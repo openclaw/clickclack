@@ -43,8 +43,24 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	notifier := &recordingNotifier{}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads"), PushNotifier: notifier}).Handler())
 	t.Cleanup(server.Close)
+
+	second, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Second", Email: "second@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, second.ID, "member"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
+		UserID:          second.ID,
+		PushoverEnabled: true,
+		PushoverUserKey: "u12345678901234567890123456789",
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	updatedChannel := patchJSON[struct {
 		Channel store.Channel `json:"channel"`
@@ -56,6 +72,9 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	message := postJSON[struct {
 		Message store.Message `json:"message"`
 	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "original"}).Message
+	if len(notifier.notifications) != 1 || notifier.notifications[0].RecipientKey != "u12345678901234567890123456789" {
+		t.Fatalf("expected one pushover notification, got %#v", notifier.notifications)
+	}
 	updatedMessage := patchJSON[struct {
 		Message store.Message `json:"message"`
 		Event   store.Event   `json:"event"`
@@ -81,6 +100,23 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	}](t, server.URL+"/api/realtime/ephemeral", map[string]any{"workspace_id": workspaces[0].ID, "type": "presence.changed", "payload": map[string]any{"status": "afk"}})
 	if presence.Event.Type != "presence.changed" {
 		t.Fatalf("unexpected presence event: %#v", presence.Event)
+	}
+	notifier.err = errors.New("pushover unavailable")
+	postJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "still succeeds"})
+	notifier.err = nil
+	updatedMe := patchJSON[struct {
+		User store.User `json:"user"`
+	}](t, server.URL+"/api/me", map[string]any{
+		"display_name": "Owner",
+		"notification_settings": map[string]any{
+			"pushover_enabled":  true,
+			"pushover_user_key": "u98765432109876543210987654321",
+		},
+	})
+	if updatedMe.User.NotificationSettings == nil || !updatedMe.User.NotificationSettings.PushoverEnabled || updatedMe.User.NotificationSettings.PushoverUserKey == "" {
+		t.Fatalf("expected profile notification settings, got %#v", updatedMe.User)
 	}
 	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+channels[0].ID, bytes.NewReader([]byte(`{`)), http.StatusBadRequest)
 	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/missing", bytes.NewReader([]byte(`{"name":"missing"}`)), http.StatusBadRequest)
@@ -221,6 +257,16 @@ func readEventTypeWithin(t *testing.T, conn *websocket.Conn, eventType string, t
 			return event, true
 		}
 	}
+}
+
+type recordingNotifier struct {
+	notifications []PushNotification
+	err           error
+}
+
+func (r *recordingNotifier) Notify(_ context.Context, notification PushNotification) error {
+	r.notifications = append(r.notifications, notification)
+	return r.err
 }
 
 func patchJSON[T any](t *testing.T, endpoint string, body any) T {

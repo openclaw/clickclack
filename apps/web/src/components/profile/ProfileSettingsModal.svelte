@@ -7,11 +7,15 @@
     displayName: string;
     handle: string;
     avatarURL: string;
+    pushoverEnabled: boolean;
+    pushoverUserKey: string;
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
     onHandle: (value: string) => void;
     onAvatarURL: (value: string) => void;
+    onPushoverEnabled: (value: boolean) => void;
+    onPushoverUserKey: (value: string) => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -21,11 +25,15 @@
     displayName,
     handle,
     avatarURL,
+    pushoverEnabled,
+    pushoverUserKey,
     status,
     statusError,
     onDisplayName,
     onHandle,
     onAvatarURL,
+    onPushoverEnabled,
+    onPushoverUserKey,
     onClose,
     onSave,
   }: Props = $props();
@@ -89,6 +97,24 @@
           placeholder="https://example.com/avatar.png"
           inputmode="url"
           oninput={(event) => onAvatarURL(event.currentTarget.value)}
+        />
+      </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          checked={pushoverEnabled}
+          onchange={(event) => onPushoverEnabled(event.currentTarget.checked)}
+        />
+        <span>Pushover notifications</span>
+      </label>
+      <label class="field">
+        <span>Pushover user key</span>
+        <input
+          value={pushoverUserKey}
+          aria-label="Pushover user key"
+          maxlength="30"
+          autocomplete="off"
+          oninput={(event) => onPushoverUserKey(event.currentTarget.value)}
         />
       </label>
       {#if status}<p class="profile-status" class:error={statusError}>{status}</p>{/if}

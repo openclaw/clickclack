@@ -15,11 +15,12 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "client")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "secret")
 	t.Setenv("CLICKCLACK_GITHUB_ALLOWED_ORG", "openclaw")
+	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "app-token")
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.PublicURL != "https://clickclack.test" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" {
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.PublicURL != "https://clickclack.test" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" {
 		t.Fatalf("unexpected env config: %#v", cfg)
 	}
 
@@ -43,6 +44,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "")
 	t.Setenv("CLICKCLACK_GITHUB_ALLOWED_ORG", "")
+	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "")
 	emptyPath := filepath.Join(t.TempDir(), "empty.json")
 	if err := os.WriteFile(emptyPath, []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)

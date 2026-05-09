@@ -15,7 +15,7 @@ func (s *Store) Backup(ctx context.Context, outPath string) error {
 func (s *Store) ExportJSON(ctx context.Context, writer io.Writer) error {
 	out := map[string]any{}
 	tables := []string{
-		"users", "identities", "workspaces", "workspace_members", "channels",
+		"users", "user_notification_settings", "identities", "workspaces", "workspace_members", "channels",
 		"messages", "thread_state", "reactions", "events", "uploads",
 		"message_attachments", "direct_conversations", "direct_conversation_members",
 		"invites", "auth_magic_links", "sessions",

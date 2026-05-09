@@ -212,6 +212,7 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce})
 	if err == nil && event.ID != "" {
 		s.hub.Publish(event)
+		s.notifyMessageCreated(r.Context(), message)
 	}
 	writeMessageCreateResult(w, message, event, err)
 }
@@ -232,6 +233,7 @@ func (s *Server) mattermostWebhook(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: user.ID, Body: body.Text})
 	if err == nil {
 		s.hub.Publish(event)
+		s.notifyMessageCreated(r.Context(), message)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{"message": message, "event": event}, err)
 }
@@ -256,6 +258,7 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: user.ID, Body: body})
 	if err == nil {
 		s.hub.Publish(event)
+		s.notifyMessageCreated(r.Context(), message)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{
 		"response_type": "in_channel",

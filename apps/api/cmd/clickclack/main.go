@@ -89,6 +89,10 @@ func serve(args []string) error {
 		}
 		log.Printf("dev auth user: %s (%s)", user.DisplayName, user.ID)
 	}
+	var pushNotifier httpapi.PushNotifier
+	if cfg.PushoverAPIToken != "" {
+		pushNotifier = httpapi.NewPushoverNotifier(cfg.PushoverAPIToken)
+	}
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadDir:      filepath.Join(cfg.Data, "uploads"),
@@ -99,6 +103,7 @@ func serve(args []string) error {
 			PublicURL:    cfg.PublicURL,
 			AllowedOrg:   cfg.GitHubAllowedOrg,
 		},
+		PushNotifier: pushNotifier,
 	})
 	return httpapi.ListenAndServe(ctx, cfg.Addr, server.Handler())
 }

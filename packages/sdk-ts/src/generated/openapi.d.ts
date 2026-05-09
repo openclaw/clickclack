@@ -474,6 +474,7 @@ export interface components {
       handle?: string;
       /** Format: uri */
       avatar_url?: string;
+      notification_settings?: components["schemas"]["NotificationSettings"];
     };
     User: {
       id: string;
@@ -482,6 +483,12 @@ export interface components {
       avatar_url: string;
       /** Format: date-time */
       created_at: string;
+      notification_settings?: components["schemas"]["NotificationSettings"];
+    };
+    NotificationSettings: {
+      pushover_enabled: boolean;
+      /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
+      pushover_user_key: string;
     };
     CreateChannelRequest: {
       name: string;

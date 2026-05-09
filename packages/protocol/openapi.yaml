@@ -545,6 +545,8 @@ components:
         avatar_url:
           type: string
           format: uri
+        notification_settings:
+          $ref: "#/components/schemas/NotificationSettings"
     User:
       type: object
       required: [id, display_name, handle, avatar_url, created_at]
@@ -560,6 +562,18 @@ components:
         created_at:
           type: string
           format: date-time
+        notification_settings:
+          $ref: "#/components/schemas/NotificationSettings"
+    NotificationSettings:
+      type: object
+      required: [pushover_enabled, pushover_user_key]
+      properties:
+        pushover_enabled:
+          type: boolean
+        pushover_user_key:
+          type: string
+          description: Current user's Pushover user key. Must be set when Pushover notifications are enabled.
+          pattern: "^[A-Za-z0-9]{30}$"
     CreateChannelRequest:
       type: object
       required: [name]

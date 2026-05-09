@@ -62,6 +62,27 @@ func TestStoreMiscBranches(t *testing.T) {
 	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{UserID: "usr_missing", DisplayName: "Missing"}); err == nil {
 		t.Fatal("expected missing profile user error")
 	}
+	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{UserID: owner.ID, PushoverEnabled: true}); err == nil {
+		t.Fatal("expected missing pushover key error")
+	}
+	settings, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
+		UserID:          owner.ID,
+		PushoverEnabled: true,
+		PushoverUserKey: "u12345678901234567890123456789",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settings.PushoverEnabled || settings.PushoverUserKey == "" {
+		t.Fatalf("unexpected notification settings: %#v", settings)
+	}
+	ownerWithSettings, err := st.GetUser(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ownerWithSettings.NotificationSettings == nil || !ownerWithSettings.NotificationSettings.PushoverEnabled {
+		t.Fatalf("expected hydrated notification settings: %#v", ownerWithSettings)
+	}
 	identityUser, err := st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
 		Provider:        "github",
 		ProviderSubject: "42",
@@ -135,6 +156,13 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	recipients, err := st.ListPushNotificationRecipients(ctx, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recipients) != 0 {
+		t.Fatalf("author should not receive own push notification: %#v", recipients)
+	}
 	if _, err := st.db.ExecContext(ctx, `UPDATE messages SET edited_at = created_at, deleted_at = created_at WHERE id = ?`, root.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -180,6 +208,13 @@ func TestStoreMiscBranches(t *testing.T) {
 	}
 	if len(replies) != 6 || len(threadState.LastReplyAuthorIDs) != 3 {
 		t.Fatalf("unexpected thread compaction: replies=%d state=%#v", len(replies), threadState)
+	}
+	recipients, err = st.ListPushNotificationRecipients(ctx, reply.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recipients) != 1 || recipients[0].UserID != owner.ID {
+		t.Fatalf("expected opted-in non-author recipient, got %#v", recipients)
 	}
 	if replies[len(replies)-1].EditedAt == nil || replies[len(replies)-1].DeletedAt == nil {
 		t.Fatalf("expected edited/deleted reply fields, got %#v", replies[len(replies)-1])

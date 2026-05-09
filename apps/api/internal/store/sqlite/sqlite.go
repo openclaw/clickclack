@@ -146,11 +146,19 @@ func (s *Store) CreateUser(ctx context.Context, input store.CreateUserInput) (st
 }
 
 func (s *Store) FirstUser(ctx context.Context) (store.User, error) {
-	return scanUser(s.db.QueryRowContext(ctx, `SELECT id, display_name, handle, avatar_url, created_at FROM users ORDER BY created_at LIMIT 1`))
+	user, err := scanUser(s.db.QueryRowContext(ctx, `SELECT id, display_name, handle, avatar_url, created_at FROM users ORDER BY created_at LIMIT 1`))
+	if err != nil {
+		return store.User{}, err
+	}
+	return s.hydrateUserNotificationSettings(ctx, user)
 }
 
 func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
-	return scanUser(s.db.QueryRowContext(ctx, `SELECT id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, id))
+	user, err := scanUser(s.db.QueryRowContext(ctx, `SELECT id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, id))
+	if err != nil {
+		return store.User{}, err
+	}
+	return s.hydrateUserNotificationSettings(ctx, user)
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {

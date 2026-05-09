@@ -48,6 +48,8 @@
   let profileDisplayName = "";
   let profileHandle = "";
   let profileAvatarURL = "";
+  let profilePushoverEnabled = false;
+  let profilePushoverUserKey = "";
   let profileStatus = "";
   let profileStatusError = false;
   let status = "loading";
@@ -118,6 +120,8 @@
     profileDisplayName = user.display_name;
     profileHandle = user.handle ? `@${user.handle}` : "";
     profileAvatarURL = user.avatar_url;
+    profilePushoverEnabled = user.notification_settings?.pushover_enabled ?? false;
+    profilePushoverUserKey = user.notification_settings?.pushover_user_key ?? "";
     profileStatus = "";
     profileStatusError = false;
     showProfileSettings = true;
@@ -133,6 +137,10 @@
           display_name: profileDisplayName,
           handle: profileHandle,
           avatar_url: profileAvatarURL,
+          notification_settings: {
+            pushover_enabled: profilePushoverEnabled,
+            pushover_user_key: profilePushoverUserKey,
+          },
         }),
       });
       user = data.user;
@@ -1199,11 +1207,15 @@
     displayName={profileDisplayName}
     handle={profileHandle}
     avatarURL={profileAvatarURL}
+    pushoverEnabled={profilePushoverEnabled}
+    pushoverUserKey={profilePushoverUserKey}
     status={profileStatus}
     statusError={profileStatusError}
     onDisplayName={(value) => (profileDisplayName = value)}
     onHandle={(value) => (profileHandle = value)}
     onAvatarURL={(value) => (profileAvatarURL = value)}
+    onPushoverEnabled={(value) => (profilePushoverEnabled = value)}
+    onPushoverUserKey={(value) => (profilePushoverUserKey = value)}
     onClose={closeModal}
     onSave={() => void saveProfile()}
   />

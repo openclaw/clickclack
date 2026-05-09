@@ -309,6 +309,10 @@
   border-radius: 2px;
 }
 
+.mobile-nav-backdrop {
+  display: none;
+}
+
 @media (max-width: 1180px) {
   .shell {
     grid-template-columns: 72px 240px minmax(0, 1fr);
@@ -363,11 +367,23 @@
   }
   .sidebar {
     left: 72px;
-    width: 260px;
+    width: min(260px, calc(100vw - 72px));
   }
   .nav-open .guild-rail,
   .nav-open .sidebar {
     transform: translateX(0);
+  }
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: min(332px, 100vw);
+    z-index: 15;
+    border: 0;
+    background: rgba(5, 8, 16, 0.46);
+    padding: 0;
   }
   .topbar {
     padding-left: 64px;

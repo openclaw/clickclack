@@ -52,6 +52,7 @@
   let profileStatusError = false;
   let status = "loading";
   let authRequired = false;
+  let connected = false;
   let socket: RealtimeConnection | null = null;
   let messageList: MessageListHandle | null = null;
   let scrollMemory = new Map<string, MessageListState>();
@@ -70,7 +71,6 @@
   let typingSweeper: number | undefined;
 
   $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceID);
-  $: connected = socket?.connected ?? false;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: sidePanelOpen = selectedThread !== null || selectedProfile !== null;
@@ -78,10 +78,12 @@
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "thread" && replyTarget && selectedThread && replyTarget.id !== selectedThread.id && !replies.some((r) => r.id === replyTarget?.id)) clearReplyTarget();
-  $: filteredGifs = gifLibrary.filter((gif) => {
-    const query = gifQuery.trim().toLowerCase();
-    return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
-  });
+  $: filteredGifs = showGifPicker
+    ? gifLibrary.filter((gif) => {
+        const query = gifQuery.trim().toLowerCase();
+        return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
+      })
+    : [];
 
   onMount(() => {
     void boot();
@@ -90,6 +92,7 @@
   onDestroy(() => {
     socket?.close();
     socket = null;
+    connected = false;
     stopTyping();
     if (typingSweeper) window.clearInterval(typingSweeper);
   });
@@ -168,6 +171,7 @@
     showWorkspaceCreate = false;
     workspaces = [...workspaces, data.workspace];
     selectedWorkspaceID = data.workspace.id;
+    mobileNavOpen = false;
     await loadChannels();
     await loadDirectConversations();
     connectRealtimeSocket();
@@ -175,6 +179,7 @@
 
   async function selectWorkspace(workspaceID: string) {
     selectedWorkspaceID = workspaceID;
+    mobileNavOpen = false;
     await loadChannels();
     await loadDirectConversations();
     connectRealtimeSocket();
@@ -654,6 +659,7 @@
     selectedThread = null;
     selectedProfile = null;
     activeComposerContext = "message";
+    mobileNavOpen = false;
     await loadMessages();
   }
 
@@ -679,6 +685,7 @@
       selectedThread = null;
       selectedProfile = null;
       activeComposerContext = "message";
+      mobileNavOpen = false;
       await loadMessages();
       void markDirectRead(existing.id);
       return;
@@ -693,6 +700,7 @@
     selectedThread = null;
     selectedProfile = null;
     activeComposerContext = "message";
+    mobileNavOpen = false;
     await loadMessages();
     void markDirectRead(data.conversation.id);
   }
@@ -700,10 +708,12 @@
   function connectRealtimeSocket() {
     socket?.close();
     socket = null;
+    connected = false;
     if (!selectedWorkspaceID) return;
     socket = connectRealtime({
       workspaceID: selectedWorkspaceID,
       onEvent: (event) => void handleEvent(event),
+      onStatusChange: (next) => (connected = next),
     });
   }
 
@@ -941,6 +951,10 @@
     selectedImage = null;
     showProfileSettings = false;
   }
+
+  function closeMobileNav() {
+    mobileNavOpen = false;
+  }
 </script>
 
 <svelte:head>
@@ -952,6 +966,10 @@
     if (event.key === "Escape") {
       if (isModalOpen()) {
         closeModal();
+      } else if (mobileNavOpen) {
+        event.preventDefault();
+        closeMobileNav();
+        return;
       } else if (replyTarget) {
         event.preventDefault();
         clearReplyTarget();
@@ -960,7 +978,7 @@
     }
     redirectTypingToComposer(event, {
       authRequired,
-      isModalOpen,
+      isModalOpen: () => isModalOpen() || mobileNavOpen,
       messageInput,
       replyInput,
       target: activeComposerTarget,
@@ -1002,10 +1020,21 @@
     class="mobile-nav-toggle"
     type="button"
     aria-label="Toggle navigation"
+    aria-controls="workspace-navigation"
+    aria-expanded={mobileNavOpen}
     onclick={() => (mobileNavOpen = !mobileNavOpen)}
   >
     {#if mobileNavOpen}&times;{:else}<span class="bars"><i></i><i></i><i></i></span>{/if}
   </button>
+
+  {#if mobileNavOpen}
+    <button
+      type="button"
+      class="mobile-nav-backdrop"
+      aria-label="Close navigation"
+      onclick={closeMobileNav}
+    ></button>
+  {/if}
 
   <GuildRail
     {workspaces}
@@ -1043,7 +1072,7 @@
     onOpenSettings={openProfileSettings}
   />
 
-  <main class="timeline">
+  <main class="timeline" inert={mobileNavOpen}>
     <Topbar
       {selectedDirect}
       {selectedChannel}
@@ -1123,7 +1152,12 @@
     />
   </main>
 
-  <aside class="thread" class:open={sidePanelOpen} aria-label={selectedProfile ? "Profile pane" : "Thread pane"}>
+  <aside
+    class="thread"
+    class:open={sidePanelOpen}
+    inert={mobileNavOpen}
+    aria-label={selectedProfile ? "Profile pane" : "Thread pane"}
+  >
     {#if selectedThread}
       <ThreadPanel
         root={selectedThread}

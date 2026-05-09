@@ -53,6 +53,37 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
 });
 
+test("shows realtime connection state in the shell", async ({ page }) => {
+  await page.goto("/app");
+  await expect(page.getByText("Connected")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Account settings for Local Captain/ }),
+  ).toContainText("Active");
+});
+
+test("mobile navigation behaves like a drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app");
+
+  const composer = page.locator('textarea[aria-label="Message body"]');
+  const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
+
+  await page.keyboard.type("hidden draft");
+  await expect(composer).toHaveValue("");
+
+  await page.keyboard.press("Escape");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await toggle.click();
+  await page.getByRole("button", { name: "Close navigation" }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
 test("sends messages, searches, uploads, opens a thread, and creates a DM", async ({ page }) => {
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));

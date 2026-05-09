@@ -25,7 +25,7 @@
   }: Props = $props();
 </script>
 
-<nav class="guild-rail" aria-label="Workspaces">
+<nav id="workspace-navigation" class="guild-rail" aria-label="Workspaces">
   <a class="guild home" title="ClickClack home" href="/">
     <span>cc</span>
   </a>

@@ -3,6 +3,7 @@ import type { RealtimeEvent } from "./types";
 export type RealtimeOptions = {
   workspaceID: string;
   onEvent: (event: RealtimeEvent) => void;
+  onStatusChange?: (connected: boolean) => void;
   reconnectDelayMs?: number;
 };
 
@@ -14,13 +15,19 @@ export type RealtimeConnection = {
 const cursorKey = (workspaceID: string) => `clickclack:${workspaceID}:cursor`;
 
 export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
-  const { workspaceID, onEvent } = options;
+  const { workspaceID, onEvent, onStatusChange } = options;
   const reconnectDelayMs = options.reconnectDelayMs ?? 1200;
 
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
   let closed = false;
-  const state = $state({ connected: false });
+  let connected = false;
+
+  function setConnected(next: boolean) {
+    if (connected === next) return;
+    connected = next;
+    onStatusChange?.(next);
+  }
 
   function open() {
     if (closed) return;
@@ -34,7 +41,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     socket = current;
 
     current.addEventListener("open", () => {
-      if (socket === current) state.connected = true;
+      if (socket === current) setConnected(true);
     });
 
     current.addEventListener("message", (message) => {
@@ -46,7 +53,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     current.addEventListener("close", () => {
       if (socket !== current || closed) return;
       socket = null;
-      state.connected = false;
+      setConnected(false);
       reconnectTimer = window.setTimeout(open, reconnectDelayMs);
     });
   }
@@ -55,11 +62,11 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
 
   return {
     get connected() {
-      return state.connected;
+      return connected;
     },
     close() {
       closed = true;
-      state.connected = false;
+      setConnected(false);
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       socket?.close();
       socket = null;

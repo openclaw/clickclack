@@ -163,6 +163,21 @@ func TestStoreMiscBranches(t *testing.T) {
 	if len(recipients) != 0 {
 		t.Fatalf("author should not receive own push notification: %#v", recipients)
 	}
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspaces[0].ID, UserID: owner.ID, MemberIDs: []string{identityUser.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmMessage, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: identityUser.ID, Body: "dm push"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipients, err = st.ListPushNotificationRecipients(ctx, dmMessage.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recipients) != 1 || recipients[0].UserID != owner.ID {
+		t.Fatalf("expected opted-in DM recipient only, got %#v", recipients)
+	}
 	if _, err := st.db.ExecContext(ctx, `UPDATE messages SET edited_at = created_at, deleted_at = created_at WHERE id = ?`, root.ID); err != nil {
 		t.Fatal(err)
 	}

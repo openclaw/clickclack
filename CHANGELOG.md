@@ -5,6 +5,10 @@
 - Fixed the chat shell realtime connection badge and mobile navigation drawer
   behavior, including backdrop/Escape close handling and type-to-focus blocking
   while navigation is open. Thanks @BunsDev.
+- Added optional per-user Pushover notifications for new channel, thread, and
+  DM messages. Server admins configure `CLICKCLACK_PUSHOVER_API_TOKEN`; users
+  opt in from account settings with their own Pushover user key. Thanks
+  @thewilloftheshadow.
 - Polished profile pane actions and contact rows so profile buttons share the
   same height and contact icons are centered in stable icon cells.
 - Added retry-safe optimistic sends, per-user unread/read receipts for

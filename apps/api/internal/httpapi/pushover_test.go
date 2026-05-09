@@ -2,10 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
 func TestPushoverNotifierPostsForm(t *testing.T) {
@@ -54,6 +57,59 @@ func TestPushoverNotifierReportsFailures(t *testing.T) {
 	})}
 	if err := notifier.Notify(context.Background(), PushNotification{RecipientKey: "user-key", Message: "hello"}); err == nil {
 		t.Fatal("expected pushover failure")
+	}
+}
+
+func TestPushoverNotifierValidatesInputsAndFailures(t *testing.T) {
+	var nilNotifier *PushoverNotifier
+	if err := nilNotifier.Notify(context.Background(), PushNotification{RecipientKey: "user-key"}); err == nil {
+		t.Fatal("expected nil notifier error")
+	}
+	if err := NewPushoverNotifier(" ").Notify(context.Background(), PushNotification{RecipientKey: "user-key"}); err == nil {
+		t.Fatal("expected missing token error")
+	}
+	if err := NewPushoverNotifier("app-token").Notify(context.Background(), PushNotification{RecipientKey: " "}); err == nil {
+		t.Fatal("expected missing user key error")
+	}
+
+	notifier := NewPushoverNotifier("app-token")
+	notifier.Client = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return nil, errors.New("network down")
+	})}
+	if err := notifier.Notify(context.Background(), PushNotification{RecipientKey: "user-key"}); err == nil {
+		t.Fatal("expected transport error")
+	}
+
+	notifier.Client = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"status":0}`)),
+		}, nil
+	})}
+	if err := notifier.Notify(context.Background(), PushNotification{RecipientKey: "user-key"}); err == nil {
+		t.Fatal("expected status failure")
+	}
+}
+
+func TestNotificationText(t *testing.T) {
+	parent := "msg_parent"
+	blank := notificationBody(store.Message{AuthorID: "usr_1", Author: &store.User{DisplayName: "  "}})
+	if blank != "usr_1 sent a message" {
+		t.Fatalf("unexpected blank body: %q", blank)
+	}
+	long := notificationBody(store.Message{AuthorID: "usr_1", Author: &store.User{DisplayName: "Peter"}, Body: strings.Repeat("x", 501)})
+	if len([]rune(strings.TrimPrefix(long, "Peter: "))) != 503 || !strings.HasSuffix(long, "...") {
+		t.Fatalf("unexpected truncated body: %q", long)
+	}
+	if got := notificationTitle(store.Message{DirectConversationID: "dm_1"}); got != "ClickClack DM" {
+		t.Fatalf("unexpected DM title: %q", got)
+	}
+	if got := notificationTitle(store.Message{ParentMessageID: &parent}); got != "ClickClack thread" {
+		t.Fatalf("unexpected thread title: %q", got)
+	}
+	if got := notificationTitle(store.Message{}); got != "ClickClack" {
+		t.Fatalf("unexpected channel title: %q", got)
 	}
 }
 

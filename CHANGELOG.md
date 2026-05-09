@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed the chat shell realtime connection badge and mobile navigation drawer
+  behavior, including backdrop/Escape close handling and type-to-focus blocking
+  while navigation is open. Thanks @BunsDev.
 - Polished profile pane actions and contact rows so profile buttons share the
   same height and contact icons are centered in stable icon cells.
 - Added retry-safe optimistic sends, per-user unread/read receipts for

@@ -30,6 +30,7 @@ hook in `cmd/clickclack/main.go`.
 | —                     | `CLICKCLACK_GITHUB_CLIENT_ID`    | unset       | GitHub OAuth app client ID. |
 | —                     | `CLICKCLACK_GITHUB_CLIENT_SECRET`| unset       | GitHub OAuth app client secret. |
 | —                     | `CLICKCLACK_GITHUB_ALLOWED_ORG`  | unset       | Optional GitHub org login gate. Requires `read:org` scope. |
+| —                     | `CLICKCLACK_PUSHOVER_API_TOKEN`  | unset       | Pushover application API token. Users still opt in with their own Pushover user key in account settings. |
 
 ## Config file
 
@@ -42,7 +43,8 @@ hook in `cmd/clickclack/main.go`.
   "public_url": "https://chat.example.com",
   "github_client_id": "Iv1.xxxxxxxxxxxx",
   "github_client_secret": "...",
-  "github_allowed_org": "openclaw"
+  "github_allowed_org": "openclaw",
+  "pushover_api_token": "azGDORePK8gMaC0QOYAMyEEuzJnyUi"
 }
 ```
 

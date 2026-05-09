@@ -25,12 +25,14 @@ type Server struct {
 	uploadDir      string
 	githubOAuth    GitHubOAuthConfig
 	disableDevAuth bool
+	pushNotifier   PushNotifier
 }
 
 type Options struct {
 	UploadDir      string
 	GitHubOAuth    GitHubOAuthConfig
 	DisableDevAuth bool
+	PushNotifier   PushNotifier
 }
 
 func New(st store.Store, hub *realtime.Hub, options Options) *Server {
@@ -40,6 +42,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		uploadDir:      options.UploadDir,
 		githubOAuth:    options.GitHubOAuth.withDefaults(),
 		disableDevAuth: options.DisableDevAuth,
+		pushNotifier:   options.PushNotifier,
 	}
 }
 
@@ -110,9 +113,10 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName string `json:"display_name"`
-		Handle      string `json:"handle"`
-		AvatarURL   string `json:"avatar_url"`
+		DisplayName          string                      `json:"display_name"`
+		Handle               string                      `json:"handle"`
+		AvatarURL            string                      `json:"avatar_url"`
+		NotificationSettings *store.NotificationSettings `json:"notification_settings"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -124,6 +128,16 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		Handle:      body.Handle,
 		AvatarURL:   body.AvatarURL,
 	})
+	if err == nil && body.NotificationSettings != nil {
+		_, err = s.store.UpdateNotificationSettings(r.Context(), store.UpdateNotificationSettingsInput{
+			UserID:          user.ID,
+			PushoverEnabled: body.NotificationSettings.PushoverEnabled,
+			PushoverUserKey: body.NotificationSettings.PushoverUserKey,
+		})
+		if err == nil {
+			updated, err = s.store.GetUser(r.Context(), user.ID)
+		}
+	}
 	writeResult(w, map[string]any{"user": updated}, err)
 }
 
@@ -224,6 +238,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce})
 	if err == nil && event.ID != "" {
 		s.hub.Publish(event)
+		s.notifyMessageCreated(r.Context(), message)
 	}
 	writeMessageCreateResult(w, message, event, err)
 }
@@ -255,6 +270,7 @@ func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
 	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID)})
 	if err == nil {
 		s.hub.PublishMany(events)
+		s.notifyMessageCreated(r.Context(), message)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{"message": message, "thread_state": state, "events": events}, err)
 }

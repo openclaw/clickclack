@@ -21,7 +21,7 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 		JOIN users u ON u.id = i.user_id
 		WHERE i.provider = ? AND i.provider_subject = ?`, provider, subject))
 	if err == nil {
-		return user, nil
+		return s.hydrateUserNotificationSettings(ctx, user)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
@@ -53,5 +53,8 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 	if err != nil {
 		return store.User{}, err
 	}
-	return user, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return store.User{}, err
+	}
+	return s.hydrateUserNotificationSettings(ctx, user)
 }

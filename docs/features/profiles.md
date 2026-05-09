@@ -5,7 +5,8 @@ read_when:
 
 # Profiles
 
-Each user has a display name, optional handle, and optional avatar URL.
+Each user has a display name, optional handle, optional avatar URL, and
+per-user notification settings.
 
 The handle is the human-friendly short name shown as `@name` in the app. The
 API accepts it with or without the leading `@`, normalizes it to lowercase, and
@@ -20,7 +21,11 @@ PATCH /api/me
 {
   "display_name": "Peter Steinberger",
   "handle": "@steipete",
-  "avatar_url": "https://example.com/avatar.png"
+  "avatar_url": "https://example.com/avatar.png",
+  "notification_settings": {
+    "pushover_enabled": true,
+    "pushover_user_key": "uQiRzpo4DXghDmr9QzzfQu27cmVRsG"
+  }
 }
 ```
 
@@ -28,11 +33,17 @@ PATCH /api/me
 must be 2-32 characters using letters, numbers, `_`, or `-`. Avatar URLs can be
 blank or an `http`/`https` URL.
 
+Pushover notifications require `CLICKCLACK_PUSHOVER_API_TOKEN` on the server.
+Each user opts in from account settings with their own 30-character Pushover
+user key. Message-created pushes are delivered to opted-in workspace members
+except the author; DMs are delivered only to opted-in conversation members
+except the author.
+
 ## App
 
 The current user's profile control sits at the bottom of the channel sidebar.
 Click or right-click it to open account settings and edit display name, handle,
-and avatar URL.
+avatar URL, and Pushover notification settings.
 
 Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,

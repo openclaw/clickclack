@@ -4,6 +4,12 @@ export type User = {
   handle: string;
   avatar_url: string;
   created_at: string;
+  notification_settings?: NotificationSettings;
+};
+
+export type NotificationSettings = {
+  pushover_enabled: boolean;
+  pushover_user_key: string;
 };
 
 export type Workspace = {

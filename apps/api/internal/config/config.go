@@ -15,6 +15,7 @@ type Config struct {
 	GitHubClientID     string `json:"github_client_id"`
 	GitHubClientSecret string `json:"github_client_secret"`
 	GitHubAllowedOrg   string `json:"github_allowed_org"`
+	PushoverAPIToken   string `json:"pushover_api_token"`
 }
 
 func Defaults() Config {
@@ -50,6 +51,9 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_GITHUB_ALLOWED_ORG"); env != "" {
 		cfg.GitHubAllowedOrg = env
+	}
+	if env := os.Getenv("CLICKCLACK_PUSHOVER_API_TOKEN"); env != "" {
+		cfg.PushoverAPIToken = env
 	}
 	if path == "" {
 		return cfg, nil

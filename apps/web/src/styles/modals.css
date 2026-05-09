@@ -133,6 +133,18 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-field input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
 .profile-status {
   color: var(--success);
   font-size: 12px;

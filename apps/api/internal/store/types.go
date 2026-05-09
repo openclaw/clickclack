@@ -15,11 +15,29 @@ var ErrQuotedMessageOutOfScope = errors.New("quoted message is not in this chann
 var ErrClientNonceConflict = errors.New("client nonce was already used for a different message")
 
 type User struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
-	Handle      string `json:"handle"`
-	AvatarURL   string `json:"avatar_url"`
-	CreatedAt   string `json:"created_at"`
+	ID                   string                `json:"id"`
+	DisplayName          string                `json:"display_name"`
+	Handle               string                `json:"handle"`
+	AvatarURL            string                `json:"avatar_url"`
+	CreatedAt            string                `json:"created_at"`
+	NotificationSettings *NotificationSettings `json:"notification_settings,omitempty"`
+}
+
+type NotificationSettings struct {
+	PushoverEnabled bool   `json:"pushover_enabled"`
+	PushoverUserKey string `json:"pushover_user_key"`
+}
+
+type UpdateNotificationSettingsInput struct {
+	UserID          string
+	PushoverEnabled bool
+	PushoverUserKey string
+}
+
+type PushNotificationRecipient struct {
+	UserID          string
+	DisplayName     string
+	PushoverUserKey string
 }
 
 type Workspace struct {
@@ -263,6 +281,8 @@ type Store interface {
 	CreateUser(ctx context.Context, input CreateUserInput) (User, error)
 	UpsertIdentityUser(ctx context.Context, input UpsertIdentityUserInput) (User, error)
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
+	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
+	ListPushNotificationRecipients(ctx context.Context, messageID string) ([]PushNotificationRecipient, error)
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error
 	EnsureDefaultWorkspaceMember(ctx context.Context, userID string) (Workspace, error)
 	FirstUser(ctx context.Context) (User, error)

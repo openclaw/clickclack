@@ -93,6 +93,8 @@ docker run --rm -v clickclack-data:/app/data clickclack \
 
 ## Data layout
 
+SQLite layout:
+
 ```
 <data>/
   clickclack.db                  # SQLite database (WAL files alongside)
@@ -106,6 +108,20 @@ consistent enough, but prefer the online backup:
 ```sh
 clickclack backup --data /var/lib/clickclack --out /var/backups/clickclack-$(date +%F).db
 ```
+
+Postgres layout:
+
+```sh
+CLICKCLACK_DB='postgres://user:pass@db.example.com:5432/clickclack?sslmode=require' \
+CLICKCLACK_DEV_BOOTSTRAP=false \
+clickclack serve --addr :8080 --data /var/lib/clickclack
+```
+
+The Postgres adapter stores users, messages, events, auth, search, and chat
+metadata in Postgres. The local data directory still holds uploads and logs,
+so Cloudflare-style ephemeral containers also need object storage before
+uploads are production-safe. Use provider snapshots or `pg_dump` for
+Postgres backups; `clickclack backup` is SQLite-only.
 
 ## Reverse proxy
 
@@ -146,8 +162,9 @@ of that org. See [features/auth.md](features/auth.md).
 
 `clickclack serve` applies migrations on boot. For zero-downtime deploys, run
 `clickclack migrate` ahead of the new binary so the old binary doesn't see
-unexpected tables. Migrations live in
-`apps/api/internal/store/sqlite/migrations/` and are append-only.
+unexpected tables. SQLite migrations live in
+`apps/api/internal/store/sqlite/migrations/`; Postgres migrations live in
+`apps/api/internal/store/postgres/migrations/`. Both are append-only.
 
 ## Event retention
 
@@ -172,5 +189,7 @@ clickclack backup --out /var/backups/clickclack-$(date +%F).db
 clickclack export --out /var/backups/clickclack-$(date +%F).json
 ```
 
-Restore is a file swap: stop `clickclack`, replace `<data>/clickclack.db`,
-delete any stale `*.db-wal`/`*.db-shm`, start it back up.
+SQLite restore is a file swap: stop `clickclack`, replace
+`<data>/clickclack.db`, delete any stale `*.db-wal`/`*.db-shm`, start it back
+up. Postgres restore uses your database provider's restore flow or `psql`
+from a `pg_dump` output.

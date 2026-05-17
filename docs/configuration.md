@@ -53,7 +53,7 @@ override env vars; CLI flags override the file if explicitly set.
 
 ## DB URL
 
-Two forms are accepted:
+SQLite forms:
 
 ```
 sqlite://./data/clickclack.db
@@ -61,8 +61,18 @@ sqlite://./data/clickclack.db
 ```
 
 Both end up at the same place — the `sqlite://` prefix is stripped. The
-parent directory is created on open. Postgres is planned and will live behind
-the same store interface.
+parent directory is created on open.
+
+Postgres forms:
+
+```
+postgres://user:pass@host:5432/clickclack?sslmode=require
+postgresql://user:pass@host:5432/clickclack?sslmode=require
+```
+
+`serve`, `migrate`, and admin commands all accept `--db` or
+`CLICKCLACK_DB`. Postgres stores durable chat state in the external database;
+uploads still use the local data directory today.
 
 ## Disabling dev fallbacks
 

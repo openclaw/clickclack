@@ -39,6 +39,17 @@ func TestExportDataPreservesExistingOutputOnFailure(t *testing.T) {
 	}
 }
 
+func TestCommandDBDefaultsUseEnvironment(t *testing.T) {
+	t.Setenv("CLICKCLACK_DATA", "/tmp/clickclack-env-data")
+	t.Setenv("CLICKCLACK_DB", "postgres://example.invalid/clickclack")
+	if got := defaultData(); got != "/tmp/clickclack-env-data" {
+		t.Fatalf("defaultData = %q", got)
+	}
+	if got := defaultDB(); got != "postgres://example.invalid/clickclack" {
+		t.Fatalf("defaultDB = %q", got)
+	}
+}
+
 func TestMessagesListOmitsAfterSeqUntilExplicitlySet(t *testing.T) {
 	var messagePaths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Postgres as an alternate server store via `postgres://` / `postgresql://` DB URLs, including migrations, search, CLI env defaults, and an opt-in Postgres integration smoke test.
 - Fixed clawpatch-reported CLI export/listing, config precedence, auth token redaction, bot workspace isolation, upload cleanup/privacy, deleted-message search, reaction no-op events, DM revocation, thread nonce, and coverage edge cases.
 - Fixed `pnpm test` so it no longer rewrites embedded web assets, and made the release asset embedding step preserve the existing embedded app if the copy fails.
 - Remember the last visited channel per workspace in the web app so returning

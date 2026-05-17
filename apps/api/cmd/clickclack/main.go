@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/httpapi"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
 
@@ -24,6 +26,13 @@ var (
 	commit  = "none"
 	date    = "unknown"
 )
+
+type databaseStore interface {
+	store.Store
+	Backup(ctx context.Context, outPath string) error
+	ExportJSON(ctx context.Context, writer io.Writer) error
+	PruneEvents(ctx context.Context, workspaceID string, keepLatest int, before string) (int64, error)
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -66,8 +75,8 @@ func dispatchArgs(args []string) (string, []string, []string) {
 func serve(args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
 	flags.String("addr", ":8080", "HTTP listen address")
-	flags.String("data", "./data", "data directory")
-	flags.String("db", "", "database URL")
+	flags.String("data", defaultData(), "data directory")
+	flags.String("db", defaultDB(), "database URL")
 	configPath := flags.String("config", "", "config file")
 	flags.Bool("dev-bootstrap", true, "create a local owner/workspace/channel if no user exists")
 	if err := flags.Parse(args); err != nil {
@@ -82,7 +91,7 @@ func serve(args []string) error {
 	if err := ensureDirs(cfg.Data); err != nil {
 		return err
 	}
-	st, err := sqlitestore.Open(url)
+	st, err := openStore(url)
 	if err != nil {
 		return err
 	}
@@ -120,15 +129,15 @@ func serve(args []string) error {
 
 func migrate(args []string) error {
 	flags := flag.NewFlagSet("migrate", flag.ExitOnError)
-	data := flags.String("data", "./data", "data directory")
-	dbURL := flags.String("db", "", "database URL")
+	data := flags.String("data", defaultData(), "data directory")
+	dbURL := flags.String("db", defaultDB(), "database URL")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if err := ensureDirs(*data); err != nil {
 		return err
 	}
-	st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+	st, err := openStore(resolveDB(*data, *dbURL))
 	if err != nil {
 		return err
 	}
@@ -143,8 +152,8 @@ func admin(args []string) error {
 	switch args[0] {
 	case "bootstrap":
 		flags := flag.NewFlagSet("admin bootstrap", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		name := flags.String("name", "Owner", "owner display name")
 		email := flags.String("email", "", "owner email")
 		if err := flags.Parse(args[1:]); err != nil {
@@ -153,7 +162,7 @@ func admin(args []string) error {
 		if err := ensureDirs(*data); err != nil {
 			return err
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -173,15 +182,15 @@ func admin(args []string) error {
 			return fmt.Errorf("usage: clickclack admin user create --name NAME --email EMAIL")
 		}
 		flags := flag.NewFlagSet("admin user create", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		name := flags.String("name", "Local User", "display name")
 		email := flags.String("email", "", "email")
 		workspaceID := flags.String("workspace", "", "workspace id to join as member")
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -205,8 +214,8 @@ func admin(args []string) error {
 			return fmt.Errorf("usage: clickclack admin invite create --workspace WORKSPACE_ID")
 		}
 		flags := flag.NewFlagSet("admin invite create", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		workspaceID := flags.String("workspace", "", "workspace id")
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
@@ -214,7 +223,7 @@ func admin(args []string) error {
 		if *workspaceID == "" {
 			return fmt.Errorf("--workspace is required")
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -238,8 +247,8 @@ func admin(args []string) error {
 			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --name NAME [--owner USER_ID] [--scopes bot:write]")
 		}
 		flags := flag.NewFlagSet("admin bot create", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		workspaceID := flags.String("workspace", "", "workspace id")
 		ownerID := flags.String("owner", "", "human owner user id")
 		name := flags.String("name", "", "bot display name")
@@ -252,7 +261,7 @@ func admin(args []string) error {
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -284,8 +293,8 @@ func admin(args []string) error {
 			return fmt.Errorf("usage: clickclack admin events prune --workspace WORKSPACE_ID [--older-than-days DAYS | --before RFC3339] [--keep-latest N]")
 		}
 		flags := flag.NewFlagSet("admin events prune", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		workspaceID := flags.String("workspace", "", "workspace id")
 		olderThanDays := flags.Int("older-than-days", 0, "delete events older than this many days")
 		before := flags.String("before", "", "delete events created before this RFC3339 timestamp")
@@ -322,7 +331,7 @@ func admin(args []string) error {
 		if err := ensureDirs(*data); err != nil {
 			return err
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -342,14 +351,14 @@ func admin(args []string) error {
 			return fmt.Errorf("usage: clickclack admin magic-link create --email EMAIL [--name NAME]")
 		}
 		flags := flag.NewFlagSet("admin magic-link create", flag.ExitOnError)
-		data := flags.String("data", "./data", "data directory")
-		dbURL := flags.String("db", "", "database URL")
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
 		email := flags.String("email", "", "email")
 		name := flags.String("name", "", "display name")
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
 		}
-		st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err
 		}
@@ -371,8 +380,8 @@ func admin(args []string) error {
 
 func backup(args []string) error {
 	flags := flag.NewFlagSet("backup", flag.ExitOnError)
-	data := flags.String("data", "./data", "data directory")
-	dbURL := flags.String("db", "", "database URL")
+	data := flags.String("data", defaultData(), "data directory")
+	dbURL := flags.String("db", defaultDB(), "database URL")
 	out := flags.String("out", "", "backup SQLite path")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -380,7 +389,7 @@ func backup(args []string) error {
 	if *out == "" {
 		return fmt.Errorf("--out is required")
 	}
-	st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+	st, err := openStore(resolveDB(*data, *dbURL))
 	if err != nil {
 		return err
 	}
@@ -390,13 +399,13 @@ func backup(args []string) error {
 
 func exportData(args []string) error {
 	flags := flag.NewFlagSet("export", flag.ExitOnError)
-	data := flags.String("data", "./data", "data directory")
-	dbURL := flags.String("db", "", "database URL")
+	data := flags.String("data", defaultData(), "data directory")
+	dbURL := flags.String("db", defaultDB(), "database URL")
 	out := flags.String("out", "-", "JSON output path or '-'")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	st, err := sqlitestore.Open(resolveDB(*data, *dbURL))
+	st, err := openStore(resolveDB(*data, *dbURL))
 	if err != nil {
 		return err
 	}
@@ -429,6 +438,26 @@ func resolveDB(data, dbURL string) string {
 		return dbURL
 	}
 	return "sqlite://" + filepath.Join(data, "clickclack.db")
+}
+
+func defaultData() string {
+	if value := os.Getenv("CLICKCLACK_DATA"); value != "" {
+		return value
+	}
+	return "./data"
+}
+
+func defaultDB() string {
+	return os.Getenv("CLICKCLACK_DB")
+}
+
+func openStore(dbURL string) (databaseStore, error) {
+	switch {
+	case strings.HasPrefix(dbURL, "postgres://"), strings.HasPrefix(dbURL, "postgresql://"):
+		return postgresstore.Open(dbURL)
+	default:
+		return sqlitestore.Open(dbURL)
+	}
 }
 
 func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {

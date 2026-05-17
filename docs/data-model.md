@@ -6,9 +6,9 @@ read_when:
 
 # Data Model
 
-Schema lives in `apps/api/internal/store/sqlite/migrations/`. The mirror in
-`infra/migrations/sqlite` is for tooling and stays in sync. `infra/migrations/postgres`
-is reserved for the future Postgres backend.
+SQLite schema lives in `apps/api/internal/store/sqlite/migrations/`. The
+mirror in `infra/migrations/sqlite` is for tooling and stays in sync.
+Postgres schema lives in `apps/api/internal/store/postgres/migrations/`.
 
 ## IDs
 
@@ -46,13 +46,15 @@ event_recipients
 uploads                            message_attachments
 direct_conversations               direct_conversation_members
 invites
-messages_fts                       (FTS5 virtual)
+messages_fts                       (SQLite FTS5 virtual)
 ```
 
-Full SQL is in
+Full SQLite SQL is in
 [`apps/api/internal/store/sqlite/migrations/0001_initial.sql`](../apps/api/internal/store/sqlite/migrations/0001_initial.sql)
 and
 [`0002_auth.sql`](../apps/api/internal/store/sqlite/migrations/0002_auth.sql).
+Full Postgres SQL is in
+[`apps/api/internal/store/postgres/migrations/0001_schema.sql`](../apps/api/internal/store/postgres/migrations/0001_schema.sql).
 
 ## Thread invariants
 
@@ -94,12 +96,13 @@ Messages set `deleted_at` instead of removing the row. This keeps
 
 ## FTS
 
-`messages_fts` mirrors `messages.body` with `porter unicode61`. Three triggers
-keep it in sync on insert/delete/update-of-body. See
+SQLite `messages_fts` mirrors `messages.body` with `porter unicode61`. Three
+triggers keep it in sync on insert/delete/update-of-body. Postgres search uses
+`to_tsvector` / `websearch_to_tsquery` against `messages.body`. See
 [features/search.md](features/search.md).
 
 ## Postgres path
 
-Postgres tables will live in `infra/migrations/postgres/`. The store
-interface in `apps/api/internal/store/types.go` is the abstraction line —
-handlers should keep calling store methods, not embed dialect-specific SQL.
+The store interface in `apps/api/internal/store/types.go` is the abstraction
+line — handlers should keep calling store methods, not embed dialect-specific
+SQL.

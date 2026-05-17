@@ -9,3 +9,12 @@ sql:
         out: apps/api/internal/store/sqlite/storedb
         sql_package: database/sql
         emit_json_tags: true
+  - engine: postgresql
+    schema: apps/api/internal/store/postgres/sqlc/schema.sql
+    queries: apps/api/internal/store/postgres/sqlc/queries.sql
+    gen:
+      go:
+        package: storedb
+        out: apps/api/internal/store/postgres/storedb
+        sql_package: database/sql
+        emit_json_tags: true

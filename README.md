@@ -18,7 +18,8 @@ go run ./apps/api/cmd/clickclack serve
 - One Go binary. Embedded Svelte SPA, embedded SQL migrations, embedded
   static assets — no separate web server, no extra services.
 - SQLite first-class storage with WAL, FTS5 search, and an online backup
-  command. Postgres is planned behind the same store interface.
+  command. Postgres is available behind the same store interface for hosted
+  deployments that need external durable storage.
 - Realtime over WebSocket with a durable event log. Reconnect with a cursor
   to recover anything you missed; HTTP `/api/realtime/events` works as a
   pull-style fallback.

@@ -1,0 +1,300 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"slices"
+	"strings"
+
+	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/postgres/storedb"
+)
+
+const directConversationMemberHydrationBatchSize = 500
+
+func (s *Store) ListDirectConversations(ctx context.Context, workspaceID, userID string) ([]store.DirectConversation, error) {
+	if err := s.requireMembership(ctx, workspaceID, userID); err != nil {
+		return nil, err
+	}
+	rows, err := s.q.ListDirectConversations(ctx, storedb.ListDirectConversationsParams{ReaderUserID: userID, WorkspaceID: workspaceID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]store.DirectConversation, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, storeDirectConversationFromList(row))
+	}
+	ids := make([]string, 0, len(out))
+	for _, dm := range out {
+		ids = append(ids, dm.ID)
+	}
+	membersByConversation, err := s.directConversationMembersByConversationIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Members = membersByConversation[out[i].ID]
+	}
+	return out, nil
+}
+
+func (s *Store) GetDirectConversation(ctx context.Context, conversationID, userID string) (store.DirectConversation, error) {
+	row, err := s.q.GetDirectConversation(ctx, storedb.GetDirectConversationParams{ReaderUserID: userID, ConversationID: conversationID})
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	dm := storeDirectConversationFromGet(row)
+	members, err := s.directConversationMembers(ctx, dm.ID)
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	dm.Members = members
+	return dm, nil
+}
+
+func (s *Store) CreateDirectConversation(ctx context.Context, input store.CreateDirectConversationInput) (store.DirectConversation, error) {
+	if err := s.requireMembership(ctx, input.WorkspaceID, input.UserID); err != nil {
+		return store.DirectConversation{}, err
+	}
+	memberIDs := append([]string{input.UserID}, input.MemberIDs...)
+	memberIDs = compactStrings(memberIDs)
+	if len(memberIDs) < 2 {
+		return store.DirectConversation{}, errors.New("direct conversation needs at least two members")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	for _, memberID := range memberIDs {
+		if err := requireMembershipTx(ctx, tx, input.WorkspaceID, memberID); err != nil {
+			return store.DirectConversation{}, err
+		}
+	}
+	dm := store.DirectConversation{ID: newID("dm"), WorkspaceID: input.WorkspaceID, CreatedAt: now()}
+	inserted := false
+	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
+		routeID, err := newRouteID('D')
+		if err != nil {
+			return store.DirectConversation{}, err
+		}
+		dm.RouteID = routeID
+		if err := qtx.InsertDirectConversation(ctx, storedb.InsertDirectConversationParams{
+			ID:          dm.ID,
+			RouteID:     sqlText(dm.RouteID),
+			WorkspaceID: dm.WorkspaceID,
+			CreatedAt:   dm.CreatedAt,
+		}); err != nil {
+			if isRouteIDConflict(err) {
+				continue
+			}
+			return store.DirectConversation{}, err
+		}
+		inserted = true
+		break
+	}
+	if !inserted {
+		return store.DirectConversation{}, errors.New("could not create direct conversation route_id after collision retries")
+	}
+	for _, memberID := range memberIDs {
+		if err := qtx.InsertDirectConversationMember(ctx, storedb.InsertDirectConversationMemberParams{ConversationID: dm.ID, UserID: memberID, CreatedAt: dm.CreatedAt}); err != nil {
+			return store.DirectConversation{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return store.DirectConversation{}, err
+	}
+	members, err := s.directConversationMembers(ctx, dm.ID)
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	dm.Members = members
+	return dm, nil
+}
+
+func (s *Store) ListDirectMessages(ctx context.Context, conversationID, userID string, page store.MessagePageRequest) (store.MessagePage, error) {
+	if err := s.requireDirectMembership(ctx, conversationID, userID); err != nil {
+		return store.MessagePage{}, err
+	}
+	return s.listMessagePage(ctx, messagePageScope{
+		where: "m.direct_conversation_id = $1 AND m.parent_message_id IS NULL",
+		args:  []any{conversationID},
+	}, page)
+}
+
+func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirectMessageInput) (store.Message, store.Event, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	workspaceID, err := qtx.GetDirectConversationWorkspace(ctx, input.ConversationID)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := requireDirectMembershipTx(ctx, tx, input.ConversationID, input.AuthorID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := lockMessageSequenceTx(ctx, tx, "direct", input.ConversationID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	seq, err := qtx.DirectNextSeq(ctx, input.ConversationID)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	id := newID("msg")
+	createdAt := now()
+	body := strings.TrimSpace(input.Body)
+	if body == "" {
+		return store.Message{}, store.Event{}, errors.New("message body is required")
+	}
+	nonce, err := normalizeClientNonce(input.Nonce)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	var quotedID, quotedAuthorID, quotedSnapshot string
+	if input.QuotedMessageID != nil {
+		quotedID = strings.TrimSpace(*input.QuotedMessageID)
+	}
+	if existing, err := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); err == nil {
+		if existing.DirectConversationID != input.ConversationID || existing.ChannelID != "" || existing.ParentMessageID != nil || existing.Body != body || !sameQuotedMessageID(existing, quotedID) {
+			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
+		}
+		return existing, store.Event{}, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return store.Message{}, store.Event{}, err
+	}
+	if quotedID != "" {
+		snap, authorID, err := resolveQuoteRefTx(ctx, tx, quotedID, quoteScope{kind: "dm", directConversationID: input.ConversationID})
+		if err != nil {
+			return store.Message{}, store.Event{}, err
+		}
+		quotedSnapshot = snap
+		quotedAuthorID = authorID
+	}
+	if err := qtx.InsertDirectMessage(ctx, storedb.InsertDirectMessageParams{
+		ID:                   id,
+		WorkspaceID:          workspaceID,
+		DirectConversationID: sqlText(input.ConversationID),
+		AuthorID:             input.AuthorID,
+		ThreadRootID:         id,
+		ChannelSeq:           sqlInt64(seq),
+		Body:                 body,
+		CreatedAt:            createdAt,
+		QuotedMessageID:      sqlOptionalText(quotedID),
+		QuotedBodySnapshot:   quotedSnapshot,
+		QuotedAuthorID:       sqlOptionalText(quotedAuthorID),
+		ClientNonce:          nonce,
+	}); err != nil {
+		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
+			if existing.DirectConversationID == input.ConversationID && existing.ChannelID == "" && existing.ParentMessageID == nil && existing.Body == body && sameQuotedMessageID(existing, quotedID) {
+				return existing, store.Event{}, nil
+			}
+			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
+		}
+		return store.Message{}, store.Event{}, err
+	}
+	if err := qtx.InsertThreadState(ctx, id); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	recipients, err := directConversationMemberIDsTx(ctx, tx, input.ConversationID)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(map[string]string{"message_id": id, "direct_conversation_id": input.ConversationID, "author_id": input.AuthorID}, nonce), recipients)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	msg, err := getMessageTx(ctx, tx, id)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	return msg, event, tx.Commit()
+}
+
+func (s *Store) requireDirectMembership(ctx context.Context, conversationID, userID string) error {
+	_, err := s.q.RequireDirectMembership(ctx, storedb.RequireDirectMembershipParams{ConversationID: conversationID, UserID: userID})
+	return err
+}
+
+func requireDirectMembershipTx(ctx context.Context, tx *sql.Tx, conversationID, userID string) error {
+	_, err := storedb.New(tx).RequireDirectMembership(ctx, storedb.RequireDirectMembershipParams{ConversationID: conversationID, UserID: userID})
+	return err
+}
+
+func directConversationMemberIDsTx(ctx context.Context, tx *sql.Tx, conversationID string) ([]string, error) {
+	return storedb.New(tx).DirectConversationMemberIDs(ctx, conversationID)
+}
+
+func (s *Store) directConversationMembers(ctx context.Context, conversationID string) ([]store.User, error) {
+	rows, err := s.q.DirectConversationMembers(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	members := make([]store.User, 0, len(rows))
+	for _, row := range rows {
+		members = append(members, storeUserFromDirectConversationMember(row))
+	}
+	return members, nil
+}
+
+func (s *Store) directConversationMembersByConversationIDs(ctx context.Context, conversationIDs []string) (map[string][]store.User, error) {
+	out := map[string][]store.User{}
+	if len(conversationIDs) == 0 {
+		return out, nil
+	}
+	for start := 0; start < len(conversationIDs); start += directConversationMemberHydrationBatchSize {
+		end := min(start+directConversationMemberHydrationBatchSize, len(conversationIDs))
+		batch := conversationIDs[start:end]
+		placeholders := pgPlaceholders(len(batch), 1)
+		args := make([]any, 0, len(batch))
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT dcm.conversation_id, u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+			FROM direct_conversation_members dcm
+			JOIN users u ON u.id = dcm.user_id
+			WHERE dcm.conversation_id IN (`+placeholders+`)
+			ORDER BY dcm.conversation_id, u.display_name`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var conversationID string
+			var owner sql.NullString
+			var member store.User
+			if err := rows.Scan(&conversationID, &member.ID, &member.Kind, &owner, &member.DisplayName, &member.Handle, &member.AvatarURL, &member.CreatedAt); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			if owner.Valid {
+				member.OwnerUserID = owner.String
+			}
+			out[conversationID] = append(out[conversationID], member)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func compactStrings(values []string) []string {
+	var out []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || slices.Contains(out, value) {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}

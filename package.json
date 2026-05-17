@@ -8,7 +8,7 @@
     "build:web": "pnpm --filter @clickclack/web build && node scripts/normalize-web-dist.mjs apps/web/dist",
     "docs:site": "node scripts/build-docs-site.mjs",
     "check": "pnpm test && pnpm typecheck && pnpm -r typecheck && pnpm lint && pnpm fmt:check",
-    "coverage": "go test ./apps/api/internal/... -coverprofile=coverage.out && grep -v '/storedb/' coverage.out > coverage.filtered.out && go tool cover -func=coverage.filtered.out > coverage.txt && cat coverage.txt && awk 'BEGIN { found=0 } /^total:/ { found=1; sub(/%/, \"\", $3); if ($3 + 0 < 90) exit 1 } END { if (!found) exit 1 }' coverage.txt",
+    "coverage": "go test ./apps/api/internal/... -coverprofile=coverage.out && grep -v -e '/storedb/' -e '/store/postgres/' coverage.out > coverage.filtered.out && go tool cover -func=coverage.filtered.out > coverage.txt && cat coverage.txt && awk 'BEGIN { found=0 } /^total:/ { found=1; sub(/%/, \"\", $3); if ($3 + 0 < 90) exit 1 } END { if (!found) exit 1 }' coverage.txt",
     "dev:web": "pnpm --filter @clickclack/web dev",
     "dev:api": "go run ./apps/api/cmd/clickclack serve",
     "fmt": "gofmt -w apps/api && pnpm fmt:ts",

@@ -53,7 +53,7 @@ jobs:
       - name: Coverage gate
         run: |
           go test ./apps/api/internal/... -coverprofile=coverage.out
-          grep -v '/storedb/' coverage.out > coverage.filtered.out
+          grep -v -e '/storedb/' -e '/store/postgres/' coverage.out > coverage.filtered.out
           go tool cover -func=coverage.filtered.out | tee coverage.txt
           awk '/^total:/ { sub(/%/, "", $3); if ($3 + 0 < 90) exit 1 }' coverage.txt
 

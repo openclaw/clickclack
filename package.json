@@ -23,7 +23,13 @@
     "test": "pnpm build:web && pnpm build:sdk && node scripts/go-test-with-web-dist.mjs",
     "embed:webassets": "node scripts/embed-web-dist.mjs apps/web/dist apps/api/internal/webassets/dist",
     "deploy:cloudflare": "wrangler deploy",
-    "cf:containers": "wrangler containers list"
+    "cf:containers": "wrangler containers list",
+    "check:changed": "pnpm run check",
+    "test:changed": "pnpm run test",
+    "crabbox:hydrate": "crabbox actions hydrate",
+    "crabbox:run": "crabbox run",
+    "crabbox:stop": "crabbox stop",
+    "crabbox:warmup": "crabbox warmup"
   },
   "packageManager": "pnpm@11.0.7",
   "devDependencies": {

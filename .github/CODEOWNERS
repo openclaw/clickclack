@@ -1,0 +1,24 @@
+# Protect ownership and automation rules.
+/.github/CODEOWNERS @openclaw/openclaw-secops
+/.github/dependabot.yml @openclaw/openclaw-secops
+/.github/workflows/ @openclaw/openclaw-secops
+/.agents/skills/ @openclaw/openclaw-secops
+/.crabbox.yaml @openclaw/openclaw-secops
+/SECURITY.md @openclaw/openclaw-secops
+
+# Package, deployment, and schema integrity surfaces.
+/Dockerfile @openclaw/openclaw-secops
+/Dockerfile.cloudflare @openclaw/openclaw-secops
+/go.mod @openclaw/openclaw-secops
+/go.sum @openclaw/openclaw-secops
+/package.json @openclaw/openclaw-secops
+/pnpm-lock.yaml @openclaw/openclaw-secops
+/pnpm-workspace.yaml @openclaw/openclaw-secops
+/sqlc.yaml @openclaw/openclaw-secops
+/wrangler.jsonc @openclaw/openclaw-secops
+
+# API, generated SQL, and deployment surfaces.
+/apps/api/ @openclaw/openclaw-secops
+/infra/ @openclaw/openclaw-secops
+/cloudflare-seed/ @openclaw/openclaw-secops
+/scripts/ @openclaw/openclaw-secops

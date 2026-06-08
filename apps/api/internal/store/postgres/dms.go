@@ -234,11 +234,6 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	return msg, event, tx.Commit()
 }
 
-func (s *Store) requireDirectMembership(ctx context.Context, conversationID, userID string) error {
-	_, err := s.q.RequireDirectMembership(ctx, storedb.RequireDirectMembershipParams{ConversationID: conversationID, UserID: userID})
-	return err
-}
-
 func (s *Store) requireDirectAccess(ctx context.Context, conversationID, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

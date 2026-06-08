@@ -101,16 +101,6 @@ func storeMagicLinkFromDB(link storedb.AuthMagicLink) store.MagicLink {
 	}
 }
 
-func storeWorkspaceFromFirstWorkspace(row storedb.FirstWorkspaceRow) store.Workspace {
-	return store.Workspace{
-		ID:        row.ID,
-		RouteID:   row.RouteID,
-		Name:      row.Name,
-		Slug:      row.Slug,
-		CreatedAt: row.CreatedAt,
-	}
-}
-
 func storeWorkspaceFromListWorkspaces(row storedb.ListWorkspacesRow) store.Workspace {
 	return store.Workspace{
 		ID:        row.ID,

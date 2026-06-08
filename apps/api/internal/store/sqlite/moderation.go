@@ -190,10 +190,6 @@ func requireCanSendDirectTx(ctx context.Context, tx *sql.Tx, workspaceID, userID
 	return nil
 }
 
-func (s *Store) postsRemaining(ctx context.Context, workspaceID, userID, role string) (int, int, error) {
-	return postsRemainingTx(ctx, s.db, workspaceID, userID, role)
-}
-
 func postsRemainingTx(ctx context.Context, q storedb.DBTX, workspaceID, userID, role string) (int, int, error) {
 	if role != store.WorkspaceRoleGuest {
 		return 0, 0, nil

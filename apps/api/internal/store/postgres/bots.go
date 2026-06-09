@@ -66,6 +66,10 @@ var botAllowedScopes = []string{
 	"realtime:read",
 	"uploads:write",
 	"profile:read",
+	// agent_progress:write authorizes a source bridge to publish ephemeral
+	// agent.progress frames (AGENT_BRIDGE_PLAN §3.1, §3.8). Deliberately NOT in
+	// any bot:* bundle (HR-FF06): explicit grant only, no inheritance.
+	"agent_progress:write",
 }
 
 func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (store.User, store.BotToken, error) {

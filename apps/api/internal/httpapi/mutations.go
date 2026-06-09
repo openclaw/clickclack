@@ -107,9 +107,30 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if body.Type != "typing.started" && body.Type != "typing.stopped" && body.Type != "presence.changed" {
+	// agent.progress is the source-bridge progress tick (AGENT_BRIDGE_PLAN
+	// §3.3). It rides the same ephemeral transport as typing/presence but is a
+	// distinct authorization surface: bot-token-only, gated on a dedicated
+	// agent_progress:write scope (NOT messages:write), and REQUIRED to name a
+	// single concrete target so a private turn can never broadcast to a whole
+	// workspace (§3.8 S1). The recipient list is always server-derived below;
+	// the relay never supplies recipients directly.
+	isAgentProgress := body.Type == "agent.progress"
+	if body.Type != "typing.started" && body.Type != "typing.stopped" &&
+		body.Type != "presence.changed" && !isAgentProgress {
 		writeError(w, http.StatusBadRequest, errors.New("unsupported ephemeral event type"))
 		return
+	}
+	if isAgentProgress {
+		// Human sessions never publish agent progress; only a source bridge bot
+		// with the explicit, non-inherited scope may (§3.1, HR-FF06).
+		if act.botTokenID == "" {
+			writeError(w, http.StatusForbidden, errors.New("agent.progress requires a bot token"))
+			return
+		}
+		if err := act.requireScope("agent_progress:write"); err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
 	}
 	if err := act.requireWorkspace(body.WorkspaceID); err != nil {
 		writeError(w, http.StatusForbidden, err)
@@ -126,6 +147,14 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 	directConversationID := strings.TrimSpace(body.DirectConversationID)
 	if (body.Type == "typing.started" || body.Type == "typing.stopped") && channelID == "" && directConversationID == "" {
 		writeError(w, http.StatusBadRequest, errors.New("typing events require channel_id or direct_conversation_id"))
+		return
+	}
+	// S1: a progress frame MUST target exactly one concrete surface. An empty
+	// target would otherwise fall through to the workspace-wide branch below and
+	// leak thinking/command-output/patch detail to every member. (channel_id and
+	// direct_conversation_id are also mutually exclusive, enforced just below.)
+	if isAgentProgress && channelID == "" && directConversationID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("agent.progress requires channel_id or direct_conversation_id"))
 		return
 	}
 	var recipientUserIDs []string

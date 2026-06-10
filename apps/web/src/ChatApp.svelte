@@ -25,6 +25,7 @@
     type MessageListViewportState,
   } from "./components/messages/MessageList.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
+  import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
   import GuildRail from "./components/navigation/GuildRail.svelte";
@@ -112,6 +113,8 @@
   let activeComposerContext: "message" | "thread" = "message";
   let typingEntries: TypingEntry[] = [];
   let typingSweeper: number | undefined;
+  let agentProgressTurns: AgentProgressTurn[] = [];
+  let agentProgressSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
 
@@ -1305,6 +1308,7 @@
     rememberUnreadMarkerForMessages(key, messages);
     if (switchingView) {
       typingEntries = [];
+      agentProgressTurns = [];
       stopTyping();
     }
   }
@@ -1784,6 +1788,10 @@
       handleTypingEvent(event);
       return;
     }
+    if (event.type === "agent.progress") {
+      handleAgentProgressEvent(event);
+      return;
+    }
     if (event.type === "channel.read" || event.type === "dm.read") {
       handleReadEvent(event);
       return;
@@ -1952,6 +1960,64 @@
     next.push({ userID, user: author, expiresAt: Date.now() + TYPING_TTL_MS });
     typingEntries = next;
     ensureTypingSweeper();
+  }
+
+  function handleAgentProgressEvent(event: RealtimeEvent) {
+    const payload = event.payload as Record<string, unknown>;
+    const eventChannel = event.channel_id || (typeof payload.channel_id === "string" ? payload.channel_id : "");
+    const eventDM = typeof payload.direct_conversation_id === "string" ? payload.direct_conversation_id : "";
+    const matchesView =
+      (selectedChannelID && eventChannel === selectedChannelID) ||
+      (selectedDirectID && eventDM === selectedDirectID);
+    if (!matchesView) return;
+    const turnId = typeof payload.turn_id === "string" ? payload.turn_id : "";
+    const op = typeof payload.op === "string" ? payload.op : "";
+    if (!turnId || !op) return;
+    if (op === "clear") {
+      agentProgressTurns = agentProgressTurns.filter((turn) => turn.turnId !== turnId);
+      return;
+    }
+    const line = payload.line as Record<string, unknown> | undefined;
+    const lineId = line && typeof line.id === "string" ? line.id : "";
+    if (!lineId) return;
+    const text = line && typeof line.text === "string" ? line.text : "";
+    const title = line && typeof line.title === "string" ? line.title : "";
+    const view = {
+      id: lineId,
+      kind: line && typeof line.kind === "string" ? line.kind : "lifecycle",
+      text: text || title,
+      toolName: line && typeof line.tool_name === "string" ? line.tool_name : typeof line?.toolName === "string" ? (line.toolName as string) : undefined,
+      status: line && typeof line.status === "string" ? line.status : undefined,
+      finalized: op === "finalize",
+    };
+    if (!view.text && !view.toolName) return;
+    const userId = typeof payload.user_id === "string" ? payload.user_id : "";
+    const expiresAt = Date.now() + AGENT_PROGRESS_TTL_MS;
+    const existing = agentProgressTurns.find((turn) => turn.turnId === turnId);
+    if (!existing) {
+      agentProgressTurns = [...agentProgressTurns, { turnId, userId, lines: [view], expiresAt }];
+    } else {
+      const lines = existing.lines.some((l) => l.id === lineId)
+        ? existing.lines.map((l) => (l.id === lineId ? view : l))
+        : [...existing.lines, view];
+      agentProgressTurns = agentProgressTurns.map((turn) =>
+        turn.turnId === turnId ? { ...turn, lines, expiresAt } : turn,
+      );
+    }
+    ensureAgentProgressSweeper();
+  }
+
+  function ensureAgentProgressSweeper() {
+    if (agentProgressSweeper) return;
+    agentProgressSweeper = window.setInterval(() => {
+      const now = Date.now();
+      const next = agentProgressTurns.filter((turn) => turn.expiresAt > now);
+      if (next.length !== agentProgressTurns.length) agentProgressTurns = next;
+      if (next.length === 0 && agentProgressSweeper) {
+        window.clearInterval(agentProgressSweeper);
+        agentProgressSweeper = undefined;
+      }
+    }, 1000);
   }
 
   function lookupUser(userID: string): User | undefined {
@@ -2287,6 +2353,8 @@
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
     />
+
+    <AgentProgress turns={agentProgressTurns} />
 
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 

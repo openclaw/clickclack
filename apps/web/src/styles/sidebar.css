@@ -512,3 +512,19 @@ button.ghost {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+@media (max-width: 820px) {
+  .workspace-header {
+    min-height: calc(60px + var(--safe-area-top));
+    padding-top: calc(14px + var(--safe-area-top));
+    padding-right: calc(16px + var(--safe-area-right));
+  }
+
+  .sidebar-scroll {
+    padding-bottom: calc(16px + var(--safe-area-bottom));
+  }
+
+  .user-card {
+    padding-bottom: calc(10px + var(--safe-area-bottom));
+  }
+}

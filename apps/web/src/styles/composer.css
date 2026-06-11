@@ -117,6 +117,7 @@
   align-items: center;
   gap: 2px;
   width: 100%;
+  min-width: 0;
   padding: 4px 6px;
   margin: 0;
   border: 0;
@@ -124,9 +125,18 @@
   border-radius: 0;
   background: color-mix(in srgb, var(--panel-2) 35%, transparent);
   box-shadow: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.composer-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .composer-toolbar button {
+  flex: 0 0 auto;
   min-width: 28px;
   height: 26px;
   display: grid;
@@ -432,4 +442,20 @@
   font-family: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
   color: var(--text);
+}
+
+@media (max-width: 820px) {
+  .composer {
+    padding: 16px calc(14px + var(--safe-area-right)) calc(10px + var(--safe-area-bottom))
+      calc(14px + var(--safe-area-left));
+  }
+
+  .composer textarea,
+  .reply-composer textarea {
+    font-size: 16px;
+  }
+
+  .composer-suggestions {
+    max-height: min(320px, 42dvh);
+  }
 }

@@ -106,6 +106,67 @@ async function expectScrollAtMessageEnd(page: Page) {
     .toBe(true);
 }
 
+type GeometryBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
+type MobileGeometry = {
+  viewportWidth: number;
+  viewportHeight: number;
+  scrollWidth: number;
+  rail: GeometryBox;
+  sidebar: GeometryBox;
+  timeline: GeometryBox;
+  toolbar: GeometryBox;
+  composer: GeometryBox;
+  toggle: GeometryBox;
+  firstGuild: GeometryBox;
+  textareaFontSize: number;
+  toolbarOverflowX: string;
+};
+
+async function mobileGeometry(page: Page): Promise<MobileGeometry> {
+  return page.evaluate(() => {
+    const box = (selector: string): GeometryBox => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) throw new Error(`missing element ${selector}`);
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+    const textarea = document.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Message body"]',
+    );
+    const toolbar = document.querySelector<HTMLElement>(".composer-toolbar");
+    if (!textarea || !toolbar) throw new Error("missing composer controls");
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      rail: box(".guild-rail"),
+      sidebar: box(".sidebar"),
+      timeline: box(".timeline"),
+      toolbar: box(".composer-toolbar"),
+      composer: box(".composer"),
+      toggle: box(".mobile-nav-toggle"),
+      firstGuild: box(".guild-rail .guild.home"),
+      textareaFontSize: Number.parseFloat(getComputedStyle(textarea).fontSize),
+      toolbarOverflowX: getComputedStyle(toolbar).overflowX,
+    };
+  });
+}
+
 test("product website links to app and docs", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
@@ -153,6 +214,49 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await toggle.click();
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/app");
+    await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector<HTMLMetaElement>('meta[name="viewport"]')?.content || "",
+        ),
+      )
+      .toContain("viewport-fit=cover");
+
+    await expect
+      .poll(async () => (await mobileGeometry(page)).sidebar.right)
+      .toBeLessThanOrEqual(0.5);
+    const closed = await mobileGeometry(page);
+    expect(closed.rail.right).toBeLessThanOrEqual(0.5);
+    expect(closed.timeline.left).toBe(0);
+    expect(closed.timeline.width).toBe(width);
+    expect(closed.scrollWidth).toBeLessThanOrEqual(width);
+    expect(closed.toolbar.right).toBeLessThanOrEqual(closed.viewportWidth);
+    expect(closed.toolbar.bottom).toBeLessThanOrEqual(closed.composer.bottom);
+    expect(closed.textareaFontSize).toBeGreaterThanOrEqual(16);
+    expect(closed.toolbarOverflowX).toBe("auto");
+
+    await page.getByRole("button", { name: "Toggle navigation" }).click();
+    await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect
+      .poll(async () => (await mobileGeometry(page)).sidebar.left)
+      .toBeGreaterThanOrEqual(71.5);
+    const open = await mobileGeometry(page);
+    expect(open.rail.left).toBeGreaterThanOrEqual(0);
+    expect(open.sidebar.left).toBeGreaterThanOrEqual(open.rail.right - 0.5);
+    expect(open.sidebar.right).toBeLessThanOrEqual(open.viewportWidth + 0.5);
+    expect(open.firstGuild.top).toBeGreaterThanOrEqual(open.toggle.bottom);
+    expect(open.scrollWidth).toBeLessThanOrEqual(width);
+  }
 });
 
 test("sends messages, searches, uploads, opens a thread, and creates a DM", async ({ page }) => {

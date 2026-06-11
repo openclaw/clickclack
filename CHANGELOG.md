@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed the mobile web layout on iPhone Safari so the closed navigation drawer fully leaves the viewport and the composer respects safe areas.
 - Revived the platform app APIs for bot lifecycle, app installation, slash
   command registration/invocation, event subscriptions, connected accounts,
   audit events, and message topics; the web composer now previews registered

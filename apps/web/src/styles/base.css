@@ -36,6 +36,10 @@
   --radius: 8px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   background: var(--bg);
   color: var(--text);
 }
@@ -119,4 +123,3 @@ textarea {
   background: rgba(255, 255, 255, 0.12);
   background-clip: content-box;
 }
-

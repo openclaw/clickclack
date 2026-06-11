@@ -1302,3 +1302,25 @@
   background: var(--panel-2);
   color: var(--text-strong);
 }
+
+@media (max-width: 520px) {
+  .message-group {
+    grid-template-columns: 44px minmax(0, 1fr);
+    padding: 7px 12px;
+  }
+
+  .message-row {
+    margin-left: -44px;
+    padding-left: 44px;
+  }
+
+  .row-stamp {
+    display: none;
+  }
+
+  .attachment-grid,
+  .attachment-grid.compact {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 100%;
+  }
+}

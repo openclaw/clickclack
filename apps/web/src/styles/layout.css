@@ -3,8 +3,10 @@
 .auth-shell {
   display: grid;
   min-height: 100vh;
+  min-height: 100dvh;
   place-items: center;
-  padding: 32px;
+  padding: calc(32px + var(--safe-area-top)) calc(32px + var(--safe-area-right))
+    calc(32px + var(--safe-area-bottom)) calc(32px + var(--safe-area-left));
   background:
     radial-gradient(700px 500px at 30% 20%, rgba(111, 126, 255, 0.18), transparent 60%),
     radial-gradient(700px 500px at 80% 90%, rgba(255, 110, 196, 0.12), transparent 60%), var(--bg);
@@ -109,7 +111,9 @@
   display: grid;
   grid-template-columns: 72px 260px minmax(0, 1fr) 0;
   height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   transition: grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -399,4 +403,3 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-

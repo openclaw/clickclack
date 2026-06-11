@@ -390,3 +390,27 @@
   line-height: 1.5;
   font-size: 13px;
 }
+
+@media (max-width: 820px) {
+  .thread {
+    min-height: 100dvh;
+  }
+
+  .thread > header {
+    min-height: calc(60px + var(--safe-area-top));
+    padding-top: calc(12px + var(--safe-area-top));
+    padding-right: calc(16px + var(--safe-area-right));
+    padding-left: calc(16px + var(--safe-area-left));
+  }
+
+  .thread-scroll {
+    padding-right: calc(16px + var(--safe-area-right));
+    padding-left: calc(16px + var(--safe-area-left));
+  }
+
+  .reply-composer {
+    padding-right: calc(14px + var(--safe-area-right));
+    padding-bottom: calc(14px + var(--safe-area-bottom));
+    padding-left: calc(14px + var(--safe-area-left));
+  }
+}

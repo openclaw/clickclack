@@ -205,6 +205,17 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
 
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await toggle.click();
   await page.keyboard.type("hidden draft");
   await expect(composer).toHaveValue("");
 
@@ -214,6 +225,19 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await toggle.click();
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("desktop sidebar collapse preference still toggles", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await page.goto("/app");
+
+  const shell = page.locator(".shell");
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(shell).toHaveClass(/sidebar-collapsed/);
+  await page
+    .getByRole("button", { name: "Expand sidebar" })
+    .evaluate((button: HTMLButtonElement) => button.click());
+  await expect(shell).not.toHaveClass(/sidebar-collapsed/);
 });
 
 test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {

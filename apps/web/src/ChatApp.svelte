@@ -39,6 +39,7 @@
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
+  const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -167,6 +168,12 @@
 
   onMount(() => {
     void boot();
+    const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
+    const handleMobileNavBreakpoint = () => {
+      mobileNavOpen = false;
+    };
+    mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
+    return () => mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
   });
 
   onDestroy(() => {
@@ -2120,6 +2127,14 @@
   function closeMobileNav() {
     mobileNavOpen = false;
   }
+
+  function handleSidebarCollapse() {
+    if (mobileNavOpen && window.matchMedia(MOBILE_NAV_MEDIA_QUERY).matches) {
+      closeMobileNav();
+      return;
+    }
+    sidebarCollapsed = !sidebarCollapsed;
+  }
 </script>
 
 <svelte:head>
@@ -2202,7 +2217,7 @@
     {selectedChannelID}
     {selectedDirectID}
     {selectedProfile}
-    onToggleCollapse={() => (sidebarCollapsed = !sidebarCollapsed)}
+    onToggleCollapse={handleSidebarCollapse}
     hrefForChannel={(channelID) => appHref(selectedWorkspaceID, channelID)}
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}

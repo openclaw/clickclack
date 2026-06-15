@@ -194,6 +194,9 @@ test("shows realtime connection state in the shell", async ({ page }) => {
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
+  const meResponse = await page.request.get("/api/me");
+  const me = (await meResponse.json()) as { user: { id: string } };
+  const storageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
   await page.addInitScript(() => {
     const target = window as unknown as {
       __clickclackPermissionRequests: number;
@@ -220,9 +223,7 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
   await page.getByLabel("Browser notifications").check();
 
   await expect
-    .poll(() =>
-      page.evaluate(() => localStorage.getItem("clickclack:browser-notifications-enabled:v1")),
-    )
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey))
     .toBe("enabled");
   await expect
     .poll(() =>
@@ -236,6 +237,30 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
       ),
     )
     .toBe(1);
+});
+
+test("browser notification storage failures do not block app startup", async ({ page }) => {
+  await page.addInitScript(() => {
+    const blockedKeyPrefix = "clickclack:browser-notifications-enabled:v1:";
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return setItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return removeItem.call(this, key);
+    };
+  });
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
 });
 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
@@ -695,7 +720,10 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
 test("browser notifications announce incoming messages outside the active conversation", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
+  const meResponse = await page.request.get("/api/me");
+  const me = (await meResponse.json()) as { user: { id: string } };
+  const storageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
+  await page.addInitScript((key) => {
     type CapturedNotification = {
       title: string;
       options?: NotificationOptions;
@@ -727,8 +755,8 @@ test("browser notifications announce incoming messages outside the active conver
     }
     target.__clickclackNotifications = [];
     target.Notification = FakeNotification as unknown as typeof Notification;
-    localStorage.setItem("clickclack:browser-notifications-enabled:v1", "enabled");
-  });
+    localStorage.setItem(key, "enabled");
+  }, storageKey);
 
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };

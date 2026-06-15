@@ -40,7 +40,7 @@
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
-  const BROWSER_NOTIFICATIONS_STORAGE_KEY = "clickclack:browser-notifications-enabled:v1";
+  const BROWSER_NOTIFICATIONS_STORAGE_PREFIX = "clickclack:browser-notifications-enabled:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
 
   export let routeWorkspaceID = "";
@@ -197,6 +197,7 @@
     try {
       const me = await api<{ user: User }>("/api/me");
       user = me.user;
+      syncBrowserNotificationState();
       await loadWorkspaces();
       if (workspaces.length === 0) {
         status = "create a workspace";
@@ -230,10 +231,39 @@
   function syncBrowserNotificationState() {
     browserNotificationsSupported = typeof Notification !== "undefined";
     browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
-    const storedEnabled = localStorage.getItem(BROWSER_NOTIFICATIONS_STORAGE_KEY) === "enabled";
+    const storedEnabled = storedBrowserNotificationsEnabled();
     browserNotificationsEnabled = browserNotificationPermission === "granted" && storedEnabled;
     if (storedEnabled && browserNotificationPermission !== "granted") {
-      localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+      storeBrowserNotificationsEnabled(false);
+    }
+  }
+
+  function browserNotificationsStorageKey(): string {
+    return user?.id ? `${BROWSER_NOTIFICATIONS_STORAGE_PREFIX}${user.id}` : "";
+  }
+
+  function storedBrowserNotificationsEnabled(): boolean {
+    const key = browserNotificationsStorageKey();
+    if (!key) return false;
+    try {
+      return window.localStorage.getItem(key) === "enabled";
+    } catch {
+      return false;
+    }
+  }
+
+  function storeBrowserNotificationsEnabled(enabled: boolean): boolean {
+    const key = browserNotificationsStorageKey();
+    if (!key) return false;
+    try {
+      if (enabled) {
+        window.localStorage.setItem(key, "enabled");
+      } else {
+        window.localStorage.removeItem(key);
+      }
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -241,7 +271,7 @@
     profileStatus = "";
     profileStatusError = false;
     if (!enabled) {
-      localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+      storeBrowserNotificationsEnabled(false);
       browserNotificationsEnabled = false;
       profileStatus = "Browser notifications disabled";
       return;
@@ -259,12 +289,14 @@
     browserNotificationsSupported = true;
     browserNotificationPermission = permission;
     if (permission === "granted") {
-      localStorage.setItem(BROWSER_NOTIFICATIONS_STORAGE_KEY, "enabled");
-      browserNotificationsEnabled = true;
-      profileStatus = "Browser notifications enabled";
+      browserNotificationsEnabled = storeBrowserNotificationsEnabled(true);
+      profileStatus = browserNotificationsEnabled
+        ? "Browser notifications enabled"
+        : "Browser notification preference could not be saved";
+      profileStatusError = !browserNotificationsEnabled;
       return;
     }
-    localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+    storeBrowserNotificationsEnabled(false);
     browserNotificationsEnabled = false;
     profileStatus = permission === "denied"
       ? "Browser notifications are blocked by this browser"

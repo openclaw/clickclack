@@ -11,6 +11,8 @@
   type Props = {
     message: Message;
     index: number;
+    previousMessage?: Message;
+    nextMessage?: Message;
     selected: boolean;
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
@@ -25,6 +27,8 @@
   let {
     message,
     index,
+    previousMessage,
+    nextMessage,
     selected,
     replyContext,
     selectedThreadID,
@@ -44,6 +48,17 @@
   // (incrementing commentary + collapsed tool sub-items, collapse-to-one-line
   // when the turn ends) instead of the final-answer treatment.
   let preambleBlock = $derived(message.preamble_block);
+  // Boxed preamble<->answer cohesion. Within an agent message group the
+  // synthetic preamble row is immediately followed by the same author's final
+  // answer (coalesceAgentActivity anchors the block at the turn, ordinary
+  // messages pass through), so within-group adjacency alone identifies the
+  // pair. The preamble that precedes a final answer and the answer that follows
+  // a preamble share one bordered card with a flat internal seam, mirroring the
+  // ClawCanvas inline model so the activity log and the answer read as one unit.
+  let followsPreamble = $derived(Boolean(previousMessage?.preamble_block) && !preambleBlock);
+  let precedesFinalMessage = $derived(
+    Boolean(preambleBlock) && Boolean(nextMessage) && !nextMessage?.preamble_block,
+  );
 </script>
 
 <div
@@ -54,6 +69,8 @@
   class:is-preamble={Boolean(preambleBlock)}
   class:is-preamble-collapsed={preambleBlock?.final === true}
   class:is-preamble-live={preambleBlock?.final === false}
+  class:before-final-message={precedesFinalMessage}
+  class:after-preamble={followsPreamble}
   data-message-id={message.id}
 >
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>

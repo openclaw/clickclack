@@ -675,6 +675,64 @@
   padding-bottom: 4px;
 }
 
+/* Boxed preamble<->answer cohesion: when an agent preamble is immediately
+   followed by its final answer (same group/author), the two rows merge into a
+   single bordered card with a flat internal seam so the activity log and the
+   answer read as one cohesive unit (mirrors the ClawCanvas inline model). Scoped
+   to the paired rows only; a standalone or still-live preamble keeps its
+   full-bleed wash + gutter accent above. */
+.message-row.is-preamble.before-final-message {
+  background: transparent;
+  margin-bottom: 0;
+  padding-top: 2px;
+  padding-bottom: 0;
+}
+
+.message-row.after-preamble {
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 2px;
+}
+
+/* The gutter accent bar belongs to the standalone preamble; the boxed pair
+   carries its accent on the card's left border instead, so suppress it. */
+.message-row.is-preamble.before-final-message::before {
+  display: none;
+}
+
+.message-row.is-preamble.before-final-message .message-content,
+.message-row.after-preamble .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, var(--line-strong));
+  border-left: 3px solid var(--activity-accent);
+  background: var(--activity-accent-soft);
+}
+
+/* Preamble = top of the card: round the top, drop the bottom edge so the seam
+   is flat and the answer below continues the same box. */
+.message-row.is-preamble.before-final-message .message-content {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+  border-bottom: 0;
+}
+
+/* Answer = bottom of the card: flat top to meet the seam, rounded bottom. A
+   marginally lighter wash reads the answer as primary and the preamble as its
+   secondary header, giving a soft tonal seam without a hard divider line. */
+.message-row.after-preamble .message-content {
+  border-top: 0;
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+  background: color-mix(in srgb, var(--activity-accent-soft) 55%, var(--panel));
+}
+
+/* Collapsed preamble inside the boxed pair: keep the compact one-line height
+   without re-adding the standalone vertical padding. */
+.message-row.is-preamble.before-final-message.is-preamble-collapsed .message-content {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
 .preamble-contract {
   display: grid;
   gap: 7px;

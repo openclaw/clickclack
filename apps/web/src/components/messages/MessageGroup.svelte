@@ -36,7 +36,7 @@
   const isBot = $derived(author?.kind === "bot");
 </script>
 
-<article class="message-group">
+<article class="message-group" class:is-agent={isBot}>
   <Avatar
     class="avatar avatar-button"
     id={group.authorID}
@@ -61,6 +61,8 @@
       <MessageRow
         {message}
         {index}
+        previousMessage={group.messages[index - 1]}
+        nextMessage={group.messages[index + 1]}
         selected={selectedThreadID === message.id}
         {replyContext}
         {selectedThreadID}

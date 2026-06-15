@@ -135,19 +135,12 @@ MVP scopes:
 - `realtime:read`
 - `uploads:write`
 - `profile:read`
-- `agent_progress:write`
 
 Derived bundles:
 
 - `bot:read` = workspace/channel/message/thread/DM/realtime read scopes.
 - `bot:write` = read scopes plus message/thread/DM/upload write scopes.
 - `bot:admin` = all MVP scopes including channel creation/update.
-
-`agent_progress:write` is deliberately excluded from every bundle. It
-authorizes a source bridge to publish ephemeral `agent.progress` frames
-(agent thinking/tool activity ticks) and must be granted explicitly when a
-token is created or rotated, so existing `bot:write`/`messages:write` tokens
-do not silently inherit progress-publish capability.
 
 Enforcement:
 
@@ -170,9 +163,9 @@ MVP endpoint mapping:
 - `POST /api/uploads`: `uploads:write`
 - `POST /api/messages/{id}/attachments`: `uploads:write` and `messages:write`
 - `POST /api/realtime/ephemeral`: `messages:write`; the `agent.progress`
-  event type additionally requires a bot token carrying
-  `agent_progress:write` and exactly one concrete target (`channel_id` or
-  `direct_conversation_id`), never workspace-wide
+  event type additionally requires a bot token and exactly one concrete target
+  (`channel_id` or `direct_conversation_id`), never workspace-wide. DM progress
+  also requires `dms:write`.
 - `PATCH /api/me`: human sessions only; bot tokens cannot mutate profiles.
 
 ## Creation Surfaces

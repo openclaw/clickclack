@@ -107,13 +107,12 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// agent.progress is the source-bridge progress tick (AGENT_BRIDGE_PLAN
-	// §3.3). It rides the same ephemeral transport as typing/presence but is a
-	// distinct authorization surface: bot-token-only, gated on a dedicated
-	// agent_progress:write scope (NOT messages:write), and REQUIRED to name a
-	// single concrete target so a private turn can never broadcast to a whole
-	// workspace (§3.8 S1). The recipient list is always server-derived below;
-	// the relay never supplies recipients directly.
+	// agent.progress is the source-bridge progress tick. It rides the same
+	// ephemeral transport and message-write authorization as typing/presence,
+	// but is bot-token-only and REQUIRED to name a single concrete target so a
+	// private turn can never broadcast to a whole workspace. The recipient list
+	// is always server-derived below; the relay never supplies recipients
+	// directly.
 	isAgentProgress := body.Type == "agent.progress"
 	if body.Type != "typing.started" && body.Type != "typing.stopped" &&
 		body.Type != "presence.changed" && !isAgentProgress {
@@ -121,14 +120,10 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isAgentProgress {
-		// Human sessions never publish agent progress; only a source bridge bot
-		// with the explicit, non-inherited scope may (§3.1, HR-FF06).
+		// Human sessions never publish agent progress. A bot with normal write
+		// access can publish progress for the channel or DM it is allowed to use.
 		if act.botTokenID == "" {
 			writeError(w, http.StatusForbidden, errors.New("agent.progress requires a bot token"))
-			return
-		}
-		if err := act.requireScope("agent_progress:write"); err != nil {
-			writeError(w, http.StatusForbidden, err)
 			return
 		}
 	}

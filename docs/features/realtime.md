@@ -38,8 +38,8 @@ POST /api/realtime/ephemeral
   period instead of relying on the connect-time backfill. User-private durable
   events, such as read receipts, are filtered the same way as the WebSocket
   stream.
-- `POST /ephemeral` publishes a non-durable typing/presence event into the
-  hub. Channel typing events are scoped by `channel_id`; DM typing events must
+- `POST /ephemeral` publishes a non-durable typing, presence, or agent progress
+  event into the hub. Channel events are scoped by `channel_id`; DM events must
   send `direct_conversation_id` and are delivered only to that conversation's
   members.
 
@@ -88,10 +88,13 @@ Not persisted, not delivered after disconnect, may be dropped under load:
 - `typing.started`
 - `typing.stopped`
 - `presence.changed`
+- `agent.progress`
 
-For DM typing, the server verifies the sender is in the direct conversation and
-filters WebSocket delivery to that member set. Workspace members outside the DM
-do not receive the event.
+For DM typing and progress, the server verifies the sender is in the direct
+conversation and filters WebSocket delivery to that member set. Workspace
+members outside the DM do not receive the event. `agent.progress` is bot-only
+and must name exactly one target, so progress from a private agent turn cannot
+fall back to a workspace-wide broadcast.
 
 `POST /api/realtime/ephemeral` validates workspace membership and tags the
 payload with `user_id` from the caller before publishing.

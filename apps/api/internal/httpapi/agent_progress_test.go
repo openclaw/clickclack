@@ -18,16 +18,15 @@ import (
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
 
-// TestAgentProgressEphemeralAuthz is the Phase 1 step-0 acceptance gate for the
-// ClickClack Agent Bridge (AGENT_BRIDGE_PLAN §5 / §3.8). The agent.progress
-// ephemeral frame is a distinct authorization surface from typing/presence:
+// TestAgentProgressEphemeralAuthz is the acceptance gate for the agent.progress
+// ephemeral frame:
 //
 //   - bot-token-only (a human session can never publish progress),
-//   - gated on a dedicated, non-inherited agent_progress:write scope (HR-FF06):
-//     a bot:write token MUST NOT be able to publish progress,
+//   - gated by the existing bot write scopes so normal chat bots can publish
+//     progress without an extra setup step,
 //   - required to name exactly one concrete target so a private turn can never
-//     broadcast to the whole workspace (Sentinel S1),
-//   - DM targets bind to server-derived conversation members (Sentinel S1/S3).
+//     broadcast to the whole workspace,
+//   - DM targets bind to server-derived conversation members.
 func TestAgentProgressEphemeralAuthz(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -55,12 +54,12 @@ func TestAgentProgressEphemeralAuthz(t *testing.T) {
 	}
 	channel := channels[0]
 
-	// A source bridge bot WITH the explicit progress scope.
+	// A source bridge bot with normal chat write permissions.
 	progressBot, progressToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		OwnerUserID: owner.ID,
 		DisplayName: "Progress Bot",
-		Scopes:      []string{"bot:write", "agent_progress:write"},
+		Scopes:      []string{"bot:write"},
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
@@ -70,19 +69,19 @@ func TestAgentProgressEphemeralAuthz(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A bridge bot WITHOUT the progress scope (bot:write only). Per HR-FF06 this
-	// must NOT inherit agent_progress:write.
-	writeBot, writeToken, err := st.CreateBot(ctx, store.CreateBotInput{
+	// A read-only bridge bot cannot publish progress because it cannot write
+	// normal chat activity either.
+	readBot, readToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		OwnerUserID: owner.ID,
-		DisplayName: "Write Bot",
-		Scopes:      []string{"bot:write"},
+		DisplayName: "Read Bot",
+		Scopes:      []string{"bot:read"},
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddWorkspaceMember(ctx, workspace.ID, writeBot.ID, "bot"); err != nil {
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, readBot.ID, "bot"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,10 +95,10 @@ func TestAgentProgressEphemeralAuthz(t *testing.T) {
 	// 1. Human session (no bot token) cannot publish agent.progress at all.
 	expectStatus(t, http.MethodPost, ephemeralURL, strings.NewReader(channelFrame), http.StatusForbidden)
 
-	// 2. bot:write WITHOUT agent_progress:write is rejected (no scope inheritance).
-	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, ephemeralURL, strings.NewReader(channelFrame), http.StatusForbidden)
+	// 2. A read-only bot is rejected.
+	expectStatusWithBearer(t, readToken.Token, http.MethodPost, ephemeralURL, strings.NewReader(channelFrame), http.StatusForbidden)
 
-	// 3. The scoped bridge bot publishing to a channel target is accepted.
+	// 3. A normal bot:write bridge bot publishing to a channel target is accepted.
 	expectStatusWithBearer(t, progressToken.Token, http.MethodPost, ephemeralURL, strings.NewReader(channelFrame), http.StatusAccepted)
 
 	// 4. S1: a progress frame with NO concrete target is rejected. Without this
@@ -189,7 +188,7 @@ func TestAgentProgressDeliversOverRealtimeWithPrivateScoping(t *testing.T) {
 		WorkspaceID: workspace.ID,
 		OwnerUserID: owner.ID,
 		DisplayName: "Progress Bot",
-		Scopes:      []string{"bot:write", "agent_progress:write"},
+		Scopes:      []string{"bot:write"},
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
@@ -262,10 +261,11 @@ func TestAgentProgressDeliversOverRealtimeWithPrivateScoping(t *testing.T) {
 
 	nextEvent := readEventType(t, viewerConn, "agent.progress")
 	payload, _ := nextEvent.Payload.(map[string]any)
-	if payload != nil {
-		if text, _ := payload["text"].(string); text == "private detail" {
-			t.Fatalf("S1 violation: DM-scoped progress leaked to a non-member over the WS: %#v", nextEvent)
-		}
+	if payload == nil {
+		t.Fatalf("expected agent.progress payload map, got %#v", nextEvent.Payload)
+	}
+	if text, _ := payload["text"].(string); text == "private detail" {
+		t.Fatalf("DM-scoped progress leaked to a non-member over the WS: %#v", nextEvent)
 	}
 	if seq, _ := payload["seq"].(float64); seq != 2 {
 		t.Fatalf("expected the sentinel channel frame (seq=2) next, got %#v", nextEvent)

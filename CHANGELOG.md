@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Rendered ephemeral agent progress activity lines in web chat for live tool, thinking, plan, patch, and command updates. Thanks @ragesaq.
 - Allowed normal bot-write tokens to publish ephemeral agent progress while keeping progress frames bot-only and target-scoped. Thanks @ragesaq and @shakkernerd.
 - Fixed the mobile sidebar collapse control so it closes the open drawer on narrow screens without changing the desktop collapse preference. Thanks @iXandru for the report.
 - Fixed the mobile web layout on iPhone Safari so the closed navigation drawer fully leaves the viewport and the composer respects safe areas.

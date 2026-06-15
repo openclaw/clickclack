@@ -6,6 +6,7 @@
   import type { Message } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
+  import PreambleBlock from "./PreambleBlock.svelte";
 
   type Props = {
     message: Message;
@@ -37,14 +38,12 @@
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
-  // Durable agent activity rows render inline but with a theme-tied accent and a
-  // small badge so operators can tell commentary/tool output from the final
-  // answer. The accent color comes from --activity-accent (blue on light, amber
-  // on dark), never a hardcoded hex.
-  let activityKind = $derived(
-    message.kind === "agent_commentary" || message.kind === "agent_tool" ? message.kind : "",
-  );
-  let activityLabel = $derived(activityKind === "agent_tool" ? "tool" : "commentary");
+  // Coalesced agent activity: consecutive same-turn agent_commentary/agent_tool
+  // rows are collapsed (client-side) into one synthetic row carrying a
+  // preamble_block. When present, the row renders as a single preamble block
+  // (incrementing commentary + collapsed tool sub-items, collapse-to-one-line
+  // when the turn ends) instead of the final-answer treatment.
+  let preambleBlock = $derived(message.preamble_block);
 </script>
 
 <div
@@ -52,26 +51,16 @@
   class:selected
   class:is-pending={isPending}
   class:is-failed={isFailed}
-  class:is-activity={activityKind !== ""}
+  class:is-preamble={Boolean(preambleBlock)}
+  class:is-preamble-collapsed={preambleBlock?.final === true}
+  class:is-preamble-live={preambleBlock?.final === false}
   data-message-id={message.id}
-  data-message-kind={activityKind || undefined}
 >
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
   <div class="message-content">
-    {#if activityKind !== ""}
-      <span class="activity-badge" data-activity-kind={activityKind}>
-        {#if activityKind === "agent_tool"}
-          <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2 2.5-2.5Z"/>
-          </svg>
-        {:else}
-          <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
-          </svg>
-        {/if}
-        <span>{activityLabel}</span>
-      </span>
-    {/if}
+    {#if preambleBlock}
+      <PreambleBlock block={preambleBlock} />
+    {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(message.body)}</div>
     {#if message.attachments?.length}
@@ -96,7 +85,9 @@
         {/if}
       </div>
     {/if}
+    {/if}
   </div>
+  {#if !preambleBlock}
   <div class="message-actions" aria-label="Message actions">
     <button
       type="button"
@@ -123,4 +114,5 @@
       </svg>
     </button>
   </div>
+  {/if}
 </div>

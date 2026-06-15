@@ -10,7 +10,8 @@
     avatarURL: string;
     pushoverEnabled: boolean;
     pushoverUserKey: string;
-    showAgentActivity: boolean;
+    hideCommentary: boolean;
+    hideToolCalls: boolean;
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -18,7 +19,8 @@
     onAvatarURL: (value: string) => void;
     onPushoverEnabled: (value: boolean) => void;
     onPushoverUserKey: (value: string) => void;
-    onShowAgentActivity: (value: boolean) => void;
+    onHideCommentary: (value: boolean) => void;
+    onHideToolCalls: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -30,7 +32,8 @@
     avatarURL,
     pushoverEnabled,
     pushoverUserKey,
-    showAgentActivity,
+    hideCommentary,
+    hideToolCalls,
     status,
     statusError,
     onDisplayName,
@@ -38,7 +41,8 @@
     onAvatarURL,
     onPushoverEnabled,
     onPushoverUserKey,
-    onShowAgentActivity,
+    onHideCommentary,
+    onHideToolCalls,
     onClose,
     onSave,
   }: Props = $props();
@@ -117,10 +121,18 @@
       <label class="field check-field">
         <input
           type="checkbox"
-          checked={showAgentActivity}
-          onchange={(event) => onShowAgentActivity(event.currentTarget.checked)}
+          checked={hideCommentary}
+          onchange={(event) => onHideCommentary(event.currentTarget.checked)}
         />
-        <span>Show agent activity</span>
+        <span>Hide agent commentary</span>
+      </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          checked={hideToolCalls}
+          onchange={(event) => onHideToolCalls(event.currentTarget.checked)}
+        />
+        <span>Hide tool calls</span>
       </label>
       <label class="field">
         <span>Pushover user key</span>

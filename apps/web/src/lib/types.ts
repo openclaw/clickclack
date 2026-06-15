@@ -36,6 +36,23 @@ export type Channel = {
   unread_count?: number;
 };
 
+// One tool call inside a coalesced preamble block.
+export type PreambleToolItem = {
+  id: string;
+  name: string;
+  detail?: string;
+};
+
+// A render-time coalescing of one agent turn's activity rows: incrementing
+// commentary prose plus an ordered list of tool calls. Built client-side from
+// flat agent_commentary/agent_tool rows that share a turn_id.
+export type PreambleBlock = {
+  turnId: string;
+  commentary: string;
+  tools: PreambleToolItem[];
+  final: boolean;
+};
+
 export type Message = {
   id: string;
   route_id?: string;
@@ -57,6 +74,10 @@ export type Message = {
   kind?: "message" | "agent_commentary" | "agent_tool";
   // Correlates a sequence of agent activity rows within one agent turn.
   turn_id?: string;
+  // Client-only: when consecutive same-turn agent activity rows are coalesced
+  // into one preamble block for rendering, the synthetic row carries the
+  // collapsed block here. Never sent by the server.
+  preamble_block?: PreambleBlock;
   author?: User;
   attachments?: Upload[];
   quoted_message_id?: string;

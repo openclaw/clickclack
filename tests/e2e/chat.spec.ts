@@ -230,6 +230,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
 test("desktop sidebar collapse preference still toggles", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 844 });
   await page.goto("/app");
+  await expect(page.getByText("Connected")).toBeVisible();
 
   const shell = page.locator(".shell");
   await page.getByRole("button", { name: "Collapse sidebar" }).click();

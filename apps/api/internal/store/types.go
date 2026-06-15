@@ -34,6 +34,46 @@ var ErrPostRateLimited = errors.New("waiting room post limit reached")
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
 
+// ErrInvalidMessageKind is returned when a caller supplies a message kind that
+// is not one of the recognised values. HTTP callers surface it as a 400.
+var ErrInvalidMessageKind = errors.New("invalid message kind")
+
+// Message kinds. 'message' is an ordinary human/bot message and is the default
+// for any row created before this column existed. The agent_* kinds are
+// durable agent activity rows: they ride the normal message stream (channel
+// sequence, message.created fan-out, scrollback) but are excluded from
+// full-text search and from unread/notification accounting.
+const (
+	MessageKindMessage         = "message"
+	MessageKindAgentCommentary = "agent_commentary"
+	MessageKindAgentTool       = "agent_tool"
+)
+
+// AgentActivityWriteScope is the dedicated, non-inherited bot scope required to
+// create an agent activity message (kind != 'message'). It is deliberately
+// EXCLUDED from the bot:* bundles so existing deployments' capability surface
+// is unchanged: a bot must be granted it explicitly.
+const AgentActivityWriteScope = "agent_activity:write"
+
+// IsActivityMessageKind reports whether kind is one of the durable agent
+// activity kinds (anything other than the ordinary 'message').
+func IsActivityMessageKind(kind string) bool {
+	return kind == MessageKindAgentCommentary || kind == MessageKindAgentTool
+}
+
+// NormalizeMessageKind validates a caller-supplied kind. An empty value
+// defaults to 'message'. Unknown values return ErrInvalidMessageKind.
+func NormalizeMessageKind(kind string) (string, error) {
+	switch kind {
+	case "", MessageKindMessage:
+		return MessageKindMessage, nil
+	case MessageKindAgentCommentary, MessageKindAgentTool:
+		return kind, nil
+	default:
+		return "", ErrInvalidMessageKind
+	}
+}
+
 const (
 	WorkspaceRoleOwner           = "owner"
 	WorkspaceRoleModerator       = "moderator"
@@ -99,28 +139,34 @@ type Channel struct {
 }
 
 type Message struct {
-	ID                   string   `json:"id"`
-	RouteID              string   `json:"route_id,omitempty"`
-	WorkspaceID          string   `json:"workspace_id"`
-	ChannelID            string   `json:"channel_id,omitempty"`
-	DirectConversationID string   `json:"direct_conversation_id,omitempty"`
-	AuthorID             string   `json:"author_id"`
-	ParentMessageID      *string  `json:"parent_message_id,omitempty"`
-	ThreadRootID         string   `json:"thread_root_id"`
-	TopicID              string   `json:"topic_id,omitempty"`
-	ChannelSeq           *int64   `json:"channel_seq,omitempty"`
-	ThreadSeq            *int64   `json:"thread_seq,omitempty"`
-	Body                 string   `json:"body"`
-	BodyFormat           string   `json:"body_format"`
-	CreatedAt            string   `json:"created_at"`
-	EditedAt             *string  `json:"edited_at,omitempty"`
-	DeletedAt            *string  `json:"deleted_at,omitempty"`
-	Author               *User    `json:"author,omitempty"`
-	Attachments          []Upload `json:"attachments,omitempty"`
-	QuotedMessageID      *string  `json:"quoted_message_id,omitempty"`
-	QuotedBodySnapshot   string   `json:"quoted_body_snapshot,omitempty"`
-	QuotedAuthorID       *string  `json:"quoted_author_id,omitempty"`
-	QuotedAuthor         *User    `json:"quoted_author,omitempty"`
+	ID                   string  `json:"id"`
+	RouteID              string  `json:"route_id,omitempty"`
+	WorkspaceID          string  `json:"workspace_id"`
+	ChannelID            string  `json:"channel_id,omitempty"`
+	DirectConversationID string  `json:"direct_conversation_id,omitempty"`
+	AuthorID             string  `json:"author_id"`
+	ParentMessageID      *string `json:"parent_message_id,omitempty"`
+	ThreadRootID         string  `json:"thread_root_id"`
+	TopicID              string  `json:"topic_id,omitempty"`
+	ChannelSeq           *int64  `json:"channel_seq,omitempty"`
+	ThreadSeq            *int64  `json:"thread_seq,omitempty"`
+	Body                 string  `json:"body"`
+	BodyFormat           string  `json:"body_format"`
+	CreatedAt            string  `json:"created_at"`
+	EditedAt             *string `json:"edited_at,omitempty"`
+	DeletedAt            *string `json:"deleted_at,omitempty"`
+	// Kind discriminates ordinary messages from durable agent activity rows.
+	// Empty in JSON means the default 'message'.
+	Kind string `json:"kind,omitempty"`
+	// TurnID correlates a sequence of agent activity rows belonging to one
+	// agent turn. Empty for ordinary messages.
+	TurnID             string   `json:"turn_id,omitempty"`
+	Author             *User    `json:"author,omitempty"`
+	Attachments        []Upload `json:"attachments,omitempty"`
+	QuotedMessageID    *string  `json:"quoted_message_id,omitempty"`
+	QuotedBodySnapshot string   `json:"quoted_body_snapshot,omitempty"`
+	QuotedAuthorID     *string  `json:"quoted_author_id,omitempty"`
+	QuotedAuthor       *User    `json:"quoted_author,omitempty"`
 	// Nonce is a client-supplied idempotency key used by optimistic UIs to match
 	// the server response to a pending placeholder and safely retry after a lost
 	// response.
@@ -421,6 +467,10 @@ type CreateMessageInput struct {
 	QuotedMessageID *string
 	Nonce           string
 	TopicID         string
+	// Kind defaults to 'message' when empty. Activity kinds are gated at the
+	// API layer by AgentActivityWriteScope.
+	Kind   string
+	TurnID string
 }
 
 type UpdateMessageInput struct {
@@ -533,6 +583,8 @@ type CreateDirectMessageInput struct {
 	Body            string
 	QuotedMessageID *string
 	Nonce           string
+	Kind            string
+	TurnID          string
 }
 
 type Topic struct {

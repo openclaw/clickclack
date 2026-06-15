@@ -509,6 +509,10 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	kind, err := store.NormalizeMessageKind(input.Kind)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	var quotedID, quotedAuthorID, quotedSnapshot string
 	if input.QuotedMessageID != nil {
 		quotedID = strings.TrimSpace(*input.QuotedMessageID)
@@ -549,6 +553,8 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		QuotedBodySnapshot: quotedSnapshot,
 		QuotedAuthorID:     sqlOptionalText(quotedAuthorID),
 		ClientNonce:        nonce,
+		Kind:               kind,
+		TurnID:             sqlOptionalText(input.TurnID),
 	}); err != nil {
 		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
 			if existing.ChannelID == input.ChannelID && existing.DirectConversationID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.TopicID == input.TopicID && sameQuotedMessageID(existing, quotedID) {
@@ -567,6 +573,12 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	eventFields := map[string]string{"message_id": id, "author_id": input.AuthorID}
 	if input.TopicID != "" {
 		eventFields["topic_id"] = input.TopicID
+	}
+	if kind != store.MessageKindMessage {
+		eventFields["kind"] = kind
+	}
+	if input.TurnID != "" {
+		eventFields["turn_id"] = input.TurnID
 	}
 	event, err := insertEvent(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(eventFields, nonce))
 	if err != nil {

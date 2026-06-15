@@ -868,6 +868,8 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 		Body            string `json:"body"`
 		QuotedMessageID string `json:"quoted_message_id"`
 		Nonce           string `json:"nonce"`
+		Kind            string `json:"kind"`
+		TurnID          string `json:"turn_id"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -877,13 +879,19 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	kind, ok := s.resolveActivityKind(w, act, body.Kind)
+	if !ok {
+		return
+	}
 	if !s.requireBotDirectWorkspace(w, r, act, chi.URLParam(r, "conversation_id")) {
 		return
 	}
-	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce})
+	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, Kind: kind, TurnID: body.TurnID})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
-		s.notifyMessageCreated(r.Context(), message)
+		if !store.IsActivityMessageKind(message.Kind) {
+			s.notifyMessageCreated(r.Context(), message)
+		}
 	}
 	writeMessageCreateResult(w, message, event, err)
 }

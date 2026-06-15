@@ -185,6 +185,7 @@
     connected = false;
     stopTyping();
     if (typingSweeper) window.clearInterval(typingSweeper);
+    if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
   });
 
   async function boot() {
@@ -1982,18 +1983,33 @@
     if (!lineId) return;
     const text = line && typeof line.text === "string" ? line.text : "";
     const title = line && typeof line.title === "string" ? line.title : "";
+    const incomingText = text || title;
+    const incomingToolName =
+      line && typeof line.tool_name === "string"
+        ? line.tool_name
+        : typeof line?.toolName === "string"
+          ? (line.toolName as string)
+          : undefined;
+    const incomingStatus = line && typeof line.status === "string" ? line.status : undefined;
+    const incomingKind = line && typeof line.kind === "string" ? line.kind : undefined;
+    // Finalize/update frames legitimately carry only { id, kind, status } and no
+    // text/toolName. Merge onto the prior line so a status-only finalize still
+    // applies (the line dims) instead of being dropped and left live until TTL.
+    const existing = agentProgressTurns.find((turn) => turn.turnId === turnId);
+    const prior = existing?.lines.find((l) => l.id === lineId);
     const view = {
       id: lineId,
-      kind: line && typeof line.kind === "string" ? line.kind : "lifecycle",
-      text: text || title,
-      toolName: line && typeof line.tool_name === "string" ? line.tool_name : typeof line?.toolName === "string" ? (line.toolName as string) : undefined,
-      status: line && typeof line.status === "string" ? line.status : undefined,
-      finalized: op === "finalize",
+      kind: incomingKind ?? prior?.kind ?? "lifecycle",
+      text: incomingText || prior?.text || "",
+      toolName: incomingToolName ?? prior?.toolName,
+      status: incomingStatus ?? prior?.status,
+      finalized: op === "finalize" || (prior?.finalized ?? false),
     };
-    if (!view.text && !view.toolName) return;
+    // Only drop a brand-new line that carries nothing renderable. An update for
+    // an existing line must always apply, even when this frame omits content.
+    if (!prior && !view.text && !view.toolName) return;
     const userId = typeof payload.user_id === "string" ? payload.user_id : "";
     const expiresAt = Date.now() + AGENT_PROGRESS_TTL_MS;
-    const existing = agentProgressTurns.find((turn) => turn.turnId === turnId);
     if (!existing) {
       agentProgressTurns = [...agentProgressTurns, { turnId, userId, lines: [view], expiresAt }];
     } else {

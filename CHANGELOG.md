@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed the mobile sidebar collapse control so it closes the open drawer on narrow screens without changing the desktop collapse preference. Thanks @iXandru for the report.
 - Fixed the mobile web layout on iPhone Safari so the closed navigation drawer fully leaves the viewport and the composer respects safe areas.
 - Revived the platform app APIs for bot lifecycle, app installation, slash
   command registration/invocation, event subscriptions, connected accounts,

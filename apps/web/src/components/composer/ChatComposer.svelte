@@ -6,6 +6,8 @@
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, Upload, User } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
+  import ComposerModelPicker from "./ComposerModelPicker.svelte";
+  import ComposerContextMeter from "./ComposerContextMeter.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
 
@@ -37,10 +39,20 @@
     showUpload?: boolean;
     showToolbar?: boolean;
     showGifPicker?: boolean;
+    // Show the composer-anchored model picker + context meter (live/structured
+    // channels only, where a per-session override actually takes effect).
+    showModelPicker?: boolean;
     gifQuery?: string;
     filteredGifs?: GifItem[];
     slashCommands?: SlashCommand[];
     mentionPeople?: User[];
+    // Model-picker override handlers (forwarded to ComposerModelPicker).
+    onModel?: (model: string | undefined) => void;
+    onProvider?: (provider: string | undefined) => void;
+    onThinking?: (mode: string | undefined) => void;
+    onFast?: (fast: boolean) => void;
+    onRuntime?: (runtime: string | undefined) => void;
+    onResetOverrides?: () => void;
     onValue: (value: string) => void;
     onSubmit: () => void;
     onKeydown: (event: KeyboardEvent) => void;
@@ -67,10 +79,17 @@
     showUpload = false,
     showToolbar = false,
     showGifPicker = false,
+    showModelPicker = false,
     gifQuery = "",
     filteredGifs = [],
     slashCommands = [],
     mentionPeople = [],
+    onModel = () => {},
+    onProvider = () => {},
+    onThinking = () => {},
+    onFast = () => {},
+    onRuntime = () => {},
+    onResetOverrides = () => {},
     onValue,
     onSubmit,
     onKeydown,
@@ -329,13 +348,49 @@
         </svg>
       </button>
     </div>
-    {#if showToolbar}
-      <ComposerToolbar
-        showGifPicker={showGifPicker}
-        onWrap={onApplyMarkdownWrap}
-        onAppend={onAppendToComposer}
-        onToggleGif={onToggleGif}
-      />
+    {#if showToolbar || showModelPicker}
+      <div class="composer-utility">
+        {#if showToolbar}
+          <ComposerToolbar
+            showGifPicker={showGifPicker}
+            onWrap={onApplyMarkdownWrap}
+            onAppend={onAppendToComposer}
+            onToggleGif={onToggleGif}
+          />
+        {/if}
+        {#if showModelPicker}
+          <div class="composer-runtime-controls">
+            <ComposerContextMeter />
+            <ComposerModelPicker
+              {onModel}
+              {onProvider}
+              {onThinking}
+              {onFast}
+              {onRuntime}
+              {onResetOverrides}
+            />
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 </form>
+
+<style>
+  /* Utility bar: markdown glyphs on the left, runtime controls (context meter +
+     model picker) pushed to the right so they read as one row under the input. */
+  .composer-utility {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .composer-runtime-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    min-width: 0;
+  }
+</style>

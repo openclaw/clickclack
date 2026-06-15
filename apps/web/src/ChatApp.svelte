@@ -19,6 +19,13 @@
   import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
+  import {
+    channelRuntime,
+    loadChannelRuntime,
+    persistRuntimeOverride,
+    seedDemoChannelRuntime,
+  } from "./lib/chat/channel-runtime-store.svelte";
+  import type { ThinkingMode } from "./lib/chat/channel-runtime";
   import ImageViewer from "./components/media/ImageViewer.svelte";
   import MessageList, {
     type MessageListHandle,
@@ -177,6 +184,11 @@
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
+  // Refresh the channel runtime snapshot (model + context) from clickclack's
+  // own endpoint whenever the active channel changes. Falls back to the seeded
+  // demo values when no bridge-stamped row exists yet.
+  $: if (selectedChannelID) void loadChannelRuntime(selectedChannelID);
+
   $: filteredGifs = showGifPicker
     ? gifLibrary.filter((gif) => {
         const query = gifQuery.trim().toLowerCase();
@@ -186,6 +198,9 @@
 
   onMount(() => {
     loadActivityPrefs();
+    // Seed a representative runtime snapshot so the composer model picker +
+    // context meter are populated before the bridge stamp (increment 2) lands.
+    seedDemoChannelRuntime();
     void boot();
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
     const handleMobileNavBreakpoint = () => {
@@ -2458,6 +2473,28 @@
       onToggleGif={() => (showGifPicker = !showGifPicker)}
       onGifQuery={(value) => (gifQuery = value)}
       onPickGif={pickGif}
+      showModelPicker={!!selectedChannelID}
+      onModel={(model) => {
+        channelRuntime.setModel(model);
+        void persistRuntimeOverride(selectedChannelID, {
+          model: model ?? "",
+          thinking: channelRuntime.runtime.thinking ?? "",
+        });
+      }}
+      onProvider={(provider) => channelRuntime.setProvider(provider)}
+      onThinking={(mode) => {
+        channelRuntime.setThinking(mode as ThinkingMode | undefined);
+        void persistRuntimeOverride(selectedChannelID, {
+          model: channelRuntime.runtime.model ?? "",
+          thinking: mode ?? "",
+        });
+      }}
+      onFast={(fast) => channelRuntime.setFast(fast)}
+      onRuntime={(runtime) => channelRuntime.setRuntime(runtime)}
+      onResetOverrides={() => {
+        channelRuntime.clearOverrides();
+        void persistRuntimeOverride(selectedChannelID, { model: "", thinking: "" });
+      }}
     />
   </main>
 

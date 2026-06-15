@@ -1209,6 +1209,51 @@
     };
   }
 
+  function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
+    if (event.type !== "message.created") return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (document.visibilityState === "visible" && affectsActiveView) return;
+    const payload = event.payload as Record<string, unknown>;
+    const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
+    if (authorID && authorID === user?.id) return;
+    const { channelID, dmID } = messageEventScope(event);
+    const channel = channels.find((candidate) => candidate.id === channelID);
+    const author = lookupUser(authorID);
+    const authorName = author?.display_name || "ClickClack";
+    const place = channel ? `#${channel.name}` : "Direct message";
+    const rawBody = typeof payload.body === "string" ? payload.body : "New message";
+    const messageID = typeof payload.message_id === "string" ? payload.message_id : `${channelID || dmID}:${event.seq || Date.now()}`;
+    try {
+      const notification = new Notification(`${authorName} in ${place}`, {
+        body: notificationBody(rawBody),
+        tag: `clickclack:${messageID}`,
+        icon: "/favicon.svg",
+      });
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+        if (channelID) {
+          void selectChannel(channelID);
+        } else if (dmID) {
+          void selectDirectConversation(dmID);
+        }
+      };
+    } catch {
+      // Browsers can still reject notifications despite granted permission.
+    }
+  }
+
+  function notificationBody(body: string): string {
+    const stripped = body
+      .replace(/!\[[^\]]*]\([^)]+\)/g, "[image]")
+      .replace(/\[[^\]]+]\(([^)]+)\)/g, "$1")
+      .replace(/[`*_>#|]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!stripped) return "New message";
+    return stripped.length > 180 ? `${stripped.slice(0, 177)}...` : stripped;
+  }
+
   function messageEventAlreadyAccounted(event: RealtimeEvent): boolean {
     if (event.type !== "message.created") return false;
     const seq = eventMessageSeq(event);
@@ -1828,6 +1873,7 @@
     if (messageEventAlreadyAccounted(event)) return;
     const affectsActiveView =
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
+    maybeShowBrowserNotification(event, affectsActiveView);
     if (event.type === "message.created" && !affectsActiveView) {
       handleUnreadBump(event);
     }

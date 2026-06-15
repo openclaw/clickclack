@@ -647,6 +647,106 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
 });
 
+test("browser notifications announce incoming messages outside the active conversation", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    type CapturedNotification = {
+      title: string;
+      options?: NotificationOptions;
+      closed?: boolean;
+      onclick?: (() => void) | null;
+      close: () => void;
+    };
+    const target = window as unknown as {
+      __clickclackNotifications: CapturedNotification[];
+      Notification: typeof Notification;
+    };
+    class FakeNotification implements CapturedNotification {
+      static permission: NotificationPermission = "granted";
+      static requestPermission = () => Promise.resolve("granted" as NotificationPermission);
+      title: string;
+      options?: NotificationOptions;
+      closed = false;
+      onclick: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        this.options = options;
+        target.__clickclackNotifications.push(this);
+      }
+
+      close() {
+        this.closed = true;
+      }
+    }
+    target.__clickclackNotifications = [];
+    target.Notification = FakeNotification as unknown as typeof Notification;
+  });
+
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelName = `notify-${Date.now()}`;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: channelName, kind: "public" },
+  });
+  const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const senderID = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspaceId,
+    "--name",
+    "Notification Sender",
+    "--email",
+    `${channelName}@example.com`,
+  ]);
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  const remoteResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: "ping from another channel" },
+  });
+  expect(remoteResponse.ok()).toBe(true);
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string; options?: NotificationOptions }[];
+            }
+          ).__clickclackNotifications,
+      ),
+    )
+    .toEqual([
+      expect.objectContaining({
+        title: expect.stringContaining("ClickClack in #notify-"),
+        options: expect.objectContaining({
+          body: "New message",
+          icon: "/favicon.svg",
+        }),
+      }),
+    ]);
+
+  await page.evaluate(() => {
+    const notification = (
+      window as unknown as {
+        __clickclackNotifications: { onclick?: (() => void) | null }[];
+      }
+    ).__clickclackNotifications[0];
+    notification.onclick?.();
+  });
+
+  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+});
+
 test("clicking the active conversation does not refetch its messages", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as {

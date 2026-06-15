@@ -51,7 +51,9 @@
       item.type === "tool" ? { item, tool: toolDetail(item.name, item.detail) } : { item, tool: null },
     ),
   );
-  let stateLabel = $derived(block.final ? "done" : "live");
+  // Final turns label the pill with the visibility state (expanded/collapsed)
+  // instead of a lifecycle word; "live" remains while the turn streams.
+  let stateLabel = $derived(block.final ? (preambleOpen ? "expanded" : "collapsed") : "live");
   let toggleLabel = $derived(preambleOpen ? "Hide preamble" : "Show preamble");
 </script>
 

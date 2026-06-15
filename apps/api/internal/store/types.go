@@ -2,8 +2,51 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 )
+
+// ChannelRuntime is the per-channel agent runtime snapshot the composer model
+// picker and context meter render. It is produced by the agent-bridge reading
+// the gateway directly and stored in clickclack's own database, with no
+// dependency on ClawCanvas. pct is derived client-side from used/limit.
+type ChannelRuntime struct {
+	ChannelID        string          `json:"channel_id"`
+	DefaultModel     string          `json:"default_model"`
+	DefaultThinking  string          `json:"default_thinking"`
+	Model            string          `json:"model,omitempty"`
+	Thinking         string          `json:"thinking,omitempty"`
+	OverrideModel    string          `json:"override_model,omitempty"`
+	OverrideThinking string          `json:"override_thinking,omitempty"`
+	ContextUsed      int64           `json:"context_used"`
+	ContextLimit     int64           `json:"context_limit"`
+	CacheHitPct      *float64        `json:"cache_hit_pct,omitempty"`
+	ContextBreakdown json.RawMessage `json:"context_breakdown,omitempty"`
+	UpdatedAt        string          `json:"updated_at,omitempty"`
+}
+
+// ChannelRuntimeSnapshot is the bridge-owned half of a runtime record: the
+// effective facts read from the gateway. It does not carry the picker's desired
+// override (that is ChannelRuntimeOverride), so a bridge write never clobbers a
+// pending override and vice versa.
+type ChannelRuntimeSnapshot struct {
+	DefaultModel     string
+	DefaultThinking  string
+	Model            string
+	Thinking         string
+	ContextUsed      int64
+	ContextLimit     int64
+	CacheHitPct      *float64
+	ContextBreakdown json.RawMessage
+}
+
+// ChannelRuntimeOverride is the picker-owned half: the model/thinking the user
+// asked the next turn to run with. The bridge consumes it and applies it to the
+// gateway session.
+type ChannelRuntimeOverride struct {
+	Model    string
+	Thinking string
+}
 
 // ErrQuotedMessageOutOfScope is returned when a message tries to quote another
 // message that does not belong to the same channel, direct conversation, or
@@ -764,4 +807,7 @@ type Store interface {
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)
+	GetChannelRuntime(ctx context.Context, channelID string) (ChannelRuntime, error)
+	UpsertChannelRuntime(ctx context.Context, channelID string, snap ChannelRuntimeSnapshot) (ChannelRuntime, error)
+	SetChannelRuntimeOverride(ctx context.Context, channelID string, override ChannelRuntimeOverride) (ChannelRuntime, error)
 }

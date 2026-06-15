@@ -27,10 +27,16 @@
   --accent: #dd5d45;
   --accent-2: #006d77;
   --accent-soft: rgba(221, 93, 69, 0.16);
-  /* Agent activity accent: blue on light theme. Tied to the theme via the
-     prefers-color-scheme override below, never hardcoded at the call site. */
-  --activity-accent: #2f6df6;
-  --activity-accent-soft: rgba(47, 109, 246, 0.06);
+  /* Two-tone agent turn: the preamble (working log) is yellow while the turn
+     streams and as it collapses to the bar on top, and the final delivered
+     answer owns the blue. Both are theme-tied via the prefers-color-scheme
+     override below, never hardcoded at the call site. */
+  --activity-accent: #d49415;
+  --activity-accent-soft: rgba(212, 148, 21, 0.15);
+  /* Delivery accent: the final answer's blue. This is the hero color of the
+     turn; the preamble's slate deliberately recedes beneath it. */
+  --delivery-accent: #2f6df6;
+  --delivery-accent-soft: rgba(47, 109, 246, 0.10);
   /* Tool-call rows inside the preamble: a light blue wash, distinct from the
      preamble background without shouting. */
   --tool-call-bg: rgba(47, 109, 246, 0.09);
@@ -70,9 +76,11 @@
     --accent: #6f7eff;
     --accent-2: #5666ee;
     --accent-soft: rgba(111, 126, 255, 0.18);
-    /* Gold/amber on dark theme. */
-    --activity-accent: #e0a93b;
-    --activity-accent-soft: rgba(224, 169, 59, 0.08);
+    /* Yellow preamble on dark theme; the delivered answer stays blue. */
+    --activity-accent: #e8b23e;
+    --activity-accent-soft: rgba(232, 178, 62, 0.16);
+    --delivery-accent: #6096ff;
+    --delivery-accent-soft: rgba(96, 150, 255, 0.14);
     /* Tool rows stay a light blue even on the amber dark accent: ragesaq's
        spec is "light blue, distinct but not striking" on both themes. */
     --tool-call-bg: rgba(96, 150, 255, 0.12);

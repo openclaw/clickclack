@@ -653,7 +653,9 @@
    secondary to the final answer, which renders as a clearly separate ordinary
    message below it. */
 .message-row.is-preamble {
-  background: var(--activity-accent-soft);
+  /* Streaming/growing phase: a clearly yellow wash so the working log reads as
+     yellow while commentary + tool rows stream in and the bubble grows. */
+  background: color-mix(in srgb, var(--activity-accent) 17%, var(--panel));
   /* Breathing room before the separate final-answer message below. */
   margin-bottom: 6px;
   padding-top: 4px;
@@ -700,8 +702,8 @@
   display: none;
 }
 
-.message-row.is-preamble.before-final-message .message-content,
-.message-row.after-preamble .message-content {
+/* Preamble = the slate working-log header (top of the card). */
+.message-row.is-preamble.before-final-message .message-content {
   padding: 7px 11px;
   border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, var(--line-strong));
   border-left: 3px solid var(--activity-accent);
@@ -719,18 +721,28 @@
 /* Answer = bottom of the card: flat top to meet the seam, rounded bottom. A
    marginally lighter wash reads the answer as primary and the preamble as its
    secondary header, giving a soft tonal seam without a hard divider line. */
+/* Answer = the delivered blue message (bottom of the card). This is the hero:
+   a clearly blue wash + blue left rail so it reads as the primary delivery and
+   the slate preamble above it reads as its secondary header. Flat top meets the
+   seam; rounded bottom closes the card. */
 .message-row.after-preamble .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--delivery-accent) 26%, var(--line-strong));
+  border-left: 3px solid var(--delivery-accent);
   border-top: 0;
   border-bottom-left-radius: 11px;
   border-bottom-right-radius: 11px;
-  background: color-mix(in srgb, var(--activity-accent-soft) 55%, var(--panel));
+  background: var(--delivery-accent-soft);
 }
 
 /* Collapsed preamble inside the boxed pair: keep the compact one-line height
-   without re-adding the standalone vertical padding. */
+   without re-adding the standalone vertical padding, and render a distinct
+   yellow bar capping the blue final block below it. */
 .message-row.is-preamble.before-final-message.is-preamble-collapsed .message-content {
   padding-top: 7px;
   padding-bottom: 7px;
+  background: color-mix(in srgb, var(--activity-accent) 22%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 40%, transparent);
 }
 
 .preamble-contract {

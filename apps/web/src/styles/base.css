@@ -27,6 +27,10 @@
   --accent: #dd5d45;
   --accent-2: #006d77;
   --accent-soft: rgba(221, 93, 69, 0.16);
+  /* Agent activity accent: blue on light theme. Tied to the theme via the
+     prefers-color-scheme override below, never hardcoded at the call site. */
+  --activity-accent: #2f6df6;
+  --activity-accent-soft: rgba(47, 109, 246, 0.12);
   --accent-glow: 0 0 0 1px rgba(221, 93, 69, 0.28), 0 8px 30px -12px rgba(221, 93, 69, 0.45);
   --success: #168b51;
   --warn: #f5b050;
@@ -62,6 +66,9 @@
     --accent: #6f7eff;
     --accent-2: #5666ee;
     --accent-soft: rgba(111, 126, 255, 0.18);
+    /* Gold/amber on dark theme. */
+    --activity-accent: #e0a93b;
+    --activity-accent-soft: rgba(224, 169, 59, 0.16);
     --accent-glow: 0 0 0 1px rgba(111, 126, 255, 0.4), 0 8px 30px -12px rgba(111, 126, 255, 0.6);
     --success: #2ecc71;
     --warn: #f5b050;

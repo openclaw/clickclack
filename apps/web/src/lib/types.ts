@@ -52,6 +52,11 @@ export type Message = {
   created_at: string;
   edited_at?: string;
   deleted_at?: string;
+  // Message kind. Absent/"message" is an ordinary message. The agent_* kinds
+  // are durable agent activity rows rendered inline with an accent + badge.
+  kind?: "message" | "agent_commentary" | "agent_tool";
+  // Correlates a sequence of agent activity rows within one agent turn.
+  turn_id?: string;
   author?: User;
   attachments?: Upload[];
   quoted_message_id?: string;
@@ -158,6 +163,8 @@ export type EventPayload = {
   author_id?: string;
   last_read_seq?: number;
   seq?: number;
+  kind?: string;
+  turn_id?: string;
 };
 
 export type RealtimeEvent = {

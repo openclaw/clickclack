@@ -10,6 +10,7 @@
     avatarURL: string;
     pushoverEnabled: boolean;
     pushoverUserKey: string;
+    showAgentActivity: boolean;
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -17,6 +18,7 @@
     onAvatarURL: (value: string) => void;
     onPushoverEnabled: (value: boolean) => void;
     onPushoverUserKey: (value: string) => void;
+    onShowAgentActivity: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -28,6 +30,7 @@
     avatarURL,
     pushoverEnabled,
     pushoverUserKey,
+    showAgentActivity,
     status,
     statusError,
     onDisplayName,
@@ -35,6 +38,7 @@
     onAvatarURL,
     onPushoverEnabled,
     onPushoverUserKey,
+    onShowAgentActivity,
     onClose,
     onSave,
   }: Props = $props();
@@ -109,6 +113,14 @@
           onchange={(event) => onPushoverEnabled(event.currentTarget.checked)}
         />
         <span>Pushover notifications</span>
+      </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          checked={showAgentActivity}
+          onchange={(event) => onShowAgentActivity(event.currentTarget.checked)}
+        />
+        <span>Show agent activity</span>
       </label>
       <label class="field">
         <span>Pushover user key</span>

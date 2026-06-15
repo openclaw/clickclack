@@ -193,6 +193,51 @@ test("shows realtime connection state in the shell", async ({ page }) => {
   ).toContainText("Active");
 });
 
+test("browser notifications require explicit profile opt-in", async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as unknown as {
+      __clickclackPermissionRequests: number;
+      Notification: typeof Notification;
+    };
+    class FakeNotification {
+      static permission: NotificationPermission = "default";
+      static requestPermission = () => {
+        target.__clickclackPermissionRequests += 1;
+        FakeNotification.permission = "granted";
+        return Promise.resolve("granted" as NotificationPermission);
+      };
+    }
+    target.__clickclackPermissionRequests = 0;
+    target.Notification = FakeNotification as unknown as typeof Notification;
+  });
+
+  await page.goto("/app");
+  await page
+    .getByRole("button", { name: /Account settings for Local Captain/ })
+    .click({ button: "right" });
+  await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
+
+  await page.getByLabel("Browser notifications").check();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("clickclack:browser-notifications-enabled:v1")),
+    )
+    .toBe("enabled");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackPermissionRequests: number;
+            }
+          ).__clickclackPermissionRequests,
+      ),
+    )
+    .toBe(1);
+});
+
 test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");
@@ -682,6 +727,7 @@ test("browser notifications announce incoming messages outside the active conver
     }
     target.__clickclackNotifications = [];
     target.Notification = FakeNotification as unknown as typeof Notification;
+    localStorage.setItem("clickclack:browser-notifications-enabled:v1", "enabled");
   });
 
   const workspacesResponse = await page.request.get("/api/workspaces");

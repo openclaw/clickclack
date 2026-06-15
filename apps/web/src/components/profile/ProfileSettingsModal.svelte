@@ -10,6 +10,9 @@
     avatarURL: string;
     pushoverEnabled: boolean;
     pushoverUserKey: string;
+    browserNotificationsSupported: boolean;
+    browserNotificationsEnabled: boolean;
+    browserNotificationPermission: NotificationPermission | "unsupported";
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -17,6 +20,7 @@
     onAvatarURL: (value: string) => void;
     onPushoverEnabled: (value: boolean) => void;
     onPushoverUserKey: (value: string) => void;
+    onBrowserNotificationsEnabled: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -28,6 +32,9 @@
     avatarURL,
     pushoverEnabled,
     pushoverUserKey,
+    browserNotificationsSupported,
+    browserNotificationsEnabled,
+    browserNotificationPermission,
     status,
     statusError,
     onDisplayName,
@@ -35,6 +42,7 @@
     onAvatarURL,
     onPushoverEnabled,
     onPushoverUserKey,
+    onBrowserNotificationsEnabled,
     onClose,
     onSave,
   }: Props = $props();
@@ -102,6 +110,20 @@
           oninput={(event) => onAvatarURL(event.currentTarget.value)}
         />
       </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          disabled={!browserNotificationsSupported || browserNotificationPermission === "denied"}
+          checked={browserNotificationsEnabled}
+          onchange={(event) => onBrowserNotificationsEnabled(event.currentTarget.checked)}
+        />
+        <span>Browser notifications</span>
+      </label>
+      {#if !browserNotificationsSupported}
+        <p class="profile-status error">Browser notifications are not supported</p>
+      {:else if browserNotificationPermission === "denied"}
+        <p class="profile-status error">Browser notifications are blocked by this browser</p>
+      {/if}
       <label class="field check-field">
         <input
           type="checkbox"

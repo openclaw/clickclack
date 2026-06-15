@@ -40,6 +40,7 @@
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
+  const BROWSER_NOTIFICATIONS_STORAGE_KEY = "clickclack:browser-notifications-enabled:v1";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
 
   export let routeWorkspaceID = "";
@@ -79,6 +80,9 @@
   let profileAvatarURL = "";
   let profilePushoverEnabled = false;
   let profilePushoverUserKey = "";
+  let browserNotificationsSupported = false;
+  let browserNotificationsEnabled = false;
+  let browserNotificationPermission: NotificationPermission | "unsupported" = "default";
   let profileStatus = "";
   let profileStatusError = false;
   let status = "loading";
@@ -170,6 +174,7 @@
     : [];
 
   onMount(() => {
+    syncBrowserNotificationState();
     void boot();
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
     const handleMobileNavBreakpoint = () => {
@@ -211,6 +216,7 @@
 
   function openProfileSettings() {
     if (!user) return;
+    syncBrowserNotificationState();
     profileDisplayName = user.display_name;
     profileHandle = user.handle ? `@${user.handle}` : "";
     profileAvatarURL = user.avatar_url;
@@ -219,6 +225,51 @@
     profileStatus = "";
     profileStatusError = false;
     showProfileSettings = true;
+  }
+
+  function syncBrowserNotificationState() {
+    browserNotificationsSupported = typeof Notification !== "undefined";
+    browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
+    const storedEnabled = localStorage.getItem(BROWSER_NOTIFICATIONS_STORAGE_KEY) === "enabled";
+    browserNotificationsEnabled = browserNotificationPermission === "granted" && storedEnabled;
+    if (storedEnabled && browserNotificationPermission !== "granted") {
+      localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+    }
+  }
+
+  async function setBrowserNotificationsEnabled(enabled: boolean) {
+    profileStatus = "";
+    profileStatusError = false;
+    if (!enabled) {
+      localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+      browserNotificationsEnabled = false;
+      profileStatus = "Browser notifications disabled";
+      return;
+    }
+    if (typeof Notification === "undefined") {
+      browserNotificationsSupported = false;
+      browserNotificationPermission = "unsupported";
+      browserNotificationsEnabled = false;
+      profileStatus = "Browser notifications are not supported";
+      profileStatusError = true;
+      return;
+    }
+    const permission =
+      Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+    browserNotificationsSupported = true;
+    browserNotificationPermission = permission;
+    if (permission === "granted") {
+      localStorage.setItem(BROWSER_NOTIFICATIONS_STORAGE_KEY, "enabled");
+      browserNotificationsEnabled = true;
+      profileStatus = "Browser notifications enabled";
+      return;
+    }
+    localStorage.removeItem(BROWSER_NOTIFICATIONS_STORAGE_KEY);
+    browserNotificationsEnabled = false;
+    profileStatus = permission === "denied"
+      ? "Browser notifications are blocked by this browser"
+      : "Browser notifications were not enabled";
+    profileStatusError = true;
   }
 
   async function saveProfile() {
@@ -1211,6 +1262,7 @@
 
   function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
     if (event.type !== "message.created") return;
+    if (!browserNotificationsEnabled) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
     const payload = event.payload as Record<string, unknown>;
@@ -2511,6 +2563,9 @@
     avatarURL={profileAvatarURL}
     pushoverEnabled={profilePushoverEnabled}
     pushoverUserKey={profilePushoverUserKey}
+    {browserNotificationsSupported}
+    {browserNotificationsEnabled}
+    {browserNotificationPermission}
     status={profileStatus}
     statusError={profileStatusError}
     onDisplayName={(value) => (profileDisplayName = value)}
@@ -2518,6 +2573,7 @@
     onAvatarURL={(value) => (profileAvatarURL = value)}
     onPushoverEnabled={(value) => (profilePushoverEnabled = value)}
     onPushoverUserKey={(value) => (profilePushoverUserKey = value)}
+    onBrowserNotificationsEnabled={(value) => void setBrowserNotificationsEnabled(value)}
     onClose={closeModal}
     onSave={() => void saveProfile()}
   />

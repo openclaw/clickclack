@@ -30,7 +30,11 @@
   /* Agent activity accent: blue on light theme. Tied to the theme via the
      prefers-color-scheme override below, never hardcoded at the call site. */
   --activity-accent: #2f6df6;
-  --activity-accent-soft: rgba(47, 109, 246, 0.12);
+  --activity-accent-soft: rgba(47, 109, 246, 0.06);
+  /* Tool-call rows inside the preamble: a light blue wash, distinct from the
+     preamble background without shouting. */
+  --tool-call-bg: rgba(47, 109, 246, 0.09);
+  --tool-call-bg-hover: rgba(47, 109, 246, 0.14);
   --accent-glow: 0 0 0 1px rgba(221, 93, 69, 0.28), 0 8px 30px -12px rgba(221, 93, 69, 0.45);
   --success: #168b51;
   --warn: #f5b050;
@@ -68,7 +72,11 @@
     --accent-soft: rgba(111, 126, 255, 0.18);
     /* Gold/amber on dark theme. */
     --activity-accent: #e0a93b;
-    --activity-accent-soft: rgba(224, 169, 59, 0.16);
+    --activity-accent-soft: rgba(224, 169, 59, 0.08);
+    /* Tool rows stay a light blue even on the amber dark accent: ragesaq's
+       spec is "light blue, distinct but not striking" on both themes. */
+    --tool-call-bg: rgba(96, 150, 255, 0.12);
+    --tool-call-bg-hover: rgba(96, 150, 255, 0.18);
     --accent-glow: 0 0 0 1px rgba(111, 126, 255, 0.4), 0 8px 30px -12px rgba(111, 126, 255, 0.6);
     --success: #2ecc71;
     --warn: #f5b050;

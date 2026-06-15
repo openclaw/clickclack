@@ -23,13 +23,34 @@
     }
   });
 
-  // Tool sub-items are collapsed by default (ragesaq's spec), independent of the
-  // whole-block toggle, so an operator can read the prose without the tool list
-  // unless they ask for it.
-  let toolsOpen = $state(false);
+  // Per-tool expansion: every tool row renders collapsed to a one-line summary
+  // (glyph + action + tool name + truncated detail) and expands on click to
+  // the full stored body. Tracked per row id so expanding one never touches
+  // the others, and live updates don't reset an operator's expansion.
+  let expandedTools = $state<Record<string, boolean>>({});
 
-  let toolCount = $derived(block.tools.length);
-  let resolvedTools = $derived(block.tools.map((t) => ({ key: t.id, ...toolDetail(t.name, t.detail) })));
+  function toggleTool(id: string) {
+    expandedTools[id] = !expandedTools[id];
+  }
+
+  // Split a stored tool body ("**head**\n\ntext" from the bridge) into the
+  // step-chain head and the output text. The head renders as a plain styled
+  // line, not markdown: chains regularly contain characters (*/, **, |) that
+  // break markdown emphasis and would render as literal asterisks.
+  function splitFull(full: string): { head?: string; text: string } {
+    const match = full.match(/^\*\*([^]*?)\*\*\s*\n*([^]*)$/);
+    if (!match) return { text: full };
+    const head = match[1].trim();
+    const text = match[2].trim();
+    return { head: head || undefined, text };
+  }
+
+  // Interleaved items in arrival order; tool rows resolve to display detail.
+  let resolved = $derived(
+    block.items.map((item) =>
+      item.type === "tool" ? { item, tool: toolDetail(item.name, item.detail) } : { item, tool: null },
+    ),
+  );
   let stateLabel = $derived(block.final ? "done" : "live");
   let toggleLabel = $derived(preambleOpen ? "Hide preamble" : "Show preamble");
 </script>
@@ -47,39 +68,43 @@
     <span class="preamble-action">{toggleLabel}</span>
   </button>
   {#if preambleOpen}
-    {#if block.commentary.trim()}
-      <div class="markdown preamble-body">{@html markdown(block.commentary)}</div>
-    {/if}
-    {#if toolCount > 0}
-      <div class="preamble-tools" class:expanded={toolsOpen}>
-        <button
-          type="button"
-          class="preamble-tools-toggle"
-          aria-expanded={toolsOpen}
-          onclick={() => (toolsOpen = !toolsOpen)}
-        >
-          <span class="preamble-tools-chevron" class:open={toolsOpen} aria-hidden="true">▸</span>
-          <span class="preamble-tools-label"
-            >{toolsOpen ? "Hide" : "Show"} {toolCount} tool {toolCount === 1 ? "call" : "calls"}</span
-          >
-        </button>
-        {#if toolsOpen}
-          <ol class="tool-line" aria-label="Tool calls">
-            {#each resolvedTools as detail (detail.key)}
-              <li class="tool-line-row">
-                <span class="tool-line-glyph" aria-hidden="true">{detail.glyph}</span>
-                <span class="tool-line-action">{detail.action}</span>
-                {#if detail.name && detail.name !== "tool"}
-                  <span class="tool-line-name">{detail.name}</span>
+    <div class="preamble-flow">
+      {#each resolved as entry (entry.item.id)}
+        {#if entry.item.type === "commentary"}
+          <div class="markdown preamble-body">{@html markdown(entry.item.body)}</div>
+        {:else if entry.tool}
+          {@const open = expandedTools[entry.item.id] === true}
+          <div class="preamble-tool" class:expanded={open}>
+            <button
+              type="button"
+              class="preamble-tool-summary"
+              aria-expanded={open}
+              onclick={() => toggleTool(entry.item.id)}
+            >
+              <span class="tool-line-chevron" class:open aria-hidden="true">▸</span>
+              <span class="tool-line-glyph" aria-hidden="true">{entry.tool.glyph}</span>
+              <span class="tool-line-action">{entry.tool.action}</span>
+              {#if entry.tool.name && entry.tool.name !== "tool"}
+                <span class="tool-line-name">{entry.tool.name}</span>
+              {/if}
+              {#if !open && entry.tool.detail}
+                <span class="tool-line-detail" title={entry.tool.detail}>{entry.tool.detail}</span>
+              {/if}
+            </button>
+            {#if open}
+              {@const full = splitFull(entry.item.full)}
+              <div class="preamble-tool-full">
+                {#if full.head}
+                  <div class="preamble-tool-full-head">{full.head}</div>
                 {/if}
-                {#if detail.detail}
-                  <span class="tool-line-detail" title={detail.detail}>{detail.detail}</span>
+                {#if full.text}
+                  <div class="markdown preamble-tool-full-body">{@html markdown(full.text)}</div>
                 {/if}
-              </li>
-            {/each}
-          </ol>
+              </div>
+            {/if}
+          </div>
         {/if}
-      </div>
-    {/if}
+      {/each}
+    </div>
   {/if}
 </section>

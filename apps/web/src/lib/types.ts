@@ -36,20 +36,33 @@ export type Channel = {
   unread_count?: number;
 };
 
-// One tool call inside a coalesced preamble block.
+// One commentary prose segment inside a coalesced preamble block.
+export type PreambleCommentaryItem = {
+  type: "commentary";
+  id: string;
+  body: string;
+};
+
+// One tool call inside a coalesced preamble block. `name`/`detail` drive the
+// collapsed one-line summary; `full` is the complete stored body shown when
+// the operator expands the row.
 export type PreambleToolItem = {
+  type: "tool";
   id: string;
   name: string;
   detail?: string;
+  full: string;
 };
 
-// A render-time coalescing of one agent turn's activity rows: incrementing
-// commentary prose plus an ordered list of tool calls. Built client-side from
-// flat agent_commentary/agent_tool rows that share a turn_id.
+export type PreambleItem = PreambleCommentaryItem | PreambleToolItem;
+
+// A render-time coalescing of one agent turn's activity rows: commentary
+// prose and tool calls interleaved in arrival order (commentary, tool,
+// commentary, tool...), built client-side from flat agent_commentary/
+// agent_tool rows that share a turn_id.
 export type PreambleBlock = {
   turnId: string;
-  commentary: string;
-  tools: PreambleToolItem[];
+  items: PreambleItem[];
   final: boolean;
 };
 

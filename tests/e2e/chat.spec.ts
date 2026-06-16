@@ -193,6 +193,76 @@ test("shows realtime connection state in the shell", async ({ page }) => {
   ).toContainText("Active");
 });
 
+test("browser notifications require explicit profile opt-in", async ({ page }) => {
+  const meResponse = await page.request.get("/api/me");
+  const me = (await meResponse.json()) as { user: { id: string } };
+  const storageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
+  await page.addInitScript(() => {
+    const target = window as unknown as {
+      __clickclackPermissionRequests: number;
+      Notification: typeof Notification;
+    };
+    class FakeNotification {
+      static permission: NotificationPermission = "default";
+      static requestPermission = () => {
+        target.__clickclackPermissionRequests += 1;
+        FakeNotification.permission = "granted";
+        return Promise.resolve("granted" as NotificationPermission);
+      };
+    }
+    target.__clickclackPermissionRequests = 0;
+    target.Notification = FakeNotification as unknown as typeof Notification;
+  });
+
+  await page.goto("/app");
+  await page
+    .getByRole("button", { name: /Account settings for Local Captain/ })
+    .click({ button: "right" });
+  await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
+
+  await page.getByLabel("Browser notifications").check();
+
+  await expect
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey))
+    .toBe("enabled");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackPermissionRequests: number;
+            }
+          ).__clickclackPermissionRequests,
+      ),
+    )
+    .toBe(1);
+});
+
+test("browser notification storage failures do not block app startup", async ({ page }) => {
+  await page.addInitScript(() => {
+    const blockedKeyPrefix = "clickclack:browser-notifications-enabled:v1:";
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return setItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return removeItem.call(this, key);
+    };
+  });
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+});
+
 test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");
@@ -645,6 +715,110 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
     .poll(async () => (await currentChannelState()).last_read_seq || 0)
     .toBeGreaterThanOrEqual(33);
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
+});
+
+test("browser notifications announce incoming messages outside the active conversation", async ({
+  page,
+}) => {
+  const meResponse = await page.request.get("/api/me");
+  const me = (await meResponse.json()) as { user: { id: string } };
+  const storageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
+  await page.addInitScript((key) => {
+    type CapturedNotification = {
+      title: string;
+      options?: NotificationOptions;
+      closed?: boolean;
+      onclick?: (() => void) | null;
+      close: () => void;
+    };
+    const target = window as unknown as {
+      __clickclackNotifications: CapturedNotification[];
+      Notification: typeof Notification;
+    };
+    class FakeNotification implements CapturedNotification {
+      static permission: NotificationPermission = "granted";
+      static requestPermission = () => Promise.resolve("granted" as NotificationPermission);
+      title: string;
+      options?: NotificationOptions;
+      closed = false;
+      onclick: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        this.options = options;
+        target.__clickclackNotifications.push(this);
+      }
+
+      close() {
+        this.closed = true;
+      }
+    }
+    target.__clickclackNotifications = [];
+    target.Notification = FakeNotification as unknown as typeof Notification;
+    localStorage.setItem(key, "enabled");
+  }, storageKey);
+
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelName = `notify-${Date.now()}`;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: channelName, kind: "public" },
+  });
+  const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const senderID = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspaceId,
+    "--name",
+    "Notification Sender",
+    "--email",
+    `${channelName}@example.com`,
+  ]);
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  const remoteResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: "ping from another channel" },
+  });
+  expect(remoteResponse.ok()).toBe(true);
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string; options?: NotificationOptions }[];
+            }
+          ).__clickclackNotifications,
+      ),
+    )
+    .toEqual([
+      expect.objectContaining({
+        title: expect.stringContaining("ClickClack in #notify-"),
+        options: expect.objectContaining({
+          body: "New message",
+          icon: "/favicon.svg",
+        }),
+      }),
+    ]);
+
+  await page.evaluate(() => {
+    const notification = (
+      window as unknown as {
+        __clickclackNotifications: { onclick?: (() => void) | null }[];
+      }
+    ).__clickclackNotifications[0];
+    notification.onclick?.();
+  });
+
+  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
 });
 
 test("clicking the active conversation does not refetch its messages", async ({ page }) => {

@@ -13,6 +13,9 @@
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
+    browserNotificationsSupported: boolean;
+    browserNotificationsEnabled: boolean;
+    browserNotificationPermission: NotificationPermission | "unsupported";
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -23,6 +26,7 @@
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
     onUserAlign: (value: "left" | "right") => void;
+    onBrowserNotificationsEnabled: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -37,6 +41,9 @@
     hideCommentary,
     hideToolCalls,
     userAlign,
+    browserNotificationsSupported,
+    browserNotificationsEnabled,
+    browserNotificationPermission,
     status,
     statusError,
     onDisplayName,
@@ -47,6 +54,7 @@
     onHideCommentary,
     onHideToolCalls,
     onUserAlign,
+    onBrowserNotificationsEnabled,
     onClose,
     onSave,
   }: Props = $props();
@@ -114,6 +122,20 @@
           oninput={(event) => onAvatarURL(event.currentTarget.value)}
         />
       </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          disabled={!browserNotificationsSupported || browserNotificationPermission === "denied"}
+          checked={browserNotificationsEnabled}
+          onchange={(event) => onBrowserNotificationsEnabled(event.currentTarget.checked)}
+        />
+        <span>Browser notifications</span>
+      </label>
+      {#if !browserNotificationsSupported}
+        <p class="profile-status error">Browser notifications are not supported</p>
+      {:else if browserNotificationPermission === "denied"}
+        <p class="profile-status error">Browser notifications are blocked by this browser</p>
+      {/if}
       <label class="field check-field">
         <input
           type="checkbox"

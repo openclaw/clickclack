@@ -84,7 +84,16 @@ async function expectMessageNearComposer(page: Page, text: string) {
         const row = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find((item) =>
           item.textContent?.includes(messageText),
         );
-        const composer = el.querySelector<HTMLElement>(".composer-card");
+        // Measure proximity to the composer DOCK, not the inner input card. The
+        // dock wraps the composer and reserves fixed internal chrome above the
+        // card (the always-present agent-responding band plus the runtime
+        // controls row). That chrome is intentional dead space, not distance
+        // between the newest message and the composer area, so anchoring to the
+        // dock keeps this assertion about "is the message pinned to the
+        // composer?" instead of tracking composer-internal chrome height.
+        const composer =
+          el.querySelector<HTMLElement>(".composer-dock") ??
+          el.querySelector<HTMLElement>(".composer-card");
         if (!row || !composer) return Number.POSITIVE_INFINITY;
         const group = row.closest<HTMLElement>(".message-group");
         const messageRect = (group || row).getBoundingClientRect();

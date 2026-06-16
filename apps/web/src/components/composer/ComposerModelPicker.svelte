@@ -177,4 +177,24 @@
   .cmp-pill.is-drift .cmp-dot {
     background: var(--warn);
   }
+
+  /* Phone: drop the provider prefix and the thinking/speed labels so the pill
+     shrinks to the dot + model name + caret and stays on the runtime row next
+     to the context meter. Full provider/thinking detail is in the picker menu.
+     The model name itself truncates rather than pushing the row wider. */
+  @media (max-width: 520px) {
+    .cmp-provider,
+    .cmp-slash,
+    .cmp-think,
+    .cmp-fast {
+      display: none;
+    }
+
+    .cmp-current {
+      max-width: 16ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 </style>

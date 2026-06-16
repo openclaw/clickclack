@@ -1698,6 +1698,12 @@
     padding: 7px 12px;
   }
 
+  /* Keep the right-adjusted self layout aligned to the same 44px avatar gutter
+     the rest of the mobile list uses, instead of the desktop 56px column. */
+  :root[data-user-align="right"] .message-group.is-self {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
   .message-row {
     margin-left: -44px;
     padding-left: 44px;

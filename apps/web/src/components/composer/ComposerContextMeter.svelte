@@ -553,4 +553,23 @@
   .ctxm-note.muted {
     color: var(--muted-2);
   }
+
+  /* Phone: the verbose pill (Context 131k/1M (13%) - Cache Hit 78%) is far too
+     wide to share the runtime row. Collapse the trigger to the load-bearing
+     signal: the fill bar, the percentage, and the caret. The full breakdown is
+     one tap away in the inspector popover. */
+  @media (max-width: 520px) {
+    .ctxm-val,
+    .ctxm-dash,
+    .ctxm-cache-key,
+    .ctxm-cache-num,
+    .ctxm-stale {
+      display: none;
+    }
+
+    .ctxm-pill {
+      gap: 4px;
+      padding: 4px 8px;
+    }
+  }
 </style>

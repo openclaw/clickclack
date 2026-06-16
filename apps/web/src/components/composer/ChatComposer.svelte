@@ -432,4 +432,37 @@
     min-width: 0;
     justify-self: end;
   }
+
+  /* Phone layout: the three full-width runtime widgets cannot share one row on
+     a ~360px viewport (they overlap). Drop to two rows: the runtime pills the
+     user actually reaches for (context meter + model picker) sit together on
+     top, the markdown glyph strip spans the row beneath. The pills themselves
+     compact to essentials inside their own components at this width. */
+  @media (max-width: 520px) {
+    .composer-runtime-controls {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "meter picker"
+        "tools tools";
+      row-gap: 4px;
+      gap: 6px;
+    }
+
+    .cu-side {
+      grid-area: tools;
+      justify-self: start;
+      overflow-x: auto;
+    }
+
+    .cu-center {
+      grid-area: meter;
+      justify-self: start;
+      justify-content: flex-start;
+    }
+
+    .cu-right {
+      grid-area: picker;
+      justify-self: end;
+    }
+  }
 </style>

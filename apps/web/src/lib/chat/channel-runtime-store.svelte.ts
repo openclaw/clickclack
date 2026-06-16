@@ -171,12 +171,10 @@ export function seedDemoChannelRuntime(): void {
     context_limit: 1_000_000,
     context_fresh: true,
     cache_hit_pct: 0.78,
-    context_breakdown: [
-      { id: "system", label: "System & instructions", tokens: 18_000, budget: 32_000 },
-      { id: "tools", label: "Tool definitions", tokens: 22_000, budget: 40_000 },
-      { id: "memory", label: "HyperMem recall", tokens: 46_000, budget: 80_000 },
-      { id: "messages", label: "Conversation", tokens: 45_000 },
-    ],
+    // No seeded context_breakdown: per-slot composition is only shown when the
+    // runtime actually stamps one (increment 2 bridge). Until then the
+    // inspector renders its honest "not reported yet" fallback rather than
+    // fabricated slots.
     preamble_enabled: true,
     observed_at: new Date().toISOString(),
   });

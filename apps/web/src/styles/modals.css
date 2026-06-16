@@ -121,7 +121,8 @@
   font-weight: 700;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   height: 38px;
   padding: 0 12px;
@@ -131,7 +132,12 @@
   color: var(--text);
 }
 
-.field input:focus {
+.field select {
+  cursor: pointer;
+}
+
+.field input:focus,
+.field select:focus {
   border-color: var(--accent);
   outline: 0;
   box-shadow: 0 0 0 3px var(--accent-soft);

@@ -12,6 +12,7 @@
     pushoverUserKey: string;
     hideCommentary: boolean;
     hideToolCalls: boolean;
+    userAlign: "left" | "right";
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -21,6 +22,7 @@
     onPushoverUserKey: (value: string) => void;
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
+    onUserAlign: (value: "left" | "right") => void;
     onClose: () => void;
     onSave: () => void;
   };
@@ -34,6 +36,7 @@
     pushoverUserKey,
     hideCommentary,
     hideToolCalls,
+    userAlign,
     status,
     statusError,
     onDisplayName,
@@ -43,6 +46,7 @@
     onPushoverUserKey,
     onHideCommentary,
     onHideToolCalls,
+    onUserAlign,
     onClose,
     onSave,
   }: Props = $props();
@@ -133,6 +137,17 @@
           onchange={(event) => onHideToolCalls(event.currentTarget.checked)}
         />
         <span>Hide tool calls</span>
+      </label>
+      <label class="field">
+        <span>Your message alignment</span>
+        <select
+          aria-label="Your message alignment"
+          value={userAlign}
+          onchange={(event) => onUserAlign(event.currentTarget.value === "right" ? "right" : "left")}
+        >
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
       </label>
       <label class="field">
         <span>Pushover user key</span>

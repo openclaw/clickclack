@@ -15,11 +15,10 @@
 export type ThinkingMode = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive";
 
 // One composition slot of the context window: a named region (system prompt,
-// tool defs, HyperMem recall, conversation, ...) with its current token cost
-// and an optional budget ceiling. Populated upstream by HyperMem instrumentation
-// (see the ClawCanvas channel `contextBreakdown` field); absent until the
-// runtime reports it, in which case the inspector shows an honest "not reported"
-// note rather than a fabricated split.
+// tool defs, memory/recall, conversation, ...) with its current token cost
+// and an optional budget ceiling. Populated upstream by the runtime's context
+// instrumentation; absent until the runtime reports it, in which case the
+// inspector shows an honest "not reported" note rather than a fabricated split.
 export type ContextSlot = {
   id?: string;
   label: string;
@@ -52,8 +51,8 @@ export type ChannelRuntime = {
   context_used?: number;
   context_limit?: number;
   context_fresh?: boolean;
-  // HyperMem cache + composition diagnostics. cache_hit_pct is the composition
-  // cache hit rate (0..1) for the session serving this channel; context_breakdown
+  // Cache + composition diagnostics. cache_hit_pct is the prompt-cache
+  // hit rate (0..1) for the session serving this channel; context_breakdown
   // is the per-slot token split of what's filling the window. Both are optional
   // and only render when the runtime actually reports them (no fabrication).
   cache_hit_pct?: number | null;
@@ -100,9 +99,9 @@ export type ResolvedChannelRuntime = {
     pct: number | null;
     tier: ContextTier;
     fresh: boolean;
-    // Composition cache hit rate (0..1) and per-slot token breakdown, when the
+    // Prompt-cache hit rate (0..1) and per-slot token breakdown, when the
     // runtime reports them. cacheHitPct is null and breakdown is empty until
-    // HyperMem instrumentation lands them in the channel payload.
+    // the runtime's context instrumentation lands them in the channel payload.
     cacheHitPct: number | null;
     breakdown: ContextSlot[];
   };

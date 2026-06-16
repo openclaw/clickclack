@@ -811,6 +811,7 @@
           {:else if item.kind === "group"}
             <MessageGroup
               group={item.group}
+              {currentUserID}
               {selectedThreadID}
               {replyContext}
               {onOpenProfile}

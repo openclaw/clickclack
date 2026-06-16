@@ -8,6 +8,7 @@
 
   type Props = {
     group: MessageGroupType;
+    currentUserID?: string;
     selectedThreadID?: string;
     replyContext: "channel" | "dm";
     onOpenProfile: (profile?: Message["author"]) => void;
@@ -21,6 +22,7 @@
 
   let {
     group,
+    currentUserID,
     selectedThreadID,
     replyContext,
     onOpenProfile,
@@ -34,9 +36,14 @@
 
   const author = $derived(group.messages[0]?.author);
   const isBot = $derived(author?.kind === "bot");
+  // Self = the current user's own messages. Bots never match the current user
+  // id, so an agent group is never marked self even in a DM with the agent.
+  const isSelf = $derived(
+    !isBot && Boolean(currentUserID) && group.authorID === currentUserID,
+  );
 </script>
 
-<article class="message-group" class:is-agent={isBot}>
+<article class="message-group" class:is-agent={isBot} class:is-self={isSelf}>
   <Avatar
     class="avatar avatar-button"
     id={group.authorID}

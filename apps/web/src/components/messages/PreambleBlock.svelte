@@ -65,7 +65,6 @@
     onclick={() => (preambleOpen = !preambleOpen)}
   >
     <span class="preamble-chevron" class:open={preambleOpen} aria-hidden="true">▸</span>
-    <span class="preamble-title">Preamble</span>
     <span class="preamble-state" class:is-live={!block.final}>{stateLabel}</span>
     <span class="preamble-action">{toggleLabel}</span>
   </button>

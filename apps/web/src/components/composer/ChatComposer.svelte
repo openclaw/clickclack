@@ -350,7 +350,33 @@
     </div>
     {#if showToolbar || showModelPicker}
       <div class="composer-utility">
-        {#if showToolbar}
+        {#if showModelPicker}
+          <div class="composer-runtime-controls">
+            <div class="cu-side">
+              {#if showToolbar}
+                <ComposerToolbar
+                  showGifPicker={showGifPicker}
+                  onWrap={onApplyMarkdownWrap}
+                  onAppend={onAppendToComposer}
+                  onToggleGif={onToggleGif}
+                />
+              {/if}
+            </div>
+            <div class="cu-center">
+              <ComposerContextMeter />
+            </div>
+            <div class="cu-right">
+              <ComposerModelPicker
+                {onModel}
+                {onProvider}
+                {onThinking}
+                {onFast}
+                {onRuntime}
+                {onResetOverrides}
+              />
+            </div>
+          </div>
+        {:else if showToolbar}
           <ComposerToolbar
             showGifPicker={showGifPicker}
             onWrap={onApplyMarkdownWrap}
@@ -358,39 +384,52 @@
             onToggleGif={onToggleGif}
           />
         {/if}
-        {#if showModelPicker}
-          <div class="composer-runtime-controls">
-            <ComposerContextMeter />
-            <ComposerModelPicker
-              {onModel}
-              {onProvider}
-              {onThinking}
-              {onFast}
-              {onRuntime}
-              {onResetOverrides}
-            />
-          </div>
-        {/if}
       </div>
     {/if}
   </div>
 </form>
 
 <style>
-  /* Utility bar: markdown glyphs on the left, runtime controls (context meter +
-     model picker) pushed to the right so they read as one row under the input. */
+  /* Single utility row beneath the input: the markdown glyph strip, context
+     meter, and model picker share one row instead of stacking. */
   .composer-utility {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
   }
 
+  /* Runtime controls row: three zones so the context meter sits in the TRUE
+     center of the composer, independent of the markdown-toolbar (left) and the
+     picker-right widths. The model picker stays pinned to the right edge. */
   .composer-runtime-controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 6px 0;
+    min-width: 0;
+  }
+
+  .cu-side {
     display: flex;
     align-items: center;
-    gap: 2px;
-    margin-left: auto;
     min-width: 0;
+    justify-self: start;
+  }
+
+  .cu-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    justify-self: center;
+  }
+
+  .cu-right {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    justify-self: end;
   }
 </style>

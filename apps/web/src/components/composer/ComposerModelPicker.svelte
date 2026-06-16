@@ -31,6 +31,9 @@
   // Read the store inside $derived so the pill re-resolves on channel switch.
   let resolved = $derived(resolveChannelRuntime(channelRuntime.runtime));
   let pickerOpen = $state(false);
+  // Trigger pill ref, handed to the menu so it can anchor itself with fixed
+  // positioning and break out of the composer card's overflow clip.
+  let pillEl: HTMLButtonElement | null = $state(null);
 
   // Pretty provider + model labels, matching the picker menu (e.g. "Pioneer" /
   // "Claude Opus 4.8") rather than the raw slug, so the composer pill reads the
@@ -51,6 +54,7 @@
     class:is-match={!anyOverride}
     class:is-drift={anyOverride}
     class:is-open={pickerOpen}
+    bind:this={pillEl}
     onclick={() => (pickerOpen = !pickerOpen)}
     aria-haspopup="menu"
     aria-expanded={pickerOpen}
@@ -72,6 +76,7 @@
     <ModelPickerMenu
       {resolved}
       placement="up"
+      anchor={pillEl}
       onModel={(v) => onModel(v)}
       onProvider={(v) => onProvider(v)}
       onThinking={(v) => onThinking(v)}

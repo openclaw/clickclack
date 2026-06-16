@@ -284,6 +284,39 @@
   transform: translateY(0);
 }
 
+/* The live "agent is responding" indicator floats over the composer inside a
+   permanently reserved band, so showing/hiding it never reflows the
+   transcript or shifts the composer. The space is always there; only opacity
+   toggles. */
+.composer-dock {
+  position: relative;
+  padding-top: 20px;
+}
+
+.composer-dock .agent-responding {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  margin: 0;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0;
+  transform: none;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.composer-dock .agent-responding.visible {
+  height: 20px;
+  margin: 0;
+  opacity: 1;
+  transform: none;
+}
+
 .typing-indicator__dots {
   display: inline-flex;
   align-items: center;
@@ -653,23 +686,28 @@
    secondary to the final answer, which renders as a clearly separate ordinary
    message below it. */
 .message-row.is-preamble {
-  /* Streaming/growing phase: a clearly yellow wash so the working log reads as
-     yellow while commentary + tool rows stream in and the bubble grows. */
-  background: color-mix(in srgb, var(--activity-accent) 17%, var(--panel));
+  /* Streaming/growing phase: the row itself stays transparent; the yellow wash
+     lives on the inline content bubble below so it reads like a message,
+     constrained to the content column instead of bleeding edge to edge across
+     the avatar gutter and full row width. */
+  background: transparent;
   /* Breathing room before the separate final-answer message below. */
   margin-bottom: 6px;
   padding-top: 4px;
   padding-bottom: 4px;
 }
 
-.message-row.is-preamble::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--activity-accent);
+/* Standalone / still-live preamble (no final answer attached yet): render the
+   yellow working log as an inline bubble within the content column, mirroring
+   the boxed pre-final treatment, so the streaming/growing phase is inline and
+   not full-bleed. Scoped to NOT .before-final-message so the boxed pair keeps
+   its own top-of-card styling. */
+.message-row.is-preamble:not(.before-final-message) .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, var(--line-strong));
+  border-left: 3px solid var(--activity-accent);
+  border-radius: 11px;
+  background: var(--activity-accent-soft);
 }
 
 .message-row.is-preamble-collapsed .message-content {
@@ -741,8 +779,56 @@
 .message-row.is-preamble.before-final-message.is-preamble-collapsed .message-content {
   padding-top: 7px;
   padding-bottom: 7px;
-  background: color-mix(in srgb, var(--activity-accent) 22%, var(--panel));
-  border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--activity-accent) 10%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
+}
+
+/* User (self) message bubble. Mirrors the agent delivery bubble's weight
+   (same padding, radius, 3px left rail) but in the accent tint instead of the
+   delivery blue, so an exchange reads as two matched but distinct bubbles. The
+   bubble hugs its content (fit-content) up to a readable max so the left/right
+   alignment toggle is visually meaningful. Scoped to ordinary self rows; the
+   agent preamble/delivery treatments are never self and stay untouched. */
+.message-group.is-self .message-content {
+  width: fit-content;
+  max-width: min(100%, 680px);
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-strong));
+  border-left: 3px solid var(--accent);
+  border-radius: 11px;
+  background: var(--user-bubble-soft);
+}
+
+/* Right-adjusted self messages: mirror the whole group so the avatar sits in
+   the right gutter, the header right-aligns, and the bubble pushes to the
+   right edge of the content column. Gated on the root data-user-align pref so
+   the default (left) layout is byte-for-byte the existing behavior. */
+:root[data-user-align="right"] .message-group.is-self {
+  grid-template-columns: minmax(0, 1fr) 56px;
+}
+
+:root[data-user-align="right"] .message-group.is-self > .avatar {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+:root[data-user-align="right"] .message-group.is-self > .group-body {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+:root[data-user-align="right"] .message-group.is-self .group-body > header {
+  justify-content: flex-end;
+}
+
+:root[data-user-align="right"] .message-group.is-self .message-content {
+  margin-left: auto;
+}
+
+:root[data-user-align="right"] .message-group.is-self .markdown {
+  text-align: right;
 }
 
 .preamble-contract {
@@ -781,18 +867,9 @@
   transform: rotate(90deg);
 }
 
-.preamble-title,
 .preamble-state,
 .preamble-action {
   line-height: 1;
-}
-
-.preamble-title {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--activity-accent);
 }
 
 .preamble-state {

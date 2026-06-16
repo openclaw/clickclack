@@ -23,6 +23,44 @@
   let ctx = $derived(resolved.context);
   let open = $state(false);
 
+  // The popup is positioned `fixed` (computed from the trigger pill's screen
+  // rect) so it escapes the composer card's `overflow: hidden` clip instead of
+  // being trapped inside the composer window. We center it on the pill and
+  // clamp it to the viewport, then point the caret at the real pill center.
+  let pillEl: HTMLButtonElement | null = $state(null);
+  let popEl: HTMLDivElement | null = $state(null);
+  let popLeft = $state(0);
+  let popBottom = $state(0);
+  let caretX = $state(130);
+
+  function positionPop() {
+    if (!pillEl) return;
+    const r = pillEl.getBoundingClientRect();
+    const margin = 12;
+    const popW = popEl?.offsetWidth ?? 260;
+    const pillCenter = r.left + r.width / 2;
+    let left = pillCenter - popW / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - popW - margin));
+    popLeft = left;
+    popBottom = Math.round(window.innerHeight - r.top + 9);
+    caretX = Math.max(14, Math.min(pillCenter - left, popW - 14));
+  }
+
+  $effect(() => {
+    if (!open) return;
+    // Measure once now and again after the popup paints (real width), then keep
+    // it anchored on scroll/resize while open.
+    positionPop();
+    requestAnimationFrame(positionPop);
+    const onMove = () => positionPop();
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  });
+
   // Fill tier per the composer spec: green < 50%, amber 50–80%, red ≥ 80%.
   // (Independent of the topbar pill's normal/elevated/high thresholds.)
   let fillTier = $derived.by(() => {
@@ -47,7 +85,7 @@
   let cacheColor = $derived(ratioGradientColor(ctx.cacheHitPct));
 
   // Per-slot composition of the window (system / tools / memory / messages),
-  // when HyperMem instrumentation reports it. Empty -> honest fallback note.
+  // when the runtime's context instrumentation reports it. Empty -> honest fallback note.
   let breakdown = $derived(ctx.breakdown);
   let hasBreakdown = $derived(breakdown.length > 0);
   // Denominator for per-slot share: the sum of the reported slots, so each row
@@ -63,11 +101,13 @@
     type="button"
     class="ctxm-pill"
     class:is-open={open}
+    bind:this={pillEl}
     onclick={() => (open = !open)}
     aria-haspopup="dialog"
     aria-expanded={open}
     title={`Context window: ${usedTokens} / ${limitTokens} (${pctLabel}% used)${hasCacheHit ? ` — Cache Hit ${cacheHitLabel}%` : ""}${ctx.fresh ? "" : " — last known value"} — click for details`}
   >
+    <span class="ctxm-fill" data-tier={fillTier} style={`width:${usedPct}%`} aria-hidden="true"></span>
     <span class="ctxm-key">Context</span>
     <span class="ctxm-val">{usedTokens}<span class="ctxm-slash">/</span>{limitTokens}</span>
     <span class="ctxm-pct" data-tier={fillTier}>({pctLabel}%)</span>
@@ -86,7 +126,13 @@
 
   {#if open}
     <button class="ctxm-scrim" aria-label="Close context details" onclick={() => (open = false)}></button>
-    <div class="ctxm-pop" role="dialog" aria-label="Context window details">
+    <div
+      class="ctxm-pop"
+      role="dialog"
+      aria-label="Context window details"
+      bind:this={popEl}
+      style={`left:${popLeft}px; bottom:${popBottom}px; --caret-x:${caretX}px`}
+    >
       <div class="ctxm-title">Context Window</div>
 
       <div class="ctxm-total">
@@ -184,11 +230,49 @@
     transition: border-color 120ms ease, background 120ms ease, opacity 120ms ease;
   }
 
+  .ctxm-pill {
+    position: relative;
+    overflow: hidden;
+  }
+
   .ctxm-pill:hover,
   .ctxm-pill.is-open {
     background: var(--hover-strong);
     border-color: var(--line);
     opacity: 1;
+  }
+
+  /* Left-anchored proportional fill: the pill itself reads as a gauge whose
+     width matches the used-context percentage, tinted by the same green/amber/
+     red tier as the percent label. Kept low-opacity so the text stays legible,
+     and sits behind the content (z-index). */
+  .ctxm-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0.16;
+    transition: width 240ms ease, background 160ms ease;
+  }
+
+  .ctxm-fill[data-tier="normal"] {
+    background: var(--success, #22c55e);
+  }
+  .ctxm-fill[data-tier="elevated"] {
+    background: var(--warn);
+  }
+  .ctxm-fill[data-tier="high"] {
+    background: var(--danger);
+  }
+
+  /* Keep all textual segments above the fill. */
+  .ctxm-pill > span:not(.ctxm-fill) {
+    position: relative;
+    z-index: 1;
   }
 
   .ctxm-key {
@@ -269,13 +353,12 @@
   }
 
   .ctxm-pop {
-    position: absolute;
-    bottom: calc(100% + 9px);
-    left: 50%;
-    transform: translateX(-50%);
+    /* Fixed so it escapes the composer card's overflow clip; left/bottom are set
+       inline from the trigger pill's screen rect. */
+    position: fixed;
     z-index: 41;
     width: 260px;
-    max-width: min(260px, calc(100vw - 32px));
+    max-width: min(260px, calc(100vw - 24px));
     padding: 11px 12px 12px;
     border-radius: 12px;
     border: 1px solid var(--line-strong);
@@ -284,12 +367,12 @@
     animation: ctxm-pop-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  /* Downward caret pinned to the centered trigger. */
+  /* Downward caret pointed at the real pill center (set via --caret-x). */
   .ctxm-pop::after {
     content: "";
     position: absolute;
     top: 100%;
-    left: 50%;
+    left: var(--caret-x, 50%);
     transform: translateX(-50%);
     width: 0;
     height: 0;
@@ -302,11 +385,11 @@
   @keyframes ctxm-pop-in {
     from {
       opacity: 0;
-      transform: translateX(-50%) translateY(6px) scale(0.98);
+      transform: translateY(6px) scale(0.98);
     }
     to {
       opacity: 1;
-      transform: translateX(-50%) translateY(0) scale(1);
+      transform: translateY(0) scale(1);
     }
   }
 

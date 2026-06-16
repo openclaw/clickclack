@@ -34,6 +34,7 @@
   } from "./components/messages/MessageList.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
   import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
+  import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
   import GuildRail from "./components/navigation/GuildRail.svelte";
@@ -52,6 +53,7 @@
   const SHOW_AGENT_ACTIVITY_STORAGE_KEY = "clickclack:show-agent-activity:v1";
   const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
   const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
+  const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -99,6 +101,10 @@
   // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
+  // Self-message alignment: "left" (default, matches the legacy layout) or
+  // "right". Persisted client-side and applied as a root data attribute so the
+  // messages.css mirror rules can flip the self group without prop drilling.
+  let userAlign: "left" | "right" = "left";
   let status = "loading";
   let authRequired = false;
   let connected = false;
@@ -175,6 +181,12 @@
   // per turn, applying the two visibility flags. Ordinary messages pass through
   // untouched and keep their order.
   $: visibleMessages = coalesceAgentActivity(messages, { hideCommentary, hideToolCalls });
+  // High-level "agent turn is live" signal: any tracked turn that still has an
+  // unfinalized line. Drives the compact AgentResponding status above the
+  // composer; clears as soon as every line finalizes or the turn is cleared.
+  $: agentResponding = agentProgressTurns.some((turn) =>
+    turn.lines.some((line) => !line.finalized),
+  );
   $: sidePanelOpen = selectedThread !== null || selectedProfile !== null;
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
@@ -218,9 +230,30 @@
       const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
       hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
       hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
+      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     } catch {
       hideCommentary = false;
       hideToolCalls = false;
+      userAlign = "left";
+    }
+    applyUserAlign();
+  }
+
+  function applyUserAlign() {
+    try {
+      document.documentElement.setAttribute("data-user-align", userAlign);
+    } catch {
+      // Non-DOM context (SSR/tests); the in-memory pref still applies on mount.
+    }
+  }
+
+  function setUserAlign(value: "left" | "right") {
+    userAlign = value;
+    applyUserAlign();
+    try {
+      window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, value);
+    } catch {
+      // Ignore unavailable storage; the in-memory pref still applies this session.
     }
   }
 
@@ -2441,6 +2474,9 @@
 
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
+    <div class="composer-dock">
+    <AgentResponding active={agentResponding} />
+
     <ChatComposer
       value={messageBody}
       placeholder={selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
@@ -2496,6 +2532,7 @@
         void persistRuntimeOverride(selectedChannelID, { model: "", thinking: "" });
       }}
     />
+    </div>
   </main>
 
   <aside
@@ -2556,6 +2593,7 @@
     pushoverUserKey={profilePushoverUserKey}
     {hideCommentary}
     {hideToolCalls}
+    {userAlign}
     status={profileStatus}
     statusError={profileStatusError}
     onDisplayName={(value) => (profileDisplayName = value)}
@@ -2565,6 +2603,7 @@
     onPushoverUserKey={(value) => (profilePushoverUserKey = value)}
     onHideCommentary={setHideCommentary}
     onHideToolCalls={setHideToolCalls}
+    onUserAlign={setUserAlign}
     onClose={closeModal}
     onSave={() => void saveProfile()}
   />

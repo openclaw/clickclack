@@ -25,6 +25,10 @@
     // Placement relative to the trigger. "up" anchors the menu above the
     // trigger (composer use); "down" anchors below (legacy topbar use).
     placement?: "up" | "down";
+    // Trigger pill element. When provided, the menu positions itself `fixed`
+    // from the pill's screen rect so it escapes the composer card's overflow
+    // clip and the right viewport edge instead of being trapped inside.
+    anchor?: HTMLElement | null;
     onModel: (model: string | undefined) => void;
     onProvider: (provider: string | undefined) => void;
     onThinking: (mode: string | undefined) => void;
@@ -39,6 +43,7 @@
   let {
     resolved,
     placement = "up",
+    anchor = null,
     onModel,
     onProvider,
     onThinking,
@@ -61,6 +66,36 @@
   // When centering would push the flyout past a viewport edge, this holds an
   // explicit clamped top (px, menu-relative); null means "use centered".
   let subClampTop = $state<number | null>(null);
+
+  // Fixed-position coordinates derived from the trigger pill (when `anchor` is
+  // set). Right-aligned to the pill and opened upward, clamped to the viewport.
+  let useFixed = $derived(!!anchor);
+  let menuLeft = $state(0);
+  let menuBottom = $state(0);
+
+  function positionMenu() {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const margin = 8;
+    const menuW = menuEl?.offsetWidth ?? 220;
+    let left = r.right - menuW;
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuW - margin));
+    menuLeft = left;
+    menuBottom = Math.round(window.innerHeight - r.top + 6);
+  }
+
+  $effect(() => {
+    if (!anchor) return;
+    positionMenu();
+    requestAnimationFrame(positionMenu);
+    const onMove = () => positionMenu();
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  });
 
   const effectiveProvider = $derived(
     (resolved.provider.effective || "").toLowerCase() || providerForModel(resolved.model.effective),
@@ -154,7 +189,15 @@
 
 <button class="mp-scrim" aria-label="Close picker" onclick={onClose}></button>
 
-<div class="mp-menu" class:place-up={placement === "up"} role="menu" aria-label="Model picker" bind:this={menuEl}>
+<div
+  class="mp-menu"
+  class:place-up={placement === "up"}
+  class:is-fixed={useFixed}
+  style={useFixed ? `left:${menuLeft}px; bottom:${menuBottom}px; right:auto; top:auto` : ""}
+  role="menu"
+  aria-label="Model picker"
+  bind:this={menuEl}
+>
   <div class="mp-section-label">Provider</div>
 
   {#each PROVIDER_CHOICES as choice (choice.value)}
@@ -369,6 +412,13 @@
     top: auto;
     bottom: calc(100% + 6px);
     box-shadow: 0 -18px 50px -18px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Fixed to the viewport (anchored to the trigger pill's screen rect) so the
+     menu and its side flyouts escape the composer card's overflow clip. The
+     submenus stay `position: absolute` relative to this fixed menu. */
+  .mp-menu.is-fixed {
+    position: fixed;
   }
 
   .mp-section-label {

@@ -81,6 +81,14 @@ var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
 // is not one of the recognised values. HTTP callers surface it as a 400.
 var ErrInvalidMessageKind = errors.New("invalid message kind")
 
+// ErrTurnIDNotAllowed is returned when an ordinary ('message') row is created
+// with a non-empty turn_id. turn_id correlates a sequence of agent activity
+// rows belonging to one turn; an ordinary message carrying one contradicts the
+// documented "Empty for ordinary messages" contract. HTTP callers surface it as
+// a 400 so a client bug fails closed instead of silently persisting a
+// contradictory turn_id.
+var ErrTurnIDNotAllowed = errors.New("turn_id is only valid for agent activity messages")
+
 // Message kinds. 'message' is an ordinary human/bot message and is the default
 // for any row created before this column existed. The agent_* kinds are
 // durable agent activity rows: they ride the normal message stream (channel
@@ -202,7 +210,8 @@ type Message struct {
 	// Empty in JSON means the default 'message'.
 	Kind string `json:"kind,omitempty"`
 	// TurnID correlates a sequence of agent activity rows belonging to one
-	// agent turn. Empty for ordinary messages.
+	// agent turn. Empty for ordinary messages: the create path enforces this and
+	// rejects a non-empty turn_id on a 'message' kind with ErrTurnIDNotAllowed.
 	TurnID             string   `json:"turn_id,omitempty"`
 	Author             *User    `json:"author,omitempty"`
 	Attachments        []Upload `json:"attachments,omitempty"`

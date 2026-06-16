@@ -616,14 +616,14 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	kind, ok := s.resolveActivityKind(w, act, body.Kind)
+	kind, turnID, ok := s.resolveMessageKind(w, act, body.Kind, body.TurnID)
 	if !ok {
 		return
 	}
 	if !s.requireBotChannelWorkspace(w, r, act, chi.URLParam(r, "channel_id")) {
 		return
 	}
-	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: body.TurnID})
+	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {
@@ -633,35 +633,43 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	writeMessageCreateResult(w, message, event, err)
 }
 
-// resolveActivityKind validates a caller-supplied message kind and enforces the
-// activity authorization contract:
+// resolveMessageKind validates a caller-supplied message kind and turn_id and
+// enforces the activity authorization contract:
 //
 //   - an empty/'message' kind is always allowed and returned as 'message',
 //   - an unknown kind is a 400,
+//   - an ordinary 'message' MUST NOT carry a turn_id (400); turn_id correlates
+//     agent activity rows only, so a non-empty value on an ordinary message is
+//     a client contract violation and fails closed,
 //   - an activity kind (agent_commentary/agent_tool) requires a BOT token that
 //     carries agent_activity:write; a human session always gets 403 and a bot
-//     without the scope gets 403.
+//     without the scope gets 403, and may carry a turn_id.
 //
 // It writes the error response itself and returns ok=false when the request
-// must not proceed.
-func (s *Server) resolveActivityKind(w http.ResponseWriter, act actor, rawKind string) (string, bool) {
+// must not proceed. On success it returns the normalized kind and the turn_id
+// that should be persisted.
+func (s *Server) resolveMessageKind(w http.ResponseWriter, act actor, rawKind, rawTurnID string) (string, string, bool) {
 	kind, err := store.NormalizeMessageKind(rawKind)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
-		return "", false
+		return "", "", false
 	}
 	if !store.IsActivityMessageKind(kind) {
-		return kind, true
+		if rawTurnID != "" {
+			writeError(w, http.StatusBadRequest, store.ErrTurnIDNotAllowed)
+			return "", "", false
+		}
+		return kind, "", true
 	}
 	if act.botTokenID == "" {
 		writeError(w, http.StatusForbidden, errors.New("agent activity messages require a bot token"))
-		return "", false
+		return "", "", false
 	}
 	if err := act.requireScope(store.AgentActivityWriteScope); err != nil {
 		writeError(w, http.StatusForbidden, err)
-		return "", false
+		return "", "", false
 	}
-	return kind, true
+	return kind, rawTurnID, true
 }
 
 func (s *Server) getMessage(w http.ResponseWriter, r *http.Request) {

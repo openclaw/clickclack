@@ -21,6 +21,14 @@
 
   let resolved = $derived(resolveChannelRuntime(channelRuntime.runtime));
   let ctx = $derived(resolved.context);
+  // The meter only renders when the channel actually reports context-window
+  // accounting (live/structured channels). Channels with no runtime data, or an
+  // override-only row, have null used/limit and must show no pill rather than a
+  // meaningless "?/?" placeholder. This also guarantees the pill is cleared on
+  // an in-app channel switch: the store is reset to {} before the next fetch,
+  // so a switch to a channel without context tears the pill down immediately
+  // instead of leaving the previous channel's meter mounted.
+  let hasContext = $derived(ctx.used != null || ctx.limit != null);
   let open = $state(false);
 
   // The popup is positioned `fixed` (computed from the trigger pill's screen
@@ -96,6 +104,7 @@
 
 <svelte:window onkeydown={(e) => { if (open && e.key === "Escape") open = false; }} />
 
+{#if hasContext}
 <span class="ctxm-anchor">
   <button
     type="button"
@@ -197,6 +206,7 @@
     </div>
   {/if}
 </span>
+{/if}
 
 <style>
   .ctxm-anchor {

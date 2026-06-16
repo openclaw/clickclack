@@ -8,6 +8,7 @@
 // elsewhere, so this store is intentionally narrow: just the runtime snapshot
 // and the per-session override controls.
 
+import { api } from "../api";
 import type { ChannelRuntime, ThinkingMode } from "./channel-runtime";
 
 // Shape returned by GET /api/channels/{id}/runtime (Go ChannelRuntime). The
@@ -38,7 +39,7 @@ class ChannelRuntimeStore {
     this.runtime = { ...this.runtime, ...rt };
   }
 
-  reset(rt: ChannelRuntime): void {
+  replace(rt: ChannelRuntime): void {
     this.runtime = { ...rt };
   }
 
@@ -102,29 +103,29 @@ function mapApiRecord(rec: RuntimeApiRecord): ChannelRuntime {
 
 /**
  * Load the runtime snapshot for a channel from clickclack's own endpoint and
- * merge it into the store. A row that carries no model/context (the bridge
- * hasn't stamped one yet) leaves the demo seed in place so the chrome stays
- * populated. Returns true when a real (non-empty) record was applied.
+ * return the displayable store shape. Empty records return `{}`; transient
+ * fetch failures return `null` so callers can preserve same-channel state while
+ * still clearing explicitly during channel switches.
  */
-export async function loadChannelRuntime(channelID: string): Promise<boolean> {
+export async function loadChannelRuntime(channelID: string): Promise<ChannelRuntime | null> {
   const id = String(channelID || "").trim();
-  if (!id) return false;
+  if (!id) return null;
   try {
-    const res = await fetch(`/api/channels/${encodeURIComponent(id)}/runtime`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { runtime?: RuntimeApiRecord };
+    const data = await api<{ runtime?: RuntimeApiRecord }>(
+      `/api/channels/${encodeURIComponent(id)}/runtime`,
+    );
     const rec = data.runtime;
-    if (!rec) return false;
-    const hasReal =
-      Boolean(rec.default_model || rec.model) ||
-      (typeof rec.context_limit === "number" && rec.context_limit > 0);
-    if (!hasReal) return false;
-    channelRuntime.set(mapApiRecord(rec));
-    return true;
+    if (!rec) return {};
+    const hasBridgeFields =
+      Boolean(rec.default_model || rec.default_thinking || rec.model || rec.thinking) ||
+      (typeof rec.context_limit === "number" && rec.context_limit > 0) ||
+      (typeof rec.context_used === "number" && rec.context_used > 0) ||
+      rec.cache_hit_pct != null ||
+      rec.context_breakdown != null;
+    const hasOverrideFields = Boolean(rec.override_model || rec.override_thinking);
+    return hasBridgeFields || hasOverrideFields ? mapApiRecord(rec) : {};
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -141,41 +142,12 @@ export async function persistRuntimeOverride(
   const id = String(channelID || "").trim();
   if (!id) return false;
   try {
-    const res = await fetch(`/api/channels/${encodeURIComponent(id)}/runtime`, {
+    await api<{ runtime?: RuntimeApiRecord }>(`/api/channels/${encodeURIComponent(id)}/runtime`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ model: override.model ?? "", thinking: override.thinking ?? "" }),
     });
-    return res.ok;
+    return true;
   } catch {
     return false;
   }
-}
-
-// ---------- demo seeding ----------
-//
-// clickclack's bridge stamp (increment 2) isn't wired yet, so absent a stamped
-// row the runtime would be empty and the picker/meter would render "default" /
-// "?". Seed a representative snapshot so the chrome is live and demoable. When
-// the bridge lands, loadChannelRuntime() overwrites this with real data; the
-// components and field shapes stay identical.
-
-export function seedDemoChannelRuntime(): void {
-  channelRuntime.reset({
-    default_provider: "anthropic",
-    default_model: "anthropic/claude-opus-4-8",
-    default_thinking: "adaptive",
-    runtime_label: "Openclaw",
-    runtime_source: "seed",
-    context_used: 131_000,
-    context_limit: 1_000_000,
-    context_fresh: true,
-    cache_hit_pct: 0.78,
-    // No seeded context_breakdown: per-slot composition is only shown when the
-    // runtime actually stamps one (increment 2 bridge). Until then the
-    // inspector renders its honest "not reported yet" fallback rather than
-    // fabricated slots.
-    preamble_enabled: true,
-    observed_at: new Date().toISOString(),
-  });
 }

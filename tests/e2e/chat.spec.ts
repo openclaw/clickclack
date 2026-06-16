@@ -115,6 +115,38 @@ async function expectScrollAtMessageEnd(page: Page) {
     .toBe(true);
 }
 
+async function expectComposerRuntimeModel(page: Page, label: RegExp | string) {
+  await expect(page.locator(".composer-runtime-controls .cmp-current")).toHaveText(label);
+}
+
+async function expectNoComposerContextMeter(page: Page) {
+  await expect(page.locator(".composer-runtime-controls .ctxm-pill")).toHaveCount(0);
+}
+
+async function patchRuntimeViaBrowser(
+  page: Page,
+  channelID: string,
+  body: { model?: string; thinking?: string },
+  withCSRF = true,
+) {
+  return page.evaluate(
+    async ({ channelID, body, withCSRF }) => {
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (withCSRF) headers["X-ClickClack-CSRF"] = "1";
+      const response = await fetch(`/api/channels/${encodeURIComponent(channelID)}/runtime`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+      });
+      return { status: response.status, text: await response.text() };
+    },
+    { channelID, body, withCSRF },
+  );
+}
+
 type GeometryBox = {
   left: number;
   right: number;
@@ -1698,4 +1730,62 @@ test("CLI resolves channel IDs across visible workspaces", async ({ page }) => {
       expect.objectContaining({ id: messageId, body: "cross workspace channel id" }),
     ]),
   );
+});
+
+test("composer runtime uses real channel records without demo seed or stale carryover", async ({
+  page,
+}) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const { workspaces } = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces[0];
+  const stamp = Date.now();
+
+  const withRuntimeResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `runtime-real-${stamp}`, kind: "public" },
+  });
+  const { channel: withRuntime } = (await withRuntimeResponse.json()) as {
+    channel: { id: string; route_id: string; name: string };
+  };
+  const emptyResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `runtime-empty-${stamp}`, kind: "public" },
+  });
+  const { channel: emptyRuntime } = (await emptyResponse.json()) as {
+    channel: { id: string; route_id: string; name: string };
+  };
+
+  let observedPatchHeaders: Record<string, string> | null = null;
+  await page.route("**/api/channels/*/runtime", async (route) => {
+    if (route.request().method() === "PATCH") observedPatchHeaders = route.request().headers();
+    await route.continue();
+  });
+
+  await page.goto(`/app/${workspace.route_id}/${withRuntime.route_id}`);
+
+  const withCsrf = await patchRuntimeViaBrowser(page, withRuntime.id, {
+    model: "openai/gpt-5.4-mini",
+    thinking: "low",
+  });
+  expect(withCsrf.status).toBe(200);
+  expect(observedPatchHeaders?.["x-clickclack-csrf"]).toBe("1");
+
+  await page.reload();
+  await expectComposerRuntimeModel(page, /GPT-5\.4 Mini/i);
+
+  await page.goto(`/app/${workspace.route_id}/${emptyRuntime.route_id}`);
+  await expectNoComposerContextMeter(page);
+  await expectComposerRuntimeModel(page, "default");
+
+  // In-app SPA channel switch (sidebar click, no reload): switching from the
+  // channel that carries an override to the empty channel must clear the
+  // previous channel's model chrome. This exercises the serial guard in
+  // refreshSelectedChannelRuntime (clear-then-fetch, discard stale responses)
+  // rather than a fresh page load that resets all JS state.
+  await page.goto(`/app/${workspace.route_id}/${withRuntime.route_id}`);
+  await expectComposerRuntimeModel(page, /GPT-5\.4 Mini/i);
+  await page.getByRole("link", { name: `# ${emptyRuntime.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${emptyRuntime.name}` })).toBeVisible();
+  await expectNoComposerContextMeter(page);
+  await expectComposerRuntimeModel(page, "default");
 });

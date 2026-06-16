@@ -196,7 +196,10 @@ func TestChannelRuntimeHTTP(t *testing.T) {
 		t.Fatalf("PUT runtime: unexpected record %+v", rec)
 	}
 
-	// PATCH (picker override) is a session write; a member may set it.
+	// PATCH (picker override) is a session write; a member may set it. A
+	// plain channel-writer path is intentionally product-approved here: the
+	// operator controls the next-turn channel runtime override without needing
+	// the bridge's agent_activity:write scope.
 	override := `{"model":"sonnet","thinking":"low"}`
 	status, body = doJSONAsUser(t, f.owner.ID, http.MethodPatch, endpoint, override)
 	if status != http.StatusOK {
@@ -204,6 +207,65 @@ func TestChannelRuntimeHTTP(t *testing.T) {
 	}
 	if rec := decodeRuntime(t, body); rec.OverrideModel != "sonnet" || rec.OverrideThinking != "low" {
 		t.Fatalf("PATCH runtime: override not recorded: %+v", rec)
+	} else if rec.Model != "opus" || rec.ContextUsed != 1200 || rec.ContextLimit != 200000 {
+		t.Fatalf("PATCH runtime: override clobbered bridge/effective fields: %+v", rec)
+	}
+
+	// Cookie-authenticated browser mutations must carry the CSRF header. The
+	// frontend api() helper adds it; a raw unsafe browser fetch must be rejected.
+	session, err := f.st.CreateSession(context.Background(), f.owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrfClient := f.server.Client()
+	cookieEndpoint := f.server.URL + "/api/channels/" + f.channel.ID + "/runtime"
+	req, err := http.NewRequest(http.MethodPatch, cookieEndpoint, strings.NewReader(override))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", f.server.URL)
+	req.AddCookie(&http.Cookie{Name: "cc_session", Value: session.Token})
+	resp, err := csrfClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("PATCH runtime cookie auth without CSRF: expected 403, got %d (%s)", resp.StatusCode, string(body))
+	}
+	_ = resp.Body.Close()
+
+	req, err = http.NewRequest(http.MethodPatch, cookieEndpoint, strings.NewReader(`{"model":"sonnet","thinking":"xhigh"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", f.server.URL)
+	req.Header.Set(csrfHeaderName, "1")
+	req.AddCookie(&http.Cookie{Name: "cc_session", Value: session.Token})
+	resp, err = csrfClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrfBody, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH runtime cookie auth with CSRF: expected 200, got %d (%s)", resp.StatusCode, string(csrfBody))
+	}
+	if rec := decodeRuntime(t, csrfBody); rec.OverrideThinking != "xhigh" || rec.Model != "opus" {
+		t.Fatalf("PATCH runtime cookie auth with CSRF: unexpected record %+v", rec)
+	}
+
+	// Picker overrides are validated at the API boundary: an unknown thinking
+	// level or an oversized model string is rejected (400) before it can reach
+	// the override row the bridge later applies to a gateway session.
+	if status, _ = doJSONAsUser(t, f.owner.ID, http.MethodPatch, endpoint, `{"thinking":"bogus"}`); status != http.StatusBadRequest {
+		t.Fatalf("PATCH runtime invalid thinking: expected 400, got %d", status)
+	}
+	if status, _ = doJSONAsUser(t, f.owner.ID, http.MethodPatch, endpoint, `{"model":"`+strings.Repeat("x", maxOverrideModelLen+1)+`"}`); status != http.StatusBadRequest {
+		t.Fatalf("PATCH runtime oversized model: expected 400, got %d", status)
 	}
 
 	// GET reflects both the bridge snapshot and the pending override without
@@ -213,7 +275,7 @@ func TestChannelRuntimeHTTP(t *testing.T) {
 		t.Fatalf("GET runtime (after writes): expected 200, got %d (%s)", status, string(body))
 	}
 	rec := decodeRuntime(t, body)
-	if rec.Model != "opus" || rec.OverrideModel != "sonnet" || rec.OverrideThinking != "low" {
+	if rec.Model != "opus" || rec.OverrideModel != "sonnet" || rec.OverrideThinking != "xhigh" {
 		t.Fatalf("GET runtime: snapshot/override merge wrong: %+v", rec)
 	}
 

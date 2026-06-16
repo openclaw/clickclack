@@ -23,7 +23,6 @@
     channelRuntime,
     loadChannelRuntime,
     persistRuntimeOverride,
-    seedDemoChannelRuntime,
   } from "./lib/chat/channel-runtime-store.svelte";
   import type { ThinkingMode } from "./lib/chat/channel-runtime";
   import ImageViewer from "./components/media/ImageViewer.svelte";
@@ -201,9 +200,24 @@
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
   // Refresh the channel runtime snapshot (model + context) from clickclack's
-  // own endpoint whenever the active channel changes. Falls back to the seeded
-  // demo values when no bridge-stamped row exists yet.
-  $: if (selectedChannelID) void loadChannelRuntime(selectedChannelID);
+  // own endpoint whenever the active channel changes. Clear first so late
+  // responses or failed fetches cannot preserve stale data from the previous
+  // channel in the composer chrome.
+  let runtimeLoadSerial = 0;
+  let runtimeLoadedChannelID = "";
+  $: if (selectedChannelID !== runtimeLoadedChannelID) {
+    runtimeLoadedChannelID = selectedChannelID;
+    void refreshSelectedChannelRuntime(selectedChannelID);
+  }
+
+  async function refreshSelectedChannelRuntime(channelID: string) {
+    const serial = ++runtimeLoadSerial;
+    channelRuntime.replace({});
+    if (!channelID) return;
+    const nextRuntime = await loadChannelRuntime(channelID);
+    if (serial !== runtimeLoadSerial || channelID !== selectedChannelID) return;
+    if (nextRuntime) channelRuntime.replace(nextRuntime);
+  }
 
   $: filteredGifs = showGifPicker
     ? gifLibrary.filter((gif) => {
@@ -214,9 +228,6 @@
 
   onMount(() => {
     loadActivityPrefs();
-    // Seed a representative runtime snapshot so the composer model picker +
-    // context meter are populated before the bridge stamp (increment 2) lands.
-    seedDemoChannelRuntime();
     syncBrowserNotificationState();
     void boot();
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);

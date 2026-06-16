@@ -3,12 +3,48 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
+
+// validOverrideThinking is the closed set a picker override may set. The empty
+// string clears the thinking override. These mirror the gateway's accepted
+// thinking levels; anything else is rejected at the API boundary so a channel
+// writer cannot persist a value the bridge would blindly apply to a session.
+var validOverrideThinking = map[string]bool{
+	"":         true,
+	"off":      true,
+	"minimal":  true,
+	"low":      true,
+	"medium":   true,
+	"high":     true,
+	"xhigh":    true,
+	"adaptive": true,
+}
+
+// maxOverrideModelLen bounds the picker override model string. Real model ids
+// are well under this; the cap exists to stop a member writing a multi-KB blob
+// into the channel's next-turn override row.
+const maxOverrideModelLen = 256
+
+// validateRuntimeOverride enforces the member-writable picker override contract.
+func validateRuntimeOverride(model, thinking string) error {
+	if len(model) > maxOverrideModelLen {
+		return fmt.Errorf("model must be at most %d characters", maxOverrideModelLen)
+	}
+	if strings.ContainsAny(model, "\n\r\x00") {
+		return errors.New("model must not contain control characters")
+	}
+	if !validOverrideThinking[thinking] {
+		return fmt.Errorf("thinking %q is not an accepted value", thinking)
+	}
+	return nil
+}
 
 // getChannelRuntime serves the per-channel agent runtime snapshot (model,
 // thinking, context used/limit) that the composer model picker and context
@@ -123,6 +159,10 @@ func (s *Server) patchChannelRuntime(w http.ResponseWriter, r *http.Request) {
 		Thinking string `json:"thinking"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := validateRuntimeOverride(body.Model, body.Thinking); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}

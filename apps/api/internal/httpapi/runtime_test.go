@@ -254,9 +254,13 @@ func TestMessageTurnIDContract(t *testing.T) {
 
 	channelEndpoint := f.server.URL + "/api/channels/" + f.channel.ID + "/messages"
 
-	// Ordinary message with a turn_id is rejected (400), default kind.
+	// Ordinary message with a turn_id is rejected (400), default kind. The 400
+	// body must carry the sentinel text so the client sees why it failed rather
+	// than an opaque error.
 	if status, body := doJSONAsUser(t, f.owner.ID, http.MethodPost, channelEndpoint, `{"body":"hi","turn_id":"t1"}`); status != http.StatusBadRequest {
 		t.Fatalf("channel message turn_id (default kind): expected 400, got %d (%s)", status, string(body))
+	} else if !strings.Contains(string(body), store.ErrTurnIDNotAllowed.Error()) {
+		t.Fatalf("channel message turn_id (default kind): 400 body missing sentinel text, got %s", string(body))
 	}
 	// Explicit kind="message" with a turn_id is also rejected (400).
 	if status, _ := doJSONAsUser(t, f.owner.ID, http.MethodPost, channelEndpoint, `{"body":"hi","kind":"message","turn_id":"t1"}`); status != http.StatusBadRequest {
@@ -291,6 +295,8 @@ func TestMessageTurnIDContract(t *testing.T) {
 
 	if status, body := doJSONAsUser(t, f.owner.ID, http.MethodPost, dmEndpoint, `{"body":"hi","turn_id":"t1"}`); status != http.StatusBadRequest {
 		t.Fatalf("dm message turn_id: expected 400, got %d (%s)", status, string(body))
+	} else if !strings.Contains(string(body), store.ErrTurnIDNotAllowed.Error()) {
+		t.Fatalf("dm message turn_id: 400 body missing sentinel text, got %s", string(body))
 	}
 	if status, _ := doJSONAsUser(t, f.owner.ID, http.MethodPost, dmEndpoint, `{"body":"hi"}`); status != http.StatusCreated {
 		t.Fatalf("dm ordinary message: expected 201, got %d", status)

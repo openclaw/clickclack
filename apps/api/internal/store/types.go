@@ -84,7 +84,7 @@ var ErrInvalidMessageKind = errors.New("invalid message kind")
 // ErrTurnIDNotAllowed is returned when an ordinary ('message') row is created
 // with a non-empty turn_id. turn_id correlates a sequence of agent activity
 // rows belonging to one turn; an ordinary message carrying one contradicts the
-// documented "Empty for ordinary messages" contract. HTTP callers surface it as
+// documented "must be empty for ordinary messages" contract. HTTP callers surface it as
 // a 400 so a client bug fails closed instead of silently persisting a
 // contradictory turn_id.
 var ErrTurnIDNotAllowed = errors.New("turn_id is only valid for agent activity messages")
@@ -210,8 +210,10 @@ type Message struct {
 	// Empty in JSON means the default 'message'.
 	Kind string `json:"kind,omitempty"`
 	// TurnID correlates a sequence of agent activity rows belonging to one
-	// agent turn. Empty for ordinary messages: the create path enforces this and
-	// rejects a non-empty turn_id on a 'message' kind with ErrTurnIDNotAllowed.
+	// agent turn. It must be empty for ordinary messages (kind="message"): the
+	// create path enforces this and rejects a non-empty turn_id on a 'message'
+	// kind with a 400 ErrTurnIDNotAllowed. It is optional for agent activity
+	// kinds (agent_commentary/agent_tool), which may carry one.
 	TurnID             string   `json:"turn_id,omitempty"`
 	Author             *User    `json:"author,omitempty"`
 	Attachments        []Upload `json:"attachments,omitempty"`

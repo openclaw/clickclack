@@ -635,6 +635,10 @@
   background: var(--accent);
 }
 
+.message-row.can-open-thread {
+  cursor: pointer;
+}
+
 .row-stamp {
   position: absolute;
   left: 8px;
@@ -651,6 +655,65 @@
 
 .message-content {
   min-width: 0;
+}
+
+.thread-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  margin-top: 5px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.thread-hint:not(.has-replies):not(.is-open) {
+  width: 24px;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  opacity: 0.62;
+}
+
+.thread-hint svg {
+  flex: 0 0 auto;
+}
+
+.thread-hint time {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.thread-hint.has-replies,
+.thread-hint.is-open {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  color: var(--text-strong);
+}
+
+.thread-hint.has-replies time,
+.thread-hint.is-open time {
+  color: var(--muted);
+}
+
+.thread-hint:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.thread-hint:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .message-actions {

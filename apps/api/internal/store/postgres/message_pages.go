@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/postgres/storedb"
 )
 
 type messagePageScope struct {
@@ -79,7 +81,60 @@ func (s *Store) listMessagePage(ctx context.Context, scope messagePageScope, req
 	if err != nil {
 		return store.MessagePage{}, err
 	}
+	messages, err = s.hydrateThreadStates(ctx, messages)
+	if err != nil {
+		return store.MessagePage{}, err
+	}
 	return s.buildMessagePage(ctx, scope, messages)
+}
+
+func (s *Store) hydrateThreadStates(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+	rootIDs := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if message.ParentMessageID == nil {
+			rootIDs = append(rootIDs, message.ID)
+		}
+	}
+	if len(rootIDs) == 0 {
+		return messages, nil
+	}
+	placeholders := make([]string, len(rootIDs))
+	args := make([]any, len(rootIDs))
+	for i, id := range rootIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
+		FROM thread_state
+		WHERE root_message_id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	states := make(map[string]store.ThreadState, len(rootIDs))
+	for rows.Next() {
+		var row storedb.ThreadState
+		if err := rows.Scan(&row.RootMessageID, &row.ReplyCount, &row.LastReplyAt, &row.LastReplyAuthorIdsJson); err != nil {
+			return nil, err
+		}
+		states[row.RootMessageID] = storeThreadStateFromDB(row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range messages {
+		if messages[i].ParentMessageID != nil {
+			continue
+		}
+		state, ok := states[messages[i].ID]
+		if !ok {
+			state = store.ThreadState{RootMessageID: messages[i].ID}
+		}
+		stateCopy := state
+		messages[i].ThreadState = &stateCopy
+	}
+	return messages, nil
 }
 
 func (s *Store) queryScopedMessages(ctx context.Context, scope messagePageScope, cursorWhere string, cursorArgs []any, order string, limit int) ([]store.Message, error) {

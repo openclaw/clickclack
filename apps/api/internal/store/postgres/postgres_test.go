@@ -52,6 +52,16 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if len(page.Messages) != 1 || page.Messages[0].ID != created.ID {
 		t.Fatalf("unexpected messages: %#v", page.Messages)
 	}
+	if _, state, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: created.ID, AuthorID: owner.ID, Body: "postgres thread reply"}); err != nil || state.ReplyCount != 1 {
+		t.Fatalf("unexpected thread reply result: %#v err=%v", state, err)
+	}
+	threadPage, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threadPage.Messages) != 1 || threadPage.Messages[0].ThreadState == nil || threadPage.Messages[0].ThreadState.ReplyCount != 1 {
+		t.Fatalf("expected hydrated thread state in postgres message page, got %#v", threadPage.Messages)
+	}
 	results, err := st.SearchMessages(ctx, workspace.ID, channel.ID, owner.ID, "postgres", 10)
 	if err != nil {
 		t.Fatal(err)

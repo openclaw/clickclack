@@ -99,28 +99,29 @@ type Channel struct {
 }
 
 type Message struct {
-	ID                   string   `json:"id"`
-	RouteID              string   `json:"route_id,omitempty"`
-	WorkspaceID          string   `json:"workspace_id"`
-	ChannelID            string   `json:"channel_id,omitempty"`
-	DirectConversationID string   `json:"direct_conversation_id,omitempty"`
-	AuthorID             string   `json:"author_id"`
-	ParentMessageID      *string  `json:"parent_message_id,omitempty"`
-	ThreadRootID         string   `json:"thread_root_id"`
-	TopicID              string   `json:"topic_id,omitempty"`
-	ChannelSeq           *int64   `json:"channel_seq,omitempty"`
-	ThreadSeq            *int64   `json:"thread_seq,omitempty"`
-	Body                 string   `json:"body"`
-	BodyFormat           string   `json:"body_format"`
-	CreatedAt            string   `json:"created_at"`
-	EditedAt             *string  `json:"edited_at,omitempty"`
-	DeletedAt            *string  `json:"deleted_at,omitempty"`
-	Author               *User    `json:"author,omitempty"`
-	Attachments          []Upload `json:"attachments,omitempty"`
-	QuotedMessageID      *string  `json:"quoted_message_id,omitempty"`
-	QuotedBodySnapshot   string   `json:"quoted_body_snapshot,omitempty"`
-	QuotedAuthorID       *string  `json:"quoted_author_id,omitempty"`
-	QuotedAuthor         *User    `json:"quoted_author,omitempty"`
+	ID                   string       `json:"id"`
+	RouteID              string       `json:"route_id,omitempty"`
+	WorkspaceID          string       `json:"workspace_id"`
+	ChannelID            string       `json:"channel_id,omitempty"`
+	DirectConversationID string       `json:"direct_conversation_id,omitempty"`
+	AuthorID             string       `json:"author_id"`
+	ParentMessageID      *string      `json:"parent_message_id,omitempty"`
+	ThreadRootID         string       `json:"thread_root_id"`
+	TopicID              string       `json:"topic_id,omitempty"`
+	ChannelSeq           *int64       `json:"channel_seq,omitempty"`
+	ThreadSeq            *int64       `json:"thread_seq,omitempty"`
+	Body                 string       `json:"body"`
+	BodyFormat           string       `json:"body_format"`
+	CreatedAt            string       `json:"created_at"`
+	EditedAt             *string      `json:"edited_at,omitempty"`
+	DeletedAt            *string      `json:"deleted_at,omitempty"`
+	Author               *User        `json:"author,omitempty"`
+	Attachments          []Upload     `json:"attachments,omitempty"`
+	QuotedMessageID      *string      `json:"quoted_message_id,omitempty"`
+	QuotedBodySnapshot   string       `json:"quoted_body_snapshot,omitempty"`
+	QuotedAuthorID       *string      `json:"quoted_author_id,omitempty"`
+	QuotedAuthor         *User        `json:"quoted_author,omitempty"`
+	ThreadState          *ThreadState `json:"thread_state,omitempty"`
 	// Nonce is a client-supplied idempotency key used by optimistic UIs to match
 	// the server response to a pending placeholder and safely retry after a lost
 	// response.

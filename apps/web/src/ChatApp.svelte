@@ -42,6 +42,7 @@
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
   const BROWSER_NOTIFICATIONS_STORAGE_PREFIX = "clickclack:browser-notifications-enabled:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
+  const appSessionStartedAt = Date.now();
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -1674,10 +1675,29 @@
     if (optimisticRoot) selectedThread = optimisticRoot;
     activeComposerContext = "thread";
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    selectedThread = data.root;
-    setActiveMessages(messages.map((message) => message.id === data.root.id ? data.root : message));
+    const root = { ...data.root, thread_state: data.thread_state };
+    selectedThread = root;
+    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
     replies = data.replies;
     selectedThreadState = data.thread_state;
+  }
+
+  async function refreshThreadSummary(messageID: string) {
+    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
+    const root = { ...data.root, thread_state: data.thread_state };
+    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
+  }
+
+  function shouldRefreshThreadSummary(rootID: string, event: RealtimeEvent): boolean {
+    const root = messages.find((message) => message.id === rootID);
+    if (!root) return false;
+    const lastReplyAt = root.thread_state?.last_reply_at;
+    if (!lastReplyAt) return true;
+    const knownTime = new Date(lastReplyAt).getTime();
+    const eventTime = new Date(event.created_at).getTime();
+    if (!Number.isFinite(knownTime) || !Number.isFinite(eventTime)) return true;
+    if (eventTime < appSessionStartedAt) return false;
+    return eventTime > knownTime;
   }
 
   async function sendReply() {
@@ -1994,6 +2014,13 @@
       }
     }
     const rootID = event.payload.root_message_id || event.payload.message_id;
+    if (
+      rootID &&
+      (event.type === "thread.reply_created" || event.type === "thread.state_updated") &&
+      shouldRefreshThreadSummary(rootID, event)
+    ) {
+      await refreshThreadSummary(rootID);
+    }
     if (selectedThread && rootID === selectedThread.id) {
       await refreshThread(selectedThread.id, selectedThread);
     }

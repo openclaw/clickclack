@@ -1494,6 +1494,8 @@ components:
           type: string
         quoted_author:
           $ref: "#/components/schemas/User"
+        thread_state:
+          $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
     RouteTarget:

@@ -500,7 +500,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(replayGif).toBeVisible({ timeout: 7_000 });
 
   await page.getByRole("button", { name: "Open thread" }).first().click();
-  await expect(page.getByText("Thread", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
 
   await page.getByLabel("Reply body").fill("thread _reply_");
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();

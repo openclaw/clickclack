@@ -1938,7 +1938,7 @@
       selectedChannelID = fallbackID;
       if (fallbackID) rememberLastChannel(selectedWorkspaceID, fallbackID);
       await navigateToApp(selectedWorkspaceID, fallbackID);
-      if (fallbackID) await loadMessages();
+      await loadMessages();
     }
   }
 

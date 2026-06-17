@@ -881,6 +881,9 @@ test("browser notifications announce incoming messages outside the active conver
     ).__clickclackNotifications.find((candidate) =>
       candidate.title.includes("ClickClack in #notify-"),
     );
+    if (!notification) {
+      throw new Error("Expected a channel notification");
+    }
     notification.onclick?.();
   });
 

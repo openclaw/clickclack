@@ -1,0 +1,755 @@
+/* =========================================================
+   Settings: two surfaces, both fully theme-aware.
+
+   1. .settings-modal-scrim / .settings-modal  - Account modal
+      (overlay; follows app light/dark tokens).
+
+   2. .workspace-settings-page                - Workspace route
+      (full page; same tokens).
+
+   Form classes are scoped under the modal so they inherit the
+   right palette without leaking outside.
+   ========================================================= */
+
+/* =========================================================
+   Modal: scrim, frame, rail, content.
+   ========================================================= */
+.settings-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 10, 14, 0.42);
+  display: grid;
+  place-items: center;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI Variable",
+    "Segoe UI",
+    Helvetica,
+    "Apple Color Emoji",
+    Arial,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  animation: settings-modal-fade 0.15s ease-out;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-modal-scrim {
+    background: rgba(0, 0, 0, 0.55);
+  }
+}
+
+@keyframes settings-modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settings-modal {
+  width: min(1100px, 96vw);
+  height: min(760px, 92vh);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  overflow: hidden;
+  position: relative;
+}
+
+.settings-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 6;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.settings-modal__close:hover {
+  background: var(--hover);
+  color: var(--text-strong);
+}
+
+/* ---------- Rail ---------- */
+.settings-modal__rail {
+  background: var(--panel-2);
+  border-right: 1px solid var(--line);
+  padding: 16px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal__rail-group + .settings-modal__rail-group {
+  margin-top: 14px;
+}
+
+.settings-modal__rail-heading {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0;
+}
+
+.settings-modal__rail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-modal__rail-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  margin: 1px 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.4;
+  text-align: left;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+
+.settings-modal__rail-item:hover {
+  background: var(--hover);
+}
+
+.settings-modal__rail-item.is-active {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.settings-modal__rail-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.settings-modal__rail-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.settings-modal__rail-item.is-active .settings-modal__rail-icon {
+  color: var(--text-strong);
+}
+
+.settings-modal__rail-avatar {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-weight: 700;
+  font-size: 9px;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--hue, 220deg) 70% 55%),
+    hsl(calc(var(--hue, 220deg) + 40deg) 70% 45%)
+  );
+}
+
+.settings-modal__rail-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.settings-modal__rail-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Content ---------- */
+.settings-modal__content {
+  overflow-y: auto;
+  padding: 40px 56px 56px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.settings-modal__content .settings-page__header {
+  margin-bottom: 32px;
+}
+
+.settings-modal__content .settings-page__eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.settings-modal__content .settings-page__h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  line-height: 1.2;
+}
+
+.settings-modal__content .settings-page__lead {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---------- Forms inside modal ---------- */
+.settings-modal__content .settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 640px;
+}
+
+.settings-modal__content .settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-modal__content .settings-footer__spacer {
+  flex: 1;
+}
+
+.settings-modal__content .settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-modal__content .settings-section__h {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 4px;
+  color: var(--muted);
+}
+
+.settings-modal__content .settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-modal__content .settings-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.settings-modal__content .settings-field__hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.settings-modal__content .settings-field__hint.is-error {
+  color: var(--danger);
+}
+
+/* Profile preview. */
+.settings-modal__content .settings-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.settings-modal__content .settings-identity__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-modal__content .settings-identity__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-modal__content .settings-identity__handle {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-modal__content .settings-identity__tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 3px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+/* Two-column field rows: description (left) and control (right). */
+
+.settings-modal__content .settings-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal__content .settings-row2 {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 32px;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-modal__content .settings-row2:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.settings-modal__content .settings-row2__desc {
+  min-width: 0;
+}
+
+.settings-modal__content .settings-row2__label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: 4px;
+}
+
+.settings-modal__content .settings-row2__hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.settings-modal__content .settings-row2__control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  max-width: 380px;
+}
+
+/* Input with prefix/suffix adornment (e.g. handle "@"). */
+.settings-modal__content .settings-input-group {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.settings-modal__content .settings-input-group:hover {
+  border-color: var(--line-strong);
+}
+
+.settings-modal__content .settings-input-group:focus-within {
+  border-color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-modal__content .settings-input-group__prefix {
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  border-right: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.settings-modal__content .settings-input--in-group {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+  max-width: none !important;
+}
+
+.settings-modal__content .settings-input--in-group:focus {
+  box-shadow: none !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+/* Subtle text-button (link-styled action). */
+.settings-modal__content .settings-linklike {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 2px 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.12s ease;
+}
+
+.settings-modal__content .settings-linklike:hover {
+  color: var(--text-strong);
+}
+
+/* Row layout for toggles where the label sits left and control sits right. */
+.settings-modal__content .settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 24px;
+}
+
+.settings-modal__content .settings-row__main {
+  min-width: 0;
+}
+
+.settings-modal__content .settings-row__label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: 2px;
+}
+
+.settings-modal__content .settings-row__hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.settings-modal__content .settings-row__hint.is-error {
+  color: var(--danger);
+}
+
+.settings-modal__content .settings-input {
+  width: 100%;
+  max-width: 420px;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.settings-modal__content .settings-input:hover {
+  border-color: var(--line-strong);
+}
+
+.settings-modal__content .settings-input:focus {
+  outline: 0;
+  border-color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-modal__content .settings-input--wide {
+  max-width: 560px;
+}
+
+.settings-modal__content .settings-row .settings-input {
+  width: auto;
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.settings-modal__content .settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 34px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.settings-modal__content .settings-button:hover {
+  background: var(--panel-3);
+  border-color: var(--line-strong);
+}
+
+.settings-modal__content .settings-button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-modal__content .settings-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-modal__content .settings-button--primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.settings-modal__content .settings-button--primary:hover {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+/* Toggle switch */
+.settings-modal__content .settings-switch {
+  appearance: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--line-strong);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  margin: 0;
+  border: 0;
+}
+
+.settings-modal__content .settings-switch:checked {
+  background: var(--accent);
+}
+
+.settings-modal__content .settings-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-modal__content .settings-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.settings-modal__content .settings-switch:checked::after {
+  transform: translateX(14px);
+}
+
+.settings-modal__content .settings-switch:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-modal__content .settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.settings-modal__content .settings-status {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.settings-modal__content .settings-status.is-error {
+  color: var(--danger);
+}
+
+/* Mobile: modal goes full-bleed */
+@media (max-width: 720px) {
+  .settings-modal {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .settings-modal__rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+  }
+  .settings-modal__content {
+    padding: 24px 20px 60px;
+  }
+  .settings-modal__content .settings-row2 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .settings-modal__content .settings-row2__control {
+    max-width: none;
+  }
+}
+
+/* =========================================================
+   Workspace settings: full route, themed via app tokens.
+   ========================================================= */
+.workspace-settings-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 56px 32px 80px;
+  color: var(--text);
+}
+
+.workspace-settings-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 40px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 24px;
+}
+
+.workspace-settings-page__eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.workspace-settings-page__h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.workspace-settings-page__lead {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  max-width: 56ch;
+  line-height: 1.5;
+}
+
+.workspace-settings-page__close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.workspace-settings-page__close:hover {
+  background: var(--panel-3);
+  color: var(--text-strong);
+  border-color: var(--line-strong);
+}
+
+.workspace-settings-page__empty {
+  padding: 28px;
+  background: var(--panel-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.workspace-settings-page__empty p {
+  margin: 0;
+}

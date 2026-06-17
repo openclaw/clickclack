@@ -22,61 +22,8 @@
   outline: 0;
 }
 
-.profile-modal {
-  position: relative;
-  z-index: 1;
-  width: min(480px, 100%);
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
 .create-modal {
   width: min(420px, 100%);
-}
-
-.profile-modal > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-2);
-}
-
-.profile-modal p {
-  margin: 0 0 3px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.profile-modal h2 {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 20px;
-  letter-spacing: 0;
-}
-
-.profile-modal > header button {
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 22px;
-}
-
-.profile-modal > header button:hover {
-  background: var(--hover);
-  color: var(--text-strong);
 }
 
 .profile-form {

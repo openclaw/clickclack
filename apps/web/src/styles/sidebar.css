@@ -162,7 +162,35 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   min-height: 60px;
+}
+
+.workspace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.workspace-settings {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.workspace-settings:hover {
+  background: var(--panel-2);
+  color: var(--text-strong);
 }
 
 .sidebar-collapse {

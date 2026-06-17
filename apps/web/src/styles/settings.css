@@ -720,77 +720,264 @@
     max-width: none;
   }
 }
-
 /* =========================================================
-   Workspace settings: full route, themed via app tokens.
+   Workspace settings — full-route framed panel (Discord-style).
+   Dim the chat behind, panel fills most of the viewport with
+   breathing room on all sides, floating X in the gutter.
    ========================================================= */
-.workspace-settings-page {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 56px 32px 80px;
+.ws-settings {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px 80px 28px 28px;
+  background: rgba(15, 15, 15, 0.22);
   color: var(--text);
-}
-
-.workspace-settings-page__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 40px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 24px;
-}
-
-.workspace-settings-page__eyebrow {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin: 0 0 6px;
-  font-weight: 600;
-}
-
-.workspace-settings-page__h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0 0 8px;
-  color: var(--text-strong);
-  letter-spacing: -0.01em;
-}
-
-.workspace-settings-page__lead {
+  z-index: 50;
   font-size: 14px;
-  color: var(--muted);
-  margin: 0;
-  max-width: 56ch;
   line-height: 1.5;
 }
 
-.workspace-settings-page__close {
-  width: 34px;
-  height: 34px;
+@media (prefers-color-scheme: dark) {
+  .ws-settings {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+
+.ws-settings__panel {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  max-width: 1400px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* ---------- Rail ---------- */
+.ws-settings__rail {
+  background: var(--panel-2);
+  border-right: 1px solid var(--line);
+  padding: 14px 10px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-settings__rail-search {
+  position: relative;
+  margin: 2px 4px 12px;
+}
+
+.ws-settings__rail-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.ws-settings__rail-search-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.ws-settings__rail-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px 0 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ws-settings__rail-search-input::placeholder {
+  color: var(--muted);
+}
+
+.ws-settings__rail-search-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.ws-settings__rail-group {
+  margin-top: 6px;
+}
+
+.ws-settings__rail-heading {
+  margin: 0;
+  padding: 8px 10px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ws-settings__rail-heading-name {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.ws-settings__rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ws-settings__rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  margin: 1px 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+  text-align: left;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+
+.ws-settings__rail-item:hover {
+  background: var(--hover);
+}
+
+.ws-settings__rail-item.is-active {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.ws-settings__rail-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
   display: grid;
   place-items: center;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--muted);
+}
+
+.ws-settings__rail-item-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.ws-settings__rail-item.is-active .ws-settings__rail-item-icon {
+  color: var(--text-strong);
+}
+
+.ws-settings__rail-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Content ---------- */
+.ws-settings__content {
+  position: relative;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.ws-settings__content-inner {
+  max-width: 740px;
+  padding: 56px 80px 80px;
+}
+
+.ws-settings__close {
+  position: fixed;
+  top: 28px;
+  right: 22px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--text-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  flex-shrink: 0;
+  z-index: 60;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   transition:
     background 0.12s ease,
     color 0.12s ease,
     border-color 0.12s ease;
 }
 
-.workspace-settings-page__close:hover {
-  background: var(--panel-3);
+.ws-settings__close:hover {
+  background: var(--panel-2);
+  color: var(--text-strong);
+  border-color: var(--text-strong);
+}
+
+/* Mobile: full-bleed panel, close in top-right corner */
+@media (max-width: 760px) {
+  .ws-settings {
+    padding: 0;
+  }
+  .ws-settings__panel {
+    border-radius: 0;
+    border: 0;
+    max-width: none;
+  }
+}
+
+.ws-settings__close:hover {
+  background: var(--panel-2);
   color: var(--text-strong);
   border-color: var(--line-strong);
 }
 
-.workspace-settings-page__empty {
-  padding: 28px;
+.ws-settings__error {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 13.5px;
+}
+
+/* Page headers + empty states inside content */
+.ws-settings .ws-page__header {
+  margin-bottom: 32px;
+}
+
+.ws-settings .ws-page__h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  line-height: 1.2;
+}
+
+.ws-settings .ws-page__lead {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.workspace-settings-empty {
+  padding: 24px;
   background: var(--panel-2);
   border: 1px dashed var(--line);
   border-radius: var(--radius);
@@ -799,6 +986,255 @@
   line-height: 1.6;
 }
 
-.workspace-settings-page__empty p {
+.workspace-settings-empty p {
   margin: 0;
+}
+
+/* ---------- Rows (mirrors v5 mockup .section / .row) ---------- */
+.ws-section {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+}
+
+.ws-section__h {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin: 0;
+  padding: 18px 0 6px;
+}
+
+.ws-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.ws-section > .ws-row:first-child,
+.ws-section > .ws-section__h + .ws-row {
+  border-top: 0;
+}
+
+.ws-row__main {
+  min-width: 0;
+}
+
+.ws-row__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: 4px;
+}
+
+.ws-row__hint {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ws-row__hint b {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.ws-row__value {
+  font-size: 14px;
+  color: var(--text-strong);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+  max-width: 320px;
+}
+
+/* ---------- Workspace strip (the "current workspace" pill) ---------- */
+.ws-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.ws-strip__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ws-strip__name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.ws-strip__pill {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.ws-strip__pill--owner {
+  background: rgba(34, 197, 94, 0.16);
+  color: #22a35a;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.ws-strip__pill--moderator {
+  background: rgba(59, 130, 246, 0.16);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.ws-strip__pill--member,
+.ws-strip__pill--guest,
+.ws-strip__pill--bot {
+  background: var(--panel-3, var(--hover));
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+/* ---------- Inputs & buttons inside ws-settings content ---------- */
+.ws-input {
+  width: 220px;
+  max-width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ws-input:focus {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ws-input[readonly] {
+  cursor: default;
+  color: var(--text);
+}
+
+.ws-btn {
+  height: 34px;
+  padding: 0 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.ws-btn:hover:not(:disabled) {
+  background: var(--panel-3, var(--hover-strong));
+  border-color: var(--line-strong);
+}
+
+.ws-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ws-btn--danger {
+  color: var(--danger);
+  border-color: var(--line);
+}
+
+.ws-btn--danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--danger);
+}
+
+/* Members — table */
+.workspace-members {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.workspace-members__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.workspace-members__table thead th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-members__table tbody td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.workspace-members__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.workspace-members__handle,
+.workspace-members__joined {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-members__role {
+  text-transform: capitalize;
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+/* Mobile: rail collapses above content */
+@media (max-width: 760px) {
+  .ws-settings__panel {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .ws-settings__rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 10px;
+  }
+  .ws-settings__content-inner {
+    padding: 32px 20px 60px;
+  }
+  .ws-settings__close {
+    top: 10px;
+    right: 12px;
+  }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import Avatar from "../avatar/Avatar.svelte";
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
@@ -7,12 +8,16 @@
   import {
     ACCOUNT_SETTINGS_SECTIONS,
     DEFAULT_ACCOUNT_SETTINGS_SECTION,
+    WORKSPACE_SETTINGS_SECTIONS,
+    workspaceSettingsPath,
     type AccountSettingsSectionId,
   } from "../../lib/settings";
-  import type { User } from "../../lib/types";
+  import { isWorkspaceManager } from "../../lib/permissions";
+  import type { User, Workspace } from "../../lib/types";
 
   type Props = {
     user: User;
+    workspaces?: Workspace[];
     initialSection?: AccountSettingsSectionId;
     onClose: () => void;
     onUserUpdated?: (user: User) => void;
@@ -20,6 +25,7 @@
 
   let {
     user: initialUser,
+    workspaces = [],
     initialSection = DEFAULT_ACCOUNT_SETTINGS_SECTION,
     onClose,
     onUserUpdated,
@@ -77,6 +83,11 @@
     event.preventDefault();
     onClose();
   }
+
+  function openWorkspaceSection(workspace: Workspace, slug: string) {
+    onClose();
+    void goto(workspaceSettingsPath(workspace.route_id || workspace.id, slug));
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -126,6 +137,34 @@
           {/each}
         </ul>
       </div>
+
+      {#each workspaces as workspace (workspace.id)}
+        <div class="settings-modal__rail-group">
+          <p class="settings-modal__rail-heading" title={workspace.name}>
+            Workspace · {workspace.name}
+          </p>
+          <ul>
+            {#each WORKSPACE_SETTINGS_SECTIONS as section (section.id)}
+              {#if !section.managersOnly || isWorkspaceManager(workspace.role)}
+                <li>
+                  <button
+                    type="button"
+                    class="settings-modal__rail-item"
+                    onclick={() => openWorkspaceSection(workspace, section.slug)}
+                  >
+                    <span class="settings-modal__rail-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14M13 5l7 7-7 7" />
+                      </svg>
+                    </span>
+                    <span class="settings-modal__rail-label">{section.label}</span>
+                  </button>
+                </li>
+              {/if}
+            {/each}
+          </ul>
+        </div>
+      {/each}
     </aside>
 
     <main class="settings-modal__content">

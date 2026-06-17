@@ -22,6 +22,59 @@ export const ACCOUNT_SETTINGS_SECTIONS: AccountSettingsSection[] = [
 
 export const DEFAULT_ACCOUNT_SETTINGS_SECTION: AccountSettingsSectionId = "profile";
 
-export function workspaceSettingsPath(workspaceID: string): string {
-  return `/app/${workspaceID}/settings`;
+// Workspace settings sections. The `slug` is the URL segment under
+// /app/{workspaceID}/settings/. `group` controls which rail heading
+// the item lives under. `managersOnly` hides the item from the rail
+// when the current user is not an owner or moderator (the page itself
+// must still re-check via the backend; this is just a UI gate).
+export type WorkspaceSettingsSectionId = "overview" | "members";
+
+export type WorkspaceSettingsGroupId = "workspace" | "people";
+
+export type WorkspaceSettingsSection = {
+  id: WorkspaceSettingsSectionId;
+  slug: string;
+  label: string;
+  group: WorkspaceSettingsGroupId;
+  // Inline SVG path data strings for the rail icon (24×24 stroke icons).
+  icon: string[];
+  managersOnly?: boolean;
+};
+
+export const WORKSPACE_SETTINGS_GROUPS: { id: WorkspaceSettingsGroupId; label: string }[] = [
+  { id: "workspace", label: "Workspace" },
+  { id: "people", label: "People" },
+];
+
+export const WORKSPACE_SETTINGS_SECTIONS: WorkspaceSettingsSection[] = [
+  {
+    id: "overview",
+    slug: "overview",
+    label: "Overview",
+    group: "workspace",
+    icon: [
+      "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+      "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z",
+    ],
+  },
+  {
+    id: "members",
+    slug: "members",
+    label: "Members",
+    group: "people",
+    managersOnly: true,
+    icon: [
+      "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+      "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+      "M22 21v-2a4 4 0 0 0-3-3.87",
+      "M16 3.13a4 4 0 0 1 0 7.75",
+    ],
+  },
+];
+
+export const DEFAULT_WORKSPACE_SETTINGS_SECTION: WorkspaceSettingsSectionId = "overview";
+
+export function workspaceSettingsPath(workspaceID: string, slug?: string): string {
+  const base = `/app/${workspaceID}/settings`;
+  return slug ? `${base}/${slug}` : base;
 }

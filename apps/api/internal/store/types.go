@@ -725,6 +725,7 @@ type Store interface {
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error
 	EnsureDefaultWorkspaceMember(ctx context.Context, userID string) (Workspace, error)
 	EnsureDefaultGuestWorkspaceMember(ctx context.Context, userID, role string) (Workspace, error)
+	ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorUserID string, page WorkspaceMemberPageRequest) (WorkspaceMemberPage, error)
 	ListWorkspaceMembers(ctx context.Context, workspaceID, actorUserID string) ([]MemberModeration, error)
 	UpdateMemberModeration(ctx context.Context, input UpdateMemberModerationInput) (MemberModeration, Event, error)
 	UserHasNonGuestMembership(ctx context.Context, userID string) (bool, error)

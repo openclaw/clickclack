@@ -8,8 +8,6 @@ package storedb
 import (
 	"context"
 	"database/sql"
-
-	"github.com/lib/pq"
 )
 
 const addReaction = `-- name: AddReaction :execrows
@@ -724,7 +722,6 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
-           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM direct_conversations dc
@@ -1170,24 +1167,6 @@ func (q *Queries) GetWorkspaceByRouteID(ctx context.Context, routeID sql.NullStr
 	return i, err
 }
 
-const hideDirectConversation = `-- name: HideDirectConversation :exec
-INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
-VALUES ($1, $2, $3)
-ON CONFLICT(conversation_id, user_id) DO UPDATE SET
-  hidden_at = excluded.hidden_at
-`
-
-type HideDirectConversationParams struct {
-	ConversationID string `json:"conversation_id"`
-	UserID         string `json:"user_id"`
-	HiddenAt       string `json:"hidden_at"`
-}
-
-func (q *Queries) HideDirectConversation(ctx context.Context, arg HideDirectConversationParams) error {
-	_, err := q.db.ExecContext(ctx, hideDirectConversation, arg.ConversationID, arg.UserID, arg.HiddenAt)
-	return err
-}
-
 const insertBotToken = `-- name: InsertBotToken :exec
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -1273,8 +1252,8 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 }
 
 const insertChannelMessage = `-- name: InsertChannelMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
-VALUES ($1, $2, $3, NULL, $4, NULL, $5, $6, $7, NULL, $8, 'markdown', $9, $10, $11, $12, $13, $14, $15)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
+VALUES ($1, $2, $3, NULL, $4, NULL, $5, $6, $7, NULL, $8, 'markdown', $9, $10, $11, $12, $13)
 `
 
 type InsertChannelMessageParams struct {
@@ -1291,8 +1270,6 @@ type InsertChannelMessageParams struct {
 	QuotedBodySnapshot string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID     sql.NullString `json:"quoted_author_id"`
 	ClientNonce        string         `json:"client_nonce"`
-	Kind               string         `json:"kind"`
-	TurnID             sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMessageParams) error {
@@ -1310,8 +1287,6 @@ func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMes
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
-		arg.Kind,
-		arg.TurnID,
 	)
 	return err
 }
@@ -1406,8 +1381,8 @@ func (q *Queries) InsertDirectConversationMember(ctx context.Context, arg Insert
 }
 
 const insertDirectMessage = `-- name: InsertDirectMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
-VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, NULL, $7, 'markdown', $8, $9, $10, $11, $12, $13, $14)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
+VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, NULL, $7, 'markdown', $8, $9, $10, $11, $12)
 `
 
 type InsertDirectMessageParams struct {
@@ -1423,8 +1398,6 @@ type InsertDirectMessageParams struct {
 	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
 	ClientNonce          string         `json:"client_nonce"`
-	Kind                 string         `json:"kind"`
-	TurnID               sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessageParams) error {
@@ -1441,8 +1414,6 @@ func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessa
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
-		arg.Kind,
-		arg.TurnID,
 	)
 	return err
 }
@@ -1781,84 +1752,6 @@ func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspace
 	return err
 }
 
-const latestEventCursor = `-- name: LatestEventCursor :one
-SELECT e.cursor
-FROM events e
-JOIN workspace_members viewer ON viewer.workspace_id = e.workspace_id AND viewer.user_id = $1
-LEFT JOIN channels event_channel ON event_channel.id = e.channel_id AND event_channel.workspace_id = e.workspace_id
-WHERE e.workspace_id = $2
-  AND (
-    e.is_private = 0
-    OR EXISTS (SELECT 1 FROM event_recipients er WHERE er.event_id = e.id AND er.user_id = $1)
-  )
-  AND (
-    e.type NOT IN ('channel.read', 'dm.read')
-    OR COALESCE(e.payload_json::jsonb ->> 'user_id', '') = $1
-  )
-  AND (
-    e.channel_id IS NULL
-    OR viewer.role <> 'guest'
-    OR event_channel.name = 'guest'
-  )
-  AND (
-    COALESCE(
-      e.payload_json::jsonb ->> 'direct_conversation_id',
-      (
-        SELECT m.direct_conversation_id
-        FROM messages m
-        WHERE m.workspace_id = e.workspace_id
-          AND m.id IN (
-            COALESCE(e.payload_json::jsonb ->> 'message_id', ''),
-            COALESCE(e.payload_json::jsonb ->> 'root_message_id', '')
-          )
-          AND m.direct_conversation_id IS NOT NULL
-          AND m.direct_conversation_id <> ''
-        LIMIT 1
-      ),
-      ''
-    ) = ''
-    OR (
-      viewer.role <> 'guest'
-      AND EXISTS (
-        SELECT 1
-        FROM direct_conversation_members dcm
-        JOIN direct_conversations dc ON dc.id = dcm.conversation_id
-        WHERE dc.workspace_id = e.workspace_id
-          AND dcm.conversation_id = COALESCE(
-            e.payload_json::jsonb ->> 'direct_conversation_id',
-            (
-              SELECT m.direct_conversation_id
-              FROM messages m
-              WHERE m.workspace_id = e.workspace_id
-                AND m.id IN (
-                  COALESCE(e.payload_json::jsonb ->> 'message_id', ''),
-                  COALESCE(e.payload_json::jsonb ->> 'root_message_id', '')
-                )
-                AND m.direct_conversation_id IS NOT NULL
-                AND m.direct_conversation_id <> ''
-              LIMIT 1
-            )
-          )
-          AND dcm.user_id = $1
-      )
-    )
-  )
-ORDER BY e.cursor DESC
-LIMIT 1
-`
-
-type LatestEventCursorParams struct {
-	UserID      string `json:"user_id"`
-	WorkspaceID string `json:"workspace_id"`
-}
-
-func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, latestEventCursor, arg.UserID, arg.WorkspaceID)
-	var cursor string
-	err := row.Scan(&cursor)
-	return cursor, err
-}
-
 const listChannels = `-- name: ListChannels :many
 SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kind, c.created_at, c.archived_at,
        CAST(COALESCE((SELECT MAX(channel_seq) FROM messages WHERE channel_id = c.id AND parent_message_id IS NULL), 0) AS BIGINT) AS last_seq,
@@ -1869,7 +1762,6 @@ SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kin
          WHERE m.channel_id = c.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
-           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT cr2.last_read_seq FROM channel_reads cr2 WHERE cr2.channel_id = c.id AND cr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM channels c
@@ -1939,19 +1831,12 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
-           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = $2
   AND dcm.user_id = $1
-  AND NOT EXISTS (
-    SELECT 1
-    FROM direct_conversation_hidden dch
-    WHERE dch.conversation_id = dc.id
-      AND dch.user_id = $1
-  )
 ORDER BY dc.created_at
 `
 
@@ -2061,10 +1946,6 @@ WHERE e.workspace_id = $2
     OR EXISTS (SELECT 1 FROM event_recipients er WHERE er.event_id = e.id AND er.user_id = $1)
   )
   AND (
-    e.type NOT IN ('channel.read', 'dm.read')
-    OR COALESCE(e.payload_json::jsonb ->> 'user_id', '') = $1
-  )
-  AND (
     e.channel_id IS NULL
     OR viewer.role <> 'guest'
     OR event_channel.name = 'guest'
@@ -2171,26 +2052,85 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 	return items, nil
 }
 
-const listThreadStates = `-- name: ListThreadStates :many
-SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
-FROM thread_state
-WHERE root_message_id = ANY($1::text[])
+const listWorkspaceMemberPage = `-- name: ListWorkspaceMemberPage :many
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       wm.role, wm.created_at AS joined_at,
+       CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) AS role_sort,
+       lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) AS sort_name,
+       lower(COALESCE(NULLIF(u.handle, ''), u.id)) AS sort_handle
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = $1
+  AND (CAST($2 AS TEXT) = '' OR wm.role = CAST($2 AS TEXT))
+  AND (CAST($3 AS TEXT) = '' OR position(CAST($3 AS TEXT) in lower(u.display_name)) > 0 OR position(CAST($3 AS TEXT) in lower(u.handle)) > 0)
+  AND (
+    CAST($4 AS TEXT) = ''
+    OR CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) > CAST($5 AS INTEGER)
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST($5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) > CAST($6 AS TEXT))
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST($5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST($6 AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) > CAST($7 AS TEXT))
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST($5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST($6 AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) = CAST($7 AS TEXT) AND u.id > CAST($4 AS TEXT))
+  )
+ORDER BY role_sort, sort_name, sort_handle, id
+LIMIT $8
 `
 
-func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string) ([]ThreadState, error) {
-	rows, err := q.db.QueryContext(ctx, listThreadStates, pq.Array(rootMessageIds))
+type ListWorkspaceMemberPageParams struct {
+	WorkspaceID      string `json:"workspace_id"`
+	RoleFilter       string `json:"role_filter"`
+	SearchQuery      string `json:"search_query"`
+	CursorUserID     string `json:"cursor_user_id"`
+	CursorRoleSort   int32  `json:"cursor_role_sort"`
+	CursorSortName   string `json:"cursor_sort_name"`
+	CursorSortHandle string `json:"cursor_sort_handle"`
+	LimitCount       int32  `json:"limit_count"`
+}
+
+type ListWorkspaceMemberPageRow struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	OwnerUserID string `json:"owner_user_id"`
+	DisplayName string `json:"display_name"`
+	Handle      string `json:"handle"`
+	AvatarUrl   string `json:"avatar_url"`
+	CreatedAt   string `json:"created_at"`
+	Role        string `json:"role"`
+	JoinedAt    string `json:"joined_at"`
+	RoleSort    int32  `json:"role_sort"`
+	SortName    string `json:"sort_name"`
+	SortHandle  string `json:"sort_handle"`
+}
+
+func (q *Queries) ListWorkspaceMemberPage(ctx context.Context, arg ListWorkspaceMemberPageParams) ([]ListWorkspaceMemberPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceMemberPage,
+		arg.WorkspaceID,
+		arg.RoleFilter,
+		arg.SearchQuery,
+		arg.CursorUserID,
+		arg.CursorRoleSort,
+		arg.CursorSortName,
+		arg.CursorSortHandle,
+		arg.LimitCount,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ThreadState
+	var items []ListWorkspaceMemberPageRow
 	for rows.Next() {
-		var i ThreadState
+		var i ListWorkspaceMemberPageRow
 		if err := rows.Scan(
-			&i.RootMessageID,
-			&i.ReplyCount,
-			&i.LastReplyAt,
-			&i.LastReplyAuthorIdsJson,
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.Role,
+			&i.JoinedAt,
+			&i.RoleSort,
+			&i.SortName,
+			&i.SortHandle,
 		); err != nil {
 			return nil, err
 		}
@@ -2667,32 +2607,6 @@ type TouchBotTokenParams struct {
 
 func (q *Queries) TouchBotToken(ctx context.Context, arg TouchBotTokenParams) error {
 	_, err := q.db.ExecContext(ctx, touchBotToken, arg.LastUsedAt, arg.ID)
-	return err
-}
-
-const unhideDirectConversation = `-- name: UnhideDirectConversation :exec
-DELETE FROM direct_conversation_hidden
-WHERE conversation_id = $1
-  AND user_id = $2
-`
-
-type UnhideDirectConversationParams struct {
-	ConversationID string `json:"conversation_id"`
-	UserID         string `json:"user_id"`
-}
-
-func (q *Queries) UnhideDirectConversation(ctx context.Context, arg UnhideDirectConversationParams) error {
-	_, err := q.db.ExecContext(ctx, unhideDirectConversation, arg.ConversationID, arg.UserID)
-	return err
-}
-
-const unhideDirectConversationForMembers = `-- name: UnhideDirectConversationForMembers :exec
-DELETE FROM direct_conversation_hidden
-WHERE conversation_id = $1
-`
-
-func (q *Queries) UnhideDirectConversationForMembers(ctx context.Context, conversationID string) error {
-	_, err := q.db.ExecContext(ctx, unhideDirectConversationForMembers, conversationID)
 	return err
 }
 

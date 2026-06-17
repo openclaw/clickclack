@@ -38,6 +38,8 @@ CREATE TABLE workspace_members (
   PRIMARY KEY (workspace_id, user_id)
 );
 
+CREATE INDEX idx_workspace_members_workspace_role_user ON workspace_members(workspace_id, role, user_id);
+
 CREATE TABLE workspace_member_moderation (
   workspace_id TEXT NOT NULL,
   user_id TEXT NOT NULL,

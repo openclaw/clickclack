@@ -282,6 +282,27 @@ WHERE wm.workspace_id = sqlc.arg(workspace_id)
 ORDER BY CASE wm.role WHEN 'owner' THEN 4 WHEN 'moderator' THEN 3 WHEN 'member' THEN 2 ELSE 1 END DESC,
          lower(u.display_name);
 
+-- name: ListWorkspaceMemberPage :many
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       wm.role, wm.created_at AS joined_at,
+       CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) AS role_sort,
+       lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) AS sort_name,
+       lower(COALESCE(NULLIF(u.handle, ''), u.id)) AS sort_handle
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND (CAST(sqlc.arg(role_filter) AS TEXT) = '' OR wm.role = CAST(sqlc.arg(role_filter) AS TEXT))
+  AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.display_name)) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.handle)) > 0)
+  AND (
+    CAST(sqlc.arg(cursor_user_id) AS TEXT) = ''
+    OR CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) > CAST(sqlc.arg(cursor_role_sort) AS INTEGER)
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) > CAST(sqlc.arg(cursor_sort_name) AS TEXT))
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_name) AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) > CAST(sqlc.arg(cursor_sort_handle) AS TEXT))
+    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_name) AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_handle) AS TEXT) AND u.id > CAST(sqlc.arg(cursor_user_id) AS TEXT))
+  )
+ORDER BY role_sort, sort_name, sort_handle, id
+LIMIT sqlc.arg(limit_count);
+
 -- name: UpdateWorkspaceMemberRole :exec
 UPDATE workspace_members
 SET role = sqlc.arg(role)

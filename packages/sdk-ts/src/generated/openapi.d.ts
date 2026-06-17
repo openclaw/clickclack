@@ -215,6 +215,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listWorkspaceMembers"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces/{workspace_id}/moderation/members": {
     parameters: {
       query?: never;
@@ -1152,6 +1168,19 @@ export interface components {
       /** @enum {string} */
       role?: "owner" | "moderator" | "member" | "guest" | "bot";
     };
+    WorkspaceMember: {
+      workspace_id: string;
+      user: components["schemas"]["User"];
+      /** @enum {string} */
+      role: "owner" | "moderator" | "member" | "bot" | "guest";
+      /** Format: date-time */
+      joined_at: string;
+    };
+    WorkspaceMemberPage: {
+      members: components["schemas"]["WorkspaceMember"][];
+      next_cursor?: string;
+      has_more: boolean;
+    };
     MemberModeration: {
       workspace_id: string;
       user: components["schemas"]["User"];
@@ -1714,6 +1743,33 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  listWorkspaceMembers: {
+    parameters: {
+      query?: {
+        limit?: number;
+        cursor?: string;
+        q?: string;
+        role?: "owner" | "moderator" | "member" | "bot" | "guest";
+      };
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paginated workspace members visible to any workspace member */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceMemberPage"];
+        };
       };
     };
   };

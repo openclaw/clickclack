@@ -81,6 +81,10 @@ GET /api/workspaces/{workspace_id}/moderation/members
 PATCH /api/workspaces/{workspace_id}/moderation/members/{user_id}
 ```
 
+The separate public member directory is
+`GET /api/workspaces/{workspace_id}/members`; it is paginated and deliberately
+does not include moderation state.
+
 `GET` returns `members`, each with the user, role, moderation state, and guest
 post budget:
 

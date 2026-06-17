@@ -35,7 +35,7 @@ The value is not stored on message rows or exported as a metrics label.
 |---------------|-----------|-----|
 | Auth          | `/api/auth/magic/{request,consume}`, `/api/auth/github/{start,callback}` | [auth](../features/auth.md) |
 | Profile       | `/api/me` | [profiles](../features/profiles.md) |
-| Workspaces    | `/api/workspaces`, `/api/workspaces/{id}` | [workspaces](../features/workspaces.md) |
+| Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
 | Bots          | `/api/workspaces/{id}/bots`, `/api/bots/{id}/tokens`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
 | App installs  | `/api/workspaces/{id}/app-installations`, `/api/app-installations/{id}/revoke` | [integrations](../features/integrations.md) |
@@ -63,7 +63,8 @@ The value is not stored on message rows or exported as a metrics label.
 - Mutating endpoints return both the affected resource and the durable event
   emitted (`{message, event}`), so clients can reconcile optimistically.
 - Pagination on listings uses cursor-style sequence numbers (`after_seq` for
-  channel/DM messages, `after_cursor` for events).
+  channel/DM messages, `after_cursor` for events) or opaque cursors where the
+  ordering is not sequence-based (`cursor` for workspace members).
 - Errors come back as `{ "error": "<message>" }` with an HTTP status code.
 - Store-level moderation restrictions surface as `403`; exhausted guest post
   budgets surface as `429`.

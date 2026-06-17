@@ -340,6 +340,44 @@ func TestCreateWorkspaceAllowedForUsersWithoutMemberships(t *testing.T) {
 	expectStatusAsUser(t, guest.ID, http.MethodPost, server.URL+"/api/workspaces", strings.NewReader(`{"name":"Guest Escape"}`), http.StatusForbidden)
 }
 
+func TestWorkspaceMembersEndpointAllowsMembersWithoutModerationAccess(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "http-members-owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "http-members-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	stranger, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Stranger", Email: "http-members-stranger@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{}).Handler())
+	t.Cleanup(server.Close)
+
+	page := getJSONAsUser[store.WorkspaceMemberPage](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/members?limit=1")
+	if len(page.Members) != 1 || !page.HasMore || page.NextCursor == "" {
+		t.Fatalf("unexpected member page response: %#v", page)
+	}
+	if page.Members[0].WorkspaceID != workspace.ID || page.Members[0].JoinedAt == "" {
+		t.Fatalf("expected public membership metadata, got %#v", page.Members[0])
+	}
+	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/moderation/members", nil, http.StatusForbidden)
+	expectStatusAsUser(t, stranger.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/members", nil, http.StatusForbidden)
+	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/members?limit=bad", nil, http.StatusBadRequest)
+}
+
 func TestJSONBodiesAreSizeLimited(t *testing.T) {
 	t.Parallel()
 	st := newHTTPStore(t)

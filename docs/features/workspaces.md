@@ -16,6 +16,7 @@ role of `owner`, `moderator`, `member`, `guest`, or `bot`.
 GET  /api/workspaces                          # workspaces the caller belongs to
 POST /api/workspaces                          # create + add caller as owner
 GET  /api/workspaces/{workspace_id}           # one workspace, must be a member
+GET  /api/workspaces/{workspace_id}/members   # paginated public member directory
 ```
 
 `POST /api/workspaces` accepts `{name, slug?}`. Slugs default to a slugified
@@ -24,6 +25,12 @@ form of `name` and must be unique.
 The owner who creates the workspace is auto-added with role `owner`. Adding
 other members today goes through auth/bootstrap flows or admin commands; the
 HTTP API exposes moderation for existing members, not arbitrary invites.
+
+`GET /api/workspaces/{workspace_id}/members` is a read-only directory for any
+workspace member. It accepts `limit` (default 100, max 200), opaque `cursor`,
+case-insensitive literal `q` search over display name and handle, and optional
+`role` (`owner`, `moderator`, `member`, `bot`, `guest`). It returns
+`{members, next_cursor, has_more}` and does not include moderation state.
 
 ## Channels
 

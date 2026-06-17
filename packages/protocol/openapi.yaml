@@ -233,6 +233,38 @@ paths:
       responses:
         "200":
           description: Workspace
+  /api/workspaces/{workspace_id}/members:
+    get:
+      operationId: listWorkspaceMembers
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [owner, moderator, member, bot, guest]
+      responses:
+        "200":
+          description: Paginated workspace members visible to any workspace member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMemberPage"
   /api/workspaces/{workspace_id}/moderation/members:
     get:
       operationId: listWorkspaceMembersForModeration
@@ -1524,6 +1556,32 @@ components:
         role:
           type: string
           enum: [owner, moderator, member, guest, bot]
+    WorkspaceMember:
+      type: object
+      required: [workspace_id, user, role, joined_at]
+      properties:
+        workspace_id:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        role:
+          type: string
+          enum: [owner, moderator, member, bot, guest]
+        joined_at:
+          type: string
+          format: date-time
+    WorkspaceMemberPage:
+      type: object
+      required: [members, has_more]
+      properties:
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceMember"
+        next_cursor:
+          type: string
+        has_more:
+          type: boolean
     MemberModeration:
       type: object
       required: [workspace_id, user, role, posts_remaining, post_limit]

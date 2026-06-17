@@ -21,6 +21,88 @@ func (s *Store) AddWorkspaceMember(ctx context.Context, workspaceID, userID, rol
 	})
 }
 
+func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorUserID string, page store.WorkspaceMemberPageRequest) (store.WorkspaceMemberPage, error) {
+	req, err := store.NormalizeWorkspaceMemberPageRequest(page)
+	if err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
+	cursor, hasCursor, err := store.DecodeWorkspaceMemberCursor(req.Cursor)
+	if err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
+	if hasCursor && (cursor.Query != req.Query || cursor.Role != req.Role) {
+		return store.WorkspaceMemberPage{}, store.ErrInvalidWorkspaceMemberPage
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
+	defer tx.Rollback()
+	if err := requireMembershipTx(ctx, tx, workspaceID, actorUserID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return store.WorkspaceMemberPage{}, store.ErrModerationRestricted
+		}
+		return store.WorkspaceMemberPage{}, err
+	}
+	rows, err := storedb.New(tx).ListWorkspaceMemberPage(ctx, storedb.ListWorkspaceMemberPageParams{
+		WorkspaceID:      workspaceID,
+		RoleFilter:       req.Role,
+		SearchQuery:      req.Query,
+		CursorUserID:     cursor.UserID,
+		CursorRoleSort:   int32(cursor.RoleSort),
+		CursorSortName:   cursor.SortName,
+		CursorSortHandle: cursor.SortHandle,
+		LimitCount:       int32(req.Limit + 1),
+	})
+	if err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
+	return postgresWorkspaceMemberPageFromRows(workspaceID, req, rows)
+}
+
+func postgresWorkspaceMemberPageFromRows(workspaceID string, req store.WorkspaceMemberPageRequest, rows []storedb.ListWorkspaceMemberPageRow) (store.WorkspaceMemberPage, error) {
+	page := store.WorkspaceMemberPage{Members: make([]store.WorkspaceMember, 0, min(len(rows), req.Limit))}
+	if len(rows) > req.Limit {
+		page.HasMore = true
+		rows = rows[:req.Limit]
+	}
+	for _, row := range rows {
+		page.Members = append(page.Members, store.WorkspaceMember{
+			WorkspaceID: workspaceID,
+			User: store.User{
+				ID:          row.ID,
+				Kind:        row.Kind,
+				OwnerUserID: row.OwnerUserID,
+				DisplayName: row.DisplayName,
+				Handle:      row.Handle,
+				AvatarURL:   row.AvatarUrl,
+				CreatedAt:   row.CreatedAt,
+			},
+			Role:     row.Role,
+			JoinedAt: row.JoinedAt,
+		})
+	}
+	if page.HasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		nextCursor, err := store.EncodeWorkspaceMemberCursor(store.WorkspaceMemberCursor{
+			RoleSort:   int(last.RoleSort),
+			SortName:   last.SortName,
+			SortHandle: last.SortHandle,
+			UserID:     last.ID,
+			Query:      req.Query,
+			Role:       req.Role,
+		})
+		if err != nil {
+			return store.WorkspaceMemberPage{}, err
+		}
+		page.NextCursor = nextCursor
+	}
+	return page, nil
+}
+
 func (s *Store) EnsureDefaultWorkspaceMember(ctx context.Context, userID string) (store.Workspace, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -118,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces", s.createWorkspace)
 		r.Get("/routes/{workspace_route_id}/{target_route_id}", s.resolveRoute)
 		r.Get("/workspaces/{workspace_id}", s.getWorkspace)
+		r.Get("/workspaces/{workspace_id}/members", s.listWorkspaceMemberPage)
 		r.Get("/workspaces/{workspace_id}/moderation/members", s.listWorkspaceMembers)
 		r.Patch("/workspaces/{workspace_id}/moderation/members/{user_id}", s.updateWorkspaceMemberModeration)
 		r.Get("/workspaces/{workspace_id}/channels", s.listChannels)
@@ -439,6 +440,51 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	workspace, err := s.store.GetWorkspace(r.Context(), workspaceID, act.user.ID)
 	writeResult(w, map[string]any{"workspace": workspace}, err)
+}
+
+func (s *Server) listWorkspaceMemberPage(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireScope("workspaces:read"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	page, err := parseWorkspaceMemberPageRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	members, err := s.store.ListWorkspaceMemberPage(r.Context(), workspaceID, act.user.ID, page)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, members)
+}
+
+func parseWorkspaceMemberPageRequest(r *http.Request) (store.WorkspaceMemberPageRequest, error) {
+	values := r.URL.Query()
+	page := store.WorkspaceMemberPageRequest{
+		Cursor: values.Get("cursor"),
+		Query:  values.Get("q"),
+		Role:   values.Get("role"),
+	}
+	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil || limit < 1 {
+			return page, fmt.Errorf("%w: limit must be positive", store.ErrInvalidWorkspaceMemberPage)
+		}
+		page.Limit = limit
+	}
+	return page, nil
 }
 
 func (s *Server) listWorkspaceMembers(w http.ResponseWriter, r *http.Request) {

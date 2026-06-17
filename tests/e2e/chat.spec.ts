@@ -525,6 +525,69 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
 });
 
+test("closes direct messages without deleting history", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces.workspaces[0];
+  const name = `Close User ${Date.now()}`;
+  const otherUserId = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspace.id,
+    "--name",
+    name,
+    "--email",
+    `${name.toLowerCase().replaceAll(" ", ".")}@example.com`,
+  ]);
+  const dmResponse = await page.request.post("/api/dms", {
+    data: { workspace_id: workspace.id, member_ids: [otherUserId] },
+  });
+  expect(dmResponse.ok()).toBe(true);
+  const { conversation } = (await dmResponse.json()) as {
+    conversation: { id: string; route_id: string };
+  };
+
+  await page.goto("/app");
+  const dmSection = page.locator(".nav-section", { hasText: "Direct messages" });
+  const dmLink = dmSection.getByRole("link", { name: new RegExp(name) });
+  await expect(dmLink).toBeVisible();
+  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await expect(dmLink).toBeHidden();
+
+  const hiddenGet = await page.request.get(`/api/dms/${conversation.id}`);
+  expect(hiddenGet.ok()).toBe(true);
+  await page.goto(`/app/${workspace.route_id}/${conversation.route_id}`);
+  await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
+
+  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await expect(dmLink).toBeHidden();
+  const reopened = await page.request.post("/api/dms", {
+    data: { workspace_id: workspace.id, member_ids: [otherUserId] },
+  });
+  expect(reopened.ok()).toBe(true);
+  const reopenedBody = (await reopened.json()) as { conversation: { id: string } };
+  expect(reopenedBody.conversation.id).toBe(conversation.id);
+  await page.reload();
+  await expect(dmLink).toBeVisible();
+
+  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await expect(dmLink).toBeHidden();
+  const messageResponse = await page.request.post(`/api/dms/${conversation.id}/messages`, {
+    headers: { "X-ClickClack-User": otherUserId },
+    data: { body: "resurface this dm" },
+  });
+  expect(messageResponse.ok()).toBe(true);
+  await expect(dmLink).toBeVisible();
+  await dmLink.click();
+  await expect(page.locator(".markdown").filter({ hasText: "resurface this dm" })).toBeVisible();
+});
+
 test("unread bar jumps to the new-message divider across repeated unread cycles", async ({
   page,
 }) => {

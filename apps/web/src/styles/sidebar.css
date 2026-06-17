@@ -375,6 +375,44 @@
   font-size: 14px;
 }
 
+.dm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 2px;
+}
+
+.dm-row .nav-item {
+  min-width: 0;
+}
+
+.dm-close {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 17px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.dm-row:hover .dm-close,
+.dm-row:focus-within .dm-close,
+.dm-row.active .dm-close {
+  opacity: 1;
+}
+
+.dm-close:hover,
+.dm-close:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
 .nav-empty {
   margin: 4px 8px;
   color: var(--muted-2);

@@ -24,6 +24,7 @@
     onCreateChannel: () => void;
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
+    onHideDirect: (conversationID: string) => void;
     onOpenProfile: (profile: User) => void;
     onOpenSettings: () => void;
   };
@@ -47,6 +48,7 @@
     onCreateChannel,
     onSelectDirect,
     onCreateDirect,
+    onHideDirect,
     onOpenProfile,
     onOpenSettings,
   }: Props = $props();
@@ -99,6 +101,7 @@
       {hrefForDirect}
       {onSelectDirect}
       {onCreateDirect}
+      {onHideDirect}
     />
 
     <section class="nav-section">

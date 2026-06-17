@@ -685,6 +685,15 @@ export class ClickClackClient {
       });
       return data.conversation;
     },
+    get: async (conversationId: string): Promise<DirectConversation> => {
+      const data = await this.request<{ conversation: DirectConversation }>(
+        `/api/dms/${conversationId}`,
+      );
+      return data.conversation;
+    },
+    close: async (conversationId: string): Promise<void> => {
+      await this.request(`/api/dms/${conversationId}`, { method: "DELETE" });
+    },
     messages: async (conversationId: string, afterSeq = 0): Promise<Message[]> => {
       const data = await this.request<{ messages: Message[] }>(
         `/api/dms/${conversationId}/messages?after_seq=${afterSeq}`,

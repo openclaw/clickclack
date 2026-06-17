@@ -10,6 +10,7 @@
     hrefForDirect: (conversationID: string) => string;
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
+    onHideDirect: (conversationID: string) => void;
   };
 
   let {
@@ -19,6 +20,7 @@
     hrefForDirect,
     onSelectDirect,
     onCreateDirect,
+    onHideDirect,
   }: Props = $props();
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
@@ -43,31 +45,44 @@
       {@const dmUser = dmAvatarUser(conversation, currentUserID)}
       {@const unread = conversation.unread_count || 0}
       {@const isActive = conversation.id === selectedDirectID}
-      <a
-        href={hrefForDirect(conversation.id)}
-        class="nav-item dm"
-        class:active={isActive}
-        class:has-unread={unread > 0 && !isActive}
-        onclick={(event) => {
-          if (!shouldHandleClientNavigation(event)) return;
-          event.preventDefault();
-          onSelectDirect(conversation.id);
-        }}
-      >
-        <Avatar
-          class="dm-avatar"
-          id={dmUser?.id || conversation.id}
-          name={dmUser?.display_name}
-          src={dmUser?.avatar_url}
-          size={22}
-        />
-        <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>
-        {#if unread > 0 && !isActive}
-          <span class="unread-badge" aria-label={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>
-        {:else}
-          <span class="presence-dot" aria-hidden="true"></span>
-        {/if}
-      </a>
+      <div class="dm-row" class:active={isActive}>
+        <a
+          href={hrefForDirect(conversation.id)}
+          class="nav-item dm"
+          class:active={isActive}
+          class:has-unread={unread > 0 && !isActive}
+          onclick={(event) => {
+            if (!shouldHandleClientNavigation(event)) return;
+            event.preventDefault();
+            onSelectDirect(conversation.id);
+          }}
+        >
+          <Avatar
+            class="dm-avatar"
+            id={dmUser?.id || conversation.id}
+            name={dmUser?.display_name}
+            src={dmUser?.avatar_url}
+            size={22}
+          />
+          <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>
+          {#if unread > 0 && !isActive}
+            <span class="unread-badge" aria-label={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>
+          {:else}
+            <span class="presence-dot" aria-hidden="true"></span>
+          {/if}
+        </a>
+        <button
+          type="button"
+          class="dm-close"
+          aria-label={`Close ${dmTitle(conversation, currentUserID)}`}
+          title="Close direct message"
+          onclick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onHideDirect(conversation.id);
+          }}
+        >×</button>
+      </div>
     {/each}
     {#if conversations.length === 0}
       <p class="nav-empty">No direct messages yet</p>

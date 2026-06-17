@@ -94,6 +94,12 @@ type DirectConversation struct {
 	MemberSetKey sql.NullString `json:"member_set_key"`
 }
 
+type DirectConversationHidden struct {
+	ConversationID string `json:"conversation_id"`
+	UserID         string `json:"user_id"`
+	HiddenAt       string `json:"hidden_at"`
+}
+
 type DirectConversationMember struct {
 	ConversationID string `json:"conversation_id"`
 	UserID         string `json:"user_id"`

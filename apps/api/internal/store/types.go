@@ -702,6 +702,7 @@ type Store interface {
 	ListDirectConversations(ctx context.Context, workspaceID, userID string) ([]DirectConversation, error)
 	GetDirectConversation(ctx context.Context, conversationID, userID string) (DirectConversation, error)
 	CreateDirectConversation(ctx context.Context, input CreateDirectConversationInput) (DirectConversation, error)
+	HideDirectConversation(ctx context.Context, conversationID, userID string) error
 	ListDirectMessages(ctx context.Context, conversationID, userID string, page MessagePageRequest) (MessagePage, error)
 	CreateDirectMessage(ctx context.Context, input CreateDirectMessageInput) (Message, Event, error)
 	MarkChannelRead(ctx context.Context, channelID, userID string, seq int64) (ReadReceipt, Event, error)

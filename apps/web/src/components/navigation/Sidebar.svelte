@@ -25,6 +25,8 @@
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
     onHideDirect: (conversationID: string) => void;
+    hiddenDirectTitle?: string;
+    onUndoHideDirect: () => void;
     onOpenProfile: (profile: User) => void;
     onOpenSettings: () => void;
   };
@@ -49,6 +51,8 @@
     onSelectDirect,
     onCreateDirect,
     onHideDirect,
+    hiddenDirectTitle,
+    onUndoHideDirect,
     onOpenProfile,
     onOpenSettings,
   }: Props = $props();
@@ -102,6 +106,8 @@
       {onSelectDirect}
       {onCreateDirect}
       {onHideDirect}
+      {hiddenDirectTitle}
+      {onUndoHideDirect}
     />
 
     <section class="nav-section">

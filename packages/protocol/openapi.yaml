@@ -755,6 +755,14 @@ paths:
       responses:
         "200":
           description: Closed direct conversation for the current user
+  /api/dms/{conversation_id}/open:
+    post:
+      operationId: reopenDirectConversation
+      parameters:
+        - $ref: "#/components/parameters/conversation_id"
+      responses:
+        "200":
+          description: Reopened direct conversation for the current user
   /api/dms/{conversation_id}/messages:
     get:
       operationId: listDirectMessages

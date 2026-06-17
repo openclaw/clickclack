@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/dms", s.createDirectConversation)
 		r.Get("/dms/{conversation_id}", s.getDirectConversation)
 		r.Delete("/dms/{conversation_id}", s.hideDirectConversation)
+		r.Post("/dms/{conversation_id}/open", s.reopenDirectConversation)
 		r.Get("/dms/{conversation_id}/messages", s.listDirectMessages)
 		r.Post("/dms/{conversation_id}/messages", s.createDirectMessage)
 		r.Post("/dms/{conversation_id}/read", s.markDirectRead)

@@ -265,6 +265,13 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if hiddenGetDM.Conversation.ID != dm.Conversation.ID {
 		t.Fatalf("hidden dm should remain directly accessible: %#v", hiddenGetDM.Conversation)
 	}
+	openedDM := postJSON[struct {
+		Conversation store.DirectConversation `json:"conversation"`
+	}](t, server.URL+"/api/dms/"+dm.Conversation.ID+"/open", nil)
+	if openedDM.Conversation.ID != dm.Conversation.ID {
+		t.Fatalf("expected open to restore hidden dm %s, got %s", dm.Conversation.ID, openedDM.Conversation.ID)
+	}
+	expectStatus(t, http.MethodDelete, server.URL+"/api/dms/"+dm.Conversation.ID, nil, http.StatusOK)
 	reopenedDM := postJSON[struct {
 		Conversation store.DirectConversation `json:"conversation"`
 	}](t, server.URL+"/api/dms", map[string]any{"workspace_id": workspace.ID, "member_ids": []string{second.ID}})
@@ -1114,6 +1121,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		{"list dms", http.MethodGet, "/api/dms?workspace_id=" + url.QueryEscape(workspace.ID), "", ""},
 		{"create dm", http.MethodPost, "/api/dms", `{"workspace_id":"` + workspace.ID + `"}`, "application/json"},
 		{"close dm", http.MethodDelete, "/api/dms/dm_missing", "", ""},
+		{"open dm", http.MethodPost, "/api/dms/dm_missing/open", "", ""},
 		{"list dm messages", http.MethodGet, "/api/dms/dm_missing/messages", "", ""},
 		{"create dm message", http.MethodPost, "/api/dms/dm_missing/messages", `{"body":"dm"}`, "application/json"},
 		{"mark dm read", http.MethodPost, "/api/dms/dm_missing/read", `{"seq":1}`, "application/json"},

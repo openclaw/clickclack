@@ -121,12 +121,19 @@
   let agentProgressSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
+  let hiddenDirectUndo: HiddenDirectUndo | null = null;
+  let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
 
   type MessageWindow = Omit<MessagePage, "messages"> & {
     messages: Message[];
   };
 
   type HistoryEdgeState = "idle" | "loading" | "settling";
+  type HiddenDirectUndo = {
+    conversation: DirectConversation;
+    restoreRoute: boolean;
+    title: string;
+  };
   type UnreadMarker = {
     boundarySeq: number;
     since: string;
@@ -191,6 +198,7 @@
     stopTyping();
     if (typingSweeper) window.clearInterval(typingSweeper);
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
+    if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
   });
 
   async function boot() {
@@ -1927,11 +1935,51 @@
     await navigateToApp(selectedWorkspaceID, data.conversation.id);
   }
 
+  function clearHiddenDirectUndo() {
+    if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
+    hiddenDirectUndoTimer = undefined;
+    hiddenDirectUndo = null;
+  }
+
+  function scheduleHiddenDirectUndo(conversation: DirectConversation, restoreRoute: boolean) {
+    clearHiddenDirectUndo();
+    hiddenDirectUndo = {
+      conversation,
+      restoreRoute,
+      title: dmTitle(conversation, user?.id),
+    };
+    hiddenDirectUndoTimer = setTimeout(() => {
+      hiddenDirectUndo = null;
+      hiddenDirectUndoTimer = undefined;
+    }, 8000);
+  }
+
+  async function undoHideDirectConversation() {
+    const undo = hiddenDirectUndo;
+    if (!undo) return;
+    clearHiddenDirectUndo();
+    try {
+      const data = await api<{ conversation: DirectConversation }>(`/api/dms/${undo.conversation.id}/open`, {
+        method: "POST"
+      });
+      upsertDirectConversation(data.conversation);
+      if (undo.restoreRoute) {
+        await navigateToApp(undo.conversation.workspace_id, data.conversation.id);
+      }
+      status = "direct message restored";
+    } catch (error) {
+      status = error instanceof Error ? error.message : "Could not restore direct message";
+    }
+  }
+
   async function hideDirectConversation(conversationID: string) {
     if (!conversationID) return;
+    const conversation = directConversations.find((item) => item.id === conversationID);
+    const restoreRoute = selectedDirectID === conversationID;
     await api(`/api/dms/${conversationID}`, { method: "DELETE" });
     directConversations = directConversations.filter((conversation) => conversation.id !== conversationID);
-    if (selectedDirectID === conversationID) {
+    if (conversation) scheduleHiddenDirectUndo(conversation, restoreRoute);
+    if (restoreRoute) {
       clearRoutePanelState();
       const fallbackID = channels[0]?.id || "";
       selectedDirectID = "";
@@ -2479,6 +2527,8 @@
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onCreateDirect={() => (showCreateDirect = true)}
     onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
+    hiddenDirectTitle={hiddenDirectUndo?.title}
+    onUndoHideDirect={() => void undoHideDirectConversation()}
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
   />

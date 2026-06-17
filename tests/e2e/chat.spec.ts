@@ -557,16 +557,27 @@ test("closes direct messages without deleting history", async ({ page }) => {
   await page.goto("/app");
   const dmSection = page.locator(".nav-section", { hasText: "Direct messages" });
   const dmLink = dmSection.getByRole("link", { name: new RegExp(name) });
+  const closeDirectMessage = async () => {
+    await dmSection
+      .getByRole("button", { name: `Direct message actions for ${name}` })
+      .click({ force: true });
+    await dmSection.getByRole("menuitem", { name: "Close direct message" }).click();
+  };
   await expect(dmLink).toBeVisible();
-  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await closeDirectMessage();
   await expect(dmLink).toBeHidden();
+  await expect(dmSection.getByText(`Closed ${name}`)).toBeVisible();
+  await dmSection.getByRole("button", { name: "Undo" }).click();
+  await expect(dmLink).toBeVisible();
 
+  await closeDirectMessage();
+  await expect(dmLink).toBeHidden();
   const hiddenGet = await page.request.get(`/api/dms/${conversation.id}`);
   expect(hiddenGet.ok()).toBe(true);
   await page.goto(`/app/${workspace.route_id}/${conversation.route_id}`);
   await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
 
-  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await closeDirectMessage();
   await expect(dmLink).toBeHidden();
   const reopened = await page.request.post("/api/dms", {
     data: { workspace_id: workspace.id, member_ids: [otherUserId] },
@@ -577,7 +588,7 @@ test("closes direct messages without deleting history", async ({ page }) => {
   await page.reload();
   await expect(dmLink).toBeVisible();
 
-  await dmSection.getByRole("button", { name: `Close ${name}` }).click({ force: true });
+  await closeDirectMessage();
   await expect(dmLink).toBeHidden();
   const messageResponse = await page.request.post(`/api/dms/${conversation.id}/messages`, {
     headers: { "X-ClickClack-User": otherUserId },

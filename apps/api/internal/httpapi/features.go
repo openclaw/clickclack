@@ -871,6 +871,24 @@ func (s *Server) hideDirectConversation(w http.ResponseWriter, r *http.Request) 
 	writeResult(w, map[string]any{"ok": true}, err)
 }
 
+func (s *Server) reopenDirectConversation(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot reopen direct conversations"))
+		return
+	}
+	if err := act.requireScope("dms:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	dm, err := s.store.ReopenDirectConversation(r.Context(), chi.URLParam(r, "conversation_id"), act.user.ID)
+	writeResult(w, map[string]any{"conversation": dm}, err)
+}
+
 func (s *Server) listDirectMessages(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {

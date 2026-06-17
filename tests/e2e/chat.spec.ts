@@ -266,6 +266,7 @@ test("browser notification storage failures do not block app startup", async ({ 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });

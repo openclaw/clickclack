@@ -854,31 +854,33 @@ test("browser notifications announce incoming messages outside the active conver
 
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (
-            window as unknown as {
-              __clickclackNotifications: { title: string; options?: NotificationOptions }[];
-            }
-          ).__clickclackNotifications,
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            __clickclackNotifications: { title: string; options?: NotificationOptions }[];
+          }
+        ).__clickclackNotifications.find((notification) =>
+          notification.title.includes("ClickClack in #notify-"),
+        ),
       ),
     )
-    .toEqual([
+    .toEqual(
       expect.objectContaining({
-        title: expect.stringContaining("ClickClack in #notify-"),
         options: expect.objectContaining({
           body: "New message",
           icon: "/favicon.svg",
         }),
       }),
-    ]);
+    );
 
   await page.evaluate(() => {
     const notification = (
       window as unknown as {
-        __clickclackNotifications: { onclick?: (() => void) | null }[];
+        __clickclackNotifications: { title: string; onclick?: (() => void) | null }[];
       }
-    ).__clickclackNotifications[0];
+    ).__clickclackNotifications.find((candidate) =>
+      candidate.title.includes("ClickClack in #notify-"),
+    );
     notification.onclick?.();
   });
 

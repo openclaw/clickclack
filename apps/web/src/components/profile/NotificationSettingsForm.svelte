@@ -13,8 +13,10 @@
 
   let { user, onUserUpdated }: Props = $props();
 
-  let pushoverEnabled = $state(user.notification_settings?.pushover_enabled ?? false);
-  let pushoverUserKey = $state(user.notification_settings?.pushover_user_key ?? "");
+  let savedUser = $state<User | null>(null);
+  const currentUser = $derived(savedUser ?? user);
+  let pushoverEnabled = $state(false);
+  let pushoverUserKey = $state("");
 
   let browserNotificationsSupported = $state(false);
   let browserNotificationsEnabled = $state(false);
@@ -25,16 +27,18 @@
   let saving = $state(false);
 
   $effect(() => {
+    pushoverEnabled = currentUser.notification_settings?.pushover_enabled ?? false;
+    pushoverUserKey = currentUser.notification_settings?.pushover_user_key ?? "";
     syncBrowserNotificationState();
   });
 
   function syncBrowserNotificationState() {
     browserNotificationsSupported = typeof Notification !== "undefined";
     browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
-    const storedEnabled = readBrowserNotificationsEnabled(user.id);
+    const storedEnabled = readBrowserNotificationsEnabled(currentUser.id);
     browserNotificationsEnabled = browserNotificationPermission === "granted" && storedEnabled;
     if (storedEnabled && browserNotificationPermission !== "granted") {
-      writeBrowserNotificationsEnabled(user.id, false);
+      writeBrowserNotificationsEnabled(currentUser.id, false);
     }
   }
 
@@ -42,7 +46,7 @@
     status = "";
     statusError = false;
     if (!enabled) {
-      writeBrowserNotificationsEnabled(user.id, false);
+      writeBrowserNotificationsEnabled(currentUser.id, false);
       browserNotificationsEnabled = false;
       status = "Browser notifications disabled";
       return;
@@ -60,14 +64,14 @@
     browserNotificationsSupported = true;
     browserNotificationPermission = permission;
     if (permission === "granted") {
-      browserNotificationsEnabled = writeBrowserNotificationsEnabled(user.id, true);
+      browserNotificationsEnabled = writeBrowserNotificationsEnabled(currentUser.id, true);
       status = browserNotificationsEnabled
         ? "Browser notifications enabled"
         : "Browser notification preference could not be saved";
       statusError = !browserNotificationsEnabled;
       return;
     }
-    writeBrowserNotificationsEnabled(user.id, false);
+    writeBrowserNotificationsEnabled(currentUser.id, false);
     browserNotificationsEnabled = false;
     status =
       permission === "denied"
@@ -85,18 +89,16 @@
       const data = await api<{ user: User }>("/api/me", {
         method: "PATCH",
         body: JSON.stringify({
-          display_name: user.display_name,
-          handle: user.handle ? `@${user.handle}` : "",
-          avatar_url: user.avatar_url,
+          display_name: currentUser.display_name,
+          handle: currentUser.handle ? `@${currentUser.handle}` : "",
+          avatar_url: currentUser.avatar_url,
           notification_settings: {
             pushover_enabled: pushoverEnabled,
             pushover_user_key: pushoverUserKey,
           },
         }),
       });
-      user = data.user;
-      pushoverEnabled = data.user.notification_settings?.pushover_enabled ?? false;
-      pushoverUserKey = data.user.notification_settings?.pushover_user_key ?? "";
+      savedUser = data.user;
       onUserUpdated?.(data.user);
       status = "Saved";
     } catch (error) {

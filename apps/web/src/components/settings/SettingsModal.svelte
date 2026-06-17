@@ -25,13 +25,14 @@
     onUserUpdated,
   }: Props = $props();
 
-  let activeSection = $state<AccountSettingsSectionId>(initialSection);
-  let user = $state<User>(initialUser);
+  let activeSection = $state<AccountSettingsSectionId>(DEFAULT_ACCOUNT_SETTINGS_SECTION);
+  let refreshedUser = $state<User | null>(null);
+  const user = $derived(refreshedUser?.id === initialUser.id ? refreshedUser : initialUser);
   let userStatus = $state<"ready" | "loading" | "error">("ready");
   let userError = $state("");
 
   $effect(() => {
-    user = initialUser;
+    activeSection = initialSection;
   });
 
   // Refresh user from the API on mount so the modal always reflects
@@ -44,7 +45,7 @@
     userStatus = "loading";
     try {
       const data = await api<{ user: User }>("/api/me");
-      user = data.user;
+      refreshedUser = data.user;
       onUserUpdated?.(data.user);
       userStatus = "ready";
     } catch (err) {
@@ -59,7 +60,7 @@
   }
 
   function handleUserUpdated(updated: User) {
-    user = updated;
+    refreshedUser = updated;
     onUserUpdated?.(updated);
   }
 
@@ -81,7 +82,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="settings-modal-scrim" onclick={handleScrimClick}>
+<div class="settings-modal-scrim" role="presentation" onclick={handleScrimClick}>
   <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
     <button type="button" class="settings-modal__close" onclick={onClose} aria-label="Close">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

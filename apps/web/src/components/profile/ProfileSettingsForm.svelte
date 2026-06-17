@@ -10,15 +10,23 @@
 
   let { user, onUserUpdated }: Props = $props();
 
-  let displayName = $state(user.display_name);
-  let handle = $state(user.handle ?? "");
-  let avatarURL = $state(user.avatar_url);
+  let savedUser = $state<User | null>(null);
+  const currentUser = $derived(savedUser ?? user);
+  let displayName = $state("");
+  let handle = $state("");
+  let avatarURL = $state("");
   let status = $state("");
   let statusError = $state(false);
   let saving = $state(false);
 
-  const previewName = $derived(displayName.trim() || user.display_name || "Your name");
-  const previewHandle = $derived(handle.trim().replace(/^@+/, "") || user.handle || "");
+  const previewName = $derived(displayName.trim() || currentUser.display_name || "Your name");
+  const previewHandle = $derived(handle.trim().replace(/^@+/, "") || currentUser.handle || "");
+
+  $effect(() => {
+    displayName = currentUser.display_name;
+    handle = currentUser.handle ?? "";
+    avatarURL = currentUser.avatar_url;
+  });
 
   function normalizedHandleForSave(): string {
     const trimmed = handle.trim().replace(/^@+/, "");
@@ -37,13 +45,10 @@
           display_name: displayName,
           handle: normalizedHandleForSave(),
           avatar_url: avatarURL,
-          notification_settings: user.notification_settings,
+          notification_settings: currentUser.notification_settings,
         }),
       });
-      user = data.user;
-      displayName = data.user.display_name;
-      handle = data.user.handle ?? "";
-      avatarURL = data.user.avatar_url;
+      savedUser = data.user;
       onUserUpdated?.(data.user);
       status = "Saved";
     } catch (error) {
@@ -68,7 +73,7 @@
 >
   <section class="settings-identity" aria-label="Profile preview">
     <Avatar
-      id={user.id}
+      id={currentUser.id}
       name={previewName}
       src={avatarURL}
       size={52}

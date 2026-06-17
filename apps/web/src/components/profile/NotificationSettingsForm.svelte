@@ -117,64 +117,77 @@
     void savePushover();
   }}
 >
-  <section class="settings-section">
-    <h3 class="settings-section__h">Desktop</h3>
-    <div class="settings-row">
-      <div class="settings-row__main">
-        <div class="settings-row__label">Browser notifications</div>
-        <div class="settings-row__hint">Show desktop alerts when ClickClack is in the background.</div>
+  <div class="settings-rows settings-rows--sectioned">
+    <h3 class="settings-rows__head">Desktop</h3>
+
+    <div class="settings-row2 settings-row2--toggle">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="notifications-browser">Browser notifications</label>
+        <p class="settings-row2__hint">Show desktop alerts when ClickClack is in the background.</p>
         {#if !browserNotificationsSupported}
-          <div class="settings-row__hint is-error">Browser notifications are not supported on this device.</div>
+          <p class="settings-row2__hint is-error">Browser notifications are not supported on this device.</p>
         {:else if browserNotificationPermission === "denied"}
-          <div class="settings-row__hint is-error">Browser notifications are blocked by this browser.</div>
+          <p class="settings-row2__hint is-error">Browser notifications are blocked by this browser.</p>
         {/if}
       </div>
-      <input
-        type="checkbox"
-        class="settings-switch"
-        aria-label="Browser notifications"
-        disabled={!browserNotificationsSupported || browserNotificationPermission === "denied"}
-        checked={browserNotificationsEnabled}
-        onchange={(event) => void setBrowserNotifications(event.currentTarget.checked)}
-      />
-    </div>
-  </section>
-
-  <section class="settings-section">
-    <h3 class="settings-section__h">Mobile push</h3>
-    <div class="settings-row">
-      <div class="settings-row__main">
-        <div class="settings-row__label">Pushover</div>
-        <div class="settings-row__hint">Send push notifications to your phone via Pushover.</div>
+      <div class="settings-row2__control settings-row2__control--end">
+        <input
+          id="notifications-browser"
+          type="checkbox"
+          class="settings-switch"
+          aria-label="Browser notifications"
+          disabled={!browserNotificationsSupported || browserNotificationPermission === "denied"}
+          checked={browserNotificationsEnabled}
+          onchange={(event) => void setBrowserNotifications(event.currentTarget.checked)}
+        />
       </div>
-      <input
-        type="checkbox"
-        class="settings-switch"
-        aria-label="Pushover notifications"
-        bind:checked={pushoverEnabled}
-      />
     </div>
-    <div class="settings-field">
-      <label class="settings-field__label" for="notifications-pushover-key">Pushover user key</label>
-      <p class="settings-field__hint">Find this in your Pushover dashboard under "Your User Key".</p>
-      <input
-        id="notifications-pushover-key"
-        class="settings-input"
-        bind:value={pushoverUserKey}
-        aria-label="Pushover user key"
-        maxlength="30"
-        placeholder="u..."
-        autocomplete="off"
-      />
-    </div>
-  </section>
 
-  <div class="settings-actions">
+    <h3 class="settings-rows__head">Mobile push</h3>
+
+    <div class="settings-row2 settings-row2--toggle">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="notifications-pushover">Pushover</label>
+        <p class="settings-row2__hint">Send push notifications to your phone via Pushover.</p>
+      </div>
+      <div class="settings-row2__control settings-row2__control--end">
+        <input
+          id="notifications-pushover"
+          type="checkbox"
+          class="settings-switch"
+          aria-label="Pushover notifications"
+          bind:checked={pushoverEnabled}
+        />
+      </div>
+    </div>
+
+    <div class="settings-row2">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="notifications-pushover-key">Pushover user key</label>
+        <p class="settings-row2__hint">Find this in your Pushover dashboard under "Your User Key".</p>
+      </div>
+      <div class="settings-row2__control">
+        <input
+          id="notifications-pushover-key"
+          class="settings-input"
+          bind:value={pushoverUserKey}
+          aria-label="Pushover user key"
+          maxlength="30"
+          placeholder="u..."
+          autocomplete="off"
+        />
+      </div>
+    </div>
+  </div>
+
+  <footer class="settings-footer">
     {#if status}
       <p class="settings-status" class:is-error={statusError} role="status">{status}</p>
+    {:else}
+      <span class="settings-footer__spacer" aria-hidden="true"></span>
     {/if}
     <button type="submit" class="settings-button settings-button--primary" disabled={saving}>
       {saving ? "Saving..." : "Save notifications"}
     </button>
-  </div>
+  </footer>
 </form>

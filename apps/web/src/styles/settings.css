@@ -356,12 +356,28 @@
   flex-direction: column;
 }
 
+/* Sectioned variant: rows inside have no per-row dividers; the
+   .settings-rows__head provides the only dividers (one per section). */
+.settings-modal__content .settings-rows--sectioned .settings-row2 {
+  border-top: 0;
+  padding: 12px 0;
+  align-items: center;
+}
+
 .settings-modal__content .settings-row2 {
   display: grid;
   grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
   gap: 32px;
   padding: 20px 0;
   border-top: 1px solid var(--line);
+}
+
+/* Toggle-style rows: description gets the whole left side, switch
+   sits at the natural right edge of the row. */
+.settings-modal__content .settings-row2--toggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
 }
 
 .settings-modal__content .settings-row2:first-child {
@@ -395,6 +411,39 @@
   gap: 8px;
   min-width: 0;
   max-width: 380px;
+}
+
+.settings-modal__content .settings-row2__control--end {
+  align-items: flex-end;
+  justify-content: center;
+  flex-direction: row;
+  max-width: none;
+}
+
+/* Uppercase section heading inside .settings-rows. Sits above its rows
+   and acts as the section divider (border-top + padding), except the
+   first one in the list. */
+.settings-modal__content .settings-rows__head {
+  margin: 0;
+  padding: 24px 0 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.settings-modal__content .settings-rows__head:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+/* A row immediately after a section head shouldn't get its own top
+   border because the head supplies the divider already. */
+.settings-modal__content .settings-rows__head + .settings-row2 {
+  border-top: 0;
+  padding-top: 0;
 }
 
 /* Input with prefix/suffix adornment (e.g. handle "@"). */

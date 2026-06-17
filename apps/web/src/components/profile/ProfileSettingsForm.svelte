@@ -120,7 +120,7 @@
             class="settings-input settings-input--in-group"
             bind:value={handle}
             aria-label="Handle"
-            placeholder="steipete"
+            placeholder="your-handle"
             autocomplete="username"
           />
         </div>

@@ -195,6 +195,80 @@ func (q *Queries) CountRecentWorkspaceMessagesByAuthor(ctx context.Context, arg 
 	return count, err
 }
 
+const countWorkspaceMemberSearch = `-- name: CountWorkspaceMemberSearch :one
+SELECT COUNT(*)
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = ?1
+  AND (instr(lower(u.display_name), ?2) > 0 OR instr(lower(u.handle), ?2) > 0)
+`
+
+type CountWorkspaceMemberSearchParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	SearchQuery string `json:"search_query"`
+}
+
+func (q *Queries) CountWorkspaceMemberSearch(ctx context.Context, arg CountWorkspaceMemberSearchParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceMemberSearch, arg.WorkspaceID, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkspaceMemberSearchByRole = `-- name: CountWorkspaceMemberSearchByRole :one
+SELECT COUNT(*)
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = ?1
+  AND wm.role = ?2
+  AND (instr(lower(u.display_name), ?3) > 0 OR instr(lower(u.handle), ?3) > 0)
+`
+
+type CountWorkspaceMemberSearchByRoleParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	RoleFilter  string `json:"role_filter"`
+	SearchQuery string `json:"search_query"`
+}
+
+func (q *Queries) CountWorkspaceMemberSearchByRole(ctx context.Context, arg CountWorkspaceMemberSearchByRoleParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceMemberSearchByRole, arg.WorkspaceID, arg.RoleFilter, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkspaceMembers = `-- name: CountWorkspaceMembers :one
+SELECT COUNT(*)
+FROM workspace_members
+WHERE workspace_id = ?1
+`
+
+func (q *Queries) CountWorkspaceMembers(ctx context.Context, workspaceID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceMembers, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkspaceMembersByRole = `-- name: CountWorkspaceMembersByRole :one
+SELECT COUNT(*)
+FROM workspace_members
+WHERE workspace_id = ?1
+  AND role = ?2
+`
+
+type CountWorkspaceMembersByRoleParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	RoleFilter  string `json:"role_filter"`
+}
+
+func (q *Queries) CountWorkspaceMembersByRole(ctx context.Context, arg CountWorkspaceMembersByRoleParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceMembersByRole, arg.WorkspaceID, arg.RoleFilter)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteExpiredUploadQuotaReservations = `-- name: DeleteExpiredUploadQuotaReservations :exec
 DELETE FROM upload_quota_reservations
 WHERE expires_at <= ?1

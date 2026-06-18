@@ -293,6 +293,32 @@ WHERE wm.workspace_id = sqlc.arg(workspace_id)
 ORDER BY role_sort, sort_name, sort_handle, id
 LIMIT sqlc.arg(limit_count);
 
+-- name: CountWorkspaceMembers :one
+SELECT COUNT(*)
+FROM workspace_members
+WHERE workspace_id = sqlc.arg(workspace_id);
+
+-- name: CountWorkspaceMembersByRole :one
+SELECT COUNT(*)
+FROM workspace_members
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND role = sqlc.arg(role_filter);
+
+-- name: CountWorkspaceMemberSearch :one
+SELECT COUNT(*)
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND (instr(lower(u.display_name), sqlc.arg(search_query)) > 0 OR instr(lower(u.handle), sqlc.arg(search_query)) > 0);
+
+-- name: CountWorkspaceMemberSearchByRole :one
+SELECT COUNT(*)
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.role = sqlc.arg(role_filter)
+  AND (instr(lower(u.display_name), sqlc.arg(search_query)) > 0 OR instr(lower(u.handle), sqlc.arg(search_query)) > 0);
+
 -- name: UpdateWorkspaceMemberRole :exec
 UPDATE workspace_members
 SET role = sqlc.arg(role)

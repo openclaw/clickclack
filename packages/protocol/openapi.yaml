@@ -1582,6 +1582,9 @@ components:
           type: string
         has_more:
           type: boolean
+        total_count:
+          type: integer
+          description: Exact filtered member count, included only on the first page.
     MemberModeration:
       type: object
       required: [workspace_id, user, role, posts_remaining, post_limit]

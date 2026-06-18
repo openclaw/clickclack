@@ -30,7 +30,9 @@ HTTP API exposes moderation for existing members, not arbitrary invites.
 workspace member. It accepts `limit` (default 100, max 200), opaque `cursor`,
 case-insensitive literal `q` search over display name and handle, and optional
 `role` (`owner`, `moderator`, `member`, `bot`, `guest`). It returns
-`{members, next_cursor, has_more}` and does not include moderation state.
+`{members, next_cursor, has_more, total_count}` on the first page. Cursor pages
+omit `total_count` so infinite scrolling does not repeat count work. The member
+directory does not include moderation state.
 
 ## Channels
 

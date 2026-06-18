@@ -36,6 +36,7 @@ type WorkspaceMemberPage struct {
 	Members    []WorkspaceMember `json:"members"`
 	NextCursor string            `json:"next_cursor,omitempty"`
 	HasMore    bool              `json:"has_more"`
+	TotalCount *int              `json:"total_count,omitempty"`
 }
 
 type WorkspaceMemberCursor struct {

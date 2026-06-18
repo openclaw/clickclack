@@ -1180,6 +1180,8 @@ export interface components {
       members: components["schemas"]["WorkspaceMember"][];
       next_cursor?: string;
       has_more: boolean;
+      /** @description Exact filtered member count, included only on the first page. */
+      total_count?: number;
     };
     MemberModeration: {
       workspace_id: string;

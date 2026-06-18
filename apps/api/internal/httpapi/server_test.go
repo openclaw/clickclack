@@ -370,8 +370,15 @@ func TestWorkspaceMembersEndpointAllowsMembersWithoutModerationAccess(t *testing
 	if len(page.Members) != 1 || !page.HasMore || page.NextCursor == "" {
 		t.Fatalf("unexpected member page response: %#v", page)
 	}
+	if page.TotalCount == nil || *page.TotalCount != 2 {
+		t.Fatalf("expected first-page total count 2, got %#v", page.TotalCount)
+	}
 	if page.Members[0].WorkspaceID != workspace.ID || page.Members[0].JoinedAt == "" {
 		t.Fatalf("expected public membership metadata, got %#v", page.Members[0])
+	}
+	next := getJSONAsUser[store.WorkspaceMemberPage](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/members?limit=1&cursor="+url.QueryEscape(page.NextCursor))
+	if next.TotalCount != nil {
+		t.Fatalf("expected cursor page to omit total count, got %#v", next.TotalCount)
 	}
 	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/moderation/members", nil, http.StatusForbidden)
 	expectStatusAsUser(t, stranger.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/members", nil, http.StatusForbidden)

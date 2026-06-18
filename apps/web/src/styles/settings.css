@@ -1255,7 +1255,7 @@
   padding: 0 12px 0 32px;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   outline: none;
@@ -1274,7 +1274,7 @@
   padding: 0 28px 0 10px;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   outline: none;
@@ -1288,7 +1288,7 @@
   overflow-x: hidden;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .ws-members__row {
@@ -1431,7 +1431,7 @@
   border-radius: 8px;
   color: var(--muted);
   font-size: 13.5px;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .ws-members__loading {

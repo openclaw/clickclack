@@ -29,11 +29,13 @@
   let hasMore = $state(untrack(() => data.hasMore));
   let totalCount = $state<number | undefined>(untrack(() => data.totalCount));
   let loadError = $state(untrack(() => data.loadError));
+  let loadedWorkspaceID = $state(untrack(() => data.workspaceID));
   let searchInput = $state("");
   let activeQuery = $state("");
   let activeRole = $state<"" | WorkspaceMemberRole>("");
   let isLoadingInitial = $state(false);
   let isLoadingMore = $state(false);
+  let listRevision = $state(0);
   let virtualizer: VirtualizerHandle | undefined = $state();
 
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -43,9 +45,37 @@
     return activeQuery.length > 0 || activeRole !== "";
   }
 
+  function resetMemberListViewport() {
+    listRevision++;
+    virtualizer = undefined;
+  }
+
+  $effect(() => {
+    if (data.workspaceID === loadedWorkspaceID) return;
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = undefined;
+    }
+    activeFetchID++;
+    resetMemberListViewport();
+    loadedWorkspaceID = data.workspaceID;
+    members = data.members;
+    nextCursor = data.nextCursor;
+    hasMore = data.hasMore;
+    totalCount = data.totalCount;
+    loadError = data.loadError;
+    searchInput = "";
+    activeQuery = "";
+    activeRole = "";
+    isLoadingInitial = false;
+    isLoadingMore = false;
+  });
+
   async function refetchFromStart() {
     const fetchID = ++activeFetchID;
+    resetMemberListViewport();
     isLoadingInitial = true;
+    isLoadingMore = false;
     loadError = "";
     try {
       const page = await listWorkspaceMembersPage({
@@ -91,7 +121,7 @@
       loadError = memberLoadErrorMessage(err);
       hasMore = false;
     } finally {
-      isLoadingMore = false;
+      if (fetchID === activeFetchID) isLoadingMore = false;
     }
   }
 
@@ -241,51 +271,53 @@
         </div>
       {/each}
     {:else}
-      <Virtualizer
-        bind:this={virtualizer}
-        data={members}
-        getKey={(m: WorkspaceMember) => m.user.id}
-        itemSize={ROW_HEIGHT}
-        onscroll={handleScroll}
-      >
-        {#snippet children(member: WorkspaceMember, _index: number)}
-          <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
-            <span
-              class="ws-members__avatar"
-              style="--hue: {hueFromID(member.user.id)}deg"
-              aria-hidden="true"
-            >
-              {#if member.user.avatar_url}
-                <img src={member.user.avatar_url} alt="" />
-              {:else}
-                {initials(member)}
-              {/if}
-            </span>
-            <div class="ws-members__main">
-              <div class="ws-members__name">{member.user.display_name || "Unknown"}</div>
-              <div class="ws-members__meta">
-                <span class="ws-members__handle">{formatHandle(member.user.handle)}</span>
-                {#if member.joined_at}
-                  <span class="ws-members__dot" aria-hidden="true">·</span>
-                  <span>Joined {formatJoined(member.joined_at)}</span>
+      {#key listRevision}
+        <Virtualizer
+          bind:this={virtualizer}
+          data={members}
+          getKey={(m: WorkspaceMember) => m.user.id}
+          itemSize={ROW_HEIGHT}
+          onscroll={handleScroll}
+        >
+          {#snippet children(member: WorkspaceMember, _index: number)}
+            <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
+              <span
+                class="ws-members__avatar"
+                style="--hue: {hueFromID(member.user.id)}deg"
+                aria-hidden="true"
+              >
+                {#if member.user.avatar_url}
+                  <img src={member.user.avatar_url} alt="" />
+                {:else}
+                  {initials(member)}
                 {/if}
+              </span>
+              <div class="ws-members__main">
+                <div class="ws-members__name">{member.user.display_name || "Unknown"}</div>
+                <div class="ws-members__meta">
+                  <span class="ws-members__handle">{formatHandle(member.user.handle)}</span>
+                  {#if member.joined_at}
+                    <span class="ws-members__dot" aria-hidden="true">·</span>
+                    <span>Joined {formatJoined(member.joined_at)}</span>
+                  {/if}
+                </div>
               </div>
+              <span class="ws-members__pill ws-members__pill--{member.role}">{roleLabel(member.role)}</span>
+              <button
+                class="ws-members__actions"
+                type="button"
+                disabled
+                aria-label="Member actions"
+                title="Coming soon"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
             </div>
-            <span class="ws-members__pill ws-members__pill--{member.role}">{roleLabel(member.role)}</span>
-            <button
-              class="ws-members__actions"
-              type="button"
-              disabled
-              aria-label="Member actions"
-              title="Coming soon"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-              </svg>
-            </button>
-          </div>
-        {/snippet}
-      </Virtualizer>
+          {/snippet}
+        </Virtualizer>
+      {/key}
     {/if}
 
     {#if isLoadingMore}

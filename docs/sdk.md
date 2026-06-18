@@ -67,7 +67,7 @@ See [features/auth.md](features/auth.md).
 | `me()`, `updateMe()` | get or edit the current user's profile |
 | `workspaces`  | `list`, `create` |
 | `topics`      | `list`, `create` |
-| `bots`        | `list`, `create`, `listTokens`, `createToken`, `revokeToken` |
+| `bots`        | `listMine`, `list`, `create`, `removeMembership`, `listWorkspaceTokens`, `createWorkspaceToken`, `listTokens`, `createToken`, `revokeToken` |
 | `apps`        | `list`, `install`, `revoke` |
 | `slashCommands` | `list`, `create`, `revoke` |
 | `eventSubscriptions` | `list`, `create`, `revoke`, `deliveries` |
@@ -120,6 +120,7 @@ the admin CLI:
 ```sh
 clickclack admin bot create \
   --workspace wsp_... \
+  --created-by usr_manager \
   --name "OpenClaw Service" \
   --handle openclaw \
   --scopes bot:write \
@@ -138,12 +139,16 @@ const { bot, bot_token } = await client.bots.create(workspaceId, {
   scopes: ["bot:write"],
 });
 
-const tokens = await client.bots.listTokens(bot.id);
+const tokens = await client.bots.listWorkspaceTokens(workspaceId, bot.id);
 await client.bots.revokeToken(tokens[0].id);
 ```
 
-Only `create` and `createToken` responses include the one-time raw
-`bot_token.token`. List calls return metadata only.
+Use `createWorkspaceToken(workspaceId, bot.id, input)` for rotation. The older
+`listTokens` and `createToken` helpers call the legacy bot-only routes and only
+work for bots installed in exactly one workspace.
+
+Only `create`, `createToken`, and `createWorkspaceToken` responses include the
+one-time raw `bot_token.token`. List calls return metadata only.
 
 The SDK also exports `ClickClackBot`, a tiny runner around the same client plus
 the realtime WebSocket:

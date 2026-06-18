@@ -291,7 +291,7 @@ func admin(args []string) error {
 		return nil
 	case "bot":
 		if len(args) < 2 || args[1] != "create" {
-			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --name NAME [--owner USER_ID] [--scopes bot:write]")
+			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --created-by USER_ID --name NAME [--owner USER_ID] [--scopes bot:write]")
 		}
 		flags := flag.NewFlagSet("admin bot create", flag.ExitOnError)
 		data := flags.String("data", defaultData(), "data directory")

@@ -30,6 +30,22 @@ Both are normal ClickClack users with `kind=bot`. A service bot has no
 `owner_user_id`; a user-owned bot has `owner_user_id=<human user id>`. Bot
 tokens always authenticate as the bot user, never as the owner.
 
+## Service bots vs user-owned bots
+
+Service bots are workspace assets. A workspace owner or moderator creates them,
+rotates their tokens, revokes their tokens, and can remove them from the
+workspace.
+
+User-owned bots are personal automation identities. Only the human owner can
+create the bot and rotate or revoke its tokens, even if that owner is only a
+plain workspace member. Workspace owners and moderators can remove the bot from
+a workspace, but they do not gain access to that bot's token metadata or token
+rotation.
+
+Removing either bot shape from a workspace deletes that workspace membership
+and revokes that bot's tokens for that workspace. The bot user row stays so old
+messages keep rendering and a user-owned bot can be installed elsewhere later.
+
 ## Create a service bot
 
 Run this on the ClickClack host, against the same data directory as the server:
@@ -38,6 +54,7 @@ Run this on the ClickClack host, against the same data directory as the server:
 clickclack admin bot create \
   --data /var/lib/clickclack \
   --workspace wsp_... \
+  --created-by usr_manager \
   --name "OpenClaw Service" \
   --handle openclaw-service \
   --scopes bot:write \
@@ -51,6 +68,7 @@ Docker deployment:
 docker exec clickclack clickclack admin bot create \
   --data /app/data \
   --workspace wsp_... \
+  --created-by usr_manager \
   --name "OpenClaw Service" \
   --handle openclaw-service \
   --scopes bot:write \
@@ -71,6 +89,7 @@ clickclack admin bot create \
   --data /var/lib/clickclack \
   --workspace wsp_... \
   --owner usr_peter \
+  --created-by usr_peter \
   --name "Peter's OpenClaw" \
   --handle peter-openclaw \
   --scopes bot:write \
@@ -78,9 +97,9 @@ clickclack admin bot create \
   --plain
 ```
 
-The owner must be a human workspace member. A bot cannot own another bot. The
-server also checks that the owner is still a workspace member when a user-owned
-bot token is used.
+The owner must be a human workspace member, and `--created-by` must match that
+owner. A bot cannot own another bot. The server also checks that the owner is
+still a workspace member when a user-owned bot token is used.
 
 ## Scopes
 
@@ -185,10 +204,14 @@ user-owned bot profile should also show that it belongs to its owner.
 
 ## Rotate or remove
 
-The MVP has CLI creation and bearer-token auth. Revocation API/UI is planned;
-until that lands, rotate by creating a new bot token, moving the runtime to the
-new secret, and deleting or revoking the old token directly in the database
-during a maintenance window.
+Rotate by creating a new workspace-scoped token, moving the runtime to the new
+secret, then revoking the old token through
+`POST /api/bot-tokens/{token_id}/revoke`.
+
+Remove a bot from a workspace through
+`DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`. This
+revokes only that workspace's tokens for the bot. It does not delete the bot
+identity, so old messages keep rendering.
 
 Keep these rules:
 
@@ -198,4 +221,3 @@ Keep these rules:
 - Use one token per runtime so rotation has a small blast radius.
 - Use service bots for shared infrastructure and user-owned bots for delegated
   personal automation.
-

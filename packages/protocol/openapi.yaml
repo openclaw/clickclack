@@ -189,6 +189,24 @@ paths:
                 properties:
                   user:
                     $ref: "#/components/schemas/User"
+  /api/me/bots:
+    get:
+      operationId: listMyBots
+      responses:
+        "200":
+          description: User-owned bots installed in workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bots]
+                properties:
+                  bots:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OwnedBotEntry"
+        "403":
+          description: Bot tokens cannot list owned bots
   /api/workspaces:
     get:
       operationId: listWorkspaces
@@ -375,6 +393,70 @@ paths:
       responses:
         "201":
           description: Created bot and one-time raw bot token
+        "403":
+          description: Service bots require a workspace manager. User-owned bots must be created by their owner.
+  /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership:
+    delete:
+      operationId: removeBotFromWorkspace
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Bot removed from workspace and workspace-scoped tokens revoked
+        "403":
+          description: Workspace manager permission required
+        "404":
+          description: Bot membership not found
+  /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens:
+    get:
+      operationId: listWorkspaceBotTokens
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Redacted workspace-scoped bot tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bot_tokens]
+                properties:
+                  bot_tokens:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BotToken"
+        "403":
+          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+    post:
+      operationId: createWorkspaceBotToken
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBotTokenRequest"
+      responses:
+        "201":
+          description: Created one-time raw workspace-scoped bot token
+        "403":
+          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
   /api/bots/{bot_user_id}/tokens:
     get:
       operationId: listBotTokens
@@ -386,7 +468,9 @@ paths:
             type: string
       responses:
         "200":
-          description: Redacted bot tokens
+          description: Redacted bot tokens for bots installed in exactly one workspace
+        "403":
+          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
     post:
       operationId: createBotToken
       parameters:
@@ -403,7 +487,9 @@ paths:
               $ref: "#/components/schemas/CreateBotTokenRequest"
       responses:
         "201":
-          description: Created one-time raw bot token
+          description: Created one-time raw bot token for bots installed in exactly one workspace
+        "403":
+          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
   /api/bot-tokens/{token_id}/revoke:
     post:
       operationId: revokeBotToken
@@ -416,6 +502,8 @@ paths:
       responses:
         "200":
           description: Revoked bot token
+        "403":
+          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
   /api/workspaces/{workspace_id}/app-installations:
     get:
       operationId: listAppInstallations
@@ -1144,6 +1232,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BotToken"
+    OwnedBotWorkspace:
+      type: object
+      required: [id, route_id, name]
+      properties:
+        id:
+          type: string
+        route_id:
+          type: string
+        name:
+          type: string
+    OwnedBotEntry:
+      type: object
+      required: [bot, workspace, active_token_count]
+      properties:
+        bot:
+          $ref: "#/components/schemas/User"
+        workspace:
+          $ref: "#/components/schemas/OwnedBotWorkspace"
+        active_token_count:
+          type: integer
+          minimum: 0
     CreateBotRequest:
       type: object
       required: [display_name]

@@ -29,6 +29,18 @@ export type BotWithTokens = {
   tokens: BotToken[];
 };
 
+export type OwnedBotWorkspace = {
+  id: string;
+  route_id: string;
+  name: string;
+};
+
+export type OwnedBotEntry = {
+  bot: User;
+  workspace: OwnedBotWorkspace;
+  active_token_count: number;
+};
+
 export type AppInstallation = {
   id: string;
   workspace_id: string;
@@ -364,6 +376,10 @@ export class ClickClackClient {
   };
 
   bots = {
+    listMine: async (): Promise<OwnedBotEntry[]> => {
+      const data = await this.request<{ bots: OwnedBotEntry[] }>("/api/me/bots");
+      return data.bots;
+    },
     list: async (workspaceId: string): Promise<BotWithTokens[]> => {
       const data = await this.request<{ bots: BotWithTokens[] }>(
         `/api/workspaces/${workspaceId}/bots`,
@@ -385,6 +401,31 @@ export class ClickClackClient {
         method: "POST",
         body: JSON.stringify(input),
       });
+    },
+    removeMembership: async (workspaceId: string, botUserId: string): Promise<void> => {
+      await this.request(`/api/workspaces/${workspaceId}/bots/${botUserId}/membership`, {
+        method: "DELETE",
+      });
+    },
+    listWorkspaceTokens: async (workspaceId: string, botUserId: string): Promise<BotToken[]> => {
+      const data = await this.request<{ bot_tokens: BotToken[] }>(
+        `/api/workspaces/${workspaceId}/bots/${botUserId}/tokens`,
+      );
+      return data.bot_tokens;
+    },
+    createWorkspaceToken: async (
+      workspaceId: string,
+      botUserId: string,
+      input: { name?: string; scopes?: string[] },
+    ): Promise<BotToken> => {
+      const data = await this.request<{ bot_token: BotToken }>(
+        `/api/workspaces/${workspaceId}/bots/${botUserId}/tokens`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      return data.bot_token;
     },
     listTokens: async (botUserId: string): Promise<BotToken[]> => {
       const data = await this.request<{ bot_tokens: BotToken[] }>(`/api/bots/${botUserId}/tokens`);

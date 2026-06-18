@@ -179,6 +179,7 @@ CLI MVP:
 ```sh
 clickclack admin bot create \
   --workspace wsp_... \
+  --created-by usr_manager \
   --name "OpenClaw Service" \
   --handle openclaw \
   --scopes bot:write \
@@ -187,6 +188,7 @@ clickclack admin bot create \
 clickclack admin bot create \
   --workspace wsp_... \
   --owner usr_peter \
+  --created-by usr_peter \
   --name "Peter's OpenClaw" \
   --handle peter-openclaw \
   --scopes bot:write \
@@ -196,6 +198,11 @@ clickclack admin bot create \
 Plain output returns the raw token only. JSON output returns `{bot, token,
 bot_token}`.
 
+Service bot creation requires `--created-by` to be a workspace owner or
+moderator. User-owned bot creation requires `--created-by` to match `--owner`;
+workspace managers cannot mint or rotate tokens for someone else's user-owned
+bot.
+
 For the practical install flow, including Docker commands and OpenClaw
 configuration, see [Bot installs](../bot-installs.md).
 
@@ -203,19 +210,31 @@ HTTP API:
 
 - `POST /api/workspaces/{workspace_id}/bots`
 - `GET /api/workspaces/{workspace_id}/bots`
+- `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`
+- `GET /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
+- `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
 - `GET /api/bots/{bot_user_id}/tokens`
 - `POST /api/bots/{bot_user_id}/tokens`
 - `POST /api/bot-tokens/{token_id}/revoke`
+- `GET /api/me/bots`
 
 The creation and token-management API requires a human session. Bot tokens can
 read and write through the normal chat APIs according to scope, but cannot mint,
-list, or revoke bot tokens.
+list, or revoke bot tokens. The workspace-scoped token routes are preferred;
+the legacy `/api/bots/{bot_user_id}/tokens` routes only work when the bot is
+installed in exactly one workspace.
 
 `POST /api/workspaces/{workspace_id}/bots` returns `{bot, bot_token}`. The
 `bot_token.token` field is the one-time raw `ccb_...` token and is never
 returned by list calls. `GET /api/workspaces/{workspace_id}/bots` returns
-`{bots: [{bot, tokens}]}` with token metadata redacted. Rotation is create-new,
-move the runtime, then revoke-old through `POST /api/bot-tokens/{token_id}/revoke`.
+`{bots: [{bot, tokens}]}`; token metadata is only populated for callers allowed
+to manage that bot's tokens. Rotation is create-new, move the runtime, then
+revoke-old through `POST /api/bot-tokens/{token_id}/revoke`.
+
+Workspace owners and moderators can remove any bot from a workspace with
+`DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this
+removes the workspace membership and revokes that bot's tokens for that
+workspace. The bot user row remains for history and future installs.
 
 ## Runtime Contract
 

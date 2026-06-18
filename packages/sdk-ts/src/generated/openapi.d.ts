@@ -167,6 +167,22 @@ export interface paths {
     patch: operations["updateMe"];
     trace?: never;
   };
+  "/api/me/bots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listMyBots"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces": {
     parameters: {
       query?: never;
@@ -305,6 +321,38 @@ export interface paths {
     get: operations["listBots"];
     put?: never;
     post: operations["createBot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/membership": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["removeBotFromWorkspace"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listWorkspaceBotTokens"];
+    put?: never;
+    post: operations["createWorkspaceBotToken"];
     delete?: never;
     options?: never;
     head?: never;
@@ -929,6 +977,16 @@ export interface components {
     BotWithTokens: {
       bot: components["schemas"]["User"];
       tokens: components["schemas"]["BotToken"][];
+    };
+    OwnedBotWorkspace: {
+      id: string;
+      route_id: string;
+      name: string;
+    };
+    OwnedBotEntry: {
+      bot: components["schemas"]["User"];
+      workspace: components["schemas"]["OwnedBotWorkspace"];
+      active_token_count: number;
     };
     CreateBotRequest: {
       owner_user_id?: string;
@@ -1656,6 +1714,35 @@ export interface operations {
       };
     };
   };
+  listMyBots: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description User-owned bots installed in workspaces */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            bots: components["schemas"]["OwnedBotEntry"][];
+          };
+        };
+      };
+      /** @description Bot tokens cannot list owned bots */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   listWorkspaces: {
     parameters: {
       query?: never;
@@ -1959,6 +2046,112 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Service bots require a workspace manager. User-owned bots must be created by their owner. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  removeBotFromWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bot removed from workspace and workspace-scoped tokens revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Workspace manager permission required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bot membership not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listWorkspaceBotTokens: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redacted workspace-scoped bot tokens */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            bot_tokens: components["schemas"]["BotToken"][];
+          };
+        };
+      };
+      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  createWorkspaceBotToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateBotTokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Created one-time raw workspace-scoped bot token */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
     };
   };
   listBotTokens: {
@@ -1972,8 +2165,15 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Redacted bot tokens */
+      /** @description Redacted bot tokens for bots installed in exactly one workspace */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -1996,8 +2196,15 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Created one-time raw bot token */
+      /** @description Created one-time raw bot token for bots installed in exactly one workspace */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -2018,6 +2225,13 @@ export interface operations {
     responses: {
       /** @description Revoked bot token */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
         headers: {
           [name: string]: unknown;
         };

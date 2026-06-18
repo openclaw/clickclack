@@ -34,10 +34,10 @@ The value is not stored on message rows or exported as a metrics label.
 | Group         | Endpoints | Doc |
 |---------------|-----------|-----|
 | Auth          | `/api/auth/magic/{request,consume}`, `/api/auth/github/{start,callback}` | [auth](../features/auth.md) |
-| Profile       | `/api/me` | [profiles](../features/profiles.md) |
+| Profile       | `/api/me`, `/api/me/bots` | [profiles](../features/profiles.md) |
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
-| Bots          | `/api/workspaces/{id}/bots`, `/api/bots/{id}/tokens`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
+| Bots          | `/api/workspaces/{id}/bots`, `/api/workspaces/{id}/bots/{bot_id}/{tokens,membership}`, `/api/bots/{id}/tokens`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
 | App installs  | `/api/workspaces/{id}/app-installations`, `/api/app-installations/{id}/revoke` | [integrations](../features/integrations.md) |
 | Slash commands | `/api/workspaces/{id}/slash-commands`, `/api/slash-commands/{id}/revoke`, `/api/hooks/slash/{channel}` | [integrations](../features/integrations.md) |
 | Event subscriptions | `/api/workspaces/{id}/event-subscriptions`, `/api/event-subscriptions/{id}/{revoke,deliveries}` | [integrations](../features/integrations.md) |

@@ -6,6 +6,7 @@ import {
   memberLoadErrorMessage,
   MEMBERS_PAGE_LIMIT,
   type WorkspaceMember,
+  type WorkspaceMemberRoleCounts,
 } from "../../../../../lib/workspace-members";
 import type { Workspace } from "../../../../../lib/types";
 
@@ -22,6 +23,7 @@ export async function load({
   let nextCursor = "";
   let hasMore = false;
   let totalCount: number | undefined;
+  let totalByRole: WorkspaceMemberRoleCounts | undefined;
   let loadError = "";
   try {
     const page = await listWorkspaceMembersPage({
@@ -32,6 +34,7 @@ export async function load({
     nextCursor = page.next_cursor ?? "";
     hasMore = page.has_more;
     totalCount = page.total_count;
+    totalByRole = page.total_by_role;
   } catch (err) {
     loadError = memberLoadErrorMessage(err);
   }
@@ -41,6 +44,7 @@ export async function load({
     nextCursor,
     hasMore,
     totalCount,
+    totalByRole,
     loadError,
   };
 }

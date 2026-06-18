@@ -1173,6 +1173,25 @@
   border-color: var(--danger);
 }
 
+.ws-btn--primary {
+  background: rgb(35, 131, 226);
+  border-color: rgb(35, 131, 226);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-btn--primary:hover:not(:disabled) {
+  background: rgb(28, 113, 196);
+  border-color: rgb(28, 113, 196);
+}
+
+.ws-btn--primary svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Members — virtualized list */
 /* When the members page is the content, let the inner container fill the
    viewport so only the list scrolls (not the whole settings shell). */
@@ -1304,21 +1323,22 @@
 .ws-members__avatar {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  background: linear-gradient(
-    135deg,
-    hsl(var(--hue, 220deg) 70% 55%),
-    hsl(calc(var(--hue, 220deg) + 30deg) 65% 42%)
-  );
+  letter-spacing: -0.02em;
+  background: rgba(35, 131, 226, 0.16);
+  color: rgb(35, 131, 226);
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.ws-members__avatar--bot {
+  background: rgba(255, 163, 68, 0.16);
+  color: rgb(217, 119, 6);
 }
 
 .ws-members__avatar img {

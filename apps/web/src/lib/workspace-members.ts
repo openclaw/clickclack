@@ -10,11 +10,14 @@ export type WorkspaceMember = {
   joined_at: string;
 };
 
+export type WorkspaceMemberRoleCounts = Record<WorkspaceMemberRole, number>;
+
 export type WorkspaceMemberPage = {
   members: WorkspaceMember[];
   next_cursor?: string;
   has_more: boolean;
   total_count?: number;
+  total_by_role?: WorkspaceMemberRoleCounts;
 };
 
 export type ListWorkspaceMembersParams = {

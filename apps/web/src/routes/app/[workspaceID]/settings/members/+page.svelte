@@ -7,6 +7,7 @@
     MEMBERS_PAGE_LIMIT,
     type WorkspaceMember,
     type WorkspaceMemberRole,
+    type WorkspaceMemberRoleCounts,
   } from "../../../../../lib/workspace-members";
 
   let { data } = $props();
@@ -28,6 +29,7 @@
   let nextCursor = $state(untrack(() => data.nextCursor));
   let hasMore = $state(untrack(() => data.hasMore));
   let totalCount = $state<number | undefined>(untrack(() => data.totalCount));
+  let totalByRole = $state<WorkspaceMemberRoleCounts | undefined>(untrack(() => data.totalByRole));
   let loadError = $state(untrack(() => data.loadError));
   let loadedWorkspaceID = $state(untrack(() => data.workspaceID));
   let searchInput = $state("");
@@ -63,6 +65,7 @@
     nextCursor = data.nextCursor;
     hasMore = data.hasMore;
     totalCount = data.totalCount;
+    totalByRole = data.totalByRole;
     loadError = data.loadError;
     searchInput = "";
     activeQuery = "";
@@ -89,12 +92,14 @@
       nextCursor = page.next_cursor ?? "";
       hasMore = page.has_more;
       totalCount = page.total_count ?? totalCount;
+      totalByRole = page.total_by_role;
     } catch (err) {
       if (fetchID !== activeFetchID) return;
       loadError = memberLoadErrorMessage(err);
       members = [];
       nextCursor = "";
       hasMore = false;
+      totalByRole = undefined;
     } finally {
       if (fetchID === activeFetchID) isLoadingInitial = false;
     }
@@ -167,10 +172,8 @@
     return source.slice(0, 2).toUpperCase();
   }
 
-  function hueFromID(id: string): number {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-    return h % 360;
+  function avatarVariant(member: WorkspaceMember): "" | "bot" {
+    return member.user.kind === "bot" ? "bot" : "";
   }
 
   function formatHandle(handle: string): string {
@@ -189,12 +192,21 @@
     return role.charAt(0).toUpperCase() + role.slice(1);
   }
 
+  function formatCount(value: number, singular: string, plural = `${singular}s`): string {
+    return `${value} ${value === 1 ? singular : plural}`;
+  }
+
   const countLabel = $derived.by(() => {
     if (isFiltering()) {
       const noun = members.length === 1 ? "match" : "matches";
       return hasMore ? `${members.length}+ ${noun}` : `${members.length} ${noun}`;
     }
-    if (totalCount != null) return `${totalCount} ${totalCount === 1 ? "member" : "members"}`;
+    if (totalCount != null) {
+      const parts = [formatCount(totalCount, "member")];
+      if (totalByRole?.owner) parts.push(formatCount(totalByRole.owner, "owner"));
+      if (totalByRole?.moderator) parts.push(formatCount(totalByRole.moderator, "moderator"));
+      return parts.join(" · ");
+    }
     return `${members.length}${hasMore ? "+" : ""} ${members.length === 1 ? "member" : "members"}`;
   });
 
@@ -241,7 +253,10 @@
         {/each}
       </select>
 
-      <button class="ws-btn" type="button" disabled title="Invitations are not available yet">
+      <button class="ws-btn ws-btn--primary" type="button" disabled title="Invitations are not available yet">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
         Invite people
       </button>
     </div>
@@ -282,8 +297,7 @@
           {#snippet children(member: WorkspaceMember, _index: number)}
             <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
               <span
-                class="ws-members__avatar"
-                style="--hue: {hueFromID(member.user.id)}deg"
+                class="ws-members__avatar ws-members__avatar--{avatarVariant(member) || 'human'}"
                 aria-hidden="true"
               >
                 {#if member.user.avatar_url}

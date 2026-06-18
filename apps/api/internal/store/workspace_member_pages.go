@@ -33,10 +33,34 @@ type WorkspaceMemberPageRequest struct {
 }
 
 type WorkspaceMemberPage struct {
-	Members    []WorkspaceMember `json:"members"`
-	NextCursor string            `json:"next_cursor,omitempty"`
-	HasMore    bool              `json:"has_more"`
-	TotalCount *int              `json:"total_count,omitempty"`
+	Members     []WorkspaceMember          `json:"members"`
+	NextCursor  string                     `json:"next_cursor,omitempty"`
+	HasMore     bool                       `json:"has_more"`
+	TotalCount  *int                       `json:"total_count,omitempty"`
+	TotalByRole *WorkspaceMemberRoleCounts `json:"total_by_role,omitempty"`
+}
+
+type WorkspaceMemberRoleCounts struct {
+	Owner     int `json:"owner"`
+	Moderator int `json:"moderator"`
+	Member    int `json:"member"`
+	Bot       int `json:"bot"`
+	Guest     int `json:"guest"`
+}
+
+func (c *WorkspaceMemberRoleCounts) Set(role string, count int) {
+	switch role {
+	case WorkspaceRoleOwner:
+		c.Owner = count
+	case WorkspaceRoleModerator:
+		c.Moderator = count
+	case WorkspaceRoleMember:
+		c.Member = count
+	case WorkspaceRoleBot:
+		c.Bot = count
+	case WorkspaceRoleGuest:
+		c.Guest = count
+	}
 }
 
 type WorkspaceMemberCursor struct {

@@ -57,6 +57,20 @@ func TestListWorkspaceMemberPagePaginatesFiltersAndSearches(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	defaultPage, err := st.ListWorkspaceMemberPage(ctx, workspace.ID, alpha.ID, store.WorkspaceMemberPageRequest{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultPage.TotalCount == nil || *defaultPage.TotalCount != 6 {
+		t.Fatalf("expected default total count 6, got %#v", defaultPage.TotalCount)
+	}
+	if defaultPage.TotalByRole == nil {
+		t.Fatal("expected default first page to include role totals")
+	}
+	if got := *defaultPage.TotalByRole; got.Owner != 1 || got.Moderator != 1 || got.Member != 3 || got.Bot != 0 || got.Guest != 1 {
+		t.Fatalf("unexpected default role totals: %#v", got)
+	}
+
 	first, err := st.ListWorkspaceMemberPage(ctx, workspace.ID, alpha.ID, store.WorkspaceMemberPageRequest{Limit: 2, Role: store.WorkspaceRoleMember})
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +80,9 @@ func TestListWorkspaceMemberPagePaginatesFiltersAndSearches(t *testing.T) {
 	}
 	if first.TotalCount == nil || *first.TotalCount != 3 {
 		t.Fatalf("expected first-page member count 3, got %#v", first.TotalCount)
+	}
+	if first.TotalByRole != nil {
+		t.Fatalf("expected role-filter page to omit role totals, got %#v", first.TotalByRole)
 	}
 	if got := memberNames(first.Members); len(got) != 2 || got[0] != "100% Real" || got[1] != "Alpha" {
 		t.Fatalf("unexpected first page order: %#v", got)
@@ -84,6 +101,9 @@ func TestListWorkspaceMemberPagePaginatesFiltersAndSearches(t *testing.T) {
 	if second.TotalCount != nil {
 		t.Fatalf("expected cursor page to omit total count, got %#v", second.TotalCount)
 	}
+	if second.TotalByRole != nil {
+		t.Fatalf("expected cursor page to omit role totals, got %#v", second.TotalByRole)
+	}
 	if got := memberNames(second.Members); len(got) != 1 || got[0] != "beta" {
 		t.Fatalf("unexpected second page order: %#v", got)
 	}
@@ -94,6 +114,9 @@ func TestListWorkspaceMemberPagePaginatesFiltersAndSearches(t *testing.T) {
 	}
 	if search.TotalCount == nil || *search.TotalCount != 1 {
 		t.Fatalf("expected search count 1, got %#v", search.TotalCount)
+	}
+	if search.TotalByRole != nil {
+		t.Fatalf("expected search page to omit role totals, got %#v", search.TotalByRole)
 	}
 	if got := memberNames(search.Members); len(got) != 1 || got[0] != "Alpha" {
 		t.Fatalf("unexpected search results: %#v", got)

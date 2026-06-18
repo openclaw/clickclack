@@ -359,6 +359,13 @@ func TestWorkspaceMembersEndpointAllowsMembersWithoutModerationAccess(t *testing
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
 	}
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "http-members-moderator@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
 	stranger, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Stranger", Email: "http-members-stranger@example.com"})
 	if err != nil {
 		t.Fatal(err)
@@ -370,8 +377,14 @@ func TestWorkspaceMembersEndpointAllowsMembersWithoutModerationAccess(t *testing
 	if len(page.Members) != 1 || !page.HasMore || page.NextCursor == "" {
 		t.Fatalf("unexpected member page response: %#v", page)
 	}
-	if page.TotalCount == nil || *page.TotalCount != 2 {
-		t.Fatalf("expected first-page total count 2, got %#v", page.TotalCount)
+	if page.TotalCount == nil || *page.TotalCount != 3 {
+		t.Fatalf("expected first-page total count 3, got %#v", page.TotalCount)
+	}
+	if page.TotalByRole == nil {
+		t.Fatal("expected first-page role totals")
+	}
+	if got := *page.TotalByRole; got.Owner != 1 || got.Moderator != 1 || got.Member != 1 || got.Bot != 0 || got.Guest != 0 {
+		t.Fatalf("unexpected role totals: %#v", got)
 	}
 	if page.Members[0].WorkspaceID != workspace.ID || page.Members[0].JoinedAt == "" {
 		t.Fatalf("expected public membership metadata, got %#v", page.Members[0])
@@ -379,6 +392,16 @@ func TestWorkspaceMembersEndpointAllowsMembersWithoutModerationAccess(t *testing
 	next := getJSONAsUser[store.WorkspaceMemberPage](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/members?limit=1&cursor="+url.QueryEscape(page.NextCursor))
 	if next.TotalCount != nil {
 		t.Fatalf("expected cursor page to omit total count, got %#v", next.TotalCount)
+	}
+	if next.TotalByRole != nil {
+		t.Fatalf("expected cursor page to omit role totals, got %#v", next.TotalByRole)
+	}
+	filtered := getJSONAsUser[store.WorkspaceMemberPage](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/members?role=moderator")
+	if filtered.TotalCount == nil || *filtered.TotalCount != 1 {
+		t.Fatalf("expected filtered total count 1, got %#v", filtered.TotalCount)
+	}
+	if filtered.TotalByRole != nil {
+		t.Fatalf("expected role-filter page to omit role totals, got %#v", filtered.TotalByRole)
 	}
 	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/moderation/members", nil, http.StatusForbidden)
 	expectStatusAsUser(t, stranger.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/members", nil, http.StatusForbidden)

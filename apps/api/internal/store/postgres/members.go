@@ -48,6 +48,10 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 	if err != nil {
 		return store.WorkspaceMemberPage{}, err
 	}
+	totalByRole, err := postgresWorkspaceMemberRoleCounts(ctx, tx, workspaceID, req)
+	if err != nil {
+		return store.WorkspaceMemberPage{}, err
+	}
 	rows, err := storedb.New(tx).ListWorkspaceMemberPage(ctx, storedb.ListWorkspaceMemberPageParams{
 		WorkspaceID:      workspaceID,
 		RoleFilter:       req.Role,
@@ -64,7 +68,7 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 	if err := tx.Commit(); err != nil {
 		return store.WorkspaceMemberPage{}, err
 	}
-	return postgresWorkspaceMemberPageFromRows(workspaceID, req, totalCount, rows)
+	return postgresWorkspaceMemberPageFromRows(workspaceID, req, totalCount, totalByRole, rows)
 }
 
 func postgresWorkspaceMemberTotalCount(ctx context.Context, tx *sql.Tx, workspaceID string, req store.WorkspaceMemberPageRequest) (*int, error) {
@@ -93,8 +97,42 @@ func postgresWorkspaceMemberTotalCount(ctx context.Context, tx *sql.Tx, workspac
 	return &total, nil
 }
 
-func postgresWorkspaceMemberPageFromRows(workspaceID string, req store.WorkspaceMemberPageRequest, totalCount *int, rows []storedb.ListWorkspaceMemberPageRow) (store.WorkspaceMemberPage, error) {
-	page := store.WorkspaceMemberPage{Members: make([]store.WorkspaceMember, 0, min(len(rows), req.Limit)), TotalCount: totalCount}
+func postgresWorkspaceMemberRoleCounts(ctx context.Context, tx *sql.Tx, workspaceID string, req store.WorkspaceMemberPageRequest) (*store.WorkspaceMemberRoleCounts, error) {
+	if req.Cursor != "" || req.Query != "" || req.Role != "" {
+		return nil, nil
+	}
+	rows, err := tx.QueryContext(ctx, `
+		SELECT role, COUNT(*)
+		FROM workspace_members
+		WHERE workspace_id = $1
+		GROUP BY role`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := store.WorkspaceMemberRoleCounts{}
+	for rows.Next() {
+		var (
+			role  string
+			count int
+		)
+		if err := rows.Scan(&role, &count); err != nil {
+			return nil, err
+		}
+		counts.Set(role, count)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &counts, nil
+}
+
+func postgresWorkspaceMemberPageFromRows(workspaceID string, req store.WorkspaceMemberPageRequest, totalCount *int, totalByRole *store.WorkspaceMemberRoleCounts, rows []storedb.ListWorkspaceMemberPageRow) (store.WorkspaceMemberPage, error) {
+	page := store.WorkspaceMemberPage{
+		Members:     make([]store.WorkspaceMember, 0, min(len(rows), req.Limit)),
+		TotalCount:  totalCount,
+		TotalByRole: totalByRole,
+	}
 	if len(rows) > req.Limit {
 		page.HasMore = true
 		rows = rows[:req.Limit]

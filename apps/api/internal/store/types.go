@@ -90,6 +90,10 @@ var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
 
+// ErrBotOwnerMembershipRequired is returned when a user-owned bot operation is
+// attempted after the owner has lost membership in that workspace.
+var ErrBotOwnerMembershipRequired = errors.New("bot owner must be a workspace member")
+
 // ErrBotOwnerCreateRequired is returned when someone other than the owner tries
 // to create a user-owned bot.
 var ErrBotOwnerCreateRequired = errors.New("only the bot owner can create a user-owned bot")

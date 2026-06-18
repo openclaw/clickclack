@@ -1250,6 +1250,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrBotOwnerRequired):
 		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrBotOwnerMembershipRequired):
+		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrBotOwnerCreateRequired):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrMessageNotWritable):

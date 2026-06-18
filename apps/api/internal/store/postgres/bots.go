@@ -482,6 +482,12 @@ func (s *Store) requireBotTokenManager(ctx context.Context, workspaceID string, 
 		if requesterID != bot.OwnerUserID {
 			return store.ErrBotOwnerRequired
 		}
+		if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return store.ErrBotOwnerMembershipRequired
+			}
+			return err
+		}
 		return nil
 	}
 	return s.requireWorkspaceManager(ctx, workspaceID, requesterID)
@@ -495,6 +501,12 @@ func requireBotTokenManagerTx(ctx context.Context, tx *sql.Tx, workspaceID strin
 	if bot.OwnerUserID != "" {
 		if requesterID != bot.OwnerUserID {
 			return store.ErrBotOwnerRequired
+		}
+		if err := requireMembershipTx(ctx, tx, workspaceID, requesterID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return store.ErrBotOwnerMembershipRequired
+			}
+			return err
 		}
 		return nil
 	}

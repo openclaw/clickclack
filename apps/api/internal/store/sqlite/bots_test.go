@@ -134,6 +134,25 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if counts[workspace.ID] != 1 || counts[otherWorkspace.ID] != 1 {
 		t.Fatalf("unexpected active token counts by workspace: %#v", counts)
 	}
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspace.ID, botOwner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, userBot.ID, botOwner.ID); !errors.Is(err, store.ErrBotOwnerMembershipRequired) {
+		t.Fatalf("expected stale owner token list to require workspace membership, got %v", err)
+	}
+	if _, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{WorkspaceID: workspace.ID, BotUserID: userBot.ID, Name: "stale owner", CreatedBy: botOwner.ID}); !errors.Is(err, store.ErrBotOwnerMembershipRequired) {
+		t.Fatalf("expected stale owner token create to require workspace membership, got %v", err)
+	}
+	if _, err := st.RevokeBotToken(ctx, ownerRotation.ID, botOwner.ID); !errors.Is(err, store.ErrBotOwnerMembershipRequired) {
+		t.Fatalf("expected stale owner token revoke to require workspace membership, got %v", err)
+	}
+	owned, err = st.ListBotsOwnedBy(ctx, botOwner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(owned) != 1 || owned[0].Workspace.ID != otherWorkspace.ID {
+		t.Fatalf("expected owned bots to hide stale workspace membership, got %#v", owned)
+	}
 
 	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, serviceBot.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
 		t.Fatalf("expected member bot removal to require manager, got %v", err)

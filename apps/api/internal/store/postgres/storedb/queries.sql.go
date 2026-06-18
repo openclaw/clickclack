@@ -1847,6 +1847,8 @@ SELECT
   ) AS INTEGER) AS active_token_count
 FROM users u
 JOIN workspace_members wm ON wm.user_id = u.id
+JOIN workspace_members owner_wm ON owner_wm.workspace_id = wm.workspace_id
+  AND owner_wm.user_id = u.owner_user_id
 JOIN workspaces w ON w.id = wm.workspace_id
 WHERE u.kind = 'bot'
   AND u.owner_user_id = $1

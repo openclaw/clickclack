@@ -519,7 +519,7 @@ func TestBotStoreValidationAndAuthEdges(t *testing.T) {
 		t.Fatalf("expected missing bot token miss, got %v", err)
 	}
 
-	_, revokedToken, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Revoked Bot"})
+	_, revokedToken, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Revoked Bot", CreatedBy: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestBotStoreValidationAndAuthEdges(t *testing.T) {
 		t.Fatalf("expected revoked token miss, got %v", err)
 	}
 
-	_, malformedToken, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Malformed Scope Bot"})
+	_, malformedToken, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Malformed Scope Bot", CreatedBy: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,6 +545,7 @@ func TestBotStoreValidationAndAuthEdges(t *testing.T) {
 		WorkspaceID: workspace.ID,
 		OwnerUserID: owner.ID,
 		DisplayName: "Owner Membership Bot",
+		CreatedBy:   owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)

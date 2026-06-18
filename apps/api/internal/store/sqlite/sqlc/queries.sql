@@ -210,6 +210,13 @@ FROM workspace_members
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND user_id = sqlc.arg(user_id);
 
+-- name: RequireWorkspaceManager :one
+SELECT role
+FROM workspace_members
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND user_id = sqlc.arg(user_id)
+  AND role IN ('owner', 'moderator');
+
 -- name: UserHasNonGuestMembership :one
 SELECT workspace_id
 FROM workspace_members
@@ -237,6 +244,32 @@ VALUES (sqlc.arg(id), 'bot', sqlc.arg(owner_user_id), sqlc.arg(display_name), sq
 -- name: InsertBotToken :exec
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(token_hash), sqlc.arg(bot_user_id), sqlc.arg(workspace_id), sqlc.arg(owner_user_id), sqlc.arg(name), sqlc.arg(scopes_json), sqlc.arg(created_by), sqlc.arg(created_at));
+
+-- name: ListBotsOwnedBy :many
+SELECT
+  u.id,
+  u.kind,
+  u.owner_user_id,
+  u.display_name,
+  u.handle,
+  u.avatar_url,
+  u.created_at,
+  w.id AS workspace_id,
+  COALESCE(w.route_id, '') AS workspace_route_id,
+  w.name AS workspace_name,
+  CAST((
+    SELECT COUNT(*)
+    FROM bot_tokens bt
+    WHERE bt.bot_user_id = u.id
+      AND bt.workspace_id = w.id
+      AND bt.revoked_at IS NULL
+  ) AS INTEGER) AS active_token_count
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+JOIN workspaces w ON w.id = wm.workspace_id
+WHERE u.kind = 'bot'
+  AND u.owner_user_id = sqlc.arg(owner_user_id)
+ORDER BY w.name COLLATE NOCASE, u.display_name COLLATE NOCASE, u.id;
 
 -- name: GetBotTokenAuth :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,

@@ -1826,6 +1826,82 @@ func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspace
 	return err
 }
 
+const listBotsOwnedBy = `-- name: ListBotsOwnedBy :many
+SELECT
+  u.id,
+  u.kind,
+  u.owner_user_id,
+  u.display_name,
+  u.handle,
+  u.avatar_url,
+  u.created_at,
+  w.id AS workspace_id,
+  COALESCE(w.route_id, '') AS workspace_route_id,
+  w.name AS workspace_name,
+  CAST((
+    SELECT COUNT(*)
+    FROM bot_tokens bt
+    WHERE bt.bot_user_id = u.id
+      AND bt.workspace_id = w.id
+      AND bt.revoked_at IS NULL
+  ) AS INTEGER) AS active_token_count
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+JOIN workspaces w ON w.id = wm.workspace_id
+WHERE u.kind = 'bot'
+  AND u.owner_user_id = $1
+ORDER BY lower(w.name), lower(u.display_name), u.id
+`
+
+type ListBotsOwnedByRow struct {
+	ID               string         `json:"id"`
+	Kind             string         `json:"kind"`
+	OwnerUserID      sql.NullString `json:"owner_user_id"`
+	DisplayName      string         `json:"display_name"`
+	Handle           string         `json:"handle"`
+	AvatarUrl        string         `json:"avatar_url"`
+	CreatedAt        string         `json:"created_at"`
+	WorkspaceID      string         `json:"workspace_id"`
+	WorkspaceRouteID string         `json:"workspace_route_id"`
+	WorkspaceName    string         `json:"workspace_name"`
+	ActiveTokenCount int32          `json:"active_token_count"`
+}
+
+func (q *Queries) ListBotsOwnedBy(ctx context.Context, ownerUserID sql.NullString) ([]ListBotsOwnedByRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBotsOwnedBy, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBotsOwnedByRow
+	for rows.Next() {
+		var i ListBotsOwnedByRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.WorkspaceID,
+			&i.WorkspaceRouteID,
+			&i.WorkspaceName,
+			&i.ActiveTokenCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChannels = `-- name: ListChannels :many
 SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kind, c.created_at, c.archived_at,
        CAST(COALESCE((SELECT MAX(channel_seq) FROM messages WHERE channel_id = c.id AND parent_message_id IS NULL), 0) AS BIGINT) AS last_seq,
@@ -2644,6 +2720,26 @@ type RequireMembershipRoleParams struct {
 
 func (q *Queries) RequireMembershipRole(ctx context.Context, arg RequireMembershipRoleParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, requireMembershipRole, arg.WorkspaceID, arg.UserID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
+}
+
+const requireWorkspaceManager = `-- name: RequireWorkspaceManager :one
+SELECT role
+FROM workspace_members
+WHERE workspace_id = $1
+  AND user_id = $2
+  AND role IN ('owner', 'moderator')
+`
+
+type RequireWorkspaceManagerParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+}
+
+func (q *Queries) RequireWorkspaceManager(ctx context.Context, arg RequireWorkspaceManagerParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, requireWorkspaceManager, arg.WorkspaceID, arg.UserID)
 	var role string
 	err := row.Scan(&role)
 	return role, err

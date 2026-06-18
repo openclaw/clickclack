@@ -44,7 +44,7 @@ func TestGuestWaitingRoomModeration(t *testing.T) {
 	if _, err := st.EnsureDefaultGuestWorkspaceMember(ctx, peerModerator.ID, store.WorkspaceRoleModerator); err != nil {
 		t.Fatal(err)
 	}
-	adminBot, _, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Admin Bot", Scopes: []string{"bot:admin"}})
+	adminBot, _, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Admin Bot", Scopes: []string{"bot:admin"}, CreatedBy: moderator.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/auth/github/callback", s.githubCallback)
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
+		r.Get("/me/bots", s.listMyBots)
 		r.Get("/workspaces", s.listWorkspaces)
 		r.Post("/workspaces", s.createWorkspace)
 		r.Get("/routes/{workspace_route_id}/{target_route_id}", s.resolveRoute)
@@ -127,6 +128,9 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces/{workspace_id}/topics", s.createTopic)
 		r.Get("/workspaces/{workspace_id}/bots", s.listBots)
 		r.Post("/workspaces/{workspace_id}/bots", s.createBot)
+		r.Delete("/workspaces/{workspace_id}/bots/{bot_user_id}/membership", s.removeBotFromWorkspace)
+		r.Get("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.listWorkspaceBotTokens)
+		r.Post("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.createWorkspaceBotToken)
 		r.Get("/bots/{bot_user_id}/tokens", s.listBotTokens)
 		r.Post("/bots/{bot_user_id}/tokens", s.createBotToken)
 		r.Post("/bot-tokens/{token_id}/revoke", s.revokeBotToken)
@@ -1241,6 +1245,12 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrUploadQuotaExceeded):
 		writeError(w, http.StatusRequestEntityTooLarge, err)
 	case errors.Is(err, store.ErrModerationRestricted):
+		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrNotWorkspaceManager):
+		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrBotOwnerRequired):
+		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrBotOwnerCreateRequired):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrMessageNotWritable):
 		writeError(w, http.StatusForbidden, err)

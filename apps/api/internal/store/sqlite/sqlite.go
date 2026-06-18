@@ -892,6 +892,22 @@ func requireMembershipTx(ctx context.Context, tx *sql.Tx, workspaceID, userID st
 	return err
 }
 
+func (s *Store) requireWorkspaceManager(ctx context.Context, workspaceID, userID string) error {
+	_, err := s.q.RequireWorkspaceManager(ctx, storedb.RequireWorkspaceManagerParams{WorkspaceID: workspaceID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotWorkspaceManager
+	}
+	return err
+}
+
+func requireWorkspaceManagerTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
+	_, err := storedb.New(tx).RequireWorkspaceManager(ctx, storedb.RequireWorkspaceManagerParams{WorkspaceID: workspaceID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotWorkspaceManager
+	}
+	return err
+}
+
 func requireChannelAdminTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	_, err := storedb.New(tx).RequireChannelAdmin(ctx, storedb.RequireChannelAdminParams{WorkspaceID: workspaceID, UserID: userID})
 	return err

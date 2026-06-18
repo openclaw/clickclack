@@ -82,6 +82,18 @@ func NormalizeMessageKind(kind string) (string, error) {
 	}
 }
 
+// ErrNotWorkspaceManager is returned when a workspace operation requires an
+// owner or moderator.
+var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
+
+// ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
+// by someone other than the bot owner.
+var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
+
+// ErrBotOwnerCreateRequired is returned when someone other than the owner tries
+// to create a user-owned bot.
+var ErrBotOwnerCreateRequired = errors.New("only the bot owner can create a user-owned bot")
+
 const (
 	WorkspaceRoleOwner           = "owner"
 	WorkspaceRoleModerator       = "moderator"
@@ -256,11 +268,24 @@ type BotWithTokens struct {
 	Tokens []BotToken `json:"tokens"`
 }
 
+type OwnedBotWorkspace struct {
+	ID      string `json:"id"`
+	RouteID string `json:"route_id"`
+	Name    string `json:"name"`
+}
+
+type OwnedBotEntry struct {
+	Bot              User              `json:"bot"`
+	Workspace        OwnedBotWorkspace `json:"workspace"`
+	ActiveTokenCount int               `json:"active_token_count"`
+}
+
 type CreateBotTokenInput struct {
-	BotUserID string
-	Name      string
-	Scopes    []string
-	CreatedBy string
+	WorkspaceID string
+	BotUserID   string
+	Name        string
+	Scopes      []string
+	CreatedBy   string
 }
 
 type AppInstallation struct {
@@ -696,7 +721,10 @@ type Store interface {
 	ListBots(ctx context.Context, workspaceID, requesterID string) ([]BotWithTokens, error)
 	CreateBotToken(ctx context.Context, input CreateBotTokenInput) (BotToken, error)
 	ListBotTokens(ctx context.Context, botUserID, requesterID string) ([]BotToken, error)
+	ListBotTokensForWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) ([]BotToken, error)
 	RevokeBotToken(ctx context.Context, tokenID, requesterID string) (BotToken, error)
+	RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) error
+	ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]OwnedBotEntry, error)
 	ListAppInstallations(ctx context.Context, workspaceID, requesterID string) ([]AppInstallation, error)
 	CreateAppInstallation(ctx context.Context, input CreateAppInstallationInput) (AppInstallation, error)
 	RevokeAppInstallation(ctx context.Context, installationID, requesterID string) (AppInstallation, error)

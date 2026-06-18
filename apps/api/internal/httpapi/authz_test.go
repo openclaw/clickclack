@@ -3,7 +3,9 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"mime/multipart"
@@ -236,6 +238,117 @@ func TestHTTPBotTokenWorkspaceIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectStatusWithBearer(t, profileToken.Token, http.MethodGet, server.URL+"/api/messages/"+otherMessage.ID, nil, http.StatusForbidden)
+}
+
+func TestHTTPBotManagementAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "mod-bot-authz@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-bot-authz@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	botOwner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Bot Owner", Email: "bot-owner-authz@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, botOwner.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots", strings.NewReader(`{"display_name":"member service bot"}`), http.StatusForbidden)
+	serviceBot := postJSONAsUser[struct {
+		Bot      store.User     `json:"bot"`
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, moderator.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"display_name": "service bot",
+		"token_name":   "initial",
+		"scopes":       []string{"bot:read"},
+	})
+	if serviceBot.Bot.OwnerUserID != "" || serviceBot.BotToken.Token == "" {
+		t.Fatalf("unexpected service bot payload: %#v", serviceBot)
+	}
+	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens", nil, http.StatusForbidden)
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens", strings.NewReader(`{"name":"member rotate"}`), http.StatusForbidden)
+	serviceRotation := postJSONAsUser[struct {
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens", map[string]any{"name": "owner rotate"})
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/bot-tokens/"+serviceRotation.BotToken.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+	postJSONAsUser[struct {
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, moderator.ID, server.URL+"/api/bot-tokens/"+serviceRotation.BotToken.ID+"/revoke", map[string]any{})
+
+	expectStatusAsUser(t, moderator.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots", strings.NewReader(`{"owner_user_id":"`+botOwner.ID+`","display_name":"manager-owned attempt"}`), http.StatusForbidden)
+	userBot := postJSONAsUser[struct {
+		Bot      store.User     `json:"bot"`
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, botOwner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"owner_user_id": botOwner.ID,
+		"display_name":  "user owned bot",
+		"token_name":    "initial",
+		"scopes":        []string{"bot:read"},
+	})
+	if userBot.Bot.OwnerUserID != botOwner.ID {
+		t.Fatalf("expected user-owned bot, got %#v", userBot.Bot)
+	}
+	expectStatusAsUser(t, moderator.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens", nil, http.StatusForbidden)
+	expectStatusAsUser(t, moderator.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens", strings.NewReader(`{"name":"manager rotate"}`), http.StatusForbidden)
+	ownerRotation := postJSONAsUser[struct {
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, botOwner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens", map[string]any{"name": "owner rotate"})
+	expectStatusAsUser(t, moderator.ID, http.MethodPost, server.URL+"/api/bot-tokens/"+ownerRotation.BotToken.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+	postJSONAsUser[struct {
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, botOwner.ID, server.URL+"/api/bot-tokens/"+ownerRotation.BotToken.ID+"/revoke", map[string]any{})
+
+	myBots := getJSONAsUser[struct {
+		Bots []store.OwnedBotEntry `json:"bots"`
+	}](t, botOwner.ID, server.URL+"/api/me/bots")
+	if len(myBots.Bots) != 1 || myBots.Bots[0].Bot.ID != userBot.Bot.ID || myBots.Bots[0].Workspace.ID != workspace.ID || myBots.Bots[0].ActiveTokenCount != 1 {
+		t.Fatalf("unexpected owned bot list: %#v", myBots.Bots)
+	}
+	ownerBots := getJSONAsUser[struct {
+		Bots []store.OwnedBotEntry `json:"bots"`
+	}](t, owner.ID, server.URL+"/api/me/bots")
+	if len(ownerBots.Bots) != 0 {
+		t.Fatalf("service bots must not be listed as owned bots: %#v", ownerBots.Bots)
+	}
+
+	expectStatusAsUser(t, member.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/membership", nil, http.StatusForbidden)
+	expectStatusAsUser(t, moderator.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/membership", nil, http.StatusNoContent)
+	if _, err := st.GetBotTokenAuth(ctx, serviceBot.BotToken.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected removed service bot token to stop authenticating, got %v", err)
+	}
 }
 
 func TestHTTPUploadNotConfiguredAndCookieAuth(t *testing.T) {

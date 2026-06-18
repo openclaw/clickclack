@@ -427,6 +427,20 @@ func (s *Server) listBots(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"bots": bots}, err)
 }
 
+func (s *Server) listMyBots(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot list owned bots"))
+		return
+	}
+	bots, err := s.store.ListBotsOwnedBy(r.Context(), act.user.ID)
+	writeResult(w, map[string]any{"bots": bots}, err)
+}
+
 func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {
@@ -476,7 +490,29 @@ func (s *Server) listBotTokens(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"bot_tokens": tokens}, err)
 }
 
+func (s *Server) listWorkspaceBotTokens(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot manage bot tokens"))
+		return
+	}
+	tokens, err := s.store.ListBotTokensForWorkspace(r.Context(), chi.URLParam(r, "workspace_id"), chi.URLParam(r, "bot_user_id"), act.user.ID)
+	writeResult(w, map[string]any{"bot_tokens": tokens}, err)
+}
+
 func (s *Server) createBotToken(w http.ResponseWriter, r *http.Request) {
+	s.createBotTokenForWorkspace(w, r, "")
+}
+
+func (s *Server) createWorkspaceBotToken(w http.ResponseWriter, r *http.Request) {
+	s.createBotTokenForWorkspace(w, r, chi.URLParam(r, "workspace_id"))
+}
+
+func (s *Server) createBotTokenForWorkspace(w http.ResponseWriter, r *http.Request, workspaceID string) {
 	act, err := s.currentActor(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err)
@@ -495,12 +531,35 @@ func (s *Server) createBotToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, err := s.store.CreateBotToken(r.Context(), store.CreateBotTokenInput{
-		BotUserID: chi.URLParam(r, "bot_user_id"),
-		Name:      body.Name,
-		Scopes:    body.Scopes,
-		CreatedBy: act.user.ID,
+		WorkspaceID: workspaceID,
+		BotUserID:   chi.URLParam(r, "bot_user_id"),
+		Name:        body.Name,
+		Scopes:      body.Scopes,
+		CreatedBy:   act.user.ID,
 	})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"bot_token": token}, err)
+}
+
+func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot remove bots from workspaces"))
+		return
+	}
+	err = s.store.RemoveBotFromWorkspace(r.Context(), chi.URLParam(r, "workspace_id"), chi.URLParam(r, "bot_user_id"), act.user.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) revokeBotToken(w http.ResponseWriter, r *http.Request) {

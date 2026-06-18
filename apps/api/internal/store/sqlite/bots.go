@@ -14,6 +14,10 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
 
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 var botScopeBundles = map[string][]string{
 	"bot:read": {
 		"workspaces:read",
@@ -101,14 +105,29 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if tokenName == "" {
 		tokenName = "default"
 	}
+	createdBy := strings.TrimSpace(input.CreatedBy)
+	if createdBy == "" {
+		return store.User{}, store.BotToken{}, errors.New("created_by is required")
+	}
+	ownerUserID := strings.TrimSpace(input.OwnerUserID)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
-	if input.OwnerUserID != "" {
-		ownerRow, err := qtx.GetUser(ctx, input.OwnerUserID)
+	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
+		return store.User{}, store.BotToken{}, err
+	}
+	if ownerUserID == "" {
+		if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
+			return store.User{}, store.BotToken{}, err
+		}
+	} else {
+		if createdBy != ownerUserID {
+			return store.User{}, store.BotToken{}, store.ErrBotOwnerCreateRequired
+		}
+		ownerRow, err := qtx.GetUser(ctx, ownerUserID)
 		if err != nil {
 			return store.User{}, store.BotToken{}, err
 		}
@@ -123,7 +142,7 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	bot := store.User{
 		ID:          newID("usr"),
 		Kind:        "bot",
-		OwnerUserID: strings.TrimSpace(input.OwnerUserID),
+		OwnerUserID: ownerUserID,
 		DisplayName: displayName,
 		Handle:      handle,
 		AvatarURL:   avatarURL,
@@ -163,7 +182,7 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		OwnerUserID: bot.OwnerUserID,
 		Name:        tokenName,
 		Scopes:      scopes,
-		CreatedBy:   strings.TrimSpace(input.CreatedBy),
+		CreatedBy:   createdBy,
 		CreatedAt:   bot.CreatedAt,
 	}
 	if err := qtx.InsertBotToken(ctx, storedb.InsertBotTokenParams{
@@ -236,8 +255,14 @@ func (s *Store) ListBots(ctx context.Context, workspaceID, requesterID string) (
 	}
 	out := []store.BotWithTokens{}
 	for _, bot := range bots {
-		tokens, err := s.listBotTokensForBot(ctx, bot.ID)
-		if err != nil {
+		tokens := []store.BotToken{}
+		if err := s.requireBotTokenManager(ctx, workspaceID, bot, requesterID); err == nil {
+			var tokenErr error
+			tokens, tokenErr = s.listBotTokensForBotWorkspace(ctx, bot.ID, workspaceID)
+			if tokenErr != nil {
+				return nil, tokenErr
+			}
+		} else if !errors.Is(err, store.ErrNotWorkspaceManager) && !errors.Is(err, store.ErrBotOwnerRequired) {
 			return nil, err
 		}
 		out = append(out, store.BotWithTokens{Bot: bot, Tokens: tokens})
@@ -263,6 +288,10 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		return store.BotToken{}, err
 	}
 	defer tx.Rollback()
+	createdBy := strings.TrimSpace(input.CreatedBy)
+	if createdBy == "" {
+		return store.BotToken{}, errors.New("created_by is required")
+	}
 	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, botUserID))
 	if err != nil {
 		return store.BotToken{}, err
@@ -270,16 +299,11 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 	if bot.Kind != "bot" {
 		return store.BotToken{}, errors.New("bot_user_id must refer to a bot")
 	}
-	var workspaceID string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT workspace_id
-		FROM workspace_members
-		WHERE user_id = ?
-		ORDER BY created_at
-		LIMIT 1`, bot.ID).Scan(&workspaceID); err != nil {
+	workspaceID, err := botWorkspaceForTokenTx(ctx, tx, bot.ID, strings.TrimSpace(input.WorkspaceID))
+	if err != nil {
 		return store.BotToken{}, err
 	}
-	if err := requireMembershipTx(ctx, tx, workspaceID, strings.TrimSpace(input.CreatedBy)); err != nil {
+	if err := requireBotTokenManagerTx(ctx, tx, workspaceID, bot, createdBy); err != nil {
 		return store.BotToken{}, err
 	}
 	token := newID("ccb")
@@ -295,7 +319,7 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		OwnerUserID: bot.OwnerUserID,
 		Name:        tokenName,
 		Scopes:      scopes,
-		CreatedBy:   strings.TrimSpace(input.CreatedBy),
+		CreatedBy:   createdBy,
 		CreatedAt:   now(),
 	}
 	_, err = tx.ExecContext(ctx, `
@@ -322,10 +346,26 @@ func (s *Store) ListBotTokens(ctx context.Context, botUserID, requesterID string
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
+	return s.ListBotTokensForWorkspace(ctx, workspaceID, botUserID, requesterID)
+}
+
+func (s *Store) ListBotTokensForWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) ([]store.BotToken, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	botUserID = strings.TrimSpace(botUserID)
+	if workspaceID == "" {
+		return nil, errors.New("workspace_id is required")
+	}
+	if botUserID == "" {
+		return nil, errors.New("bot_user_id is required")
+	}
+	bot, err := s.getWorkspaceBot(ctx, workspaceID, botUserID)
+	if err != nil {
 		return nil, err
 	}
-	return s.listBotTokensForBot(ctx, botUserID)
+	if err := s.requireBotTokenManager(ctx, workspaceID, bot, requesterID); err != nil {
+		return nil, err
+	}
+	return s.listBotTokensForBotWorkspace(ctx, bot.ID, workspaceID)
 }
 
 func (s *Store) RevokeBotToken(ctx context.Context, tokenID, requesterID string) (store.BotToken, error) {
@@ -337,7 +377,11 @@ func (s *Store) RevokeBotToken(ctx context.Context, tokenID, requesterID string)
 	if err != nil {
 		return store.BotToken{}, err
 	}
-	if err := s.requireMembership(ctx, token.WorkspaceID, requesterID); err != nil {
+	bot, err := s.getWorkspaceBot(ctx, token.WorkspaceID, token.BotUserID)
+	if err != nil {
+		return store.BotToken{}, err
+	}
+	if err := s.requireBotTokenManager(ctx, token.WorkspaceID, bot, requesterID); err != nil {
 		return store.BotToken{}, err
 	}
 	revokedAt := now()
@@ -348,26 +392,182 @@ func (s *Store) RevokeBotToken(ctx context.Context, tokenID, requesterID string)
 }
 
 func (s *Store) botWorkspace(ctx context.Context, botUserID string) (string, error) {
-	var workspaceID string
-	err := s.db.QueryRowContext(ctx, `
+	return botWorkspaceForToken(ctx, s.db, botUserID)
+}
+
+func botWorkspaceForToken(ctx context.Context, db queryer, botUserID string) (string, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT wm.workspace_id
 		FROM workspace_members wm
 		JOIN users u ON u.id = wm.user_id
 		WHERE wm.user_id = ? AND u.kind = 'bot'
 		ORDER BY wm.created_at
-		LIMIT 1`, botUserID).Scan(&workspaceID)
-	return workspaceID, err
+		LIMIT 2`, botUserID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var workspaceIDs []string
+	for rows.Next() {
+		var workspaceID string
+		if err := rows.Scan(&workspaceID); err != nil {
+			return "", err
+		}
+		workspaceIDs = append(workspaceIDs, workspaceID)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(workspaceIDs) == 0 {
+		return "", sql.ErrNoRows
+	}
+	if len(workspaceIDs) > 1 {
+		return "", errors.New("workspace_id is required for bots installed in multiple workspaces")
+	}
+	return workspaceIDs[0], nil
+}
+
+func botWorkspaceForTokenTx(ctx context.Context, tx *sql.Tx, botUserID, workspaceID string) (string, error) {
+	if workspaceID == "" {
+		return botWorkspaceForToken(ctx, tx, botUserID)
+	}
+	var matched string
+	err := tx.QueryRowContext(ctx, `
+		SELECT wm.workspace_id
+		FROM workspace_members wm
+		JOIN users u ON u.id = wm.user_id
+		WHERE wm.user_id = ? AND wm.workspace_id = ? AND u.kind = 'bot'`, botUserID, workspaceID).Scan(&matched)
+	return matched, err
 }
 
 func (s *Store) listBotTokensForBot(ctx context.Context, botUserID string) ([]store.BotToken, error) {
+	workspaceID, err := s.botWorkspace(ctx, botUserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.listBotTokensForBotWorkspace(ctx, botUserID, workspaceID)
+}
+
+func (s *Store) listBotTokensForBotWorkspace(ctx context.Context, botUserID, workspaceID string) ([]store.BotToken, error) {
 	rows, err := s.db.QueryContext(ctx, botTokenSelect()+`
-		WHERE bot_user_id = ?
-		ORDER BY created_at DESC`, botUserID)
+		WHERE bot_user_id = ? AND workspace_id = ?
+		ORDER BY created_at DESC`, botUserID, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	return scanBotTokens(rows)
+}
+
+func (s *Store) getWorkspaceBot(ctx context.Context, workspaceID, botUserID string) (store.User, error) {
+	bot, err := scanUser(s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		FROM users u
+		JOIN workspace_members wm ON wm.user_id = u.id
+		WHERE wm.workspace_id = ? AND u.id = ? AND u.kind = 'bot'`, workspaceID, botUserID))
+	if err != nil {
+		return store.User{}, err
+	}
+	return bot, nil
+}
+
+func (s *Store) requireBotTokenManager(ctx context.Context, workspaceID string, bot store.User, requesterID string) error {
+	requesterID = strings.TrimSpace(requesterID)
+	if requesterID == "" {
+		return errors.New("requester_id is required")
+	}
+	if bot.OwnerUserID != "" {
+		if requesterID != bot.OwnerUserID {
+			return store.ErrBotOwnerRequired
+		}
+		return nil
+	}
+	return s.requireWorkspaceManager(ctx, workspaceID, requesterID)
+}
+
+func requireBotTokenManagerTx(ctx context.Context, tx *sql.Tx, workspaceID string, bot store.User, requesterID string) error {
+	requesterID = strings.TrimSpace(requesterID)
+	if requesterID == "" {
+		return errors.New("requester_id is required")
+	}
+	if bot.OwnerUserID != "" {
+		if requesterID != bot.OwnerUserID {
+			return store.ErrBotOwnerRequired
+		}
+		return nil
+	}
+	return requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID)
+}
+
+func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	botUserID = strings.TrimSpace(botUserID)
+	requesterID = strings.TrimSpace(requesterID)
+	if workspaceID == "" {
+		return errors.New("workspace_id is required")
+	}
+	if botUserID == "" {
+		return errors.New("bot_user_id is required")
+	}
+	if requesterID == "" {
+		return errors.New("requester_id is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
+		return err
+	}
+	if _, err := scanUser(tx.QueryRowContext(ctx, `
+		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		FROM users u
+		JOIN workspace_members wm ON wm.user_id = u.id
+		WHERE wm.workspace_id = ? AND u.id = ? AND u.kind = 'bot'`, workspaceID, botUserID)); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspaceID, botUserID)
+	if err != nil {
+		return err
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return sql.ErrNoRows
+	}
+	revokedAt := now()
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE bot_tokens
+		SET revoked_at = COALESCE(revoked_at, ?)
+		WHERE bot_user_id = ? AND workspace_id = ?`, revokedAt, botUserID, workspaceID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]store.OwnedBotEntry, error) {
+	ownerUserID = strings.TrimSpace(ownerUserID)
+	if ownerUserID == "" {
+		return nil, errors.New("owner_user_id is required")
+	}
+	rows, err := s.q.ListBotsOwnedBy(ctx, sqlOptionalText(ownerUserID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]store.OwnedBotEntry, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, store.OwnedBotEntry{
+			Bot: storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt),
+			Workspace: store.OwnedBotWorkspace{
+				ID:      row.WorkspaceID,
+				RouteID: row.WorkspaceRouteID,
+				Name:    row.WorkspaceName,
+			},
+			ActiveTokenCount: int(row.ActiveTokenCount),
+		})
+	}
+	return out, nil
 }
 
 func (s *Store) getBotTokenByID(ctx context.Context, tokenID string) (store.BotToken, error) {

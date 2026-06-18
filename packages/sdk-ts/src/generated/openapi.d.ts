@@ -978,6 +978,16 @@ export interface components {
       bot: components["schemas"]["User"];
       tokens: components["schemas"]["BotToken"][];
     };
+    CreateBotResponse: {
+      bot: components["schemas"]["User"];
+      bot_token: components["schemas"]["BotToken"];
+    };
+    BotTokenResponse: {
+      bot_token: components["schemas"]["BotToken"];
+    };
+    BotTokenListResponse: {
+      bot_tokens: components["schemas"]["BotToken"][];
+    };
     OwnedBotWorkspace: {
       id: string;
       route_id: string;
@@ -2020,7 +2030,11 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": {
+            bots: components["schemas"]["BotWithTokens"][];
+          };
+        };
       };
     };
   };
@@ -2044,7 +2058,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["CreateBotResponse"];
+        };
       };
       /** @description Service bots require a workspace manager. User-owned bots must be created by their owner. */
       403: {
@@ -2143,7 +2159,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["BotTokenResponse"];
+        };
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
       403: {
@@ -2170,7 +2188,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["BotTokenListResponse"];
+        };
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
       403: {
@@ -2201,7 +2221,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["BotTokenResponse"];
+        };
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
       403: {
@@ -2228,7 +2250,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["BotTokenResponse"];
+        };
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
       403: {

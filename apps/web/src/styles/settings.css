@@ -1173,50 +1173,305 @@
   border-color: var(--danger);
 }
 
-/* Members — table */
-.workspace-members {
-  overflow-x: auto;
-  margin-top: 8px;
+/* Members — virtualized list */
+/* When the members page is the content, let the inner container fill the
+   viewport so only the list scrolls (not the whole settings shell). */
+.ws-settings__content:has(.ws-members-page) {
+  overflow: hidden;
 }
 
-.workspace-members__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13.5px;
+.ws-settings__content-inner:has(.ws-members-page) {
+  max-width: none;
+  padding: 56px 80px 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.workspace-members__table thead th {
-  text-align: left;
-  font-size: 11px;
+.ws-members-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.ws-members-page__header {
+  flex: 0 0 auto;
+}
+
+.ws-members__toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0 12px;
+  margin: 4px 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.ws-members__count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted);
-  font-weight: 600;
-  padding: 0 12px 10px;
-  border-bottom: 1px solid var(--line);
 }
 
-.workspace-members__table tbody td {
-  padding: 12px;
-  border-bottom: 1px solid var(--line);
+.ws-members__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ws-members__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ws-members__search-icon {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  pointer-events: none;
+  display: inline-flex;
+}
+
+.ws-members__search-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ws-members__search-input {
+  width: 220px;
+  height: 34px;
+  padding: 0 12px 0 32px;
+  font-size: 13px;
   color: var(--text);
-  vertical-align: middle;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
 }
 
-.workspace-members__table tbody tr:last-child td {
-  border-bottom: 0;
+.ws-members__search-input::-webkit-search-cancel-button {
+  appearance: none;
 }
 
-.workspace-members__handle,
-.workspace-members__joined {
+.ws-members__search-input:focus {
+  border-color: var(--accent);
+}
+
+.ws-members__role-select {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+.ws-members__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.ws-members__row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  box-sizing: border-box;
+}
+
+.ws-members__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--hue, 220deg) 70% 55%),
+    hsl(calc(var(--hue, 220deg) + 30deg) 65% 42%)
+  );
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ws-members__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ws-members__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ws-members__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong, var(--text));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-members__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.workspace-members__role {
+.ws-members__handle {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.ws-members__dot {
+  opacity: 0.6;
+}
+
+.ws-members__pill {
+  font-size: 11.5px;
+  font-weight: 600;
   text-transform: capitalize;
-  color: var(--text-strong);
-  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ws-members__pill--owner {
+  background: rgba(34, 197, 94, 0.16);
+  color: rgb(22, 163, 74);
+}
+
+.ws-members__pill--moderator {
+  background: rgba(35, 131, 226, 0.18);
+  color: rgb(35, 131, 226);
+}
+
+.ws-members__pill--bot {
+  background: rgba(168, 85, 247, 0.18);
+  color: rgb(147, 51, 234);
+}
+
+.ws-members__pill--guest {
+  background: rgba(245, 158, 11, 0.18);
+  color: rgb(202, 138, 4);
+}
+
+.ws-members__actions {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ws-members__actions:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.ws-members__actions:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ws-members__empty {
+  margin-top: 24px;
+  padding: 36px 20px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+  background: var(--surface);
+}
+
+.ws-members__loading {
+  padding: 10px 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  border-top: 1px solid var(--line);
+}
+
+.ws-members__row--skeleton {
+  height: 64px;
+}
+
+.ws-members__skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(127, 127, 127, 0.08),
+    rgba(127, 127, 127, 0.18),
+    rgba(127, 127, 127, 0.08)
+  );
+  background-size: 200% 100%;
+  animation: ws-members-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.ws-members__skeleton--line {
+  height: 10px;
+  margin: 4px 0;
+}
+
+.ws-members__skeleton--pill {
+  width: 64px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+@keyframes ws-members-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* Mobile: rail collapses above content */

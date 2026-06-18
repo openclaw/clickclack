@@ -1,29 +1,46 @@
 export const prerender = false;
 export const ssr = false;
 
-import { api, APIError } from "../../../../../lib/api";
-import type { User } from "../../../../../lib/types";
+import {
+  listWorkspaceMembersPage,
+  memberLoadErrorMessage,
+  MEMBERS_PAGE_LIMIT,
+  type WorkspaceMember,
+} from "../../../../../lib/workspace-members";
+import type { Workspace } from "../../../../../lib/types";
 
-type Member = {
-  workspace_id: string;
-  user: User;
-  role: string;
-};
-
-export async function load({ params }: { params: { workspaceID: string } }) {
-  let members: Member[] = [];
+export async function load({
+  params,
+  parent,
+}: {
+  params: { workspaceID: string };
+  parent: () => Promise<{ workspace?: Workspace }>;
+}) {
+  const { workspace } = await parent();
+  const workspaceID = workspace?.id ?? params.workspaceID;
+  let members: WorkspaceMember[] = [];
+  let nextCursor = "";
+  let hasMore = false;
+  let totalCount: number | undefined;
   let loadError = "";
   try {
-    const data = await api<{ members: Member[] }>(
-      `/api/workspaces/${params.workspaceID}/moderation/members`,
-    );
-    members = data.members;
+    const page = await listWorkspaceMembersPage({
+      workspaceID,
+      limit: MEMBERS_PAGE_LIMIT,
+    });
+    members = page.members;
+    nextCursor = page.next_cursor ?? "";
+    hasMore = page.has_more;
+    totalCount = page.total_count;
   } catch (err) {
-    if (err instanceof APIError && (err.status === 401 || err.status === 403)) {
-      loadError = "You don't have permission to view this workspace's members.";
-    } else {
-      loadError = err instanceof Error ? err.message : "Could not load members";
-    }
+    loadError = memberLoadErrorMessage(err);
   }
-  return { members, loadError };
+  return {
+    workspaceID,
+    members,
+    nextCursor,
+    hasMore,
+    totalCount,
+    loadError,
+  };
 }

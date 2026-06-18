@@ -560,6 +560,11 @@ SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
 FROM thread_state
 WHERE root_message_id = sqlc.arg(root_message_id);
 
+-- name: ListThreadStates :many
+SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
+FROM thread_state
+WHERE root_message_id = ANY(sqlc.arg(root_message_ids)::text[]);
+
 -- name: ThreadNextSeq :one
 SELECT CAST(COALESCE(MAX(thread_seq), 0) + 1 AS BIGINT) AS next_seq
 FROM messages

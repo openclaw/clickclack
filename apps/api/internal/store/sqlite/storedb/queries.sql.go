@@ -8,6 +8,7 @@ package storedb
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const addReaction = `-- name: AddReaction :execrows
@@ -2034,6 +2035,50 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.Seq,
 			&i.PayloadJson,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listThreadStates = `-- name: ListThreadStates :many
+SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
+FROM thread_state
+WHERE root_message_id IN (/*SLICE:root_message_ids*/?)
+`
+
+func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string) ([]ThreadState, error) {
+	query := listThreadStates
+	var queryParams []interface{}
+	if len(rootMessageIds) > 0 {
+		for _, v := range rootMessageIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:root_message_ids*/?", strings.Repeat(",?", len(rootMessageIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:root_message_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ThreadState
+	for rows.Next() {
+		var i ThreadState
+		if err := rows.Scan(
+			&i.RootMessageID,
+			&i.ReplyCount,
+			&i.LastReplyAt,
+			&i.LastReplyAuthorIdsJson,
 		); err != nil {
 			return nil, err
 		}

@@ -4,6 +4,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
+  import MyBotsSection from "./MyBotsSection.svelte";
   import { api, APIError } from "../../lib/api";
   import {
     ACCOUNT_SETTINGS_SECTIONS,
@@ -131,6 +132,18 @@
                     </svg>
                   </span>
                   <span class="settings-modal__rail-label">{section.label}</span>
+                {:else if section.id === "bots"}
+                  <span class="settings-modal__rail-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 8V4H8" />
+                      <path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+                      <path d="M2 14h2" />
+                      <path d="M20 14h2" />
+                      <path d="M15 13v2" />
+                      <path d="M9 13v2" />
+                    </svg>
+                  </span>
+                  <span class="settings-modal__rail-label">{section.label}</span>
                 {/if}
               </button>
             </li>
@@ -186,6 +199,8 @@
           <p class="settings-page__lead">Decide when and how ClickClack should reach you.</p>
         </header>
         <NotificationSettingsForm {user} onUserUpdated={handleUserUpdated} />
+      {:else if activeSection === "bots"}
+        <MyBotsSection {onClose} />
       {/if}
     </main>
   </div>

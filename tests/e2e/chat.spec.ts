@@ -273,30 +273,36 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  const openMobileNavigation = async () => {
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  };
+
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(composer).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.keyboard.type("hidden draft");
   await expect(composer).toHaveValue("");
 
   await page.keyboard.press("Escape");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });

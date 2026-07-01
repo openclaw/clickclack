@@ -1406,10 +1406,12 @@
 
   function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
     if (event.type !== "message.created") return;
+    const payload = event.payload as Record<string, unknown>;
+    const kind = typeof payload.kind === "string" ? payload.kind : "";
+    if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
-    const payload = event.payload as Record<string, unknown>;
     const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
     if (authorID && authorID === user?.id) return;
     const { channelID, dmID } = messageEventScope(event);

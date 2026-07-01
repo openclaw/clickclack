@@ -147,22 +147,22 @@ type Channel struct {
 }
 
 type Message struct {
-	ID                   string       `json:"id"`
-	RouteID              string       `json:"route_id,omitempty"`
-	WorkspaceID          string       `json:"workspace_id"`
-	ChannelID            string       `json:"channel_id,omitempty"`
-	DirectConversationID string       `json:"direct_conversation_id,omitempty"`
-	AuthorID             string       `json:"author_id"`
-	ParentMessageID      *string      `json:"parent_message_id,omitempty"`
-	ThreadRootID         string       `json:"thread_root_id"`
-	TopicID              string       `json:"topic_id,omitempty"`
-	ChannelSeq           *int64       `json:"channel_seq,omitempty"`
-	ThreadSeq            *int64       `json:"thread_seq,omitempty"`
-	Body                 string       `json:"body"`
-	BodyFormat           string       `json:"body_format"`
-	CreatedAt            string       `json:"created_at"`
-	EditedAt             *string      `json:"edited_at,omitempty"`
-	DeletedAt            *string      `json:"deleted_at,omitempty"`
+	ID                   string  `json:"id"`
+	RouteID              string  `json:"route_id,omitempty"`
+	WorkspaceID          string  `json:"workspace_id"`
+	ChannelID            string  `json:"channel_id,omitempty"`
+	DirectConversationID string  `json:"direct_conversation_id,omitempty"`
+	AuthorID             string  `json:"author_id"`
+	ParentMessageID      *string `json:"parent_message_id,omitempty"`
+	ThreadRootID         string  `json:"thread_root_id"`
+	TopicID              string  `json:"topic_id,omitempty"`
+	ChannelSeq           *int64  `json:"channel_seq,omitempty"`
+	ThreadSeq            *int64  `json:"thread_seq,omitempty"`
+	Body                 string  `json:"body"`
+	BodyFormat           string  `json:"body_format"`
+	CreatedAt            string  `json:"created_at"`
+	EditedAt             *string `json:"edited_at,omitempty"`
+	DeletedAt            *string `json:"deleted_at,omitempty"`
 	// Kind discriminates ordinary messages from durable agent activity rows.
 	// Empty in JSON means the default 'message'.
 	Kind string `json:"kind,omitempty"`

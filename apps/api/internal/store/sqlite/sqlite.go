@@ -517,7 +517,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		quotedID = strings.TrimSpace(*input.QuotedMessageID)
 	}
 	if existing, err := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); err == nil {
-		if existing.ChannelID != input.ChannelID || existing.DirectConversationID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.TopicID != input.TopicID || !sameQuotedMessageID(existing, quotedID) {
+		if existing.ChannelID != input.ChannelID || existing.DirectConversationID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.TopicID != input.TopicID || existing.Kind != kind || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
 		if err := requireMessageAccessTx(ctx, tx, existing, input.AuthorID); err != nil {
@@ -556,7 +556,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		TurnID:             sqlOptionalText(input.TurnID),
 	}); err != nil {
 		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
-			if existing.ChannelID == input.ChannelID && existing.DirectConversationID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.TopicID == input.TopicID && sameQuotedMessageID(existing, quotedID) {
+			if existing.ChannelID == input.ChannelID && existing.DirectConversationID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.TopicID == input.TopicID && existing.Kind == kind && existing.TurnID == input.TurnID && sameQuotedMessageID(existing, quotedID) {
 				if err := requireMessageAccessTx(ctx, tx, existing, input.AuthorID); err != nil {
 					return store.Message{}, store.Event{}, err
 				}

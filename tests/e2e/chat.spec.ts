@@ -222,6 +222,33 @@ test("shows realtime connection state in the shell", async ({ page }) => {
 });
 
 test("coalesces durable agent activity and applies activity preferences", async ({ page }) => {
+  const meResponse = await page.request.get("/api/me");
+  const me = (await meResponse.json()) as { user: { id: string } };
+  const notificationStorageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
+  await page.addInitScript((storageKey) => {
+    type CapturedNotification = { title: string; close: () => void };
+    const target = window as unknown as {
+      __clickclackNotifications: CapturedNotification[];
+      Notification: typeof Notification;
+    };
+    class FakeNotification implements CapturedNotification {
+      static permission: NotificationPermission = "granted";
+      static requestPermission = () => Promise.resolve("granted" as NotificationPermission);
+      title: string;
+      onclick: (() => void) | null = null;
+
+      constructor(title: string) {
+        this.title = title;
+        target.__clickclackNotifications.push(this);
+      }
+
+      close() {}
+    }
+    localStorage.setItem(storageKey, "enabled");
+    target.__clickclackNotifications = [];
+    target.Notification = FakeNotification as unknown as typeof Notification;
+  }, notificationStorageKey);
+
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
   const workspaceId = workspaces.workspaces[0].id;
@@ -231,6 +258,14 @@ test("coalesces durable agent activity and applies activity preferences", async 
   expect(channelResponse.ok()).toBe(true);
   const { channel } = (await channelResponse.json()) as {
     channel: { id: string; name: string };
+  };
+  const backgroundChannelResponse = await page.request.post(
+    `/api/workspaces/${workspaceId}/channels`,
+    { data: { name: `agent-background-${Date.now()}`, kind: "public" } },
+  );
+  expect(backgroundChannelResponse.ok()).toBe(true);
+  const backgroundChannel = (await backgroundChannelResponse.json()) as {
+    channel: { id: string };
   };
 
   const botResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
@@ -273,6 +308,48 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preamble.getByText("bash")).toBeVisible();
   await preamble.getByRole("button", { name: /bash/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
+
+  const backgroundActivityResponse = await page.request.post(
+    `/api/channels/${backgroundChannel.channel.id}/messages`,
+    {
+      headers: botHeaders,
+      data: {
+        body: "Background commentary must stay quiet.",
+        kind: "agent_commentary",
+        turn_id: `background-${Date.now()}`,
+      },
+    },
+  );
+  expect(backgroundActivityResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(0);
+  const backgroundMessageResponse = await page.request.post(
+    `/api/channels/${backgroundChannel.channel.id}/messages`,
+    { headers: botHeaders, data: { body: "Ordinary background message." } },
+  );
+  expect(backgroundMessageResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(1);
 
   await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
   const settings = page.getByLabel("Account settings");

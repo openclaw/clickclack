@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -64,6 +65,94 @@ func TestAgentActivityMessageKindRoundTrip(t *testing.T) {
 	// Unknown kinds are rejected.
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "bad", Kind: "bogus"}); err != store.ErrInvalidMessageKind {
 		t.Fatalf("expected ErrInvalidMessageKind for unknown kind, got %v", err)
+	}
+}
+
+func TestAgentActivityNonceReplayIncludesKindAndTurn(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	channelInput := store.CreateMessageInput{
+		ChannelID: channels[0].ID,
+		AuthorID:  owner.ID,
+		Body:      "same body",
+		Nonce:     "channel-activity-nonce",
+		Kind:      store.MessageKindAgentCommentary,
+		TurnID:    "turn-1",
+	}
+	created, _, err := st.CreateMessage(ctx, channelInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, event, err := st.CreateMessage(ctx, channelInput)
+	if err != nil || replayed.ID != created.ID || event.ID != "" {
+		t.Fatalf("expected exact channel replay, got message=%#v event=%#v err=%v", replayed, event, err)
+	}
+	changedKind := channelInput
+	changedKind.Kind = store.MessageKindAgentTool
+	if _, _, err := st.CreateMessage(ctx, changedKind); !errors.Is(err, store.ErrClientNonceConflict) {
+		t.Fatalf("expected channel kind mismatch conflict, got %v", err)
+	}
+	changedTurn := channelInput
+	changedTurn.TurnID = "turn-2"
+	if _, _, err := st.CreateMessage(ctx, changedTurn); !errors.Is(err, store.ErrClientNonceConflict) {
+		t.Fatalf("expected channel turn mismatch conflict, got %v", err)
+	}
+
+	other, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Other", Email: "other@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, other.ID, "member"); err != nil {
+		t.Fatal(err)
+	}
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{other.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmInput := store.CreateDirectMessageInput{
+		ConversationID: dm.ID,
+		AuthorID:       owner.ID,
+		Body:           "same dm body",
+		Nonce:          "dm-activity-nonce",
+		Kind:           store.MessageKindAgentTool,
+		TurnID:         "turn-dm-1",
+	}
+	dmCreated, _, err := st.CreateDirectMessage(ctx, dmInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmReplayed, dmEvent, err := st.CreateDirectMessage(ctx, dmInput)
+	if err != nil || dmReplayed.ID != dmCreated.ID || dmEvent.ID != "" {
+		t.Fatalf("expected exact DM replay, got message=%#v event=%#v err=%v", dmReplayed, dmEvent, err)
+	}
+	dmChangedKind := dmInput
+	dmChangedKind.Kind = store.MessageKindAgentCommentary
+	if _, _, err := st.CreateDirectMessage(ctx, dmChangedKind); !errors.Is(err, store.ErrClientNonceConflict) {
+		t.Fatalf("expected DM kind mismatch conflict, got %v", err)
+	}
+	dmChangedTurn := dmInput
+	dmChangedTurn.TurnID = "turn-dm-2"
+	if _, _, err := st.CreateDirectMessage(ctx, dmChangedTurn); !errors.Is(err, store.ErrClientNonceConflict) {
+		t.Fatalf("expected DM turn mismatch conflict, got %v", err)
 	}
 }
 

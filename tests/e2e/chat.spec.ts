@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { productAppURLForHost } from "../../apps/web/src/productLinks";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -177,6 +178,23 @@ test("product website links to app and docs", async ({ page }) => {
     "https://docs.clickclack.chat",
   );
   await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
+});
+
+test("self-hosted product website links stay on the local app route", async ({ page }) => {
+  await page.goto("http://selfhost.localhost:18082/");
+  await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
+});
+
+test("product website app URL host routing", () => {
+  expect(productAppURLForHost("clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("www.clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("CLICKCLACK.CHAT")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("localhost")).toBe("/app");
+  expect(productAppURLForHost("127.0.0.1")).toBe("/app");
+  expect(productAppURLForHost("::1")).toBe("/app");
+  expect(productAppURLForHost("selfhost.localhost")).toBe("/app");
+  expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
 });
 
 test("app subdomain root opens the chat app", async ({ page }) => {

@@ -14,6 +14,9 @@ table — every DM message sets `direct_conversation_id` and leaves
 ```http
 GET  /api/dms?workspace_id=                              # caller's conversations in a workspace
 POST /api/dms                                            # { workspace_id, member_ids }
+GET  /api/dms/{conversation_id}                          # direct access, including closed DMs
+DELETE /api/dms/{conversation_id}                        # close for the current human user
+POST /api/dms/{conversation_id}/open                     # reopen for the current human user
 GET  /api/dms/{conversation_id}/messages?after_seq=&limit=
 POST /api/dms/{conversation_id}/messages                 # { body, quoted_message_id?, nonce? }
 POST /api/dms/{conversation_id}/read                     # { seq }
@@ -26,6 +29,13 @@ The web sidebar lists existing DMs and also derives a People section from DM
 members and hydrated message authors. Users appear there automatically as
 conversation context is loaded; clicking a person opens their DM when one
 exists, otherwise it opens the profile pane with a Message action.
+
+Closing a DM only hides it from the current user's sidebar. Membership,
+history, routes, and read state remain intact for every member. Direct links
+still resolve. Reopening the same one-to-one member set, using the explicit
+open endpoint, or receiving a new root message makes the conversation visible
+again. The web sidebar exposes Close and an eight-second Undo action. Bot
+tokens cannot close or reopen a human user's sidebar state.
 
 `POST` to `/dms/{id}/messages` increments a per-conversation sequence on
 `messages.channel_seq` and emits a durable private event into the workspace

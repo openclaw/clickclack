@@ -37,7 +37,7 @@ export function trimMessageWindow(
     let start = Math.max(0, center - Math.floor(RETAIN_MESSAGE_WINDOW / 2));
     let end = Math.min(list.length, start + RETAIN_MESSAGE_WINDOW);
     start = Math.max(0, end - RETAIN_MESSAGE_WINDOW);
-    return list.slice(start, end);
+    return sliceMessageWindow(list, start, end, protectedBounds, "start");
   }
   return sliceMessageWindow(
     list,

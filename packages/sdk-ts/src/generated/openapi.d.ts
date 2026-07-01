@@ -660,6 +660,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/dms/{conversation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getDirectConversation"];
+    put?: never;
+    post?: never;
+    delete: operations["hideDirectConversation"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/open": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["reopenDirectConversation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/dms/{conversation_id}/messages": {
     parameters: {
       query?: never;
@@ -2422,6 +2454,66 @@ export interface operations {
     responses: {
       /** @description Created DM */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Direct conversation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  hideDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Closed direct conversation for the current user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  reopenDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Reopened direct conversation for the current user */
+      200: {
         headers: {
           [name: string]: unknown;
         };

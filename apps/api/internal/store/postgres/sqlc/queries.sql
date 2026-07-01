@@ -464,6 +464,12 @@ FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = sqlc.arg(workspace_id)
   AND dcm.user_id = sqlc.arg(reader_user_id)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM direct_conversation_hidden dch
+    WHERE dch.conversation_id = dc.id
+      AND dch.user_id = sqlc.arg(reader_user_id)
+  )
 ORDER BY dc.created_at;
 
 -- name: GetDirectConversation :one
@@ -519,6 +525,21 @@ ON CONFLICT DO NOTHING;
 -- name: InsertDirectConversationMember :exec
 INSERT INTO direct_conversation_members (conversation_id, user_id, created_at)
 VALUES (sqlc.arg(conversation_id), sqlc.arg(user_id), sqlc.arg(created_at));
+
+-- name: HideDirectConversation :exec
+INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
+VALUES (sqlc.arg(conversation_id), sqlc.arg(user_id), sqlc.arg(hidden_at))
+ON CONFLICT(conversation_id, user_id) DO UPDATE SET
+  hidden_at = excluded.hidden_at;
+
+-- name: UnhideDirectConversation :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = sqlc.arg(conversation_id)
+  AND user_id = sqlc.arg(user_id);
+
+-- name: UnhideDirectConversationForMembers :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = sqlc.arg(conversation_id);
 
 -- name: RequireDirectMembership :one
 SELECT 1

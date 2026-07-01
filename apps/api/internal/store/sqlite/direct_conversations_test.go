@@ -119,3 +119,157 @@ func TestCreateDirectConversationReusesLegacyUnkeyedPair(t *testing.T) {
 		t.Fatalf("expected no duplicate conversation row, got %d", got)
 	}
 }
+
+func TestHideDirectConversationIsPerUserAndReversible(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Other", Email: "other@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, other.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{other.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.HideDirectConversation(ctx, dm.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	ownerList, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerList) != 0 {
+		t.Fatalf("expected hidden dm to disappear for owner, got %#v", ownerList)
+	}
+	otherList, err := st.ListDirectConversations(ctx, workspace.ID, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherList) != 1 || otherList[0].ID != dm.ID {
+		t.Fatalf("expected dm to remain visible for other member, got %#v", otherList)
+	}
+	if _, err := st.GetDirectConversation(ctx, dm.ID, owner.ID); err != nil {
+		t.Fatalf("hidden dm route/access should still resolve: %v", err)
+	}
+
+	reopened, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{other.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.ID != dm.ID {
+		t.Fatalf("expected reopen to reuse existing dm %s, got %s", dm.ID, reopened.ID)
+	}
+	ownerList, err = st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerList) != 1 || ownerList[0].ID != dm.ID {
+		t.Fatalf("expected reopened dm to be visible, got %#v", ownerList)
+	}
+
+	if err := st.HideDirectConversation(ctx, dm.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: owner.ID, Body: "sender resurface"}); err != nil {
+		t.Fatal(err)
+	}
+	ownerList, err = st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerList) != 1 || ownerList[0].ID != dm.ID {
+		t.Fatalf("expected own root dm message to resurface hidden dm, got %#v", ownerList)
+	}
+
+	if err := st.HideDirectConversation(ctx, dm.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: other.ID, Body: "resurface"}); err != nil {
+		t.Fatal(err)
+	}
+	ownerList, err = st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerList) != 1 || ownerList[0].ID != dm.ID {
+		t.Fatalf("expected new root dm message to resurface hidden dm, got %#v", ownerList)
+	}
+}
+
+func TestReopenDirectConversationRestoresGroupDMByID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Other", Email: "other@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Third", Email: "third@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	for _, memberID := range []string{other.ID, third.ID} {
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, memberID, store.WorkspaceRoleMember); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{other.ID, third.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.HideDirectConversation(ctx, dm.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := st.ReopenDirectConversation(ctx, dm.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.ID != dm.ID {
+		t.Fatalf("expected group dm reopen to preserve %s, got %s", dm.ID, reopened.ID)
+	}
+	ownerList, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ownerList) != 1 || ownerList[0].ID != dm.ID {
+		t.Fatalf("expected reopened group dm to be visible, got %#v", ownerList)
+	}
+}

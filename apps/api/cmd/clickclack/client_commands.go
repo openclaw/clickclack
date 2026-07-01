@@ -96,8 +96,14 @@ func (c apiClient) status(args []string) error {
 	if err != nil {
 		return err
 	}
-	workspace, _ := c.resolveWorkspace()
-	channel, _ := c.resolveChannel()
+	workspace, workspaceErr := c.resolveWorkspace()
+	if workspaceErr != nil && strings.TrimSpace(c.opts.Workspace) != "" {
+		return workspaceErr
+	}
+	channel, channelErr := c.resolveChannel()
+	if channelErr != nil && strings.TrimSpace(c.opts.Channel) != "" {
+		return channelErr
+	}
 	return c.write(map[string]any{"server": c.opts.Server, "user": user, "workspace": workspace, "channel": channel}, "", fmt.Sprintf("server\t%s\nuser\t%s\nworkspace\t%s\nchannel\t%s\n", c.opts.Server, user.ID, workspace.ID, channel.ID))
 }
 

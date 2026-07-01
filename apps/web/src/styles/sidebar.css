@@ -375,6 +375,117 @@
   font-size: 14px;
 }
 
+.dm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.dm-row .nav-item {
+  min-width: 0;
+}
+
+.dm-actions-trigger {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+}
+
+.dm-row:hover .dm-actions-trigger,
+.dm-row:focus-within .dm-actions-trigger,
+.dm-row.active .dm-actions-trigger {
+  opacity: 1;
+}
+
+.dm-actions-trigger:hover,
+.dm-actions-trigger:focus-visible,
+.dm-actions-trigger[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.dm-actions-menu {
+  position: absolute;
+  z-index: 30;
+  top: 28px;
+  right: 0;
+  min-width: 164px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  box-shadow: var(--shadow);
+}
+
+.dm-actions-item {
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.dm-actions-item:hover,
+.dm-actions-item:focus-visible {
+  background: var(--hover);
+  color: var(--text-strong);
+  outline: none;
+}
+
+.dm-undo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 8px 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dm-undo span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-undo button {
+  border: 0;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.dm-undo button:hover,
+.dm-undo button:focus-visible {
+  background: var(--accent);
+  color: white;
+  outline: none;
+}
+
 .nav-empty {
   margin: 4px 8px;
   color: var(--muted-2);

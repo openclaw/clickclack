@@ -11,6 +11,17 @@ export function markdownImageViewerURL(image: HTMLImageElement) {
 export function enhanceMarkdownGifs(node: HTMLElement) {
   const timers = new Map<HTMLImageElement, number>();
   const plays = new Map<HTMLImageElement, number>();
+  const decorated = new Map<
+    HTMLImageElement,
+    {
+      wrapper: HTMLElement;
+      replay: HTMLButtonElement;
+      originalSrc: string;
+      originalParent: ParentNode | null;
+      originalNextSibling: ChildNode | null;
+      onReplay: (event: MouseEvent) => void;
+    }
+  >();
   let destroyed = false;
 
   const gifStillURL = (src: string) => {
@@ -96,14 +107,26 @@ export function enhanceMarkdownGifs(node: HTMLElement) {
       replay.ariaLabel = `Replay GIF ${image.alt || "image"}`;
       replay.title = "Replay GIF";
       replay.textContent = "↻";
+      const originalParent = image.parentNode;
+      const originalNextSibling = image.nextSibling;
+      const originalSrc = image.getAttribute("src") || image.src;
       (image as EnhancedGIFImage)[animatedURLKey] = animatedURL;
-      image.parentNode?.insertBefore(wrapper, image);
+      originalParent?.insertBefore(wrapper, image);
       wrapper.append(image, badge, replay);
-      replay.addEventListener("click", (event) => {
+      const onReplay = (event: MouseEvent) => {
         event.preventDefault();
         event.stopPropagation();
         playOnce(wrapper, image, replay, animatedURL, stillURL, true);
+      };
+      decorated.set(image, {
+        wrapper,
+        replay,
+        originalSrc,
+        originalParent,
+        originalNextSibling,
+        onReplay,
       });
+      replay.addEventListener("click", onReplay);
       playOnce(wrapper, image, replay, animatedURL, stillURL);
     }
   };
@@ -117,6 +140,19 @@ export function enhanceMarkdownGifs(node: HTMLElement) {
       destroyed = true;
       observer.disconnect();
       for (const timer of timers.values()) window.clearTimeout(timer);
+      for (const [image, state] of decorated) {
+        state.replay.removeEventListener("click", state.onReplay);
+        delete (image as EnhancedGIFImage)[animatedURLKey];
+        image.src = state.originalSrc;
+        if (state.wrapper.parentNode) {
+          state.wrapper.replaceWith(image);
+        } else if (state.originalParent && image.parentNode !== state.originalParent) {
+          state.originalParent.insertBefore(image, state.originalNextSibling);
+        }
+      }
+      decorated.clear();
+      timers.clear();
+      plays.clear();
     },
   };
 }

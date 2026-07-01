@@ -45,7 +45,13 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     });
 
     current.addEventListener("message", (message) => {
-      const event = JSON.parse(String(message.data)) as RealtimeEvent;
+      let event: RealtimeEvent;
+      try {
+        event = JSON.parse(String(message.data)) as RealtimeEvent;
+      } catch {
+        return;
+      }
+      if (!isRealtimeEvent(event)) return;
       if (event.cursor) localStorage.setItem(cursorKey(workspaceID), event.cursor);
       onEvent(event);
     });
@@ -72,4 +78,10 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
       socket = null;
     },
   };
+}
+
+function isRealtimeEvent(value: unknown): value is RealtimeEvent {
+  return (
+    typeof value === "object" && value !== null && typeof (value as RealtimeEvent).type === "string"
+  );
 }

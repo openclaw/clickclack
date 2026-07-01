@@ -97,7 +97,10 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 			SecondUserID: memberIDs[1],
 		})
 		if err == nil {
-			if err := tx.Rollback(); err != nil {
+			if err := qtx.UnhideDirectConversation(ctx, storedb.UnhideDirectConversationParams{ConversationID: existing.ID, UserID: input.UserID}); err != nil {
+				return store.DirectConversation{}, err
+			}
+			if err := tx.Commit(); err != nil {
 				return store.DirectConversation{}, err
 			}
 			return s.hydrateDirectConversation(ctx, store.DirectConversation{
@@ -136,7 +139,10 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 					MemberSetKey: sqlText(memberSetKey),
 				})
 				if lookupErr == nil {
-					if err := tx.Rollback(); err != nil {
+					if err := qtx.UnhideDirectConversation(ctx, storedb.UnhideDirectConversationParams{ConversationID: existing.ID, UserID: input.UserID}); err != nil {
+						return store.DirectConversation{}, err
+					}
+					if err := tx.Commit(); err != nil {
 						return store.DirectConversation{}, err
 					}
 					return s.hydrateDirectConversation(ctx, store.DirectConversation{
@@ -167,6 +173,48 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 		return store.DirectConversation{}, err
 	}
 	return s.hydrateDirectConversation(ctx, dm)
+}
+
+func (s *Store) HideDirectConversation(ctx context.Context, conversationID, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := requireDirectAccessTx(ctx, tx, conversationID, userID); err != nil {
+		return err
+	}
+	if err := s.q.WithTx(tx).HideDirectConversation(ctx, storedb.HideDirectConversationParams{
+		ConversationID: conversationID,
+		UserID:         userID,
+		HiddenAt:       now(),
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ReopenDirectConversation(ctx context.Context, conversationID, userID string) (store.DirectConversation, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	defer tx.Rollback()
+	if err := requireDirectAccessTx(ctx, tx, conversationID, userID); err != nil {
+		return store.DirectConversation{}, err
+	}
+	qtx := s.q.WithTx(tx)
+	if err := qtx.UnhideDirectConversation(ctx, storedb.UnhideDirectConversationParams{ConversationID: conversationID, UserID: userID}); err != nil {
+		return store.DirectConversation{}, err
+	}
+	row, err := qtx.GetDirectConversation(ctx, storedb.GetDirectConversationParams{ReaderUserID: userID, ConversationID: conversationID})
+	if err != nil {
+		return store.DirectConversation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.DirectConversation{}, err
+	}
+	return s.hydrateDirectConversation(ctx, storeDirectConversationFromGet(row))
 }
 
 func (s *Store) hydrateDirectConversation(ctx context.Context, dm store.DirectConversation) (store.DirectConversation, error) {
@@ -265,6 +313,9 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		return store.Message{}, store.Event{}, err
 	}
 	if err := qtx.InsertThreadState(ctx, id); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := qtx.UnhideDirectConversationForMembers(ctx, input.ConversationID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	recipients, err := directConversationMemberIDsTx(ctx, tx, input.ConversationID)

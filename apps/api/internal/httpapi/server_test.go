@@ -246,6 +246,38 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if len(dms.Conversations) != 1 {
 		t.Fatalf("expected one dm conversation, got %d", len(dms.Conversations))
 	}
+	getDM := getJSON[struct {
+		Conversation store.DirectConversation `json:"conversation"`
+	}](t, server.URL+"/api/dms/"+dm.Conversation.ID)
+	if getDM.Conversation.ID != dm.Conversation.ID {
+		t.Fatalf("unexpected get dm response: %#v", getDM.Conversation)
+	}
+	expectStatus(t, http.MethodDelete, server.URL+"/api/dms/"+dm.Conversation.ID, nil, http.StatusOK)
+	hiddenDMS := getJSON[struct {
+		Conversations []store.DirectConversation `json:"conversations"`
+	}](t, server.URL+"/api/dms?workspace_id="+url.QueryEscape(workspace.ID))
+	if len(hiddenDMS.Conversations) != 0 {
+		t.Fatalf("expected hidden dm to disappear from list, got %#v", hiddenDMS.Conversations)
+	}
+	hiddenGetDM := getJSON[struct {
+		Conversation store.DirectConversation `json:"conversation"`
+	}](t, server.URL+"/api/dms/"+dm.Conversation.ID)
+	if hiddenGetDM.Conversation.ID != dm.Conversation.ID {
+		t.Fatalf("hidden dm should remain directly accessible: %#v", hiddenGetDM.Conversation)
+	}
+	openedDM := postJSON[struct {
+		Conversation store.DirectConversation `json:"conversation"`
+	}](t, server.URL+"/api/dms/"+dm.Conversation.ID+"/open", nil)
+	if openedDM.Conversation.ID != dm.Conversation.ID {
+		t.Fatalf("expected open to restore hidden dm %s, got %s", dm.Conversation.ID, openedDM.Conversation.ID)
+	}
+	expectStatus(t, http.MethodDelete, server.URL+"/api/dms/"+dm.Conversation.ID, nil, http.StatusOK)
+	reopenedDM := postJSON[struct {
+		Conversation store.DirectConversation `json:"conversation"`
+	}](t, server.URL+"/api/dms", map[string]any{"workspace_id": workspace.ID, "member_ids": []string{second.ID}})
+	if reopenedDM.Conversation.ID != dm.Conversation.ID {
+		t.Fatalf("expected reopen to reuse hidden dm %s, got %s", dm.Conversation.ID, reopenedDM.Conversation.ID)
+	}
 	dmMessages := getJSON[struct {
 		Messages []store.Message `json:"messages"`
 	}](t, server.URL+"/api/dms/"+dm.Conversation.ID+"/messages")
@@ -1088,6 +1120,8 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		{"attach upload", http.MethodPost, "/api/messages/" + messageID + "/attachments", `{"upload_id":"upl_missing"}`, "application/json"},
 		{"list dms", http.MethodGet, "/api/dms?workspace_id=" + url.QueryEscape(workspace.ID), "", ""},
 		{"create dm", http.MethodPost, "/api/dms", `{"workspace_id":"` + workspace.ID + `"}`, "application/json"},
+		{"close dm", http.MethodDelete, "/api/dms/dm_missing", "", ""},
+		{"open dm", http.MethodPost, "/api/dms/dm_missing/open", "", ""},
 		{"list dm messages", http.MethodGet, "/api/dms/dm_missing/messages", "", ""},
 		{"create dm message", http.MethodPost, "/api/dms/dm_missing/messages", `{"body":"dm"}`, "application/json"},
 		{"mark dm read", http.MethodPost, "/api/dms/dm_missing/read", `{"seq":1}`, "application/json"},

@@ -85,6 +85,15 @@ CREATE TABLE direct_conversation_members (
 
 CREATE INDEX idx_direct_conversation_members_user ON direct_conversation_members(user_id, conversation_id);
 
+CREATE TABLE direct_conversation_hidden (
+  conversation_id TEXT NOT NULL REFERENCES direct_conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  hidden_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE INDEX idx_direct_conversation_hidden_user ON direct_conversation_hidden(user_id, conversation_id);
+
 CREATE TABLE topics (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

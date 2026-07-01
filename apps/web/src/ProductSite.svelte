@@ -1,10 +1,9 @@
 <script lang="ts">
   import "./product.css";
+  import { productAppURLForHost } from "./productLinks";
 
   const docsURL = "https://docs.clickclack.chat";
-  const appURL = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
-    ? "/app"
-    : "https://app.clickclack.chat";
+  const appURL = productAppURLForHost(window.location.hostname);
   const repoURL = "https://github.com/openclaw/clickclack";
 
   const features = [

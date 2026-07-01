@@ -553,7 +553,7 @@
     }
 
     if (routeTarget?.target_type === "thread") {
-      const resolved = await applyThreadRoute(routeTarget, serial);
+      const resolved = await applyThreadRoute(routeTarget);
       if (serial !== routeApplySerial) return;
       if (resolved) {
         appliedRouteKey = canonicalRouteKey;
@@ -618,7 +618,7 @@
     }
   }
 
-  async function applyThreadRoute(route: RouteTarget, serial: number): Promise<boolean> {
+  async function applyThreadRoute(route: RouteTarget): Promise<boolean> {
     if (route.workspace_id !== selectedWorkspaceID) return false;
     const parentChannelID = route.parent_type === "channel" ? route.parent_id || "" : "";
     const parentDirectID = route.parent_type === "direct" ? route.parent_id || "" : "";
@@ -638,8 +638,7 @@
     selectedProfile = null;
     activeComposerContext = "thread";
     mobileNavOpen = false;
-    await refreshThread(route.target_id, undefined, serial);
-    if (serial !== routeApplySerial) return false;
+    await refreshThread(route.target_id);
     if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
     return true;
   }
@@ -1699,13 +1698,11 @@
     }
   }
 
-  async function refreshThread(messageID: string, optimisticRoot?: Message, routeSerial?: number) {
+  async function refreshThread(messageID: string, optimisticRoot?: Message) {
     selectedProfile = null;
     if (optimisticRoot) selectedThread = optimisticRoot;
     activeComposerContext = "thread";
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    // Closing or replacing a routed thread invalidates its pending hydration.
-    if (routeSerial !== undefined && routeSerial !== routeApplySerial) return;
     const root = { ...data.root, thread_state: data.thread_state };
     selectedThread = root;
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
@@ -2390,7 +2387,6 @@
   function closeSidePanel() {
     const threadWasOpen = selectedThread !== null;
     const parentTargetID = currentConversationKey();
-    if (threadWasOpen) routeApplySerial++;
     if (replyContext === "thread") clearReplyTarget();
     selectedThread = null;
     selectedProfile = null;

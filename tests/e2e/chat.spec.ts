@@ -554,7 +554,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(threadedRow.locator(".thread-hint")).toContainText("1 reply");
   await expect.poll(() => threadRefreshes).toBe(1);
 
-  await page.getByRole("button", { name: "Close thread" }).click();
+  await page.getByLabel("Thread pane").getByRole("button", { name: "Close thread" }).click();
   await expect(page.getByLabel("Thread pane")).toBeHidden();
   await threadedRow.locator(".markdown").click();
   await expect(page.getByLabel("Thread pane")).toBeVisible();

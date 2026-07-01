@@ -195,6 +195,8 @@ test("product website app URL host routing", () => {
   expect(productAppURLForHost("::1")).toBe("/app");
   expect(productAppURLForHost("selfhost.localhost")).toBe("/app");
   expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
+  expect(productAppURLForHost("clickclack.lan")).toBe("/app");
+  expect(productAppURLForHost("chat.example.com")).toBe("/app");
 });
 
 test("app subdomain root opens the chat app", async ({ page }) => {

@@ -78,7 +78,7 @@ See [features/auth.md](features/auth.md).
 | `threads`     | `get`, `reply` |
 | `search(workspaceId, q)` | full-text search |
 | `uploads`     | `create(workspaceId, file)`, `attach(messageId, uploadId)` |
-| `dms`         | `list`, `create`, `messages`, `sendMessage`, `markRead` |
+| `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
 | `events`      | `publishEphemeral`, `subscribe` |
 
 ## Realtime subscription

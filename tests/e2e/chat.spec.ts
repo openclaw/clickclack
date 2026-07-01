@@ -530,11 +530,11 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await replayGif.click();
   await expect(replayGif).toBeVisible({ timeout: 7_000 });
 
-  await page.getByRole("button", { name: "Open thread" }).first().click();
-  await expect(page.getByLabel("Thread pane")).toBeVisible();
   const threadedRow = page
     .locator(".message-row")
-    .filter({ has: page.locator(".thread-hint.is-open") });
+    .filter({ has: page.locator(".markdown").filter({ hasText: "hello playwright" }) });
+  await threadedRow.getByRole("button", { name: "Open thread" }).click();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
 
   await page.getByLabel("Reply body").fill("thread _reply_");
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();

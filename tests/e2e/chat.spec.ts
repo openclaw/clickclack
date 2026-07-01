@@ -537,6 +537,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     .filter({ has: page.locator(".thread-hint.is-open") });
   const threadedMessageID = await threadedRow.getAttribute("data-message-id");
   expect(threadedMessageID).toBeTruthy();
+  await page.waitForLoadState("networkidle");
   let threadRefreshes = 0;
   page.on("request", (request) => {
     const url = new URL(request.url());

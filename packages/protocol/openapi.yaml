@@ -1342,9 +1342,9 @@ components:
         kind:
           type: string
           enum: [message, agent_commentary, agent_tool]
-          default: message
           description: |
-            Durable message kind. Agent activity kinds require bot-token auth
+            Durable message kind; omitted values default to message. Agent
+            activity kinds require bot-token auth
             with the explicit agent_activity:write scope and are supported on
             channel and direct-message create endpoints.
         turn_id:

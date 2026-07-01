@@ -1018,13 +1018,13 @@ export interface components {
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
       /**
-       * @description Durable message kind. Agent activity kinds require bot-token auth
+       * @description Durable message kind; omitted values default to message. Agent
+       *     activity kinds require bot-token auth
        *     with the explicit agent_activity:write scope and are supported on
        *     channel and direct-message create endpoints.
-       * @default message
        * @enum {string}
        */
-      kind: "message" | "agent_commentary" | "agent_tool";
+      kind?: "message" | "agent_commentary" | "agent_tool";
       /**
        * @description Optional agent-turn correlation ID. Allowed only with
        *     agent_commentary or agent_tool; ordinary messages reject it.

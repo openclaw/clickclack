@@ -52,6 +52,12 @@ transaction as the reply insert. It carries:
 - `last_reply_author_ids_json` — small ring of recent author IDs for "X, Y and 3
   others replied" UI.
 
+Channel and DM message-page responses hydrate this state onto every root
+message. The web timeline keeps a compact thread control visible, shows reply
+count and recent activity when replies exist, and opens a thread from either
+that control or non-interactive row content. Links, buttons, attachments, and
+text selection keep their normal behavior.
+
 A reply emits two durable events: `thread.reply_created` and
 `thread.state_updated`. Both go into the workspace event stream and reach
 subscribers via the realtime hub.

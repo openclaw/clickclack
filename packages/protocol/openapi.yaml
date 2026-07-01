@@ -1466,6 +1466,22 @@ components:
         unread_count:
           type: integer
           format: int64
+    ThreadState:
+      type: object
+      required: [root_message_id, reply_count, last_reply_author_ids]
+      properties:
+        root_message_id:
+          type: string
+        reply_count:
+          type: integer
+          format: int64
+        last_reply_at:
+          type: string
+          format: date-time
+        last_reply_author_ids:
+          type: array
+          items:
+            type: string
     Message:
       type: object
       required: [id, workspace_id, author_id, thread_root_id, body, body_format, created_at]

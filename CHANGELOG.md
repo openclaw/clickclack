@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added persistent thread activity counts and row-click thread opening in channel and DM timelines, with live summary refreshes. Thanks @PollyBot13.
 - Added per-user DM closing with durable history, direct-link access, Undo, canonical one-to-one reopening, and automatic resurfacing on new messages. Thanks @PollyBot13.
 - Kept self-hosted landing-page App links on the instance-local `/app` route for Tailscale, LAN, and custom hostnames instead of redirecting to the hosted app. Thanks @iXandru for the report and @TurboTheTurtle for the fix.
 - Reused the canonical two-member direct conversation for repeated DM creates so bot replies no longer split across duplicate chats. Thanks @PollyBot13 for the report.

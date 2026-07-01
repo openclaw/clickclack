@@ -28,7 +28,9 @@ DELETE /api/messages/{message_id}
   channel, ordered by `channel_seq` ascending. `after_seq` and `before_seq` are
   exclusive cursor windows; `around_seq` returns context around a target
   sequence. Cursor params are mutually exclusive, and `limit` is clamped to
-  `1..200` (default 100).
+  `1..200` (default 100). Every returned root includes `thread_state`, including
+  a zero-reply state, so clients can render thread activity without fetching
+  each thread.
 - `POST /messages` accepts `{body, quoted_message_id?, nonce?, topic_id?}`.
   Empty bodies are rejected. `nonce` is an optional client idempotency key;
   replaying the same nonce with the same body, quote, and topic returns the

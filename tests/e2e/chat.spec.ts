@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { productAppURLForHost } from "../../apps/web/src/productLinks";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -179,6 +180,25 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
 });
 
+test("self-hosted product website links stay on the local app route", async ({ page }) => {
+  await page.goto("http://selfhost.localhost:18082/");
+  await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
+});
+
+test("product website app URL host routing", () => {
+  expect(productAppURLForHost("clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("www.clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("CLICKCLACK.CHAT")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("localhost")).toBe("/app");
+  expect(productAppURLForHost("127.0.0.1")).toBe("/app");
+  expect(productAppURLForHost("::1")).toBe("/app");
+  expect(productAppURLForHost("selfhost.localhost")).toBe("/app");
+  expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
+  expect(productAppURLForHost("clickclack.lan")).toBe("/app");
+  expect(productAppURLForHost("chat.example.com")).toBe("/app");
+});
+
 test("app subdomain root opens the chat app", async ({ page }) => {
   await page.goto("http://app.localhost:18082/");
   await expect(page.getByText("Connected")).toBeVisible();
@@ -220,7 +240,11 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
     .click({ button: "right" });
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
 
-  await page.getByLabel("Browser notifications").check();
+  const browserNotifications = page
+    .locator("label.check-field", { hasText: "Browser notifications" })
+    .locator("input[type='checkbox']");
+  await expect(browserNotifications).toBeEnabled();
+  await browserNotifications.check();
 
   await expect
     .poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey))
@@ -270,30 +294,36 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  const openMobileNavigation = async () => {
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  };
+
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(composer).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.keyboard.type("hidden draft");
   await expect(composer).toHaveValue("");
 
   await page.keyboard.press("Escape");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });

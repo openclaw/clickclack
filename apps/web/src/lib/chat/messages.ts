@@ -13,8 +13,11 @@ export type MessageGroup = {
 
 export function quoteSnippet(text: string | undefined, max = 120): string {
   if (!text) return "";
+  if (max <= 0) return "";
   const collapsed = text.replace(/\s+/g, " ").trim();
-  return collapsed.length > max ? collapsed.slice(0, max - 1) + "..." : collapsed;
+  if (collapsed.length <= max) return collapsed;
+  if (max <= 3) return ".".repeat(max);
+  return `${collapsed.slice(0, max - 3)}...`;
 }
 
 export function quotedAuthorName(message: Message): string {

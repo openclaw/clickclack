@@ -4,6 +4,9 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "start": "pnpm --filter @clickclack/sdk-ts build && node --experimental-strip-types src/index.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"

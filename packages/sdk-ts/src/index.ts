@@ -234,19 +234,27 @@ export type ClickClackClientOptions = {
   userId?: string;
   token?: string;
   fetch?: typeof fetch;
+  webSocket?: WebSocketConstructor;
 };
+
+export type WebSocketConstructor = new (
+  url: string | URL,
+  protocols?: string | string[],
+) => WebSocket;
 
 export class ClickClackClient {
   private readonly baseUrl: string;
   private readonly userId?: string;
   private token?: string;
   private readonly fetcher: typeof fetch;
+  private readonly WebSocket?: WebSocketConstructor;
 
   constructor(options: ClickClackClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.userId = options.userId;
     this.token = options.token;
     this.fetcher = options.fetch ?? fetch;
+    this.WebSocket = options.webSocket ?? globalThis.WebSocket;
   }
 
   auth = {
@@ -757,7 +765,10 @@ export class ClickClackClient {
       url.searchParams.set("workspace_id", options.workspaceId);
       if (options.afterCursor) url.searchParams.set("after_cursor", options.afterCursor);
       const protocols = this.token ? [`clickclack.bearer.${this.token}`] : undefined;
-      const socket = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+      if (!this.WebSocket) {
+        throw new Error("ClickClackClient events.subscribe requires a WebSocket implementation");
+      }
+      const socket = protocols ? new this.WebSocket(url, protocols) : new this.WebSocket(url);
       socket.addEventListener("message", (message) =>
         options.onEvent(JSON.parse(String(message.data))),
       );
@@ -780,7 +791,11 @@ export class ClickClackClient {
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return response.json() as Promise<T>;
+    if (response.status === 204 || response.status === 205) {
+      return undefined as T;
+    }
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : (undefined as T);
   }
 }
 
@@ -801,12 +816,20 @@ export class ClickClackBot {
   }
 
   start(): WebSocket {
-    this.socket = this.client.events.subscribe({
+    if (this.socket && isActiveSocket(this.socket)) {
+      return this.socket;
+    }
+    let socket: WebSocket;
+    socket = this.client.events.subscribe({
       workspaceId: this.workspaceId,
       afterCursor: this.afterCursor,
       onEvent: (event) => void this.onEvent(event, this.client),
-      onClose: this.onClose,
+      onClose: () => {
+        if (this.socket === socket) this.socket = undefined;
+        this.onClose?.();
+      },
     });
+    this.socket = socket;
     return this.socket;
   }
 
@@ -822,4 +845,8 @@ export class ClickClackBot {
   sendDirectMessage(conversationId: string, body: string): Promise<Message> {
     return this.client.dms.sendMessage(conversationId, { body });
   }
+}
+
+function isActiveSocket(socket: WebSocket): boolean {
+  return socket.readyState === 0 || socket.readyState === 1;
 }

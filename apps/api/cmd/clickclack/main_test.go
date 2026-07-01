@@ -101,3 +101,30 @@ func TestMessagesListOmitsAfterSeqUntilExplicitlySet(t *testing.T) {
 		t.Fatalf("expected explicit after_seq query, got %v", messagePaths)
 	}
 }
+
+func TestStatusFailsForExplicitMissingWorkspaceOrChannel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/me":
+			_ = json.NewEncoder(w).Encode(map[string]any{"user": store.User{ID: "usr_1", DisplayName: "User"}})
+		case "/api/workspaces":
+			_ = json.NewEncoder(w).Encode(map[string]any{"workspaces": []store.Workspace{{ID: "wsp_1", Slug: "one", Name: "One"}}})
+		case "/api/workspaces/wsp_1/channels":
+			_ = json.NewEncoder(w).Encode(map[string]any{"channels": []store.Channel{{ID: "chn_1", WorkspaceID: "wsp_1", Name: "general"}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	c := apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", Workspace: "missing", Plain: true}, http: server.Client()}
+	if err := c.status(nil); err == nil || !strings.Contains(err.Error(), `workspace "missing" not found`) {
+		t.Fatalf("expected missing workspace error, got %v", err)
+	}
+
+	c = apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", Workspace: "wsp_1", Channel: "missing", Plain: true}, http: server.Client()}
+	if err := c.status(nil); err == nil || !strings.Contains(err.Error(), `channel "missing" not found`) {
+		t.Fatalf("expected missing channel error, got %v", err)
+	}
+}

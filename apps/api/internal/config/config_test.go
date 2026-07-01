@@ -38,8 +38,8 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":7000" || cfg.Data != "/data" {
-		t.Fatalf("unexpected file config: %#v", cfg)
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" {
+		t.Fatalf("expected env to override file config: %#v", cfg)
 	}
 
 	t.Setenv("CLICKCLACK_ADDR", "")

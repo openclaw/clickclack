@@ -2,6 +2,8 @@ packages:
   - apps/*
   - examples/*
   - packages/*
+overrides:
+  cookie: 0.7.2
 allowBuilds:
   esbuild: true
   sharp: true

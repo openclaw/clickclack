@@ -14,16 +14,16 @@
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/geist-mono": "^5.2.8",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.11",
     "marked": "^17.0.6",
     "pdfjs-dist": "^5.7.284",
-    "svelte": "^5.56.3",
-    "virtua": "^0.49.1",
-    "vite": "^7.3.5"
+    "svelte": "^5.56.4",
+    "virtua": "^0.49.2",
+    "vite": "^7.3.6"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.63.0",
+    "@sveltejs/kit": "^2.68.0",
     "@typescript/native-preview": "7.0.0-dev.20260609.1"
   }
 }

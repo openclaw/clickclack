@@ -31,14 +31,14 @@
     "crabbox:stop": "crabbox stop",
     "crabbox:warmup": "crabbox warmup"
   },
-  "packageManager": "pnpm@11.0.7",
+  "packageManager": "pnpm@11.9.0",
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.2",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^25.9.4",
     "@typescript/native-preview": "7.0.0-dev.20260609.1",
-    "oxfmt": "^0.54.0",
-    "oxlint": "^1.69.0",
-    "wrangler": "4.99.0"
+    "oxfmt": "^0.57.0",
+    "oxlint": "^1.72.0",
+    "wrangler": "4.105.0"
   }
 }

@@ -383,41 +383,77 @@ func saveClientConfig(cfg clientConfig) error {
 }
 
 func writeClientConfigFile(path string, data []byte) error {
-	target := path
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		target = resolved
+	target, err := resolveClientConfigTarget(path)
+	if err != nil {
+		return err
 	}
 	mode := os.FileMode(0o600)
 	if info, err := os.Stat(target); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("client config target %q is not a regular file", target)
+		}
+		if info.Mode().Perm()&0o222 == 0 {
+			return fmt.Errorf("client config target %q is not writable: %w", target, os.ErrPermission)
+		}
+		probe, err := os.OpenFile(target, os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		if err := probe.Close(); err != nil {
+			return err
+		}
 		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
 	}
+	return writeClientConfigFileWithRename(target, data, mode, os.Rename)
+}
+
+func resolveClientConfigTarget(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return path, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return path, nil
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve client config symlink %q: %w", path, err)
+	}
+	return resolved, nil
+}
+
+func writeClientConfigFileWithRename(target string, data []byte, mode os.FileMode, rename func(string, string) error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-*")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpPath) }
+	closed := false
+	defer func() {
+		if !closed {
+			_ = tmp.Close()
+		}
+		_ = os.Remove(tmpPath)
+	}()
 	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		cleanup()
 		return err
 	}
 	if err := tmp.Chmod(mode); err != nil {
-		_ = tmp.Close()
-		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		cleanup()
 		return err
 	}
-	if err := os.Rename(tmpPath, target); err != nil {
-		cleanup()
+	closed = true
+	if err := rename(tmpPath, target); err != nil {
 		return err
 	}
 	return nil

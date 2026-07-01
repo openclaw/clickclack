@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Wrote CLI client configuration atomically while preserving read-only-file and symlink safety. Thanks @KrasimirKralev.
 - Added bot-scoped durable agent commentary and tool activity, collapsed into per-turn preambles with independent visibility controls and configurable self-message alignment. Thanks @ragesaq.
 - Added persistent thread activity counts and row-click thread opening in channel and DM timelines, with live summary refreshes. Thanks @PollyBot13.
 - Added per-user DM closing with durable history, direct-link access, Undo, canonical one-to-one reopening, and automatic resurfacing on new messages. Thanks @PollyBot13.

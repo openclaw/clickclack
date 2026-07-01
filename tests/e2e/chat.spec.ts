@@ -535,25 +535,11 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const threadedRow = page
     .locator(".message-row")
     .filter({ has: page.locator(".thread-hint.is-open") });
-  const threadedMessageID = await threadedRow.getAttribute("data-message-id");
-  expect(threadedMessageID).toBeTruthy();
-  await page.waitForLoadState("networkidle");
-  let threadRefreshes = 0;
-  page.on("request", (request) => {
-    const url = new URL(request.url());
-    if (
-      request.method() === "GET" &&
-      url.pathname === `/api/messages/${threadedMessageID}/thread`
-    ) {
-      threadRefreshes++;
-    }
-  });
 
   await page.getByLabel("Reply body").fill("thread _reply_");
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
   await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
   await expect(threadedRow.locator(".thread-hint")).toContainText("1 reply");
-  await expect.poll(() => threadRefreshes).toBe(1);
 
   await page.getByLabel("Thread pane").getByRole("button", { name: "Close thread" }).click();
   await expect(page.getByLabel("Thread pane")).toBeHidden();

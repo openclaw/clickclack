@@ -68,7 +68,10 @@ function authorKey(message: Message): string {
 }
 
 function turnKey(message: Message): string {
-  return message.turn_id || message.id;
+  const scope = message.channel_id
+    ? `channel:${message.channel_id}`
+    : `direct:${message.direct_conversation_id || ""}`;
+  return `${scope}\u0000${authorKey(message)}\u0000${message.turn_id || message.id}`;
 }
 
 // Parse a stored activity body into a tool name + optional detail. The bridge
@@ -153,6 +156,7 @@ function buildBlock(
 }
 
 type TurnAccumulator = {
+  turnId: string;
   rows: Message[];
   firstIndex: number;
   lastIndex: number;
@@ -182,7 +186,13 @@ export function coalesceAgentActivity(
       turn.rows.push(message);
       turn.lastIndex = i;
     } else {
-      turns.set(key, { rows: [message], firstIndex: i, lastIndex: i, author: authorKey(message) });
+      turns.set(key, {
+        turnId: message.turn_id || message.id,
+        rows: [message],
+        firstIndex: i,
+        lastIndex: i,
+        author: authorKey(message),
+      });
     }
   }
   if (turns.size === 0) return messages;
@@ -212,7 +222,7 @@ export function coalesceAgentActivity(
     const key = turnKey(message);
     const turn = turns.get(key);
     if (!turn || turn.firstIndex !== i) continue; // folded into the anchor row
-    const block = buildBlock(key, turn.rows, finals.get(key) === true, flags);
+    const block = buildBlock(turn.turnId, turn.rows, finals.get(key) === true, flags);
     if (!block) continue;
     // Synthesize one row from the turn's first activity row so author,
     // timestamp, channel/seq, and turn_id flow through grouping and the

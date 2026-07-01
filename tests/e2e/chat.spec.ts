@@ -291,12 +291,33 @@ test("coalesces durable agent activity and applies activity preferences", async 
     });
     expect(response.ok()).toBe(true);
   }
+  const secondBotResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
+    data: {
+      display_name: "Second Activity Bot",
+      handle: `activity2-${Date.now()}`,
+      token_name: "e2e",
+      scopes: ["bot:write", "agent_activity:write"],
+    },
+  });
+  expect(secondBotResponse.ok()).toBe(true);
+  const secondBot = (await secondBotResponse.json()) as { bot_token: { token: string } };
+  for (const data of [
+    { body: "A separate bot reused this turn ID.", kind: "agent_commentary", turn_id: turnId },
+    { body: "Second bot finished independently." },
+  ]) {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+      headers: { Authorization: `Bearer ${secondBot.bot_token.token}` },
+      data,
+    });
+    expect(response.ok()).toBe(true);
+  }
 
   await page.goto("/app");
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
-  const preamble = page.getByLabel("Agent preamble");
-  await expect(preamble).toHaveCount(1);
+  const preambles = page.getByLabel("Agent preamble");
+  await expect(preambles).toHaveCount(2);
+  const preamble = preambles.nth(0);
   await expect(preamble.getByRole("button", { name: "Show preamble" })).toHaveAttribute(
     "aria-expanded",
     "false",
@@ -356,7 +377,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await settings.getByLabel("Hide agent commentary").check();
   await expect(preamble.getByText("Checking the deployment boundary.")).toHaveCount(0);
   await settings.getByLabel("Hide tool calls").check();
-  await expect(preamble).toHaveCount(0);
+  await expect(preambles).toHaveCount(0);
   await settings.getByLabel("Your message alignment").selectOption("right");
   await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
 });

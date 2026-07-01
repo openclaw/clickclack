@@ -35,7 +35,7 @@
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
     "@playwright/test": "^1.61.1",
-    "@types/node": "^25.9.4",
+    "@types/node": "^24.13.2",
     "@typescript/native-preview": "7.0.0-dev.20260609.1",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",

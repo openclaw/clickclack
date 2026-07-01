@@ -79,7 +79,7 @@ docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 
 Stages:
 
-1. `node:25-alpine` — installs pnpm dependencies and runs `pnpm build`.
+1. `node:24-alpine` — installs pnpm dependencies and runs `pnpm build`.
 2. `golang:1.26-alpine` — builds the Go binary, importing the SPA dist.
 3. `alpine:3.23` — runtime image, runs as the `clickclack` user, exposes
    `8080`, mounts `/app/data` as a volume.

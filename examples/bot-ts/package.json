@@ -15,7 +15,7 @@
     "@clickclack/sdk-ts": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^25.9.4",
+    "@types/node": "^24.13.2",
     "@typescript/native-preview": "7.0.0-dev.20260609.1"
   }
 }

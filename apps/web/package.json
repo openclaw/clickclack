@@ -24,6 +24,7 @@
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.68.0",
+    "@types/node": "^24.13.2",
     "@typescript/native-preview": "7.0.0-dev.20260609.1"
   }
 }

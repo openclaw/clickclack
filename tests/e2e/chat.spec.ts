@@ -252,8 +252,9 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
   const workspaceId = workspaces.workspaces[0].id;
+  // Keep the bootstrap channel first in the shared suite's sorted channel list.
   const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: `agent-activity-${Date.now()}`, kind: "public" },
+    data: { name: `zz-agent-activity-${Date.now()}`, kind: "public" },
   });
   expect(channelResponse.ok()).toBe(true);
   const { channel } = (await channelResponse.json()) as {
@@ -261,7 +262,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   };
   const backgroundChannelResponse = await page.request.post(
     `/api/workspaces/${workspaceId}/channels`,
-    { data: { name: `agent-background-${Date.now()}`, kind: "public" } },
+    { data: { name: `zz-agent-background-${Date.now()}`, kind: "public" } },
   );
   expect(backgroundChannelResponse.ok()).toBe(true);
   const backgroundChannel = (await backgroundChannelResponse.json()) as {
@@ -330,6 +331,15 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await preamble.getByRole("button", { name: /bash/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
 
+  // Ignore any replayed events from the initial realtime subscription; this
+  // assertion begins with the background activity posted below.
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __clickclackNotifications: { title: string }[];
+      }
+    ).__clickclackNotifications = [];
+  });
   const backgroundActivityResponse = await page.request.post(
     `/api/channels/${backgroundChannel.channel.id}/messages`,
     {

@@ -466,6 +466,12 @@ FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = sqlc.arg(workspace_id)
   AND dcm.user_id = sqlc.arg(reader_user_id)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM direct_conversation_hidden dch
+    WHERE dch.conversation_id = dc.id
+      AND dch.user_id = sqlc.arg(reader_user_id)
+  )
 ORDER BY dc.created_at;
 
 -- name: GetDirectConversation :one
@@ -487,13 +493,56 @@ JOIN workspace_members wm ON wm.workspace_id = dc.workspace_id AND wm.user_id = 
 WHERE dc.id = sqlc.arg(conversation_id)
   AND dcm.user_id = sqlc.arg(reader_user_id);
 
--- name: InsertDirectConversation :exec
-INSERT INTO direct_conversations (id, route_id, workspace_id, created_at)
-VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), sqlc.arg(created_at));
+-- name: FindOneToOneDirectConversation :one
+SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created_at
+FROM direct_conversations dc
+WHERE dc.workspace_id = sqlc.arg(workspace_id)
+  AND EXISTS (
+    SELECT 1 FROM direct_conversation_members first_member
+    WHERE first_member.conversation_id = dc.id
+      AND first_member.user_id = sqlc.arg(first_user_id)
+  )
+  AND EXISTS (
+    SELECT 1 FROM direct_conversation_members second_member
+    WHERE second_member.conversation_id = dc.id
+      AND second_member.user_id = sqlc.arg(second_user_id)
+  )
+  AND (
+    SELECT COUNT(*) FROM direct_conversation_members member_count
+    WHERE member_count.conversation_id = dc.id
+  ) = 2
+ORDER BY dc.created_at, dc.id
+LIMIT 1;
+
+-- name: GetDirectConversationByMemberSetKey :one
+SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, created_at
+FROM direct_conversations
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND member_set_key = sqlc.arg(member_set_key);
+
+-- name: InsertDirectConversation :execrows
+INSERT INTO direct_conversations (id, route_id, workspace_id, created_at, member_set_key)
+VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), sqlc.arg(created_at), sqlc.arg(member_set_key))
+ON CONFLICT DO NOTHING;
 
 -- name: InsertDirectConversationMember :exec
 INSERT INTO direct_conversation_members (conversation_id, user_id, created_at)
 VALUES (sqlc.arg(conversation_id), sqlc.arg(user_id), sqlc.arg(created_at));
+
+-- name: HideDirectConversation :exec
+INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
+VALUES (sqlc.arg(conversation_id), sqlc.arg(user_id), sqlc.arg(hidden_at))
+ON CONFLICT(conversation_id, user_id) DO UPDATE SET
+  hidden_at = excluded.hidden_at;
+
+-- name: UnhideDirectConversation :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = sqlc.arg(conversation_id)
+  AND user_id = sqlc.arg(user_id);
+
+-- name: UnhideDirectConversationForMembers :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = sqlc.arg(conversation_id);
 
 -- name: RequireDirectMembership :one
 SELECT 1
@@ -534,6 +583,11 @@ VALUES (sqlc.arg(root_message_id));
 SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
 FROM thread_state
 WHERE root_message_id = sqlc.arg(root_message_id);
+
+-- name: ListThreadStates :many
+SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
+FROM thread_state
+WHERE root_message_id = ANY(sqlc.arg(root_message_ids)::text[]);
 
 -- name: ThreadNextSeq :one
 SELECT CAST(COALESCE(MAX(thread_seq), 0) + 1 AS BIGINT) AS next_seq

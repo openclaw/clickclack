@@ -6,8 +6,6 @@
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, Upload, User } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
-  import ComposerModelPicker from "./ComposerModelPicker.svelte";
-  import ComposerContextMeter from "./ComposerContextMeter.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
 
@@ -39,20 +37,10 @@
     showUpload?: boolean;
     showToolbar?: boolean;
     showGifPicker?: boolean;
-    // Show the composer-anchored model picker + context meter (live/structured
-    // channels only, where a per-session override actually takes effect).
-    showModelPicker?: boolean;
     gifQuery?: string;
     filteredGifs?: GifItem[];
     slashCommands?: SlashCommand[];
     mentionPeople?: User[];
-    // Model-picker override handlers (forwarded to ComposerModelPicker).
-    onModel?: (model: string | undefined) => void;
-    onProvider?: (provider: string | undefined) => void;
-    onThinking?: (mode: string | undefined) => void;
-    onFast?: (fast: boolean) => void;
-    onRuntime?: (runtime: string | undefined) => void;
-    onResetOverrides?: () => void;
     onValue: (value: string) => void;
     onSubmit: () => void;
     onKeydown: (event: KeyboardEvent) => void;
@@ -79,17 +67,10 @@
     showUpload = false,
     showToolbar = false,
     showGifPicker = false,
-    showModelPicker = false,
     gifQuery = "",
     filteredGifs = [],
     slashCommands = [],
     mentionPeople = [],
-    onModel = () => {},
-    onProvider = () => {},
-    onThinking = () => {},
-    onFast = () => {},
-    onRuntime = () => {},
-    onResetOverrides = () => {},
     onValue,
     onSubmit,
     onKeydown,
@@ -348,121 +329,13 @@
         </svg>
       </button>
     </div>
-    {#if showToolbar || showModelPicker}
-      <div class="composer-utility">
-        {#if showModelPicker}
-          <div class="composer-runtime-controls">
-            <div class="cu-side">
-              {#if showToolbar}
-                <ComposerToolbar
-                  showGifPicker={showGifPicker}
-                  onWrap={onApplyMarkdownWrap}
-                  onAppend={onAppendToComposer}
-                  onToggleGif={onToggleGif}
-                />
-              {/if}
-            </div>
-            <div class="cu-center">
-              <ComposerContextMeter />
-            </div>
-            <div class="cu-right">
-              <ComposerModelPicker
-                {onModel}
-                {onProvider}
-                {onThinking}
-                {onFast}
-                {onRuntime}
-                {onResetOverrides}
-              />
-            </div>
-          </div>
-        {:else if showToolbar}
-          <ComposerToolbar
-            showGifPicker={showGifPicker}
-            onWrap={onApplyMarkdownWrap}
-            onAppend={onAppendToComposer}
-            onToggleGif={onToggleGif}
-          />
-        {/if}
-      </div>
+    {#if showToolbar}
+      <ComposerToolbar
+        showGifPicker={showGifPicker}
+        onWrap={onApplyMarkdownWrap}
+        onAppend={onAppendToComposer}
+        onToggleGif={onToggleGif}
+      />
     {/if}
   </div>
 </form>
-
-<style>
-  /* Single utility row beneath the input: the markdown glyph strip, context
-     meter, and model picker share one row instead of stacking. */
-  .composer-utility {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    min-width: 0;
-  }
-
-  /* Runtime controls row: three zones so the context meter sits in the TRUE
-     center of the composer, independent of the markdown-toolbar (left) and the
-     picker-right widths. The model picker stays pinned to the right edge. */
-  .composer-runtime-controls {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 6px 0;
-    min-width: 0;
-  }
-
-  .cu-side {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    justify-self: start;
-  }
-
-  .cu-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    justify-self: center;
-  }
-
-  .cu-right {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    justify-self: end;
-  }
-
-  /* Phone layout: the three full-width runtime widgets cannot share one row on
-     a ~360px viewport (they overlap). Drop to two rows: the runtime pills the
-     user actually reaches for (context meter + model picker) sit together on
-     top, the markdown glyph strip spans the row beneath. The pills themselves
-     compact to essentials inside their own components at this width. */
-  @media (max-width: 520px) {
-    .composer-runtime-controls {
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas:
-        "meter picker"
-        "tools tools";
-      row-gap: 4px;
-      gap: 6px;
-    }
-
-    .cu-side {
-      grid-area: tools;
-      justify-self: start;
-      overflow-x: auto;
-    }
-
-    .cu-center {
-      grid-area: meter;
-      justify-self: start;
-      justify-content: flex-start;
-    }
-
-    .cu-right {
-      grid-area: picker;
-      justify-self: end;
-    }
-  }
-</style>

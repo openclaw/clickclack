@@ -14,10 +14,10 @@
   // (final === true) it collapses to a single line they can re-expand. The
   // operator's manual toggle wins for the rest of the session via preambleOpen,
   // but a state flip (live -> final) re-applies the default once.
-  let preambleOpen = $state(!block.final);
-  let lastFinal = $state(block.final);
+  let preambleOpen = $state(true);
+  let lastFinal = $state<boolean | undefined>(undefined);
   $effect(() => {
-    if (block.final !== lastFinal) {
+    if (lastFinal === undefined || block.final !== lastFinal) {
       lastFinal = block.final;
       preambleOpen = !block.final;
     }
@@ -82,7 +82,7 @@
               aria-expanded={open}
               onclick={() => toggleTool(entry.item.id)}
             >
-              <span class="tool-line-chevron" class:open aria-hidden="true">▸</span>
+              <span class="tool-line-chevron" class:open={open} aria-hidden="true">▸</span>
               <span class="tool-line-glyph" aria-hidden="true">{entry.tool.glyph}</span>
               <span class="tool-line-action">{entry.tool.action}</span>
               {#if entry.tool.name && entry.tool.name !== "tool"}

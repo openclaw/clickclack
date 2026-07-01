@@ -87,10 +87,17 @@ type ConnectedAccount struct {
 }
 
 type DirectConversation struct {
-	ID          string         `json:"id"`
-	WorkspaceID string         `json:"workspace_id"`
-	CreatedAt   string         `json:"created_at"`
-	RouteID     sql.NullString `json:"route_id"`
+	ID           string         `json:"id"`
+	WorkspaceID  string         `json:"workspace_id"`
+	CreatedAt    string         `json:"created_at"`
+	RouteID      sql.NullString `json:"route_id"`
+	MemberSetKey sql.NullString `json:"member_set_key"`
+}
+
+type DirectConversationHidden struct {
+	ConversationID string `json:"conversation_id"`
+	UserID         string `json:"user_id"`
+	HiddenAt       string `json:"hidden_at"`
 }
 
 type DirectConversationMember struct {

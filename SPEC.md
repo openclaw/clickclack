@@ -240,6 +240,9 @@ GET    /api/uploads/{upload_id}
 
 GET    /api/dms
 POST   /api/dms
+GET    /api/dms/{conversation_id}
+DELETE /api/dms/{conversation_id}
+POST   /api/dms/{conversation_id}/open
 GET    /api/dms/{conversation_id}/messages?before=&after_seq=&limit=
 POST   /api/dms/{conversation_id}/messages
 ```

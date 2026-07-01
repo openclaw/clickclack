@@ -127,6 +127,19 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 	if threadRoot.ID != root.ID || len(replies) != 1 || threadState.ReplyCount != 1 {
 		t.Fatalf("unexpected thread: %#v %#v %#v", threadRoot, replies, threadState)
 	}
+	threadPage, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threadPage.Messages) != 2 {
+		t.Fatalf("unexpected thread page messages: %#v", threadPage.Messages)
+	}
+	if got := threadPage.Messages[0].ThreadState; got == nil || got.RootMessageID != root.ID || got.ReplyCount != 1 {
+		t.Fatalf("expected root thread state on message page, got %#v", got)
+	}
+	if got := threadPage.Messages[1].ThreadState; got == nil || got.RootMessageID != idempotent.ID || got.ReplyCount != 0 {
+		t.Fatalf("expected empty thread state on root without replies, got %#v", got)
+	}
 
 	results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "searchable", 10)
 	if err != nil {

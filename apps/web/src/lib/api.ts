@@ -18,5 +18,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw new APIError(response.status, await response.text());
   }
-  return response.json() as Promise<T>;
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : (undefined as T);
 }

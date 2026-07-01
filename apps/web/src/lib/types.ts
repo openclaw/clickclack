@@ -97,6 +97,7 @@ export type Message = {
   quoted_body_snapshot?: string;
   quoted_author_id?: string;
   quoted_author?: User;
+  thread_state?: ThreadState;
   // Optimistic-send: client-supplied id, echoed by server. Used to swap
   // pending placeholder with the real message on response/WS event.
   nonce?: string;
@@ -197,7 +198,7 @@ export type EventPayload = {
   author_id?: string;
   last_read_seq?: number;
   seq?: number;
-  kind?: string;
+  kind?: Message["kind"];
   turn_id?: string;
 };
 

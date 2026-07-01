@@ -660,6 +660,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/dms/{conversation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getDirectConversation"];
+    put?: never;
+    post?: never;
+    delete: operations["hideDirectConversation"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/open": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["reopenDirectConversation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/dms/{conversation_id}/messages": {
     parameters: {
       query?: never;
@@ -985,6 +1017,27 @@ export interface components {
       nonce?: string;
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
+      /**
+       * @description Durable message kind. Agent activity kinds require bot-token auth
+       *     with the explicit agent_activity:write scope and are supported on
+       *     channel and direct-message create endpoints.
+       * @default message
+       * @enum {string}
+       */
+      kind: "message" | "agent_commentary" | "agent_tool";
+      /**
+       * @description Optional agent-turn correlation ID. Allowed only with
+       *     agent_commentary or agent_tool; ordinary messages reject it.
+       */
+      turn_id?: string;
+    };
+    CreateThreadReplyRequest: {
+      body: string;
+      quoted_message_id?: string;
+      nonce?: string;
+    };
+    UpdateMessageRequest: {
+      body: string;
     };
     MarkReadRequest: {
       /**
@@ -1061,6 +1114,14 @@ export interface components {
       /** Format: int64 */
       unread_count?: number;
     };
+    ThreadState: {
+      root_message_id: string;
+      /** Format: int64 */
+      reply_count: number;
+      /** Format: date-time */
+      last_reply_at?: string;
+      last_reply_author_ids: string[];
+    };
     Message: {
       id: string;
       /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
@@ -1084,11 +1145,19 @@ export interface components {
       edited_at?: string;
       /** Format: date-time */
       deleted_at?: string;
+      /**
+       * @description Defaults to message for ordinary human and bot messages.
+       * @enum {string}
+       */
+      kind?: "message" | "agent_commentary" | "agent_tool";
+      /** @description Correlates durable agent activity rows from one agent turn. */
+      turn_id?: string;
       author?: components["schemas"]["User"];
       quoted_message_id?: string;
       quoted_body_snapshot?: string;
       quoted_author_id?: string;
       quoted_author?: components["schemas"]["User"];
+      thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
     };
     RouteTarget: {
@@ -2012,7 +2081,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
+        "application/json": components["schemas"]["UpdateMessageRequest"];
       };
     };
     responses: {
@@ -2151,7 +2220,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
+        "application/json": components["schemas"]["CreateThreadReplyRequest"];
       };
     };
     responses: {
@@ -2422,6 +2491,66 @@ export interface operations {
     responses: {
       /** @description Created DM */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Direct conversation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  hideDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Closed direct conversation for the current user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  reopenDirectConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Reopened direct conversation for the current user */
+      200: {
         headers: {
           [name: string]: unknown;
         };

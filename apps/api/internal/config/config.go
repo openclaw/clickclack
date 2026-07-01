@@ -30,7 +30,6 @@ func Defaults() Config {
 
 func Load(path string) (Config, error) {
 	cfg := Defaults()
-	var fileBody []byte
 	fileHasDevBootstrap := false
 	if path != "" {
 		body, err := os.ReadFile(path)
@@ -42,7 +41,9 @@ func Load(path string) (Config, error) {
 			return Config{}, err
 		}
 		_, fileHasDevBootstrap = fields["dev_bootstrap"]
-		fileBody = body
+		if err := json.Unmarshal(body, &cfg); err != nil {
+			return Config{}, err
+		}
 	}
 	if env := os.Getenv("CLICKCLACK_ADDR"); env != "" {
 		cfg.Addr = env
@@ -92,12 +93,6 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_R2_ENDPOINT"); env != "" {
 		cfg.R2Endpoint = env
-	}
-	if path == "" {
-		return cfg, nil
-	}
-	if err := json.Unmarshal(fileBody, &cfg); err != nil {
-		return Config{}, err
 	}
 	if cfg.Addr == "" {
 		cfg.Addr = ":8080"

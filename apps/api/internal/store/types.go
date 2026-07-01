@@ -2,51 +2,8 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 )
-
-// ChannelRuntime is the per-channel agent runtime snapshot the composer model
-// picker and context meter render. It is produced by the agent-bridge reading
-// the gateway directly and stored in clickclack's own database, with no
-// dependency on ClawCanvas. pct is derived client-side from used/limit.
-type ChannelRuntime struct {
-	ChannelID        string          `json:"channel_id"`
-	DefaultModel     string          `json:"default_model"`
-	DefaultThinking  string          `json:"default_thinking"`
-	Model            string          `json:"model,omitempty"`
-	Thinking         string          `json:"thinking,omitempty"`
-	OverrideModel    string          `json:"override_model,omitempty"`
-	OverrideThinking string          `json:"override_thinking,omitempty"`
-	ContextUsed      int64           `json:"context_used"`
-	ContextLimit     int64           `json:"context_limit"`
-	CacheHitPct      *float64        `json:"cache_hit_pct,omitempty"`
-	ContextBreakdown json.RawMessage `json:"context_breakdown,omitempty"`
-	UpdatedAt        string          `json:"updated_at,omitempty"`
-}
-
-// ChannelRuntimeSnapshot is the bridge-owned half of a runtime record: the
-// effective facts read from the gateway. It does not carry the picker's desired
-// override (that is ChannelRuntimeOverride), so a bridge write never clobbers a
-// pending override and vice versa.
-type ChannelRuntimeSnapshot struct {
-	DefaultModel     string
-	DefaultThinking  string
-	Model            string
-	Thinking         string
-	ContextUsed      int64
-	ContextLimit     int64
-	CacheHitPct      *float64
-	ContextBreakdown json.RawMessage
-}
-
-// ChannelRuntimeOverride is the picker-owned half: the model/thinking the user
-// asked the next turn to run with. The bridge consumes it and applies it to the
-// gateway session.
-type ChannelRuntimeOverride struct {
-	Model    string
-	Thinking string
-}
 
 // ErrQuotedMessageOutOfScope is returned when a message tries to quote another
 // message that does not belong to the same channel, direct conversation, or
@@ -190,22 +147,22 @@ type Channel struct {
 }
 
 type Message struct {
-	ID                   string  `json:"id"`
-	RouteID              string  `json:"route_id,omitempty"`
-	WorkspaceID          string  `json:"workspace_id"`
-	ChannelID            string  `json:"channel_id,omitempty"`
-	DirectConversationID string  `json:"direct_conversation_id,omitempty"`
-	AuthorID             string  `json:"author_id"`
-	ParentMessageID      *string `json:"parent_message_id,omitempty"`
-	ThreadRootID         string  `json:"thread_root_id"`
-	TopicID              string  `json:"topic_id,omitempty"`
-	ChannelSeq           *int64  `json:"channel_seq,omitempty"`
-	ThreadSeq            *int64  `json:"thread_seq,omitempty"`
-	Body                 string  `json:"body"`
-	BodyFormat           string  `json:"body_format"`
-	CreatedAt            string  `json:"created_at"`
-	EditedAt             *string `json:"edited_at,omitempty"`
-	DeletedAt            *string `json:"deleted_at,omitempty"`
+	ID                   string       `json:"id"`
+	RouteID              string       `json:"route_id,omitempty"`
+	WorkspaceID          string       `json:"workspace_id"`
+	ChannelID            string       `json:"channel_id,omitempty"`
+	DirectConversationID string       `json:"direct_conversation_id,omitempty"`
+	AuthorID             string       `json:"author_id"`
+	ParentMessageID      *string      `json:"parent_message_id,omitempty"`
+	ThreadRootID         string       `json:"thread_root_id"`
+	TopicID              string       `json:"topic_id,omitempty"`
+	ChannelSeq           *int64       `json:"channel_seq,omitempty"`
+	ThreadSeq            *int64       `json:"thread_seq,omitempty"`
+	Body                 string       `json:"body"`
+	BodyFormat           string       `json:"body_format"`
+	CreatedAt            string       `json:"created_at"`
+	EditedAt             *string      `json:"edited_at,omitempty"`
+	DeletedAt            *string      `json:"deleted_at,omitempty"`
 	// Kind discriminates ordinary messages from durable agent activity rows.
 	// Empty in JSON means the default 'message'.
 	Kind string `json:"kind,omitempty"`
@@ -214,13 +171,14 @@ type Message struct {
 	// create path enforces this and rejects a non-empty turn_id on a 'message'
 	// kind with a 400 ErrTurnIDNotAllowed. It is optional for agent activity
 	// kinds (agent_commentary/agent_tool), which may carry one.
-	TurnID             string   `json:"turn_id,omitempty"`
-	Author             *User    `json:"author,omitempty"`
-	Attachments        []Upload `json:"attachments,omitempty"`
-	QuotedMessageID    *string  `json:"quoted_message_id,omitempty"`
-	QuotedBodySnapshot string   `json:"quoted_body_snapshot,omitempty"`
-	QuotedAuthorID     *string  `json:"quoted_author_id,omitempty"`
-	QuotedAuthor       *User    `json:"quoted_author,omitempty"`
+	TurnID             string       `json:"turn_id,omitempty"`
+	Author             *User        `json:"author,omitempty"`
+	Attachments        []Upload     `json:"attachments,omitempty"`
+	QuotedMessageID    *string      `json:"quoted_message_id,omitempty"`
+	QuotedBodySnapshot string       `json:"quoted_body_snapshot,omitempty"`
+	QuotedAuthorID     *string      `json:"quoted_author_id,omitempty"`
+	QuotedAuthor       *User        `json:"quoted_author,omitempty"`
+	ThreadState        *ThreadState `json:"thread_state,omitempty"`
 	// Nonce is a client-supplied idempotency key used by optimistic UIs to match
 	// the server response to a pending placeholder and safely retry after a lost
 	// response.
@@ -808,6 +766,8 @@ type Store interface {
 	ListDirectConversations(ctx context.Context, workspaceID, userID string) ([]DirectConversation, error)
 	GetDirectConversation(ctx context.Context, conversationID, userID string) (DirectConversation, error)
 	CreateDirectConversation(ctx context.Context, input CreateDirectConversationInput) (DirectConversation, error)
+	HideDirectConversation(ctx context.Context, conversationID, userID string) error
+	ReopenDirectConversation(ctx context.Context, conversationID, userID string) (DirectConversation, error)
 	ListDirectMessages(ctx context.Context, conversationID, userID string, page MessagePageRequest) (MessagePage, error)
 	CreateDirectMessage(ctx context.Context, input CreateDirectMessageInput) (Message, Event, error)
 	MarkChannelRead(ctx context.Context, channelID, userID string, seq int64) (ReadReceipt, Event, error)
@@ -818,7 +778,4 @@ type Store interface {
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)
-	GetChannelRuntime(ctx context.Context, channelID string) (ChannelRuntime, error)
-	UpsertChannelRuntime(ctx context.Context, channelID string, snap ChannelRuntimeSnapshot) (ChannelRuntime, error)
-	SetChannelRuntimeOverride(ctx context.Context, channelID string, override ChannelRuntimeOverride) (ChannelRuntime, error)
 }

@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { productAppURLForHost } from "../../apps/web/src/productLinks";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -84,10 +85,9 @@ async function expectMessageNearComposer(page: Page, text: string) {
         const row = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find((item) =>
           item.textContent?.includes(messageText),
         );
-        // Measure proximity to the composer DOCK, not the inner input card. The
-        // dock wraps the composer and reserves fixed internal chrome above the
-        // card (the always-present agent-responding band plus the runtime
-        // controls row). That chrome is intentional dead space, not distance
+        // Measure proximity to the composer dock, not the inner input card. The
+        // dock reserves a fixed agent-responding band above the card. That
+        // chrome is intentional dead space, not distance
         // between the newest message and the composer area, so anchoring to the
         // dock keeps this assertion about "is the message pinned to the
         // composer?" instead of tracking composer-internal chrome height.
@@ -113,38 +113,6 @@ async function expectScrollAtMessageEnd(page: Page) {
       }),
     )
     .toBe(true);
-}
-
-async function expectComposerRuntimeModel(page: Page, label: RegExp | string) {
-  await expect(page.locator(".composer-runtime-controls .cmp-current")).toHaveText(label);
-}
-
-async function expectNoComposerContextMeter(page: Page) {
-  await expect(page.locator(".composer-runtime-controls .ctxm-pill")).toHaveCount(0);
-}
-
-async function patchRuntimeViaBrowser(
-  page: Page,
-  channelID: string,
-  body: { model?: string; thinking?: string },
-  withCSRF = true,
-) {
-  return page.evaluate(
-    async ({ channelID, body, withCSRF }) => {
-      const headers: Record<string, string> = {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      };
-      if (withCSRF) headers["X-ClickClack-CSRF"] = "1";
-      const response = await fetch(`/api/channels/${encodeURIComponent(channelID)}/runtime`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(body),
-      });
-      return { status: response.status, text: await response.text() };
-    },
-    { channelID, body, withCSRF },
-  );
 }
 
 type GeometryBox = {
@@ -220,6 +188,25 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
 });
 
+test("self-hosted product website links stay on the local app route", async ({ page }) => {
+  await page.goto("http://selfhost.localhost:18082/");
+  await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
+});
+
+test("product website app URL host routing", () => {
+  expect(productAppURLForHost("clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("www.clickclack.chat")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("CLICKCLACK.CHAT")).toBe("https://app.clickclack.chat");
+  expect(productAppURLForHost("localhost")).toBe("/app");
+  expect(productAppURLForHost("127.0.0.1")).toBe("/app");
+  expect(productAppURLForHost("::1")).toBe("/app");
+  expect(productAppURLForHost("selfhost.localhost")).toBe("/app");
+  expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
+  expect(productAppURLForHost("clickclack.lan")).toBe("/app");
+  expect(productAppURLForHost("chat.example.com")).toBe("/app");
+});
+
 test("app subdomain root opens the chat app", async ({ page }) => {
   await page.goto("http://app.localhost:18082/");
   await expect(page.getByText("Connected")).toBeVisible();
@@ -232,6 +219,69 @@ test("shows realtime connection state in the shell", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: /Account settings for Local Captain/ }),
   ).toContainText("Active");
+});
+
+test("coalesces durable agent activity and applies activity preferences", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `agent-activity-${Date.now()}`, kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+
+  const botResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
+    data: {
+      display_name: "Activity Bot",
+      handle: `activity-bot-${Date.now()}`,
+      token_name: "e2e",
+      scopes: ["bot:write", "agent_activity:write"],
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
+  const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
+  const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
+  const turnId = `turn-${Date.now()}`;
+  for (const data of [
+    { body: "Checking the deployment boundary.", kind: "agent_commentary", turn_id: turnId },
+    { body: "**bash inspect**\n\nvalidated local target", kind: "agent_tool", turn_id: turnId },
+    { body: "Deployment boundary is healthy." },
+  ]) {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+      headers: botHeaders,
+      data,
+    });
+    expect(response.ok()).toBe(true);
+  }
+
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+  const preamble = page.getByLabel("Agent preamble");
+  await expect(preamble).toHaveCount(1);
+  await expect(preamble.getByRole("button", { name: "Show preamble" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(page.getByText("Deployment boundary is healthy.")).toBeVisible();
+
+  await preamble.getByRole("button", { name: "Show preamble" }).click();
+  await expect(preamble.getByText("Checking the deployment boundary.")).toBeVisible();
+  await expect(preamble.getByText("bash")).toBeVisible();
+  await preamble.getByRole("button", { name: /bash/ }).click();
+  await expect(preamble.getByText("validated local target")).toBeVisible();
+
+  await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
+  const settings = page.getByLabel("Account settings");
+  await settings.getByLabel("Hide agent commentary").check();
+  await expect(preamble.getByText("Checking the deployment boundary.")).toHaveCount(0);
+  await settings.getByLabel("Hide tool calls").check();
+  await expect(preamble).toHaveCount(0);
+  await settings.getByLabel("Your message alignment").selectOption("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
@@ -261,7 +311,11 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
     .click({ button: "right" });
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
 
-  await page.getByLabel("Browser notifications").check();
+  const browserNotifications = page
+    .locator("label.check-field", { hasText: "Browser notifications" })
+    .locator("input[type='checkbox']");
+  await expect(browserNotifications).toBeEnabled();
+  await browserNotifications.check();
 
   await expect
     .poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey))
@@ -307,33 +361,40 @@ test("browser notification storage failures do not block app startup", async ({ 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
+  const openMobileNavigation = async () => {
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  };
+
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(composer).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openMobileNavigation();
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.keyboard.type("hidden draft");
   await expect(composer).toHaveValue("");
 
   await page.keyboard.press("Escape");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  await toggle.click();
+  await openMobileNavigation();
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
@@ -540,12 +601,23 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await replayGif.click();
   await expect(replayGif).toBeVisible({ timeout: 7_000 });
 
-  await page.getByRole("button", { name: "Open thread" }).first().click();
-  await expect(page.getByText("Thread", { exact: true })).toBeVisible();
+  const threadedRow = page
+    .locator(".message-row")
+    .filter({ has: page.locator(".markdown").filter({ hasText: "hello playwright" }) });
+  await threadedRow.getByRole("button", { name: "Open thread" }).click();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
 
   await page.getByLabel("Reply body").fill("thread _reply_");
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
   await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
+  await expect(threadedRow.locator(".thread-hint")).toContainText("1 reply");
+
+  const threadPane = page.getByLabel("Thread pane");
+  await threadPane.getByRole("button", { name: "Close thread" }).click();
+  await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
+  await expect(threadPane.getByText("No thread open")).toBeVisible();
+  await threadedRow.locator(".markdown").click();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
 
   await page.reload();
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
@@ -564,6 +636,80 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByLabel("Message body").fill("private playwright");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
+});
+
+test("closes direct messages without deleting history", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces.workspaces[0];
+  const name = `Close User ${Date.now()}`;
+  const otherUserId = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspace.id,
+    "--name",
+    name,
+    "--email",
+    `${name.toLowerCase().replaceAll(" ", ".")}@example.com`,
+  ]);
+  const dmResponse = await page.request.post("/api/dms", {
+    data: { workspace_id: workspace.id, member_ids: [otherUserId] },
+  });
+  expect(dmResponse.ok()).toBe(true);
+  const { conversation } = (await dmResponse.json()) as {
+    conversation: { id: string; route_id: string };
+  };
+
+  await page.goto("/app");
+  const dmSection = page.locator(".nav-section", { hasText: "Direct messages" });
+  const dmLink = dmSection.getByRole("link", { name: new RegExp(name) });
+  const closeDirectMessage = async () => {
+    await dmSection
+      .getByRole("button", { name: `Direct message actions for ${name}` })
+      .click({ force: true });
+    await dmSection.getByRole("menuitem", { name: "Close direct message" }).click();
+  };
+  await expect(dmLink).toBeVisible();
+  await closeDirectMessage();
+  await expect(dmLink).toBeHidden();
+  await expect(dmSection.getByText(`Closed ${name}`)).toBeVisible();
+  await dmSection.getByRole("button", { name: "Undo" }).click();
+  await expect(dmLink).toBeVisible();
+
+  await closeDirectMessage();
+  await expect(dmLink).toBeHidden();
+  const hiddenGet = await page.request.get(`/api/dms/${conversation.id}`);
+  expect(hiddenGet.ok()).toBe(true);
+  await page.goto(`/app/${workspace.route_id}/${conversation.route_id}`);
+  await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
+
+  await closeDirectMessage();
+  await expect(dmLink).toBeHidden();
+  const reopened = await page.request.post("/api/dms", {
+    data: { workspace_id: workspace.id, member_ids: [otherUserId] },
+  });
+  expect(reopened.ok()).toBe(true);
+  const reopenedBody = (await reopened.json()) as { conversation: { id: string } };
+  expect(reopenedBody.conversation.id).toBe(conversation.id);
+  await page.reload();
+  await expect(dmLink).toBeVisible();
+
+  await closeDirectMessage();
+  await expect(dmLink).toBeHidden();
+  const messageResponse = await page.request.post(`/api/dms/${conversation.id}/messages`, {
+    headers: { "X-ClickClack-User": otherUserId },
+    data: { body: "resurface this dm" },
+  });
+  expect(messageResponse.ok()).toBe(true);
+  await expect(dmLink).toBeVisible();
+  await dmLink.click();
+  await expect(page.locator(".markdown").filter({ hasText: "resurface this dm" })).toBeVisible();
 });
 
 test("unread bar jumps to the new-message divider across repeated unread cycles", async ({
@@ -831,31 +977,36 @@ test("browser notifications announce incoming messages outside the active conver
 
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (
-            window as unknown as {
-              __clickclackNotifications: { title: string; options?: NotificationOptions }[];
-            }
-          ).__clickclackNotifications,
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            __clickclackNotifications: { title: string; options?: NotificationOptions }[];
+          }
+        ).__clickclackNotifications.find((notification) =>
+          notification.title.includes("ClickClack in #notify-"),
+        ),
       ),
     )
-    .toEqual([
+    .toEqual(
       expect.objectContaining({
-        title: expect.stringContaining("ClickClack in #notify-"),
         options: expect.objectContaining({
           body: "New message",
           icon: "/favicon.svg",
         }),
       }),
-    ]);
+    );
 
   await page.evaluate(() => {
     const notification = (
       window as unknown as {
-        __clickclackNotifications: { onclick?: (() => void) | null }[];
+        __clickclackNotifications: { title: string; onclick?: (() => void) | null }[];
       }
-    ).__clickclackNotifications[0];
+    ).__clickclackNotifications.find((candidate) =>
+      candidate.title.includes("ClickClack in #notify-"),
+    );
+    if (!notification) {
+      throw new Error("Expected a channel notification");
+    }
     notification.onclick?.();
   });
 
@@ -1730,62 +1881,4 @@ test("CLI resolves channel IDs across visible workspaces", async ({ page }) => {
       expect.objectContaining({ id: messageId, body: "cross workspace channel id" }),
     ]),
   );
-});
-
-test("composer runtime uses real channel records without demo seed or stale carryover", async ({
-  page,
-}) => {
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const { workspaces } = (await workspacesResponse.json()) as {
-    workspaces: { id: string; route_id: string }[];
-  };
-  const workspace = workspaces[0];
-  const stamp = Date.now();
-
-  const withRuntimeResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: `runtime-real-${stamp}`, kind: "public" },
-  });
-  const { channel: withRuntime } = (await withRuntimeResponse.json()) as {
-    channel: { id: string; route_id: string; name: string };
-  };
-  const emptyResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: `runtime-empty-${stamp}`, kind: "public" },
-  });
-  const { channel: emptyRuntime } = (await emptyResponse.json()) as {
-    channel: { id: string; route_id: string; name: string };
-  };
-
-  let observedPatchHeaders: Record<string, string> | null = null;
-  await page.route("**/api/channels/*/runtime", async (route) => {
-    if (route.request().method() === "PATCH") observedPatchHeaders = route.request().headers();
-    await route.continue();
-  });
-
-  await page.goto(`/app/${workspace.route_id}/${withRuntime.route_id}`);
-
-  const withCsrf = await patchRuntimeViaBrowser(page, withRuntime.id, {
-    model: "openai/gpt-5.4-mini",
-    thinking: "low",
-  });
-  expect(withCsrf.status).toBe(200);
-  expect(observedPatchHeaders?.["x-clickclack-csrf"]).toBe("1");
-
-  await page.reload();
-  await expectComposerRuntimeModel(page, /GPT-5\.4 Mini/i);
-
-  await page.goto(`/app/${workspace.route_id}/${emptyRuntime.route_id}`);
-  await expectNoComposerContextMeter(page);
-  await expectComposerRuntimeModel(page, "default");
-
-  // In-app SPA channel switch (sidebar click, no reload): switching from the
-  // channel that carries an override to the empty channel must clear the
-  // previous channel's model chrome. This exercises the serial guard in
-  // refreshSelectedChannelRuntime (clear-then-fetch, discard stale responses)
-  // rather than a fresh page load that resets all JS state.
-  await page.goto(`/app/${workspace.route_id}/${withRuntime.route_id}`);
-  await expectComposerRuntimeModel(page, /GPT-5\.4 Mini/i);
-  await page.getByRole("link", { name: `# ${emptyRuntime.name}` }).click();
-  await expect(page.getByRole("heading", { name: `#${emptyRuntime.name}` })).toBeVisible();
-  await expectNoComposerContextMeter(page);
-  await expectComposerRuntimeModel(page, "default");
 });

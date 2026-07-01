@@ -163,11 +163,19 @@ type TurnAccumulator = {
 // (grouped by turn_id across the whole list) into a single synthetic preamble
 // message anchored at the turn's first activity row. Ordinary messages pass
 // through untouched and keep their order.
-export function coalesceAgentActivity(messages: Message[], flags: AgentActivityFlags): Message[] {
+export function coalesceAgentActivity(
+  messages: Message[],
+  flags: AgentActivityFlags,
+  now = Date.now(),
+): Message[] {
   const turns = new Map<string, TurnAccumulator>();
+  const lastOrdinaryIndexByAuthor = new Map<string, number>();
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i];
-    if (!isAgentActivity(message)) continue;
+    if (!isAgentActivity(message)) {
+      if (isOrdinaryMessage(message)) lastOrdinaryIndexByAuthor.set(authorKey(message), i);
+      continue;
+    }
     const key = turnKey(message);
     const turn = turns.get(key);
     if (turn) {
@@ -182,19 +190,11 @@ export function coalesceAgentActivity(messages: Message[], flags: AgentActivityF
   // Decide turn finality: a same-author ordinary message (the final answer)
   // after the turn opened, anything after the turn's last activity row, or
   // staleness (no new frames for TURN_STALE_MS).
-  const now = Date.now();
   const finals = new Map<string, boolean>();
   for (const [key, turn] of turns) {
-    let final = turn.lastIndex < messages.length - 1;
-    if (!final) {
-      for (let i = turn.firstIndex + 1; i < messages.length; i += 1) {
-        const message = messages[i];
-        if (isOrdinaryMessage(message) && authorKey(message) === turn.author) {
-          final = true;
-          break;
-        }
-      }
-    }
+    let final =
+      turn.lastIndex < messages.length - 1 ||
+      (lastOrdinaryIndexByAuthor.get(turn.author) ?? -1) > turn.firstIndex;
     if (!final) {
       const newest = Date.parse(turn.rows[turn.rows.length - 1].created_at);
       if (Number.isFinite(newest) && now - newest > TURN_STALE_MS) final = true;

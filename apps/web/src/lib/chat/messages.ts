@@ -13,8 +13,11 @@ export type MessageGroup = {
 
 export function quoteSnippet(text: string | undefined, max = 120): string {
   if (!text) return "";
+  if (max <= 0) return "";
   const collapsed = text.replace(/\s+/g, " ").trim();
-  return collapsed.length > max ? collapsed.slice(0, max - 1) + "..." : collapsed;
+  if (collapsed.length <= max) return collapsed;
+  if (max <= 3) return ".".repeat(max);
+  return `${collapsed.slice(0, max - 3)}...`;
 }
 
 export function quotedAuthorName(message: Message): string {
@@ -23,7 +26,33 @@ export function quotedAuthorName(message: Message): string {
 
 export function threadSummary(message: Message, selectedThreadID?: string): string {
   if (selectedThreadID === message.id) return "Open";
-  return "Thread";
+  const count = message.thread_state?.reply_count || 0;
+  if (count === 0) return "No replies yet";
+  return `${count} ${count === 1 ? "reply" : "replies"}`;
+}
+
+export function threadActivityLabel(message: Message): string {
+  const count = message.thread_state?.reply_count || 0;
+  if (count === 0) return "Thread";
+  return `${count} ${count === 1 ? "reply" : "replies"}`;
+}
+
+export function threadActivityTime(message: Message): string {
+  const value = message.thread_state?.last_reply_at;
+  if (!value) return "";
+  return timeAgo(value);
+}
+
+function timeAgo(value: string): string {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "";
+  const delta = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(delta / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 export function dayLabel(value: string): string {

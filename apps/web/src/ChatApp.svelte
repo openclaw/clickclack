@@ -19,12 +19,6 @@
   import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
-  import {
-    channelRuntime,
-    loadChannelRuntime,
-    persistRuntimeOverride,
-  } from "./lib/chat/channel-runtime-store.svelte";
-  import type { ThinkingMode } from "./lib/chat/channel-runtime";
   import ImageViewer from "./components/media/ImageViewer.svelte";
   import MessageList, {
     type MessageListHandle,
@@ -54,6 +48,7 @@
   const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
   const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
   const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
+  const appSessionStartedAt = Date.now();
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -142,14 +137,23 @@
   let typingSweeper: number | undefined;
   let agentProgressTurns: AgentProgressTurn[] = [];
   let agentProgressSweeper: number | undefined;
+  let activityClock = Date.now();
+  let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
+  let hiddenDirectUndo: HiddenDirectUndo | null = null;
+  let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
 
   type MessageWindow = Omit<MessagePage, "messages"> & {
     messages: Message[];
   };
 
   type HistoryEdgeState = "idle" | "loading" | "settling";
+  type HiddenDirectUndo = {
+    conversation: DirectConversation;
+    restoreRoute: boolean;
+    title: string;
+  };
   type UnreadMarker = {
     boundarySeq: number;
     since: string;
@@ -183,7 +187,11 @@
   // Coalesce consecutive same-turn agent activity rows into one preamble block
   // per turn, applying the two visibility flags. Ordinary messages pass through
   // untouched and keep their order.
-  $: visibleMessages = coalesceAgentActivity(messages, { hideCommentary, hideToolCalls });
+  $: visibleMessages = coalesceAgentActivity(
+    messages,
+    { hideCommentary, hideToolCalls },
+    activityClock,
+  );
   // High-level "agent turn is live" signal: any tracked turn that still has an
   // unfinalized line. Drives the compact AgentResponding status above the
   // composer; clears as soon as every line finalizes or the turn is cleared.
@@ -199,26 +207,6 @@
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
-  // Refresh the channel runtime snapshot (model + context) from clickclack's
-  // own endpoint whenever the active channel changes. Clear first so late
-  // responses or failed fetches cannot preserve stale data from the previous
-  // channel in the composer chrome.
-  let runtimeLoadSerial = 0;
-  let runtimeLoadedChannelID = "";
-  $: if (selectedChannelID !== runtimeLoadedChannelID) {
-    runtimeLoadedChannelID = selectedChannelID;
-    void refreshSelectedChannelRuntime(selectedChannelID);
-  }
-
-  async function refreshSelectedChannelRuntime(channelID: string) {
-    const serial = ++runtimeLoadSerial;
-    channelRuntime.replace({});
-    if (!channelID) return;
-    const nextRuntime = await loadChannelRuntime(channelID);
-    if (serial !== runtimeLoadSerial || channelID !== selectedChannelID) return;
-    if (nextRuntime) channelRuntime.replace(nextRuntime);
-  }
-
   $: filteredGifs = showGifPicker
     ? gifLibrary.filter((gif) => {
         const query = gifQuery.trim().toLowerCase();
@@ -228,6 +216,9 @@
 
   onMount(() => {
     loadActivityPrefs();
+    activityClockSweeper = window.setInterval(() => {
+      activityClock = Date.now();
+    }, 30_000);
     syncBrowserNotificationState();
     void boot();
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
@@ -298,6 +289,8 @@
     stopTyping();
     if (typingSweeper) window.clearInterval(typingSweeper);
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
+    if (activityClockSweeper) window.clearInterval(activityClockSweeper);
+    if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
   });
 
   async function boot() {
@@ -678,7 +671,13 @@
       return serial === routeApplySerial && channels.some((channel) => channel.id === route.target_id);
     }
     if (route.target_type === "direct") {
-      if (!directConversations.some((conversation) => conversation.id === route.target_id)) await loadDirectConversations();
+      if (!directConversations.some((conversation) => conversation.id === route.target_id)) {
+        await loadDirectConversations();
+        if (!directConversations.some((conversation) => conversation.id === route.target_id)) {
+          const data = await api<{ conversation: DirectConversation }>(`/api/dms/${route.target_id}`);
+          upsertDirectConversation(data.conversation);
+        }
+      }
       return serial === routeApplySerial && directConversations.some((conversation) => conversation.id === route.target_id);
     }
     if (route.parent_type === "channel" && route.parent_id) {
@@ -686,7 +685,13 @@
       return serial === routeApplySerial && channels.some((channel) => channel.id === route.parent_id);
     }
     if (route.parent_type === "direct" && route.parent_id) {
-      if (!directConversations.some((conversation) => conversation.id === route.parent_id)) await loadDirectConversations();
+      if (!directConversations.some((conversation) => conversation.id === route.parent_id)) {
+        await loadDirectConversations();
+        if (!directConversations.some((conversation) => conversation.id === route.parent_id)) {
+          const data = await api<{ conversation: DirectConversation }>(`/api/dms/${route.parent_id}`);
+          upsertDirectConversation(data.conversation);
+        }
+      }
       return serial === routeApplySerial && directConversations.some((conversation) => conversation.id === route.parent_id);
     }
     return true;
@@ -1461,6 +1466,14 @@
     return false;
   }
 
+  async function loadUnknownDirectConversationFromEvent(event: RealtimeEvent): Promise<boolean> {
+    const payload = event.payload as Record<string, unknown>;
+    const dmID = typeof payload.direct_conversation_id === "string" ? payload.direct_conversation_id : "";
+    if (!dmID || directConversations.some((conversation) => conversation.id === dmID)) return false;
+    await loadDirectConversations();
+    return directConversations.some((conversation) => conversation.id === dmID);
+  }
+
   function unreadStateForKey(key: string): { unread_count?: number; last_read_seq?: number; last_seq?: number } {
     return channels.find((c) => c.id === key) || directConversations.find((c) => c.id === key) || {};
   }
@@ -1781,10 +1794,29 @@
     if (optimisticRoot) selectedThread = optimisticRoot;
     activeComposerContext = "thread";
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    selectedThread = data.root;
-    setActiveMessages(messages.map((message) => message.id === data.root.id ? data.root : message));
+    const root = { ...data.root, thread_state: data.thread_state };
+    selectedThread = root;
+    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
     replies = data.replies;
     selectedThreadState = data.thread_state;
+  }
+
+  async function refreshThreadSummary(messageID: string) {
+    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
+    const root = { ...data.root, thread_state: data.thread_state };
+    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
+  }
+
+  function shouldRefreshThreadSummary(rootID: string, event: RealtimeEvent): boolean {
+    const root = messages.find((message) => message.id === rootID);
+    if (!root) return false;
+    const eventTime = new Date(event.created_at).getTime();
+    if (Number.isFinite(eventTime) && eventTime < appSessionStartedAt) return false;
+    const lastReplyAt = root.thread_state?.last_reply_at;
+    if (!lastReplyAt) return true;
+    const knownTime = new Date(lastReplyAt).getTime();
+    if (!Number.isFinite(knownTime) || !Number.isFinite(eventTime)) return true;
+    return eventTime > knownTime;
   }
 
   async function sendReply() {
@@ -1953,6 +1985,12 @@
     directConversations = data.conversations;
   }
 
+  function upsertDirectConversation(conversation: DirectConversation) {
+    directConversations = directConversations.some((item) => item.id === conversation.id)
+      ? directConversations.map((item) => (item.id === conversation.id ? conversation : item))
+      : [...directConversations, conversation];
+  }
+
   async function createDirectConversation(memberID = directMemberID) {
     const trimmed = memberID.trim();
     if (!selectedWorkspaceID || !trimmed) return;
@@ -1962,7 +2000,7 @@
     });
     directMemberID = "";
     showCreateDirect = false;
-    directConversations = [...directConversations, data.conversation];
+    upsertDirectConversation(data.conversation);
     mobileNavOpen = false;
     await navigateToApp(selectedWorkspaceID, data.conversation.id);
   }
@@ -2003,9 +2041,64 @@
       method: "POST",
       body: JSON.stringify({ workspace_id: selectedWorkspaceID, member_ids: [trimmed] })
     });
-    directConversations = [...directConversations, data.conversation];
+    upsertDirectConversation(data.conversation);
     mobileNavOpen = false;
     await navigateToApp(selectedWorkspaceID, data.conversation.id);
+  }
+
+  function clearHiddenDirectUndo() {
+    if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
+    hiddenDirectUndoTimer = undefined;
+    hiddenDirectUndo = null;
+  }
+
+  function scheduleHiddenDirectUndo(conversation: DirectConversation, restoreRoute: boolean) {
+    clearHiddenDirectUndo();
+    hiddenDirectUndo = {
+      conversation,
+      restoreRoute,
+      title: dmTitle(conversation, user?.id),
+    };
+    hiddenDirectUndoTimer = setTimeout(() => {
+      hiddenDirectUndo = null;
+      hiddenDirectUndoTimer = undefined;
+    }, 8000);
+  }
+
+  async function undoHideDirectConversation() {
+    const undo = hiddenDirectUndo;
+    if (!undo) return;
+    clearHiddenDirectUndo();
+    try {
+      const data = await api<{ conversation: DirectConversation }>(`/api/dms/${undo.conversation.id}/open`, {
+        method: "POST"
+      });
+      upsertDirectConversation(data.conversation);
+      if (undo.restoreRoute) {
+        await navigateToApp(undo.conversation.workspace_id, data.conversation.id);
+      }
+      status = "direct message restored";
+    } catch (error) {
+      status = error instanceof Error ? error.message : "Could not restore direct message";
+    }
+  }
+
+  async function hideDirectConversation(conversationID: string) {
+    if (!conversationID) return;
+    const conversation = directConversations.find((item) => item.id === conversationID);
+    const restoreRoute = selectedDirectID === conversationID;
+    await api(`/api/dms/${conversationID}`, { method: "DELETE" });
+    directConversations = directConversations.filter((conversation) => conversation.id !== conversationID);
+    if (conversation) scheduleHiddenDirectUndo(conversation, restoreRoute);
+    if (restoreRoute) {
+      clearRoutePanelState();
+      const fallbackID = channels[0]?.id || "";
+      selectedDirectID = "";
+      selectedChannelID = fallbackID;
+      if (fallbackID) rememberLastChannel(selectedWorkspaceID, fallbackID);
+      await navigateToApp(selectedWorkspaceID, fallbackID);
+      await loadMessages();
+    }
   }
 
   function connectRealtimeSocket() {
@@ -2066,7 +2159,8 @@
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
     maybeShowBrowserNotification(event, affectsActiveView);
     if (event.type === "message.created" && !affectsActiveView) {
-      handleUnreadBump(event);
+      const loadedConversation = await loadUnknownDirectConversationFromEvent(event);
+      if (!loadedConversation) handleUnreadBump(event);
     }
     if (
       affectsActiveView &&
@@ -2101,7 +2195,17 @@
       }
     }
     const rootID = event.payload.root_message_id || event.payload.message_id;
-    if (selectedThread && rootID === selectedThread.id) {
+    if (
+      rootID &&
+      event.type === "thread.state_updated" &&
+      shouldRefreshThreadSummary(rootID, event)
+    ) {
+      if (selectedThread?.id === rootID) {
+        await refreshThread(rootID, selectedThread);
+      } else {
+        await refreshThreadSummary(rootID);
+      }
+    } else if (event.type !== "thread.reply_created" && selectedThread && rootID === selectedThread.id) {
       await refreshThread(selectedThread.id, selectedThread);
     }
   }
@@ -2547,6 +2651,9 @@
     onCreateChannel={() => (showCreateChannel = true)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onCreateDirect={() => (showCreateDirect = true)}
+    onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
+    hiddenDirectTitle={hiddenDirectUndo?.title}
+    onUndoHideDirect={() => void undoHideDirectConversation()}
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
   />
@@ -2650,28 +2757,6 @@
       onToggleGif={() => (showGifPicker = !showGifPicker)}
       onGifQuery={(value) => (gifQuery = value)}
       onPickGif={pickGif}
-      showModelPicker={!!selectedChannelID}
-      onModel={(model) => {
-        channelRuntime.setModel(model);
-        void persistRuntimeOverride(selectedChannelID, {
-          model: model ?? "",
-          thinking: channelRuntime.runtime.thinking ?? "",
-        });
-      }}
-      onProvider={(provider) => channelRuntime.setProvider(provider)}
-      onThinking={(mode) => {
-        channelRuntime.setThinking(mode as ThinkingMode | undefined);
-        void persistRuntimeOverride(selectedChannelID, {
-          model: channelRuntime.runtime.model ?? "",
-          thinking: mode ?? "",
-        });
-      }}
-      onFast={(fast) => channelRuntime.setFast(fast)}
-      onRuntime={(runtime) => channelRuntime.setRuntime(runtime)}
-      onResetOverrides={() => {
-        channelRuntime.clearOverrides();
-        void persistRuntimeOverride(selectedChannelID, { model: "", thinking: "" });
-      }}
     />
     </div>
   </main>

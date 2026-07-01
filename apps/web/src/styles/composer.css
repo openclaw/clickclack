@@ -120,16 +120,14 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  width: auto;
+  width: 100%;
   min-width: 0;
-  padding: 4px 0;
+  padding: 4px 6px;
   margin: 0;
   border: 0;
+  border-top: 1px solid var(--line);
   border-radius: 0;
-  /* No background/border: the glyph strip sits flush in the utility row with
-     the context meter and model picker, instead of reading as a separate
-     shaded block. */
-  background: transparent;
+  background: color-mix(in srgb, var(--panel-2) 35%, transparent);
   box-shadow: none;
   overflow-x: auto;
   overflow-y: hidden;

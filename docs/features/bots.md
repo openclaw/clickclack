@@ -128,6 +128,7 @@ MVP scopes:
 - `channels:write`
 - `messages:read`
 - `messages:write`
+- `agent_activity:write` (explicit only; excluded from all `bot:*` bundles)
 - `threads:read`
 - `threads:write`
 - `dms:read`
@@ -159,6 +160,9 @@ MVP endpoint mapping:
 - `POST/PATCH channel endpoints`: `channels:write`
 - `GET channel/DM/thread messages`: matching read scope
 - `POST channel/DM/thread messages`: matching write scope
+- Durable `agent_commentary` and `agent_tool` channel/DM messages additionally
+  require a bot token with `agent_activity:write`; human sessions and ordinary
+  bot bundles cannot publish them.
 - `GET /api/realtime/events` and `/ws`: `realtime:read`
 - `POST /api/uploads`: `uploads:write`
 - `POST /api/messages/{id}/attachments`: `uploads:write` and `messages:write`

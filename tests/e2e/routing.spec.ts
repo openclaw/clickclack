@@ -119,7 +119,7 @@ test("app routes restore channels, DMs, threads, fallbacks, and history navigati
 
   await page.goto(`/app/${workspace.route_id}/${threadRoot.route_id}`);
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
-  await expect(page.getByText("Thread", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
   await expect(page.locator(".thread-root .markdown")).toContainText(root.body);
   await expect(page.locator(".reply .markdown")).toContainText(`route thread reply ${stamp}`);
   await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${threadRoot.route_id}$`));
@@ -133,7 +133,7 @@ test("app routes restore channels, DMs, threads, fallbacks, and history navigati
   await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${conversation.route_id}$`));
 
   await page.goto(`/app/${workspaceID}/${root.id}`);
-  await expect(page.getByText("Thread", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${threadRoot.route_id}$`));
 
   await page.goto(`/app/${workspace.route_id}`);

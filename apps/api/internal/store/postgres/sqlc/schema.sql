@@ -69,10 +69,12 @@ CREATE TABLE direct_conversations (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
-  route_id TEXT
+  route_id TEXT,
+  member_set_key TEXT
 );
 
 CREATE UNIQUE INDEX idx_direct_conversations_workspace_route_id ON direct_conversations(workspace_id, route_id) WHERE route_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_direct_conversations_workspace_member_set ON direct_conversations(workspace_id, member_set_key) WHERE member_set_key IS NOT NULL;
 
 CREATE TABLE direct_conversation_members (
   conversation_id TEXT NOT NULL REFERENCES direct_conversations(id) ON DELETE CASCADE,
@@ -82,6 +84,15 @@ CREATE TABLE direct_conversation_members (
 );
 
 CREATE INDEX idx_direct_conversation_members_user ON direct_conversation_members(user_id, conversation_id);
+
+CREATE TABLE direct_conversation_hidden (
+  conversation_id TEXT NOT NULL REFERENCES direct_conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  hidden_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE INDEX idx_direct_conversation_hidden_user ON direct_conversation_hidden(user_id, conversation_id);
 
 CREATE TABLE topics (
   id TEXT PRIMARY KEY,

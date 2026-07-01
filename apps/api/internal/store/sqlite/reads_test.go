@@ -218,7 +218,7 @@ func TestMarkDirectReadAndUnreadCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	emptyDM, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
-		WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{other.ID},
+		WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{stranger.ID},
 	})
 	if err != nil {
 		t.Fatal(err)

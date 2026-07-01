@@ -149,6 +149,20 @@ export type Topic = {
   archived_at?: string;
 };
 
+export type MessageKind = "message" | "agent_commentary" | "agent_tool";
+
+type MessageInputBase = {
+  body: string;
+  quoted_message_id?: string;
+  nonce?: string;
+};
+
+export type MessageInput = MessageInputBase &
+  (
+    | { kind?: "message"; turn_id?: never }
+    | { kind: "agent_commentary" | "agent_tool"; turn_id?: string }
+  );
+
 export type Message = {
   id: string;
   route_id?: string;
@@ -166,6 +180,8 @@ export type Message = {
   created_at: string;
   edited_at?: string;
   deleted_at?: string;
+  kind?: MessageKind;
+  turn_id?: string;
   author?: User;
   attachments?: Upload[];
   quoted_message_id?: string;
@@ -234,19 +250,27 @@ export type ClickClackClientOptions = {
   userId?: string;
   token?: string;
   fetch?: typeof fetch;
+  webSocket?: WebSocketConstructor;
 };
+
+export type WebSocketConstructor = new (
+  url: string | URL,
+  protocols?: string | string[],
+) => WebSocket;
 
 export class ClickClackClient {
   private readonly baseUrl: string;
   private readonly userId?: string;
   private token?: string;
   private readonly fetcher: typeof fetch;
+  private readonly WebSocket?: WebSocketConstructor;
 
   constructor(options: ClickClackClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.userId = options.userId;
     this.token = options.token;
     this.fetcher = options.fetch ?? fetch;
+    this.WebSocket = options.webSocket ?? globalThis.WebSocket;
   }
 
   auth = {
@@ -586,7 +610,7 @@ export class ClickClackClient {
     },
     sendMessage: async (
       channelId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string; topic_id?: string },
+      input: MessageInput & { topic_id?: string },
     ): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/channels/${channelId}/messages`, {
         method: "POST",
@@ -685,16 +709,29 @@ export class ClickClackClient {
       });
       return data.conversation;
     },
+    get: async (conversationId: string): Promise<DirectConversation> => {
+      const data = await this.request<{ conversation: DirectConversation }>(
+        `/api/dms/${conversationId}`,
+      );
+      return data.conversation;
+    },
+    close: async (conversationId: string): Promise<void> => {
+      await this.request(`/api/dms/${conversationId}`, { method: "DELETE" });
+    },
+    open: async (conversationId: string): Promise<DirectConversation> => {
+      const data = await this.request<{ conversation: DirectConversation }>(
+        `/api/dms/${conversationId}/open`,
+        { method: "POST" },
+      );
+      return data.conversation;
+    },
     messages: async (conversationId: string, afterSeq = 0): Promise<Message[]> => {
       const data = await this.request<{ messages: Message[] }>(
         `/api/dms/${conversationId}/messages?after_seq=${afterSeq}`,
       );
       return data.messages;
     },
-    sendMessage: async (
-      conversationId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string },
-    ): Promise<Message> => {
+    sendMessage: async (conversationId: string, input: MessageInput): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/dms/${conversationId}/messages`, {
         method: "POST",
         body: JSON.stringify(input),
@@ -741,7 +778,10 @@ export class ClickClackClient {
       url.searchParams.set("workspace_id", options.workspaceId);
       if (options.afterCursor) url.searchParams.set("after_cursor", options.afterCursor);
       const protocols = this.token ? [`clickclack.bearer.${this.token}`] : undefined;
-      const socket = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+      if (!this.WebSocket) {
+        throw new Error("ClickClackClient events.subscribe requires a WebSocket implementation");
+      }
+      const socket = protocols ? new this.WebSocket(url, protocols) : new this.WebSocket(url);
       socket.addEventListener("message", (message) =>
         options.onEvent(JSON.parse(String(message.data))),
       );
@@ -764,7 +804,11 @@ export class ClickClackClient {
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return response.json() as Promise<T>;
+    if (response.status === 204 || response.status === 205) {
+      return undefined as T;
+    }
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : (undefined as T);
   }
 }
 
@@ -785,12 +829,20 @@ export class ClickClackBot {
   }
 
   start(): WebSocket {
-    this.socket = this.client.events.subscribe({
+    if (this.socket && isActiveSocket(this.socket)) {
+      return this.socket;
+    }
+    let socket: WebSocket;
+    socket = this.client.events.subscribe({
       workspaceId: this.workspaceId,
       afterCursor: this.afterCursor,
       onEvent: (event) => void this.onEvent(event, this.client),
-      onClose: this.onClose,
+      onClose: () => {
+        if (this.socket === socket) this.socket = undefined;
+        this.onClose?.();
+      },
     });
+    this.socket = socket;
     return this.socket;
   }
 
@@ -806,4 +858,8 @@ export class ClickClackBot {
   sendDirectMessage(conversationId: string, body: string): Promise<Message> {
     return this.client.dms.sendMessage(conversationId, { body });
   }
+}
+
+function isActiveSocket(socket: WebSocket): boolean {
+  return socket.readyState === 0 || socket.readyState === 1;
 }

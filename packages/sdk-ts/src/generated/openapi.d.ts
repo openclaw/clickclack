@@ -1017,6 +1017,27 @@ export interface components {
       nonce?: string;
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
+      /**
+       * @description Durable message kind; omitted values default to message. Agent
+       *     activity kinds require bot-token auth
+       *     with the explicit agent_activity:write scope and are supported on
+       *     channel and direct-message create endpoints.
+       * @enum {string}
+       */
+      kind?: "message" | "agent_commentary" | "agent_tool";
+      /**
+       * @description Optional agent-turn correlation ID. Allowed only with
+       *     agent_commentary or agent_tool; ordinary messages reject it.
+       */
+      turn_id?: string;
+    };
+    CreateThreadReplyRequest: {
+      body: string;
+      quoted_message_id?: string;
+      nonce?: string;
+    };
+    UpdateMessageRequest: {
+      body: string;
     };
     MarkReadRequest: {
       /**
@@ -1124,6 +1145,13 @@ export interface components {
       edited_at?: string;
       /** Format: date-time */
       deleted_at?: string;
+      /**
+       * @description Defaults to message for ordinary human and bot messages.
+       * @enum {string}
+       */
+      kind?: "message" | "agent_commentary" | "agent_tool";
+      /** @description Correlates durable agent activity rows from one agent turn. */
+      turn_id?: string;
       author?: components["schemas"]["User"];
       quoted_message_id?: string;
       quoted_body_snapshot?: string;
@@ -2053,7 +2081,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
+        "application/json": components["schemas"]["UpdateMessageRequest"];
       };
     };
     responses: {
@@ -2192,7 +2220,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
+        "application/json": components["schemas"]["CreateThreadReplyRequest"];
       };
     };
     responses: {

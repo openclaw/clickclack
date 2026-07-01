@@ -149,6 +149,20 @@ export type Topic = {
   archived_at?: string;
 };
 
+export type MessageKind = "message" | "agent_commentary" | "agent_tool";
+
+type MessageInputBase = {
+  body: string;
+  quoted_message_id?: string;
+  nonce?: string;
+};
+
+export type MessageInput = MessageInputBase &
+  (
+    | { kind?: "message"; turn_id?: never }
+    | { kind: "agent_commentary" | "agent_tool"; turn_id?: string }
+  );
+
 export type Message = {
   id: string;
   route_id?: string;
@@ -166,6 +180,8 @@ export type Message = {
   created_at: string;
   edited_at?: string;
   deleted_at?: string;
+  kind?: MessageKind;
+  turn_id?: string;
   author?: User;
   attachments?: Upload[];
   quoted_message_id?: string;
@@ -594,7 +610,7 @@ export class ClickClackClient {
     },
     sendMessage: async (
       channelId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string; topic_id?: string },
+      input: MessageInput & { topic_id?: string },
     ): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/channels/${channelId}/messages`, {
         method: "POST",
@@ -715,10 +731,7 @@ export class ClickClackClient {
       );
       return data.messages;
     },
-    sendMessage: async (
-      conversationId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string },
-    ): Promise<Message> => {
+    sendMessage: async (conversationId: string, input: MessageInput): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/dms/${conversationId}/messages`, {
         method: "POST",
         body: JSON.stringify(input),

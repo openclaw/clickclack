@@ -270,12 +270,16 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	kind, err := store.NormalizeMessageKind(input.Kind)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	var quotedID, quotedAuthorID, quotedSnapshot string
 	if input.QuotedMessageID != nil {
 		quotedID = strings.TrimSpace(*input.QuotedMessageID)
 	}
 	if existing, err := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); err == nil {
-		if existing.DirectConversationID != input.ConversationID || existing.ChannelID != "" || existing.ParentMessageID != nil || existing.Body != body || !sameQuotedMessageID(existing, quotedID) {
+		if existing.DirectConversationID != input.ConversationID || existing.ChannelID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.Kind != kind || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
 		return existing, store.Event{}, nil
@@ -303,9 +307,11 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		QuotedBodySnapshot:   quotedSnapshot,
 		QuotedAuthorID:       sqlOptionalText(quotedAuthorID),
 		ClientNonce:          nonce,
+		Kind:                 kind,
+		TurnID:               sqlOptionalText(input.TurnID),
 	}); err != nil {
 		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
-			if existing.DirectConversationID == input.ConversationID && existing.ChannelID == "" && existing.ParentMessageID == nil && existing.Body == body && sameQuotedMessageID(existing, quotedID) {
+			if existing.DirectConversationID == input.ConversationID && existing.ChannelID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.Kind == kind && existing.TurnID == input.TurnID && sameQuotedMessageID(existing, quotedID) {
 				return existing, store.Event{}, nil
 			}
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
@@ -322,7 +328,14 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
-	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(map[string]string{"message_id": id, "direct_conversation_id": input.ConversationID, "author_id": input.AuthorID}, nonce), recipients)
+	dmEventFields := map[string]string{"message_id": id, "direct_conversation_id": input.ConversationID, "author_id": input.AuthorID}
+	if kind != store.MessageKindMessage {
+		dmEventFields["kind"] = kind
+	}
+	if input.TurnID != "" {
+		dmEventFields["turn_id"] = input.TurnID
+	}
+	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(dmEventFields, nonce), recipients)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}

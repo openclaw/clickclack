@@ -31,7 +31,8 @@ DELETE /api/messages/{message_id}
   `1..200` (default 100). Every returned root includes `thread_state`, including
   a zero-reply state, so clients can render thread activity without fetching
   each thread.
-- `POST /messages` accepts `{body, quoted_message_id?, nonce?, topic_id?}`.
+- `POST /messages` accepts
+  `{body, quoted_message_id?, nonce?, topic_id?, kind?, turn_id?}`.
   Empty bodies are rejected. `nonce` is an optional client idempotency key;
   replaying the same nonce with the same body, quote, and topic returns the
   existing message with HTTP 200 instead of creating a duplicate.
@@ -48,6 +49,22 @@ DELETE /api/messages/{message_id}
 Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
 Read events are private to the user who advanced the pointer.
+
+## Durable agent activity
+
+Channel and DM create endpoints accept two bot-only activity kinds:
+`agent_commentary` for narration and `agent_tool` for tool execution. Activity
+rows use the normal durable message sequence and realtime fan-out, and rows
+sharing a `turn_id` render as one collapsible preamble in the web app. They do
+not increment unread counts, trigger notifications, or appear in full-text
+search.
+
+Publishing activity requires bot-token authentication plus the explicit
+`agent_activity:write` scope, which is intentionally excluded from every
+`bot:*` bundle. Ordinary messages default to `kind: "message"` and reject a
+`turn_id`; human sessions cannot publish either activity kind. Create an
+activity-capable bot token with a scope list such as
+`bot:write,agent_activity:write`.
 
 ## Topics
 

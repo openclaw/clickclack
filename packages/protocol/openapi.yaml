@@ -485,7 +485,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateMessageRequest"
+              $ref: "#/components/schemas/UpdateMessageRequest"
       responses:
         "200":
           description: Existing message returned for an idempotent nonce replay
@@ -551,7 +551,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateMessageRequest"
+              $ref: "#/components/schemas/CreateThreadReplyRequest"
       responses:
         "200":
           description: Existing thread reply returned for an idempotent nonce replay
@@ -1339,6 +1339,36 @@ components:
         topic_id:
           type: string
           description: Optional topic id. Channel-scoped topics can only be used in their channel.
+        kind:
+          type: string
+          enum: [message, agent_commentary, agent_tool]
+          description: |
+            Durable message kind; omitted values default to message. Agent
+            activity kinds require bot-token auth
+            with the explicit agent_activity:write scope and are supported on
+            channel and direct-message create endpoints.
+        turn_id:
+          type: string
+          description: |
+            Optional agent-turn correlation ID. Allowed only with
+            agent_commentary or agent_tool; ordinary messages reject it.
+    CreateThreadReplyRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+        quoted_message_id:
+          type: string
+        nonce:
+          type: string
+          maxLength: 128
+    UpdateMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
     MarkReadRequest:
       type: object
       required: [seq]
@@ -1523,6 +1553,13 @@ components:
         deleted_at:
           type: string
           format: date-time
+        kind:
+          type: string
+          enum: [message, agent_commentary, agent_tool]
+          description: Defaults to message for ordinary human and bot messages.
+        turn_id:
+          type: string
+          description: Correlates durable agent activity rows from one agent turn.
         author:
           $ref: "#/components/schemas/User"
         quoted_message_id:

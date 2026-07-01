@@ -196,6 +196,8 @@ type Message struct {
 	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
 	ClientNonce          string         `json:"client_nonce"`
 	RouteID              sql.NullString `json:"route_id"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
 }
 
 type MessageAttachment struct {

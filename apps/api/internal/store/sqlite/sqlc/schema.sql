@@ -127,7 +127,9 @@ CREATE TABLE messages (
   quoted_body_snapshot TEXT NOT NULL DEFAULT '',
   quoted_author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   client_nonce TEXT NOT NULL DEFAULT '',
-  route_id TEXT
+  route_id TEXT,
+  kind TEXT NOT NULL DEFAULT 'message',
+  turn_id TEXT
 );
 
 CREATE INDEX idx_messages_channel_seq ON messages(channel_id, channel_seq);

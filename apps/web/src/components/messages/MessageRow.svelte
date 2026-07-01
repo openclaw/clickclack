@@ -6,10 +6,13 @@
   import type { Message } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
+  import PreambleBlock from "./PreambleBlock.svelte";
 
   type Props = {
     message: Message;
     index: number;
+    previousMessage?: Message;
+    nextMessage?: Message;
     selected: boolean;
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
@@ -24,6 +27,8 @@
   let {
     message,
     index,
+    previousMessage,
+    nextMessage,
     selected,
     replyContext,
     selectedThreadID,
@@ -37,12 +42,29 @@
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
+  // Coalesced agent activity: consecutive same-turn agent_commentary/agent_tool
+  // rows are collapsed (client-side) into one synthetic row carrying a
+  // preamble_block. When present, the row renders as a single preamble block
+  // (incrementing commentary + collapsed tool sub-items, collapse-to-one-line
+  // when the turn ends) instead of the final-answer treatment.
+  let preambleBlock = $derived(message.preamble_block);
+  // Boxed preamble<->answer cohesion. Within an agent message group the
+  // synthetic preamble row is immediately followed by the same author's final
+  // answer (coalesceAgentActivity anchors the block at the turn, ordinary
+  // messages pass through), so within-group adjacency alone identifies the
+  // pair. The preamble that precedes a final answer and the answer that follows
+  // a preamble share one bordered card with a flat internal seam, mirroring the
+  // ClawCanvas inline model so the activity log and the answer read as one unit.
+  let followsPreamble = $derived(Boolean(previousMessage?.preamble_block) && !preambleBlock);
+  let precedesFinalMessage = $derived(
+    Boolean(preambleBlock) && Boolean(nextMessage) && !nextMessage?.preamble_block,
+  );
   let threadReplyCount = $derived(message.thread_state?.reply_count || 0);
   let hasThreadReplies = $derived(threadReplyCount > 0);
   let threadTime = $derived(threadActivityTime(message));
 
   function openThreadFromRow(event: MouseEvent) {
-    if (isPending || isFailed) return;
+    if (preambleBlock || isPending || isFailed) return;
     if (window.getSelection()?.toString()) return;
     const target = event.target as HTMLElement | null;
     if (
@@ -70,12 +92,20 @@
   class:selected
   class:is-pending={isPending}
   class:is-failed={isFailed}
-  class:can-open-thread={!isPending && !isFailed}
+  class:is-preamble={Boolean(preambleBlock)}
+  class:is-preamble-collapsed={preambleBlock?.final === true}
+  class:is-preamble-live={preambleBlock?.final === false}
+  class:before-final-message={precedesFinalMessage}
+  class:after-preamble={followsPreamble}
+  class:can-open-thread={!preambleBlock && !isPending && !isFailed}
   data-message-id={message.id}
   use:openThreadOnClick
 >
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
   <div class="message-content">
+    {#if preambleBlock}
+      <PreambleBlock block={preambleBlock} />
+    {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(message.body)}</div>
     {#if message.attachments?.length}
@@ -120,7 +150,9 @@
         {/if}
       {/if}
     </button>
+    {/if}
   </div>
+  {#if !preambleBlock}
   <div class="message-actions" aria-label="Message actions">
     <button
       type="button"
@@ -147,4 +179,5 @@
       </svg>
     </button>
   </div>
+  {/if}
 </div>

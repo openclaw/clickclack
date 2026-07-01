@@ -10,6 +10,9 @@
     avatarURL: string;
     pushoverEnabled: boolean;
     pushoverUserKey: string;
+    hideCommentary: boolean;
+    hideToolCalls: boolean;
+    userAlign: "left" | "right";
     browserNotificationsSupported: boolean;
     browserNotificationsEnabled: boolean;
     browserNotificationPermission: NotificationPermission | "unsupported";
@@ -20,6 +23,9 @@
     onAvatarURL: (value: string) => void;
     onPushoverEnabled: (value: boolean) => void;
     onPushoverUserKey: (value: string) => void;
+    onHideCommentary: (value: boolean) => void;
+    onHideToolCalls: (value: boolean) => void;
+    onUserAlign: (value: "left" | "right") => void;
     onBrowserNotificationsEnabled: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
@@ -32,6 +38,9 @@
     avatarURL,
     pushoverEnabled,
     pushoverUserKey,
+    hideCommentary,
+    hideToolCalls,
+    userAlign,
     browserNotificationsSupported,
     browserNotificationsEnabled,
     browserNotificationPermission,
@@ -42,6 +51,9 @@
     onAvatarURL,
     onPushoverEnabled,
     onPushoverUserKey,
+    onHideCommentary,
+    onHideToolCalls,
+    onUserAlign,
     onBrowserNotificationsEnabled,
     onClose,
     onSave,
@@ -131,6 +143,33 @@
           onchange={(event) => onPushoverEnabled(event.currentTarget.checked)}
         />
         <span>Pushover notifications</span>
+      </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          checked={hideCommentary}
+          onchange={(event) => onHideCommentary(event.currentTarget.checked)}
+        />
+        <span>Hide agent commentary</span>
+      </label>
+      <label class="field check-field">
+        <input
+          type="checkbox"
+          checked={hideToolCalls}
+          onchange={(event) => onHideToolCalls(event.currentTarget.checked)}
+        />
+        <span>Hide tool calls</span>
+      </label>
+      <label class="field">
+        <span>Your message alignment</span>
+        <select
+          aria-label="Your message alignment"
+          value={userAlign}
+          onchange={(event) => onUserAlign(event.currentTarget.value === "right" ? "right" : "left")}
+        >
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
       </label>
       <label class="field">
         <span>Pushover user key</span>

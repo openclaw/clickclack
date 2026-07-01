@@ -51,7 +51,7 @@ func messageSelect() string {
 		       u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
 		       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
 		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.created_at,
-		       m.client_nonce
+		       m.client_nonce, m.kind, COALESCE(m.turn_id, '')
 		FROM messages m
 		JOIN users u ON u.id = m.author_id
 		LEFT JOIN users qu ON qu.id = m.quoted_author_id`
@@ -72,7 +72,7 @@ func scanMessage(row scanner) (store.Message, error) {
 		&author.ID, &author.Kind, &authorOwnerID, &author.DisplayName, &author.Handle, &author.AvatarURL, &author.CreatedAt,
 		&quotedMessageID, &m.QuotedBodySnapshot, &quotedAuthorID,
 		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quCreatedAt,
-		&nonce,
+		&nonce, &m.Kind, &m.TurnID,
 	)
 	if err != nil {
 		return store.Message{}, err

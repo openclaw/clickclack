@@ -284,6 +284,39 @@
   transform: translateY(0);
 }
 
+/* The live "agent is responding" indicator floats over the composer inside a
+   permanently reserved band, so showing/hiding it never reflows the
+   transcript or shifts the composer. The space is always there; only opacity
+   toggles. */
+.composer-dock {
+  position: relative;
+  padding-top: 20px;
+}
+
+.composer-dock .agent-responding {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  margin: 0;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0;
+  transform: none;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.composer-dock .agent-responding.visible {
+  height: 20px;
+  margin: 0;
+  opacity: 1;
+  transform: none;
+}
+
 .typing-indicator__dots {
   display: inline-flex;
   align-items: center;
@@ -647,6 +680,362 @@
   color: var(--muted-2);
   opacity: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/* Coalesced agent preamble block: one block per agent turn, interleaving
+   commentary prose with individually collapsed tool-call rows in arrival
+   order. The block opens while the turn is live and collapses to a single
+   line once the final answer lands. Theme-tied to --activity-accent (blue on
+   light, amber on dark); the wash is deliberately faint so the block reads as
+   secondary to the final answer, which renders as a clearly separate ordinary
+   message below it. */
+.message-row.is-preamble {
+  /* Streaming/growing phase: the row itself stays transparent; the yellow wash
+     lives on the inline content bubble below so it reads like a message,
+     constrained to the content column instead of bleeding edge to edge across
+     the avatar gutter and full row width. */
+  background: transparent;
+  /* Breathing room before the separate final-answer message below. */
+  margin-bottom: 6px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Standalone / still-live preamble (no final answer attached yet): render the
+   yellow working log as an inline bubble within the content column, mirroring
+   the boxed pre-final treatment, so the streaming/growing phase is inline and
+   not full-bleed. Scoped to NOT .before-final-message so the boxed pair keeps
+   its own top-of-card styling. */
+.message-row.is-preamble:not(.before-final-message) .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, var(--line-strong));
+  border-left: 3px solid var(--activity-accent);
+  border-radius: 11px;
+  background: var(--activity-accent-soft);
+}
+
+.message-row.is-preamble-collapsed .message-content {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Boxed preamble<->answer cohesion: when an agent preamble is immediately
+   followed by its final answer (same group/author), the two rows merge into a
+   single bordered card with a flat internal seam so the activity log and the
+   answer read as one cohesive unit (mirrors the ClawCanvas inline model). Scoped
+   to the paired rows only; a standalone or still-live preamble keeps its
+   full-bleed wash + gutter accent above. */
+.message-row.is-preamble.before-final-message {
+  background: transparent;
+  margin-bottom: 0;
+  padding-top: 2px;
+  padding-bottom: 0;
+}
+
+.message-row.after-preamble {
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 2px;
+}
+
+/* The gutter accent bar belongs to the standalone preamble; the boxed pair
+   carries its accent on the card's left border instead, so suppress it. */
+.message-row.is-preamble.before-final-message::before {
+  display: none;
+}
+
+/* Preamble = the slate working-log header (top of the card). */
+.message-row.is-preamble.before-final-message .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, var(--line-strong));
+  border-left: 3px solid var(--activity-accent);
+  background: var(--activity-accent-soft);
+}
+
+/* Preamble = top of the card: round the top, drop the bottom edge so the seam
+   is flat and the answer below continues the same box. */
+.message-row.is-preamble.before-final-message .message-content {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+  border-bottom: 0;
+}
+
+/* Answer = bottom of the card: flat top to meet the seam, rounded bottom. A
+   marginally lighter wash reads the answer as primary and the preamble as its
+   secondary header, giving a soft tonal seam without a hard divider line. */
+/* Answer = the delivered blue message (bottom of the card). This is the hero:
+   a clearly blue wash + blue left rail so it reads as the primary delivery and
+   the slate preamble above it reads as its secondary header. Flat top meets the
+   seam; rounded bottom closes the card. */
+.message-row.after-preamble .message-content {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--delivery-accent) 26%, var(--line-strong));
+  border-left: 3px solid var(--delivery-accent);
+  border-top: 0;
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+  background: var(--delivery-accent-soft);
+}
+
+/* Collapsed preamble inside the boxed pair: keep the compact one-line height
+   without re-adding the standalone vertical padding, and render a distinct
+   yellow bar capping the blue final block below it. */
+.message-row.is-preamble.before-final-message.is-preamble-collapsed .message-content {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  background: color-mix(in srgb, var(--activity-accent) 10%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
+}
+
+/* User (self) message bubble. Mirrors the agent delivery bubble's weight
+   (same padding, radius, 3px left rail) but in the accent tint instead of the
+   delivery blue, so an exchange reads as two matched but distinct bubbles. The
+   bubble hugs its content (fit-content) up to a readable max so the left/right
+   alignment toggle is visually meaningful. Scoped to ordinary self rows; the
+   agent preamble/delivery treatments are never self and stay untouched. */
+.message-group.is-self .message-content {
+  width: fit-content;
+  max-width: min(100%, 680px);
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-strong));
+  border-left: 3px solid var(--accent);
+  border-radius: 11px;
+  background: var(--user-bubble-soft);
+}
+
+/* Right-adjusted self messages: mirror the whole group so the avatar sits in
+   the right gutter, the header right-aligns, and the bubble pushes to the
+   right edge of the content column. Gated on the root data-user-align pref so
+   the default (left) layout is byte-for-byte the existing behavior. */
+:root[data-user-align="right"] .message-group.is-self {
+  grid-template-columns: minmax(0, 1fr) 56px;
+}
+
+:root[data-user-align="right"] .message-group.is-self > .avatar {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+:root[data-user-align="right"] .message-group.is-self > .group-body {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+:root[data-user-align="right"] .message-group.is-self .group-body > header {
+  justify-content: flex-end;
+}
+
+:root[data-user-align="right"] .message-group.is-self .message-content {
+  margin-left: auto;
+}
+
+:root[data-user-align="right"] .message-group.is-self .markdown {
+  text-align: right;
+}
+
+.preamble-contract {
+  display: grid;
+  gap: 7px;
+  /* Grid/flex items default to min-width:auto and refuse to shrink below their
+     content's intrinsic size; a long unbroken token (path, command, id) would
+     then force the column wider than the bubble and overflow. min-width:0 down
+     the chain lets the wrap rules take over. */
+  min-width: 0;
+}
+
+.preamble-toggle {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--activity-accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preamble-chevron {
+  color: var(--activity-accent);
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+
+.preamble-chevron.open {
+  transform: rotate(90deg);
+}
+
+.preamble-state,
+.preamble-action {
+  line-height: 1;
+}
+
+.preamble-state {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
+  border-radius: 999px;
+  color: var(--activity-accent);
+  font-size: 9.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.preamble-state.is-live {
+  border-color: color-mix(in srgb, var(--activity-accent) 55%, transparent);
+  animation: preamble-live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes preamble-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preamble-state.is-live { animation: none; }
+}
+
+.preamble-action {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preamble-body {
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Interleaved preamble flow: commentary prose and tool-call rows in arrival
+   order (commentary, tool, commentary, tool), indented under the header. */
+.preamble-flow {
+  display: grid;
+  gap: 7px;
+  padding-left: 17px;
+  min-width: 0;
+}
+
+/* One tool call: a collapsed one-line summary (chevron + glyph + action +
+   name + truncated detail) on a light blue wash, expanding on click to the
+   full stored body. */
+.preamble-tool {
+  --tool-accent: var(--activity-accent);
+  min-width: 0;
+  border-radius: 7px;
+  background: var(--tool-call-bg);
+  overflow: hidden;
+}
+
+.preamble-tool-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 9px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preamble-tool-summary:hover {
+  background: var(--tool-call-bg-hover);
+}
+
+.preamble-tool-full {
+  display: grid;
+  gap: 5px;
+  padding: 2px 10px 8px 27px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* The step-chain head, rendered as plain text (not markdown: chains contain
+   *, /, | that would break emphasis parsing). */
+.preamble-tool-full-head {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tool-accent) 45%, var(--muted));
+}
+
+.preamble-tool-full-body {
+  min-width: 0;
+}
+
+.preamble-tool-full pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-line-chevron {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--muted-2);
+  transition: transform 120ms ease;
+}
+
+.tool-line-chevron.open {
+  transform: rotate(90deg);
+}
+
+.tool-line-glyph {
+  flex-shrink: 0;
+  font-size: 11px;
+  filter: saturate(0.85);
+}
+
+.tool-line-action {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tool-accent) 38%, var(--text));
+}
+
+.tool-line-name {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--tool-accent) 55%, var(--muted));
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.tool-line-detail {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  opacity: 0.85;
 }
 
 .message-row:hover .row-stamp {
@@ -1370,6 +1759,12 @@
   .message-group {
     grid-template-columns: 44px minmax(0, 1fr);
     padding: 7px 12px;
+  }
+
+  /* Keep the right-adjusted self layout aligned to the same 44px avatar gutter
+     the rest of the mobile list uses, instead of the desktop 56px column. */
+  :root[data-user-align="right"] .message-group.is-self {
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
 
   .message-row {

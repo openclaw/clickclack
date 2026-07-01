@@ -36,6 +36,36 @@ export type Channel = {
   unread_count?: number;
 };
 
+// One commentary prose segment inside a coalesced preamble block.
+export type PreambleCommentaryItem = {
+  type: "commentary";
+  id: string;
+  body: string;
+};
+
+// One tool call inside a coalesced preamble block. `name`/`detail` drive the
+// collapsed one-line summary; `full` is the complete stored body shown when
+// the operator expands the row.
+export type PreambleToolItem = {
+  type: "tool";
+  id: string;
+  name: string;
+  detail?: string;
+  full: string;
+};
+
+export type PreambleItem = PreambleCommentaryItem | PreambleToolItem;
+
+// A render-time coalescing of one agent turn's activity rows: commentary
+// prose and tool calls interleaved in arrival order (commentary, tool,
+// commentary, tool...), built client-side from flat agent_commentary/
+// agent_tool rows that share a turn_id.
+export type PreambleBlock = {
+  turnId: string;
+  items: PreambleItem[];
+  final: boolean;
+};
+
 export type Message = {
   id: string;
   route_id?: string;
@@ -52,6 +82,15 @@ export type Message = {
   created_at: string;
   edited_at?: string;
   deleted_at?: string;
+  // Message kind. Absent/"message" is an ordinary message. The agent_* kinds
+  // are durable agent activity rows rendered inline with an accent + badge.
+  kind?: "message" | "agent_commentary" | "agent_tool";
+  // Correlates a sequence of agent activity rows within one agent turn.
+  turn_id?: string;
+  // Client-only: when consecutive same-turn agent activity rows are coalesced
+  // into one preamble block for rendering, the synthetic row carries the
+  // collapsed block here. Never sent by the server.
+  preamble_block?: PreambleBlock;
   author?: User;
   attachments?: Upload[];
   quoted_message_id?: string;
@@ -159,6 +198,8 @@ export type EventPayload = {
   author_id?: string;
   last_read_seq?: number;
   seq?: number;
+  kind?: Message["kind"];
+  turn_id?: string;
 };
 
 export type RealtimeEvent = {

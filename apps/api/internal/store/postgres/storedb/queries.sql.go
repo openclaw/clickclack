@@ -724,6 +724,7 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM direct_conversations dc
@@ -1272,8 +1273,8 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 }
 
 const insertChannelMessage = `-- name: InsertChannelMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES ($1, $2, $3, NULL, $4, NULL, $5, $6, $7, NULL, $8, 'markdown', $9, $10, $11, $12, $13)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES ($1, $2, $3, NULL, $4, NULL, $5, $6, $7, NULL, $8, 'markdown', $9, $10, $11, $12, $13, $14, $15)
 `
 
 type InsertChannelMessageParams struct {
@@ -1290,6 +1291,8 @@ type InsertChannelMessageParams struct {
 	QuotedBodySnapshot string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID     sql.NullString `json:"quoted_author_id"`
 	ClientNonce        string         `json:"client_nonce"`
+	Kind               string         `json:"kind"`
+	TurnID             sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMessageParams) error {
@@ -1307,6 +1310,8 @@ func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMes
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
+		arg.Kind,
+		arg.TurnID,
 	)
 	return err
 }
@@ -1401,8 +1406,8 @@ func (q *Queries) InsertDirectConversationMember(ctx context.Context, arg Insert
 }
 
 const insertDirectMessage = `-- name: InsertDirectMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, NULL, $7, 'markdown', $8, $9, $10, $11, $12)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, NULL, $7, 'markdown', $8, $9, $10, $11, $12, $13, $14)
 `
 
 type InsertDirectMessageParams struct {
@@ -1418,6 +1423,8 @@ type InsertDirectMessageParams struct {
 	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
 	ClientNonce          string         `json:"client_nonce"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessageParams) error {
@@ -1434,6 +1441,8 @@ func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessa
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
+		arg.Kind,
+		arg.TurnID,
 	)
 	return err
 }
@@ -1782,6 +1791,7 @@ SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kin
          WHERE m.channel_id = c.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT cr2.last_read_seq FROM channel_reads cr2 WHERE cr2.channel_id = c.id AND cr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM channels c
@@ -1851,6 +1861,7 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> $1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
        ), 0) AS BIGINT) AS unread_count
 FROM direct_conversations dc

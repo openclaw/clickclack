@@ -191,6 +191,7 @@ SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kin
          WHERE m.channel_id = c.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> sqlc.arg(reader_user_id)
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT cr2.last_read_seq FROM channel_reads cr2 WHERE cr2.channel_id = c.id AND cr2.user_id = sqlc.arg(reader_user_id)), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM channels c
@@ -447,6 +448,7 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> sqlc.arg(reader_user_id)
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = sqlc.arg(reader_user_id)), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM direct_conversations dc
@@ -471,6 +473,7 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> sqlc.arg(reader_user_id)
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = sqlc.arg(reader_user_id)), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM direct_conversations dc
@@ -554,12 +557,12 @@ WHERE dcm.conversation_id = sqlc.arg(conversation_id)
 ORDER BY u.display_name;
 
 -- name: InsertChannelMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), NULL, sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(topic_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce));
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), NULL, sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(topic_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id));
 
 -- name: InsertDirectMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), NULL, sqlc.arg(direct_conversation_id), sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce));
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), NULL, sqlc.arg(direct_conversation_id), sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id));
 
 -- name: InsertThreadState :exec
 INSERT INTO thread_state (root_message_id)

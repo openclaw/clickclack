@@ -66,6 +66,11 @@ var botAllowedScopes = []string{
 	"realtime:read",
 	"uploads:write",
 	"profile:read",
+	// agent_activity:write is grantable but intentionally NOT part of any
+	// bot:* bundle. Durable agent activity is a distinct authorization surface
+	// and must be granted explicitly, so existing bot:* deployments gain no new
+	// capability.
+	store.AgentActivityWriteScope,
 }
 
 func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (store.User, store.BotToken, error) {

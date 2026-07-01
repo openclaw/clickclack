@@ -27,6 +27,25 @@
   --accent: #dd5d45;
   --accent-2: #006d77;
   --accent-soft: rgba(221, 93, 69, 0.16);
+  /* User (self) message bubble: accent-tinted alternate shading, held at a
+     similar low opacity to the agent delivery/activity washes so the two read
+     as a matched pair rather than competing fills. Defined once here and
+     theme-tied through var(--accent), so the dark override flows automatically. */
+  --user-bubble-soft: color-mix(in srgb, var(--accent) 9%, transparent);
+  /* Two-tone agent turn: the preamble (working log) is yellow while the turn
+     streams and as it collapses to the bar on top, and the final delivered
+     answer owns the blue. Both are theme-tied via the prefers-color-scheme
+     override below, never hardcoded at the call site. */
+  --activity-accent: #d49415;
+  --activity-accent-soft: rgba(212, 148, 21, 0.09);
+  /* Delivery accent: the final answer's blue. This is the hero color of the
+     turn; the preamble's slate deliberately recedes beneath it. */
+  --delivery-accent: #2f6df6;
+  --delivery-accent-soft: rgba(47, 109, 246, 0.06);
+  /* Tool-call rows inside the preamble: a light blue wash, distinct from the
+     preamble background without shouting. */
+  --tool-call-bg: rgba(47, 109, 246, 0.09);
+  --tool-call-bg-hover: rgba(47, 109, 246, 0.14);
   --accent-glow: 0 0 0 1px rgba(221, 93, 69, 0.28), 0 8px 30px -12px rgba(221, 93, 69, 0.45);
   --success: #168b51;
   --warn: #f5b050;
@@ -62,6 +81,15 @@
     --accent: #6f7eff;
     --accent-2: #5666ee;
     --accent-soft: rgba(111, 126, 255, 0.18);
+    /* Yellow preamble on dark theme; the delivered answer stays blue. */
+    --activity-accent: #e8b23e;
+    --activity-accent-soft: rgba(232, 178, 62, 0.10);
+    --delivery-accent: #6096ff;
+    --delivery-accent-soft: rgba(96, 150, 255, 0.08);
+    /* Tool rows stay a light blue even on the amber dark accent: ragesaq's
+       spec is "light blue, distinct but not striking" on both themes. */
+    --tool-call-bg: rgba(96, 150, 255, 0.12);
+    --tool-call-bg-hover: rgba(96, 150, 255, 0.18);
     --accent-glow: 0 0 0 1px rgba(111, 126, 255, 0.4), 0 8px 30px -12px rgba(111, 126, 255, 0.6);
     --success: #2ecc71;
     --warn: #f5b050;

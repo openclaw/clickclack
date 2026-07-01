@@ -127,7 +127,9 @@ CREATE TABLE messages (
   quoted_body_snapshot TEXT NOT NULL DEFAULT '',
   quoted_author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   client_nonce TEXT NOT NULL DEFAULT '',
-  route_id TEXT
+  route_id TEXT,
+  kind TEXT NOT NULL DEFAULT 'message',
+  turn_id TEXT
 );
 
 CREATE INDEX idx_messages_channel_seq ON messages(channel_id, channel_seq);
@@ -147,7 +149,7 @@ CREATE UNIQUE INDEX idx_messages_thread_unique_seq ON messages(thread_root_id, t
   WHERE parent_message_id IS NOT NULL AND thread_seq IS NOT NULL;
 CREATE INDEX idx_messages_search_fts ON messages
   USING GIN (to_tsvector('simple', body))
-  WHERE direct_conversation_id IS NULL AND channel_id IS NOT NULL AND deleted_at IS NULL;
+  WHERE direct_conversation_id IS NULL AND channel_id IS NOT NULL AND deleted_at IS NULL AND kind = 'message';
 
 CREATE TABLE thread_state (
   root_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,

@@ -14,6 +14,7 @@
     type MessageWindowDirection,
   } from "./lib/chat/messageWindow";
   import { collectRecentPeople, dmTitle } from "./lib/chat/people";
+  import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
   import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
@@ -26,6 +27,7 @@
   } from "./components/messages/MessageList.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
   import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
+  import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
   import GuildRail from "./components/navigation/GuildRail.svelte";
@@ -42,6 +44,10 @@
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
   const BROWSER_NOTIFICATIONS_STORAGE_PREFIX = "clickclack:browser-notifications-enabled:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
+  const SHOW_AGENT_ACTIVITY_STORAGE_KEY = "clickclack:show-agent-activity:v1";
+  const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
+  const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
+  const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
   const appSessionStartedAt = Date.now();
 
   export let routeWorkspaceID = "";
@@ -86,6 +92,17 @@
   let browserNotificationPermission: NotificationPermission | "unsupported" = "default";
   let profileStatus = "";
   let profileStatusError = false;
+  // Client-only preferences for agent activity. Consecutive same-turn
+  // agent_commentary/agent_tool rows are coalesced into one preamble block;
+  // these two independent flags drop the commentary prose and/or the tool-call
+  // sub-items from that block. When both are set the block is omitted entirely.
+  // Default: show both. Persisted in localStorage like other client prefs.
+  let hideCommentary = false;
+  let hideToolCalls = false;
+  // Self-message alignment: "left" (default, matches the legacy layout) or
+  // "right". Persisted client-side and applied as a root data attribute so the
+  // messages.css mirror rules can flip the self group without prop drilling.
+  let userAlign: "left" | "right" = "left";
   let status = "loading";
   let authRequired = false;
   let connected = false;
@@ -120,6 +137,8 @@
   let typingSweeper: number | undefined;
   let agentProgressTurns: AgentProgressTurn[] = [];
   let agentProgressSweeper: number | undefined;
+  let activityClock = Date.now();
+  let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
@@ -165,6 +184,20 @@
   $: activeUnreadSince = activeUnreadCount > 0
     ? unreadSinceForKey(activeConversationKey, activeUnreadBoundarySeq, messageWindows)
     : "";
+  // Coalesce consecutive same-turn agent activity rows into one preamble block
+  // per turn, applying the two visibility flags. Ordinary messages pass through
+  // untouched and keep their order.
+  $: visibleMessages = coalesceAgentActivity(
+    messages,
+    { hideCommentary, hideToolCalls },
+    activityClock,
+  );
+  // High-level "agent turn is live" signal: any tracked turn that still has an
+  // unfinalized line. Drives the compact AgentResponding status above the
+  // composer; clears as soon as every line finalizes or the turn is cleared.
+  $: agentResponding = agentProgressTurns.some((turn) =>
+    turn.lines.some((line) => !line.finalized),
+  );
   $: sidePanelOpen = selectedThread !== null || selectedProfile !== null;
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
@@ -182,6 +215,10 @@
     : [];
 
   onMount(() => {
+    loadActivityPrefs();
+    activityClockSweeper = window.setInterval(() => {
+      activityClock = Date.now();
+    }, 30_000);
     syncBrowserNotificationState();
     void boot();
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
@@ -192,6 +229,59 @@
     return () => mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
   });
 
+  function loadActivityPrefs() {
+    try {
+      // New flags default off (both shown). Migrate the legacy single toggle:
+      // if the operator had previously hidden all activity, carry that forward
+      // as both flags hidden.
+      const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
+      hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
+      hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
+      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
+    } catch {
+      hideCommentary = false;
+      hideToolCalls = false;
+      userAlign = "left";
+    }
+    applyUserAlign();
+  }
+
+  function applyUserAlign() {
+    try {
+      document.documentElement.setAttribute("data-user-align", userAlign);
+    } catch {
+      // Non-DOM context (SSR/tests); the in-memory pref still applies on mount.
+    }
+  }
+
+  function setUserAlign(value: "left" | "right") {
+    userAlign = value;
+    applyUserAlign();
+    try {
+      window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, value);
+    } catch {
+      // Ignore unavailable storage; the in-memory pref still applies this session.
+    }
+  }
+
+  function setHideCommentary(value: boolean) {
+    hideCommentary = value;
+    try {
+      window.localStorage.setItem(HIDE_COMMENTARY_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // Ignore unavailable storage; the in-memory pref still applies this session.
+    }
+  }
+
+  function setHideToolCalls(value: boolean) {
+    hideToolCalls = value;
+    try {
+      window.localStorage.setItem(HIDE_TOOL_CALLS_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // Ignore unavailable storage; the in-memory pref still applies this session.
+    }
+  }
+
   onDestroy(() => {
     socket?.close();
     socket = null;
@@ -199,6 +289,7 @@
     stopTyping();
     if (typingSweeper) window.clearInterval(typingSweeper);
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
+    if (activityClockSweeper) window.clearInterval(activityClockSweeper);
     if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
   });
 
@@ -1315,10 +1406,12 @@
 
   function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
     if (event.type !== "message.created") return;
+    const payload = event.payload as Record<string, unknown>;
+    const kind = typeof payload.kind === "string" ? payload.kind : "";
+    if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
-    const payload = event.payload as Record<string, unknown>;
     const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
     if (authorID && authorID === user?.id) return;
     const { channelID, dmID } = messageEventScope(event);
@@ -2146,6 +2239,10 @@
 
   function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean) {
     const payload = event.payload as Record<string, unknown>;
+    // Durable agent activity messages never bump unread counts, mirroring the
+    // server-side accounting (their rows are excluded from unread subqueries).
+    const kind = typeof payload.kind === "string" ? payload.kind : "";
+    if (kind === "agent_commentary" || kind === "agent_tool") return;
     // Don't bump for own messages.
     const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
     if (authorID && authorID === user?.id) return;
@@ -2586,7 +2683,7 @@
     />
 
     <MessageList
-      {messages}
+      messages={visibleMessages}
       {selectedDirect}
       {selectedChannel}
       restoreState={viewRestoreState}
@@ -2627,6 +2724,9 @@
 
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
+    <div class="composer-dock">
+    <AgentResponding active={agentResponding} />
+
     <ChatComposer
       value={messageBody}
       placeholder={selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
@@ -2660,6 +2760,7 @@
       onGifQuery={(value) => (gifQuery = value)}
       onPickGif={pickGif}
     />
+    </div>
   </main>
 
   <aside
@@ -2718,6 +2819,9 @@
     avatarURL={profileAvatarURL}
     pushoverEnabled={profilePushoverEnabled}
     pushoverUserKey={profilePushoverUserKey}
+    {hideCommentary}
+    {hideToolCalls}
+    {userAlign}
     {browserNotificationsSupported}
     {browserNotificationsEnabled}
     {browserNotificationPermission}
@@ -2728,6 +2832,9 @@
     onAvatarURL={(value) => (profileAvatarURL = value)}
     onPushoverEnabled={(value) => (profilePushoverEnabled = value)}
     onPushoverUserKey={(value) => (profilePushoverUserKey = value)}
+    onHideCommentary={setHideCommentary}
+    onHideToolCalls={setHideToolCalls}
+    onUserAlign={setUserAlign}
     onBrowserNotificationsEnabled={(value) => void setBrowserNotificationsEnabled(value)}
     onClose={closeModal}
     onSave={() => void saveProfile()}

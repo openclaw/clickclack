@@ -84,6 +84,23 @@ export interface paths {
     patch: operations["updateMe"];
     trace?: never;
   };
+  "/api/cc/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Local developer-only Claude Code transcript bridge. Requires a human local session and an explicitly configured status script. */
+    get: operations["getCCTranscript"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces": {
     parameters: {
       query?: never;
@@ -1160,6 +1177,49 @@ export interface components {
       thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
     };
+    CCTranscriptMessage: {
+      role: string;
+      content: string;
+      timestamp?: string;
+    };
+    CCTranscriptSession: {
+      lane: string;
+      truth_status: string;
+      api_status?: string;
+      pid?: number;
+      process_state?: string;
+      cpu_ticks_delta?: number;
+      duplicates?: number;
+      session_id: string;
+      cwd: string;
+      last_output_age_seconds?: number;
+      last_output_role?: string;
+      last_output_snippet?: string;
+      why?: string;
+    };
+    CCTranscriptResponse: {
+      status: string;
+      session?: components["schemas"]["CCTranscriptSession"];
+      sessions: components["schemas"]["CCTranscriptSession"][];
+      messages: components["schemas"]["CCTranscriptMessage"][];
+    };
+    MessageEnvelope: {
+      /** @description Stable project-scoped key used to group coordination messages and handoffs. */
+      project_key: string;
+      /**
+       * @description Canonical routing lane for the coordination message.
+       * @enum {string}
+       */
+      lane: "now" | "waiting" | "watch" | "park";
+      /** @description Durable origin label for the coordinating surface or actor. */
+      source: string;
+      /** @description Short human-readable intent or action label for the message. */
+      intent: string;
+      /** @description Durable proof pointers, URLs, or receipt IDs that back up the envelope. */
+      receipts: string[];
+      /** @description True when the envelope requires human attention or a routing decision. */
+      needs_attention: boolean;
+    };
     RouteTarget: {
       workspace_id: string;
       workspace_route_id: string;
@@ -1380,6 +1440,50 @@ export interface operations {
             user: components["schemas"]["User"];
           };
         };
+      };
+    };
+  };
+  getCCTranscript: {
+    parameters: {
+      query?: {
+        cwd?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Transcript bridge state and parsed messages */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CCTranscriptResponse"];
+        };
+      };
+      /** @description Transcript access requires authentication */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Transcript access requires a loopback human session */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Transcript bridge is not configured or unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

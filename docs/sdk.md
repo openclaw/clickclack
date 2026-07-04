@@ -105,12 +105,24 @@ const socket = client.events.subscribe({
 `packages/protocol/openapi.yaml`. Re-export at the top of `index.ts`:
 
 ```ts
-export type { components, paths } from "./generated/openapi";
+export type { components, paths } from "./generated/openapi.js";
 ```
 
 Use the friendly hand-written types (`User`, `Workspace`, `Message`, etc.)
 for app code; reach into `components["schemas"]` only when you need the
 exact OpenAPI shape.
+
+## Coordination envelopes
+
+The SDK exports small framework-neutral helpers for building durable
+coordination payloads from ClickClack messages:
+
+```ts
+import { buildCoordinationHandoff, buildMessageEnvelope } from "@clickclack/sdk-ts";
+```
+
+These helpers only build typed JSON objects. Transports, memory stores, and
+routing services stay outside the SDK.
 
 ## Bot accounts
 

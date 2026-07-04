@@ -95,6 +95,34 @@ paths:
                 properties:
                   user:
                     $ref: "#/components/schemas/User"
+  /api/cc/transcript:
+    get:
+      operationId: getCCTranscript
+      description: Local developer-only Claude Code transcript bridge. Requires a human local session and an explicitly configured status script.
+      parameters:
+        - name: cwd
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Transcript bridge state and parsed messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CCTranscriptResponse"
+        "401":
+          description: Transcript access requires authentication
+        "403":
+          description: Transcript access requires a loopback human session
+        "503":
+          description: Transcript bridge is not configured or unavailable
   /api/workspaces:
     get:
       operationId: listWorkspaces
@@ -1574,6 +1602,87 @@ components:
           $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
+    CCTranscriptMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+        timestamp:
+          type: string
+    CCTranscriptSession:
+      type: object
+      required: [lane, truth_status, session_id, cwd]
+      properties:
+        lane:
+          type: string
+        truth_status:
+          type: string
+        api_status:
+          type: string
+        pid:
+          type: integer
+        process_state:
+          type: string
+        cpu_ticks_delta:
+          type: integer
+        duplicates:
+          type: integer
+        session_id:
+          type: string
+        cwd:
+          type: string
+        last_output_age_seconds:
+          type: number
+        last_output_role:
+          type: string
+        last_output_snippet:
+          type: string
+        why:
+          type: string
+    CCTranscriptResponse:
+      type: object
+      required: [status, sessions, messages]
+      properties:
+        status:
+          type: string
+        session:
+          $ref: "#/components/schemas/CCTranscriptSession"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CCTranscriptSession"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/CCTranscriptMessage"
+    MessageEnvelope:
+      type: object
+      required: [project_key, lane, source, intent, receipts, needs_attention]
+      properties:
+        project_key:
+          type: string
+          description: Stable project-scoped key used to group coordination messages and handoffs.
+        lane:
+          type: string
+          enum: [now, waiting, watch, park]
+          description: Canonical routing lane for the coordination message.
+        source:
+          type: string
+          description: Durable origin label for the coordinating surface or actor.
+        intent:
+          type: string
+          description: Short human-readable intent or action label for the message.
+        receipts:
+          type: array
+          items:
+            type: string
+          description: Durable proof pointers, URLs, or receipt IDs that back up the envelope.
+        needs_attention:
+          type: boolean
+          description: True when the envelope requires human attention or a routing decision.
     RouteTarget:
       type: object
       required: [workspace_id, workspace_route_id, target_type, target_id, target_route_id, canonical_path]

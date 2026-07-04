@@ -84,6 +84,7 @@
       </p>
       <div class="hero-actions">
         <a class="primary-action" href={appURL}>Open app</a>
+        <a class="secondary-action" href="/talk">Local transcript</a>
         <a class="secondary-action" href={docsURL}>Read docs</a>
         <a class="secondary-action" href={repoURL}>GitHub</a>
       </div>

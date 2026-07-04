@@ -1,0 +1,1 @@
+import"../chunks/CoUBFNZc.js";import{p as a,a as e}from"../chunks/Ko6Rw0u5.js";import{C as o}from"../chunks/B7mORUDj.js";function u(t,r){a(r,!0),o(t,{get routeWorkspaceID(){return r.params.workspaceID},get routeTargetID(){return r.params.targetID}}),e()}export{u as component};

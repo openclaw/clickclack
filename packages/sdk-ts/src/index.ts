@@ -1,4 +1,6 @@
-export type { components, paths } from "./generated/openapi";
+export type { components, paths } from "./generated/openapi.js";
+export * from "./message-envelope.js";
+export * from "./coordination-handoff.js";
 
 export type User = {
   id: string;

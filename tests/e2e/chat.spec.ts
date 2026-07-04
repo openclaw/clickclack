@@ -181,11 +181,22 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
   await expect(page.locator(".product-site")).toHaveCSS("display", "block");
   await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
+  await expect(page.getByRole("link", { name: "Local transcript" })).toHaveAttribute(
+    "href",
+    "/talk",
+  );
   await expect(page.getByRole("link", { name: "Read docs" })).toHaveAttribute(
     "href",
     "https://docs.clickclack.chat",
   );
   await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
+  await page.getByRole("link", { name: "Local transcript" }).click();
+  await expect(
+    page.getByRole("heading", { name: "The real conversation, or nothing." }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Live transcript").getByText("cc transcript bridge is not configured"),
+  ).toBeVisible();
 });
 
 test("self-hosted product website links stay on the local app route", async ({ page }) => {

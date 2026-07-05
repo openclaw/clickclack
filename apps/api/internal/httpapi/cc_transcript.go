@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +16,8 @@ import (
 )
 
 const ccTruthStatusPathEnv = "CLICKCLACK_CC_TRUTH_STATUS_PATH"
+
+const maxCCTranscriptLineBytes = 8 * 1024 * 1024
 
 // ccTruthSession mirrors the bridge status rows produced by cc_truth_status.py.
 type ccTruthSession struct {
@@ -222,10 +225,19 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 	}
 
 	messages := make([]ccTranscriptMessage, 0, limit)
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	reader := bufio.NewReader(file)
+	for {
+		line, oversized, err := readCCTranscriptLine(reader)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read transcript %s: %w", path, err)
+		}
+		if oversized {
+			continue
+		}
+		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
@@ -249,18 +261,39 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 			messages = messages[len(messages)-limit:]
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan transcript %s: %w", path, err)
-	}
 	return messages, nil
+}
+
+func readCCTranscriptLine(reader *bufio.Reader) ([]byte, bool, error) {
+	line := make([]byte, 0, 4096)
+	oversized := false
+	for {
+		fragment, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			return nil, false, err
+		}
+		if !oversized {
+			if len(line)+len(fragment) > maxCCTranscriptLineBytes {
+				line = nil
+				oversized = true
+			} else {
+				line = append(line, fragment...)
+			}
+		}
+		if !isPrefix {
+			return line, oversized, nil
+		}
+	}
 }
 
 func isCCMetaRow(row map[string]any) bool {
 	if row == nil {
 		return true
 	}
-	if meta, ok := row["isMeta"].(bool); ok && meta {
-		return true
+	for _, field := range []string{"isMeta", "isCompactSummary", "isSidechain"} {
+		if hidden, ok := row[field].(bool); ok && hidden {
+			return true
+		}
 	}
 	typeName, _ := row["type"].(string)
 	return typeName != "user" && typeName != "assistant"

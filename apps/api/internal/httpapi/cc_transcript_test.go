@@ -214,6 +214,8 @@ func TestReadCCTranscriptMessagesReturnsHonestEmptyState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.jsonl")
 	rows := strings.Join([]string{
 		`{"type":"system","isMeta":true,"content":"hidden"}`,
+		`{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"hidden"}}`,
+		`{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":"hidden"}}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"hidden"}]}}`,
 		`{"type":"progress","message":{"role":"assistant","content":"hidden"}}`,
 		`not json`,
@@ -227,5 +229,25 @@ func TestReadCCTranscriptMessagesReturnsHonestEmptyState(t *testing.T) {
 	}
 	if messages == nil || len(messages) != 0 {
 		t.Fatalf("expected an empty non-nil message list, got %#v", messages)
+	}
+}
+
+func TestReadCCTranscriptMessagesSkipsOversizedRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "oversized.jsonl")
+	oversized := `{"type":"progress","content":"` + strings.Repeat("x", maxCCTranscriptLineBytes) + `"}`
+	rows := strings.Join([]string{
+		`{"type":"user","message":{"role":"user","content":"before"}}`,
+		oversized,
+		`{"type":"assistant","message":{"role":"assistant","content":"after"}}`,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := readCCTranscriptMessages(path, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 || messages[0].Content != "before" || messages[1].Content != "after" {
+		t.Fatalf("expected surrounding messages to survive oversized row, got %#v", messages)
 	}
 }

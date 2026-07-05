@@ -77,8 +77,9 @@ Without `cwd`, selection prefers `truth_status=active`, then
 finally the first reported session.
 
 The reader streams the JSONL file and keeps only recent user/assistant text.
-Metadata, tool-use, attachment, and malformed rows are ignored. If the selected
-file has no readable text, the API returns an honest empty message list.
+Metadata, compaction summaries, sidechain traffic, tool-use, attachment,
+oversized, and malformed rows are ignored. If the selected file has no readable
+text, the API returns an honest empty message list.
 
 ## Failure behavior
 

@@ -13,6 +13,7 @@ export type ClickClackDesktopBridge = {
   platform: NodeJS.Platform;
   setActiveRoute(route: string): void;
   setUnreadCount(count: number): void;
+  signInWithGitHub(): Promise<boolean>;
 };
 
 const bridge: ClickClackDesktopBridge = {
@@ -20,6 +21,7 @@ const bridge: ClickClackDesktopBridge = {
   notify: (notification) => ipcRenderer.invoke("desktop:notify", notification),
   setUnreadCount: (count) => ipcRenderer.send("desktop:set-unread", count),
   setActiveRoute: (route) => ipcRenderer.send("desktop:set-active-route", route),
+  signInWithGitHub: () => ipcRenderer.invoke("desktop:sign-in-with-github"),
   openSettings: () => ipcRenderer.send("desktop:open-settings"),
   onNavigate: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, route: string) => callback(route);

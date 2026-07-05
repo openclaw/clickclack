@@ -33,6 +33,129 @@ func TestGitHubOAuthDefaultHTTPClientTimeout(t *testing.T) {
 	}
 }
 
+func TestGitHubDesktopOAuthFlow(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(t.TempDir(), "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "d-token"})
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 77, "login": "desktop", "email": "desktop@example.com"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      provider.URL + "/authorize",
+		TokenURL:     provider.URL + "/token",
+		UserURL:      provider.URL + "/user",
+		EmailsURL:    provider.URL + "/emails",
+	}}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+
+	verifier := strings.Repeat("v", 43)
+	challenge := desktopCodeChallenge(verifier)
+	resp, err := client.Get(server.URL + "/api/auth/github/desktop/start?code_challenge=" + challenge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), provider.URL+"/authorize?") {
+		t.Fatalf("unexpected desktop start response: %s %s", resp.Status, resp.Header.Get("Location"))
+	}
+	stateCookie := findCookie(resp.Cookies(), "cc_github_state")
+	desktopCookie := findCookie(resp.Cookies(), "cc_github_desktop_state")
+	challengeCookie := findCookie(resp.Cookies(), "cc_github_desktop_challenge")
+	resp.Body.Close()
+	if stateCookie == nil || desktopCookie == nil || desktopCookie.Value != stateCookie.Value || challengeCookie == nil || challengeCookie.Value != challenge {
+		t.Fatalf("expected matching desktop state and challenge cookies, got %#v %#v %#v", stateCookie, desktopCookie, challengeCookie)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+stateCookie.Value, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(stateCookie)
+	req.AddCookie(desktopCookie)
+	req.AddCookie(challengeCookie)
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantCode := callback.Query().Get("code")
+	if resp.StatusCode != http.StatusFound || callback.Scheme != "clickclack" || callback.Host != "auth" || callback.Path != "/callback" || !validDesktopCode(grantCode, 32, 32) {
+		t.Fatalf("unexpected desktop callback: %s %s", resp.Status, callback.String())
+	}
+	if cookie := findCookie(resp.Cookies(), "cc_session"); cookie != nil {
+		t.Fatalf("desktop callback leaked a browser session cookie: %#v", cookie)
+	}
+	if cookie := findCookie(resp.Cookies(), "cc_github_desktop_challenge"); cookie == nil || cookie.MaxAge >= 0 {
+		t.Fatalf("expected desktop challenge cookie to be cleared, got %#v", cookie)
+	}
+	resp.Body.Close()
+
+	consume := func(origin, candidateVerifier string) *http.Response {
+		t.Helper()
+		body, err := json.Marshal(map[string]string{"code": grantCode, "code_verifier": candidateVerifier})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequest(http.MethodPost, server.URL+"/api/auth/github/desktop/consume", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	resp = consume("https://evil.example", verifier)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected cross-site consume rejection, got %s", resp.Status)
+	}
+	resp.Body.Close()
+	resp = consume(server.URL, strings.Repeat("x", 43))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected wrong verifier rejection, got %s", resp.Status)
+	}
+	resp.Body.Close()
+	resp = consume(server.URL, verifier)
+	sessionCookie := findCookie(resp.Cookies(), "cc_session")
+	if resp.StatusCode != http.StatusOK || sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatalf("expected desktop session cookie, got %s %#v", resp.Status, sessionCookie)
+	}
+	resp.Body.Close()
+	resp = consume(server.URL, verifier)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected one-time grant rejection, got %s", resp.Status)
+	}
+	resp.Body.Close()
+}
+
 func TestGitHubOAuthFlow(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

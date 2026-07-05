@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Added secure ClickClack desktop apps for macOS, Windows, and Linux with native notifications, unread badges, tray lifecycle, quick compose, deep links, downloads, spellcheck, and self-hosted server selection.
-- Kept desktop GitHub sign-in in the main app window while withholding native desktop capabilities from GitHub pages.
+- Opened desktop GitHub sign-in in the system browser, then returned securely through a short-lived, verifier-bound `clickclack://` callback so existing browser sessions, passkeys, and two-factor authentication work without exposing tokens in URLs.
 - Redesigned the clickclack.chat product website with a modern Geist-based look that matches the app: sticky nav, app-mockup hero, feature grid, CLI terminal, quickstart steps, and full dark-mode support.
 - Refreshed runtime, build, and CI dependencies to clear known JavaScript advisories and pin current GitHub Actions releases.
 - Wrote CLI client configuration atomically while preserving read-only-file and symlink safety. Thanks @KrasimirKralev.

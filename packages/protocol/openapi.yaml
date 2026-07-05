@@ -43,6 +43,41 @@ paths:
           description: Redirect to GitHub OAuth authorization
         "501":
           description: GitHub OAuth not configured
+  /api/auth/github/desktop/start:
+    get:
+      operationId: startDesktopGitHubOAuth
+      parameters:
+        - name: code_challenge
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 43
+            maxLength: 43
+            pattern: "^[A-Za-z0-9_-]+$"
+      responses:
+        "302":
+          description: Redirect the system browser to GitHub OAuth authorization
+        "400":
+          description: Invalid desktop code challenge
+        "501":
+          description: GitHub OAuth not configured
+  /api/auth/github/desktop/consume:
+    post:
+      operationId: consumeDesktopGitHubOAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsumeDesktopGitHubOAuthRequest"
+      responses:
+        "200":
+          description: One-time desktop grant consumed and session cookie created
+        "400":
+          description: Invalid, expired, or previously consumed desktop grant
+        "403":
+          description: Cross-site redemption rejected
   /api/auth/github/callback:
     get:
       operationId: finishGitHubOAuth
@@ -57,7 +92,7 @@ paths:
             type: string
       responses:
         "302":
-          description: Session created and redirected to app
+          description: Session created and redirected to the web app or desktop callback
         "400":
           description: Invalid OAuth callback
         "403":
@@ -917,6 +952,20 @@ components:
       properties:
         token:
           type: string
+    ConsumeDesktopGitHubOAuthRequest:
+      type: object
+      required: [code, code_verifier]
+      properties:
+        code:
+          type: string
+          minLength: 32
+          maxLength: 32
+          pattern: "^[a-f0-9]+$"
+        code_verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_-]+$"
     UpdateMeRequest:
       type: object
       required: [display_name]

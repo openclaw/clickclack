@@ -29,6 +29,7 @@ type Server struct {
 	uploadDir      string
 	uploadStorage  uploadstore.Store
 	githubOAuth    GitHubOAuthConfig
+	desktopOAuth   *desktopOAuthBroker
 	disableDevAuth bool
 	pushNotifier   PushNotifier
 }
@@ -68,6 +69,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		uploadDir:      options.UploadDir,
 		uploadStorage:  uploadStorage,
 		githubOAuth:    options.GitHubOAuth.withDefaults(),
+		desktopOAuth:   newDesktopOAuthBroker(),
 		disableDevAuth: options.DisableDevAuth,
 		pushNotifier:   options.PushNotifier,
 	}
@@ -84,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
 		r.Get("/auth/github/start", s.githubStart)
+		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
+		r.Post("/auth/github/desktop/consume", s.githubDesktopConsume)
 		r.Get("/auth/github/callback", s.githubCallback)
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)

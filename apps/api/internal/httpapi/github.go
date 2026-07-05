@@ -3,6 +3,9 @@ package httpapi
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -33,6 +37,30 @@ type GitHubOAuthConfig struct {
 var errGitHubOrgDenied = errors.New("github account is not a member of the allowed organization")
 
 const defaultGitHubHTTPTimeout = 30 * time.Second
+
+const (
+	desktopOAuthCallbackURL = "clickclack://auth/callback"
+	desktopOAuthStateTTL    = 10 * time.Minute
+	desktopOAuthGrantTTL    = 5 * time.Minute
+	desktopOAuthMaxGrants   = 4096
+)
+
+type desktopOAuthGrant struct {
+	challenge string
+	expiresAt time.Time
+	session   store.Session
+}
+
+type desktopOAuthBroker struct {
+	mu     sync.Mutex
+	grants map[string]desktopOAuthGrant
+}
+
+func newDesktopOAuthBroker() *desktopOAuthBroker {
+	return &desktopOAuthBroker{
+		grants: make(map[string]desktopOAuthGrant),
+	}
+}
 
 func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 	if c.AuthURL == "" {
@@ -57,6 +85,19 @@ func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 }
 
 func (s *Server) githubStart(w http.ResponseWriter, r *http.Request) {
+	s.startGitHubOAuth(w, r, "")
+}
+
+func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
+	challenge := strings.TrimSpace(r.URL.Query().Get("code_challenge"))
+	if !validDesktopCode(challenge, 43, 43) {
+		writeError(w, http.StatusBadRequest, errors.New("valid desktop oauth code challenge is required"))
+		return
+	}
+	s.startGitHubOAuth(w, r, challenge)
+}
+
+func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, desktopChallenge string) {
 	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
 		writeError(w, http.StatusNotImplemented, errors.New("github oauth is not configured"))
 		return
@@ -65,6 +106,14 @@ func (s *Server) githubStart(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if desktopChallenge != "" {
+		maxAge := int(desktopOAuthStateTTL / time.Second)
+		http.SetCookie(w, &http.Cookie{Name: "cc_github_desktop_state", Value: state, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: "cc_github_desktop_challenge", Value: desktopChallenge, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
+	} else {
+		s.clearGitHubDesktopStateCookie(w, r)
+		s.clearGitHubDesktopChallengeCookie(w, r)
 	}
 	http.SetCookie(w, &http.Cookie{Name: "cc_github_state", Value: state, Path: "/", MaxAge: 600, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
 	values := url.Values{
@@ -83,6 +132,19 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.clearGitHubStateCookie(w, r)
+	desktopStateCookie, desktopCookieErr := r.Cookie("cc_github_desktop_state")
+	isDesktop := desktopCookieErr == nil && desktopStateCookie.Value == state.Value
+	s.clearGitHubDesktopStateCookie(w, r)
+	desktopChallengeCookie, desktopChallengeErr := r.Cookie("cc_github_desktop_challenge")
+	s.clearGitHubDesktopChallengeCookie(w, r)
+	var desktopChallenge string
+	if isDesktop {
+		if desktopChallengeErr != nil || !validDesktopCode(desktopChallengeCookie.Value, 43, 43) {
+			writeError(w, http.StatusBadRequest, errors.New("desktop oauth request expired"))
+			return
+		}
+		desktopChallenge = desktopChallengeCookie.Value
+	}
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
 		writeError(w, http.StatusBadRequest, errors.New("github oauth code is required"))
@@ -126,8 +188,50 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	if !isDesktop {
+		s.setSessionCookie(w, r, session)
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	grantCode, err := randomToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !s.desktopOAuth.putGrant(grantCode, desktopChallenge, session, time.Now().Add(desktopOAuthGrantTTL)) {
+		writeError(w, http.StatusServiceUnavailable, errors.New("too many pending desktop oauth grants"))
+		return
+	}
+	callback, _ := url.Parse(desktopOAuthCallbackURL)
+	query := callback.Query()
+	query.Set("code", grantCode)
+	callback.RawQuery = query.Encode()
+	http.Redirect(w, r, callback.String(), http.StatusFound)
+}
+
+func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSameOriginJSON(w, r) {
+		return
+	}
+	var body struct {
+		Code     string `json:"code"`
+		Verifier string `json:"code_verifier"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if !validDesktopCode(body.Code, 32, 32) || !validDesktopCode(body.Verifier, 43, 128) {
+		writeError(w, http.StatusBadRequest, errors.New("invalid desktop oauth grant"))
+		return
+	}
+	session, ok := s.desktopOAuth.consumeGrant(body.Code, desktopCodeChallenge(body.Verifier), time.Now())
+	if !ok {
+		writeError(w, http.StatusBadRequest, errors.New("invalid or expired desktop oauth grant"))
+		return
+	}
 	s.setSessionCookie(w, r, session)
-	http.Redirect(w, r, "/", http.StatusFound)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) clearGitHubStateCookie(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +245,84 @@ func (s *Server) clearGitHubStateCookie(w http.ResponseWriter, r *http.Request) 
 		Secure:   s.secureCookies(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (s *Server) clearGitHubDesktopStateCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "cc_github_desktop_state",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   s.secureCookies(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *Server) clearGitHubDesktopChallengeCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "cc_github_desktop_challenge",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   s.secureCookies(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (b *desktopOAuthBroker) putGrant(code, challenge string, session store.Session, expiresAt time.Time) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.pruneLocked(time.Now())
+	if len(b.grants) >= desktopOAuthMaxGrants {
+		return false
+	}
+	b.grants[code] = desktopOAuthGrant{challenge: challenge, expiresAt: expiresAt, session: session}
+	return true
+}
+
+func (b *desktopOAuthBroker) consumeGrant(code, challenge string, now time.Time) (store.Session, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.pruneLocked(now)
+	grant, ok := b.grants[code]
+	if !ok || subtle.ConstantTimeCompare([]byte(grant.challenge), []byte(challenge)) != 1 {
+		return store.Session{}, false
+	}
+	delete(b.grants, code)
+	return grant.session, true
+}
+
+func (b *desktopOAuthBroker) pruneLocked(now time.Time) {
+	for key, grant := range b.grants {
+		if !now.Before(grant.expiresAt) {
+			delete(b.grants, key)
+		}
+	}
+}
+
+func desktopCodeChallenge(verifier string) string {
+	digest := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
+}
+
+func validDesktopCode(value string, minimum, maximum int) bool {
+	if len(value) < minimum || len(value) > maximum {
+		return false
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') ||
+			character == '-' || character == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Server) ensureGitHubWorkspace(ctx context.Context, token, userID string) (store.Workspace, error) {

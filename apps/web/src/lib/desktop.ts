@@ -13,6 +13,7 @@ export type ClickClackDesktopBridge = {
   platform: "darwin" | "linux" | "win32" | string;
   setActiveRoute(route: string): void;
   setUnreadCount(count: number): void;
+  signInWithGitHub(): Promise<boolean>;
 };
 
 export const desktop: ClickClackDesktopBridge | undefined =

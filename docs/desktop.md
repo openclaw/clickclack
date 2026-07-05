@@ -45,8 +45,14 @@ http://127.0.0.1:8080
 ```
 
 Remote servers must use HTTPS. Plain HTTP is accepted only for `localhost`,
-`127.0.0.1`, and `::1`. Authentication stays in Electron's persistent browser
+`127.0.0.1`, and `::1`. Authentication returns to Electron's persistent browser
 session and remains scoped to the selected origin.
+
+GitHub sign-in opens in the system browser, where existing GitHub sessions,
+passkeys, password managers, and two-factor authentication already work. After
+GitHub approves the login, `clickclack://auth/callback` returns a one-time grant
+to the running app. The app redeems it against the exact server that initiated
+the flow and reloads itself as the signed-in workspace.
 
 ## Security model
 
@@ -56,11 +62,14 @@ bridge exposes only bounded notification, unread-count, navigation, and quick-
 compose messages. It does not expose arbitrary IPC, shell commands, environment
 variables, filesystem access, or credentials.
 
-Navigation stays on the configured ClickClack origin. GitHub's exact OAuth
-authorization URL is allowed for sign-in; other HTTP(S) and mail links open in
-the system browser. Permission requests from remote content are denied. Server
-configuration is accepted only from the bundled local settings window and is
-written atomically with user-only permissions.
+Navigation stays on the configured ClickClack origin. GitHub OAuth and other
+HTTP(S) and mail links open in the system browser. The callback carries only an
+opaque, short-lived grant: GitHub access tokens and ClickClack session tokens
+never appear in the callback URL. Redemption requires the verifier held by the
+initiating app, is single-use, and expires after five minutes. Permission
+requests from remote content are denied. Server configuration is accepted only
+from the bundled local settings window and is written atomically with user-only
+permissions.
 
 ## Build locally
 

@@ -15,6 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { readFile, rename, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import {
   appURL,
@@ -22,6 +23,8 @@ import {
   deepLinkToRoute,
   defaultSettings,
   DESKTOP_SERVER_ORIGIN_ARG,
+  desktopOAuthCallbackCode,
+  desktopOAuthStartURL,
   mergeSettings,
   normalizeServerURL,
   safeAppRoute,
@@ -42,9 +45,10 @@ let settings = defaultSettings();
 let currentRoute = "/app";
 let unreadCount = 0;
 let quitting = false;
-let oauthInProgress = false;
 let routesReady = false;
 let pendingRoute: string | null = null;
+let pendingProtocolURL: string | null = null;
+let pendingDesktopAuth: { serverUrl: string; verifier: string } | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 
@@ -54,11 +58,12 @@ if (!app.requestSingleInstanceLock()) {
   registerProtocol();
   app.on("second-instance", (_event, commandLine) => {
     const link = commandLine.find((argument) => argument.startsWith(`${PROTOCOL}://`));
-    openRouteWhenReady(link ? deepLinkToRoute(link) : currentRoute);
+    if (link) handleProtocolURL(link);
+    else openRouteWhenReady(currentRoute);
   });
   app.on("open-url", (event, url) => {
     event.preventDefault();
-    openRouteWhenReady(deepLinkToRoute(url));
+    handleProtocolURL(url);
   });
 
   void app.whenReady().then(start);
@@ -82,6 +87,13 @@ async function start() {
   if (initialRoute) currentRoute = initialRoute;
   createMainWindow(currentRoute);
   routesReady = true;
+  if (pendingProtocolURL) {
+    const link = pendingProtocolURL;
+    pendingProtocolURL = null;
+    handleProtocolURL(link);
+  } else if (startupLink && desktopOAuthCallbackCode(startupLink)) {
+    handleProtocolURL(startupLink);
+  }
 
   app.on("activate", () => showMainWindow());
   app.on("before-quit", () => {
@@ -149,7 +161,6 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   window.on("maximize", scheduleWindowStateSave);
   window.on("unmaximize", scheduleWindowStateSave);
   window.webContents.on("did-navigate", (_event, url) => {
-    if (isSameServerURL(url)) oauthInProgress = false;
     const parsed = routeFromServerURL(url);
     if (parsed) currentRoute = parsed;
   });
@@ -162,10 +173,9 @@ function createMainWindow(route = currentRoute): BrowserWindow {
 
 function configureWebContents(window: BrowserWindow) {
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSameServerURL(url)) {
-      void window.loadURL(url);
-    } else if (isGitHubOAuthURL(url)) {
-      oauthInProgress = true;
+    if (isGitHubLoginStartURL(url)) {
+      void beginDesktopOAuth();
+    } else if (isSameServerURL(url)) {
       void window.loadURL(url);
     } else if (isExternalURL(url)) {
       void shell.openExternal(url);
@@ -222,15 +232,14 @@ function guardMainFrameNavigation(
   isMainFrame: boolean,
 ) {
   if (!isMainFrame) return;
+  if (isGitHubLoginStartURL(url)) {
+    event.preventDefault();
+    void beginDesktopOAuth();
+    return;
+  }
   if (isSameServerURL(url)) {
-    oauthInProgress = false;
     return;
   }
-  if (isGitHubOAuthURL(url)) {
-    oauthInProgress = true;
-    return;
-  }
-  if (oauthInProgress && isGitHubURL(url)) return;
   event.preventDefault();
   if (url.startsWith(`${PROTOCOL}://`)) {
     openRoute(deepLinkToRoute(url));
@@ -300,6 +309,11 @@ function registerIPC() {
   });
   ipcMain.on("desktop:open-settings", (event) => {
     if (isMainSender(event)) createSettingsWindow();
+  });
+  ipcMain.handle("desktop:sign-in-with-github", async (event) => {
+    if (!isMainSender(event)) return false;
+    await beginDesktopOAuth();
+    return true;
   });
 
   ipcMain.handle("settings:get", (event) => {
@@ -532,8 +546,7 @@ function openRoute(route: string | null | undefined) {
   currentRoute = safeRoute;
   const window = mainWindow ?? createMainWindow(safeRoute);
   showMainWindow();
-  if (oauthInProgress || !isSameServerURL(window.webContents.getURL())) {
-    oauthInProgress = false;
+  if (!isSameServerURL(window.webContents.getURL())) {
     void window.loadURL(appURL(settings.serverUrl, safeRoute));
     return;
   }
@@ -543,6 +556,84 @@ function openRoute(route: string | null | undefined) {
     );
   } else {
     window.webContents.send("desktop:navigate", safeRoute);
+  }
+}
+
+function handleProtocolURL(input: string) {
+  const authCode = desktopOAuthCallbackCode(input);
+  if (authCode) {
+    if (!routesReady) {
+      pendingProtocolURL = input;
+      return;
+    }
+    void completeDesktopOAuth(authCode);
+    return;
+  }
+  openRouteWhenReady(deepLinkToRoute(input));
+}
+
+async function beginDesktopOAuth() {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const serverUrl = normalizeServerURL(settings.serverUrl);
+  pendingDesktopAuth = { serverUrl, verifier };
+  showMainWindow();
+  try {
+    await shell.openExternal(desktopOAuthStartURL(serverUrl, challenge));
+  } catch (error) {
+    pendingDesktopAuth = null;
+    throw error;
+  }
+}
+
+async function completeDesktopOAuth(code: string) {
+  const pending = pendingDesktopAuth;
+  if (!pending || pending.serverUrl !== normalizeServerURL(settings.serverUrl)) {
+    await showDesktopAuthError("This sign-in request expired. Start again from ClickClack.");
+    return;
+  }
+  try {
+    const response = await session.defaultSession.fetch(
+      new URL("/api/auth/github/desktop/consume", pending.serverUrl).toString(),
+      {
+        body: JSON.stringify({ code, code_verifier: pending.verifier }),
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-ClickClack-CSRF": "1",
+        },
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+    const cookies = await session.defaultSession.cookies.get({
+      name: "cc_session",
+      url: pending.serverUrl,
+    });
+    if (cookies.length === 0) throw new Error("Server did not create a desktop session");
+    pendingDesktopAuth = null;
+    currentRoute = "/app";
+    const window = mainWindow ?? createMainWindow(currentRoute);
+    await window.loadURL(appURL(pending.serverUrl, currentRoute));
+    showMainWindow();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown authentication error";
+    await showDesktopAuthError(`GitHub sign-in could not be completed. ${detail}`);
+  }
+}
+
+async function showDesktopAuthError(message: string) {
+  const options: Electron.MessageBoxOptions = {
+    message,
+    title: "ClickClack sign-in failed",
+    type: "error",
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await dialog.showMessageBox(mainWindow, options);
+  } else {
+    await dialog.showMessageBox(options);
   }
 }
 
@@ -573,23 +664,13 @@ function isSameServerURL(input: string): boolean {
   }
 }
 
-function isGitHubOAuthURL(input: string): boolean {
+function isGitHubLoginStartURL(input: string): boolean {
   try {
     const value = new URL(input);
     return (
-      value.protocol === "https:" &&
-      value.hostname === "github.com" &&
-      value.pathname === "/login/oauth/authorize"
+      value.origin === normalizeServerURL(settings.serverUrl) &&
+      value.pathname === "/api/auth/github/start"
     );
-  } catch {
-    return false;
-  }
-}
-
-function isGitHubURL(input: string): boolean {
-  try {
-    const value = new URL(input);
-    return value.protocol === "https:" && value.hostname === "github.com";
   } catch {
     return false;
   }

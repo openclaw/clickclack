@@ -80,6 +80,33 @@ export function appURL(serverUrl: string, route = DEFAULT_APP_ROUTE): string {
   return new URL(safeRoute, origin).toString();
 }
 
+export function desktopOAuthStartURL(serverUrl: string, codeChallenge: string): string {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)) {
+    throw new Error("Invalid desktop OAuth code challenge");
+  }
+  const value = new URL("/api/auth/github/desktop/start", normalizeServerURL(serverUrl));
+  value.searchParams.set("code_challenge", codeChallenge);
+  return value.toString();
+}
+
+export function desktopOAuthCallbackCode(input: string): string | null {
+  let value: URL;
+  try {
+    value = new URL(input);
+  } catch {
+    return null;
+  }
+  if (
+    value.protocol !== "clickclack:" ||
+    value.hostname !== "auth" ||
+    value.pathname !== "/callback"
+  ) {
+    return null;
+  }
+  const code = value.searchParams.get("code") ?? "";
+  return /^[a-f0-9]{32}$/.test(code) ? code : null;
+}
+
 export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: string | undefined) {
   if (!trustedOrigin) return false;
   try {

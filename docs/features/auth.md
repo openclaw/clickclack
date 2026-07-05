@@ -116,6 +116,24 @@ Flow:
    default workspace or the open `Guests` workspace, creates a session, sets
    `cc_session`, redirects to `/`.
 
+The desktop app uses the same GitHub callback through a system-browser handoff:
+
+1. The app creates a high-entropy verifier and opens
+   `GET /api/auth/github/desktop/start?code_challenge=<SHA-256 challenge>` in the
+   default browser.
+2. After the normal GitHub callback succeeds, the server redirects to
+   `clickclack://auth/callback?code=<opaque one-time grant>`. No GitHub or
+   ClickClack session token is placed in the URL.
+3. The app posts the grant and its verifier to
+   `POST /api/auth/github/desktop/consume`. The exact initiating server sets the
+   Electron session cookie, invalidates the grant, and the app reloads `/app`.
+
+Desktop state expires after ten minutes; completed grants expire after five.
+The verifier binding prevents another local application from redeeming a custom
+protocol callback it intercepts. Pending challenges live only in the initiating
+browser's HTTP-only state cookies, so abandoned public starts do not consume
+server-side state or block other users from beginning sign-in.
+
 The redirect URL is derived from `CLICKCLACK_PUBLIC_URL` when set, otherwise
 from the request scheme/host. Configure GitHub with `<public-url>/api/auth/github/callback`.
 

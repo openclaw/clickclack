@@ -4,6 +4,8 @@ import {
   appURL,
   clampUnreadCount,
   desktopBridgeAllowed,
+  desktopOAuthCallbackCode,
+  desktopOAuthStartURL,
   deepLinkToRoute,
   mergeSettings,
   normalizeServerURL,
@@ -41,6 +43,21 @@ test("maps explicit deep-link forms to app routes", () => {
   );
   assert.equal(deepLinkToRoute("clickclack://evil/app/team"), null);
   assert.equal(deepLinkToRoute("https://chat.example.com/app/team"), null);
+});
+
+test("builds and validates the desktop OAuth handoff", () => {
+  const challenge = "a".repeat(43);
+  assert.equal(
+    desktopOAuthStartURL("https://chat.example.com", challenge),
+    `https://chat.example.com/api/auth/github/desktop/start?code_challenge=${challenge}`,
+  );
+  assert.throws(() => desktopOAuthStartURL("https://chat.example.com", "short"), /challenge/);
+  assert.equal(
+    desktopOAuthCallbackCode(`clickclack://auth/callback?code=${"a1".repeat(16)}`),
+    "a1".repeat(16),
+  );
+  assert.equal(desktopOAuthCallbackCode("clickclack://auth/callback?code=bad"), null);
+  assert.equal(desktopOAuthCallbackCode(`clickclack://app/callback?code=${"a1".repeat(16)}`), null);
 });
 
 test("exposes the desktop bridge only to the configured server origin", () => {

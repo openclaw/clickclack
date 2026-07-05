@@ -63,6 +63,7 @@ it for anything that isn't a local clone.
 | Magic-link auth, GitHub OAuth, dev fallback | [Auth](features/auth.md) |
 | Guest waiting-room roles, approvals, timeouts, blocks | [Moderation](features/moderation.md) |
 | Mattermost-shaped webhooks and slash commands | [Integrations](features/integrations.md) |
+| Opt-in local Claude Code transcript viewer | [Local transcript bridge](features/local-transcript.md) |
 | TypeScript SDK + bot example | [SDK](sdk.md) |
 
 ## Operate it

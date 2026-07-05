@@ -27,6 +27,7 @@ The server resolves callers in this order (see
 |---------------|-----------|-----|
 | Auth          | `/api/auth/magic/{request,consume}`, `/api/auth/github/{start,callback}` | [auth](../features/auth.md) |
 | Profile       | `/api/me` | [profiles](../features/profiles.md) |
+| Local transcript | `/api/cc/transcript` | [local transcript bridge](../features/local-transcript.md) |
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
 | Bots          | `/api/workspaces/{id}/bots`, `/api/bots/{id}/tokens`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |

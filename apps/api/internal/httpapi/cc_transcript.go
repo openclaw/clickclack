@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -84,7 +85,7 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 	}
 	sessions, err := loadCCTruthSessions(r.Context(), script)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, err)
+		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript bridge status is unavailable"))
 		return
 	}
 
@@ -94,7 +95,7 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, ccTranscriptResponse{
 			Status:   "No live Claude Code session is attached yet.",
 			Sessions: sanitizeCCSessions(sessions),
-			Messages: nil,
+			Messages: []ccTranscriptMessage{},
 		})
 		return
 	}
@@ -108,7 +109,7 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 	}
 	messages, err := readCCTranscriptMessages(selected.Transcript, limit)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, err)
+		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript is unavailable"))
 		return
 	}
 
@@ -211,14 +212,20 @@ func normalizePath(path string) string {
 }
 
 func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read transcript %s: %w", path, err)
 	}
-	lines := bytes.Split(data, []byte("\n"))
+	defer file.Close()
+	if limit <= 0 {
+		limit = 20
+	}
+
 	messages := make([]ccTranscriptMessage, 0, limit)
-	for _, rawLine := range lines {
-		line := bytes.TrimSpace(rawLine)
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
 		}
@@ -242,8 +249,8 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 			messages = messages[len(messages)-limit:]
 		}
 	}
-	if len(messages) == 0 {
-		return nil, errors.New("no readable CC messages found in transcript")
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan transcript %s: %w", path, err)
 	}
 	return messages, nil
 }
@@ -256,17 +263,7 @@ func isCCMetaRow(row map[string]any) bool {
 		return true
 	}
 	typeName, _ := row["type"].(string)
-	switch typeName {
-	case "last-prompt", "mode", "permission-mode", "file-history-snapshot":
-		return true
-	}
-	if typeName == "user" || typeName == "assistant" {
-		return false
-	}
-	if _, ok := row["attachment"]; ok {
-		return true
-	}
-	return false
+	return typeName != "user" && typeName != "assistant"
 }
 
 func extractCCTranscriptMessage(row map[string]any) (role string, content string, timestamp string) {
@@ -281,28 +278,48 @@ func extractCCTranscriptMessage(row map[string]any) (role string, content string
 		if msgRole, ok := msg["role"].(string); ok && msgRole != "" {
 			role = msgRole
 		}
-		content = anyToString(msg["content"])
+		content = ccContentText(msg["content"])
 	}
 	if content == "" {
-		content = anyToString(row["content"])
+		content = ccContentText(row["content"])
 	}
 	content = strings.TrimSpace(content)
 	return role, content, timestamp
 }
 
-func anyToString(v any) string {
+func ccContentText(v any) string {
 	switch typed := v.(type) {
 	case nil:
 		return ""
 	case string:
 		return typed
-	case []byte:
-		return string(typed)
-	default:
-		b, err := json.Marshal(typed)
-		if err != nil {
-			return fmt.Sprint(typed)
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			switch block := item.(type) {
+			case string:
+				if text := strings.TrimSpace(block); text != "" {
+					parts = append(parts, text)
+				}
+			case map[string]any:
+				kind, _ := block["type"].(string)
+				if kind != "" && kind != "text" {
+					continue
+				}
+				if text, ok := block["text"].(string); ok && strings.TrimSpace(text) != "" {
+					parts = append(parts, strings.TrimSpace(text))
+				}
+			}
 		}
-		return string(b)
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		kind, _ := typed["type"].(string)
+		if kind != "" && kind != "text" {
+			return ""
+		}
+		text, _ := typed["text"].(string)
+		return text
+	default:
+		return ""
 	}
 }

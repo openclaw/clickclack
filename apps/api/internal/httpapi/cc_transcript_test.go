@@ -124,7 +124,7 @@ func TestCCTranscriptConfiguredBridgeReturnsSanitizedMessages(t *testing.T) {
 	transcript := strings.Join([]string{
 		`{"type":"system","isMeta":true,"content":"ignore me"}`,
 		`{"type":"user","timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"hello"}}`,
-		`{"type":"assistant","timestamp":"2026-07-04T10:00:01Z","message":{"role":"assistant","content":"hi back"}}`,
+		`{"type":"assistant","timestamp":"2026-07-04T10:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"hi back"},{"type":"tool_use","name":"ignored"}]}}`,
 	}, "\n")
 	if err := os.WriteFile(transcriptPath, []byte(transcript), 0o600); err != nil {
 		t.Fatal(err)
@@ -169,6 +169,11 @@ print(json.dumps([{
 	if _, ok := payload["session"].(map[string]any)["transcript"]; ok {
 		t.Fatalf("transcript path leaked in session payload: %#v", payload["session"])
 	}
+	for _, item := range payload["sessions"].([]any) {
+		if _, ok := item.(map[string]any)["transcript"]; ok {
+			t.Fatalf("transcript path leaked in sessions payload: %#v", payload["sessions"])
+		}
+	}
 	messages, ok := payload["messages"].([]any)
 	if !ok || len(messages) != 1 {
 		t.Fatalf("expected one limited transcript message, got %#v", payload["messages"])
@@ -176,5 +181,51 @@ print(json.dumps([{
 	message, ok := messages[0].(map[string]any)
 	if !ok || message["role"] != "assistant" || message["content"] != "hi back" {
 		t.Fatalf("unexpected transcript message: %#v", messages[0])
+	}
+
+	missingPath := filepath.Join(dataDir, "private-missing.jsonl")
+	missingScriptBody := strings.Replace(statusScriptBody, strconv.Quote(transcriptPath), strconv.Quote(missingPath), 1)
+	if err := os.WriteFile(statusScript, []byte(missingScriptBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	missingReq, err := http.NewRequest(http.MethodGet, server.URL+"/api/cc/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingReq.Header.Set("X-ClickClack-User", owner.ID)
+	missingResp, err := http.DefaultClient.Do(missingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer missingResp.Body.Close()
+	if missingResp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected a missing transcript to return 503, got %s", missingResp.Status)
+	}
+	var failure map[string]any
+	if err := json.NewDecoder(missingResp.Body).Decode(&failure); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(failure["error"].(string), missingPath) {
+		t.Fatalf("transcript path leaked in failure payload: %#v", failure)
+	}
+}
+
+func TestReadCCTranscriptMessagesReturnsHonestEmptyState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.jsonl")
+	rows := strings.Join([]string{
+		`{"type":"system","isMeta":true,"content":"hidden"}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"hidden"}]}}`,
+		`{"type":"progress","message":{"role":"assistant","content":"hidden"}}`,
+		`not json`,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := readCCTranscriptMessages(path, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if messages == nil || len(messages) != 0 {
+		t.Fatalf("expected an empty non-nil message list, got %#v", messages)
 	}
 }

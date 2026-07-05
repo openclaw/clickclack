@@ -3,6 +3,7 @@
   import { productAppURLForHost } from "../../productLinks";
 
   const docsURL = "https://docs.clickclack.chat";
+  const transcriptDocsURL = `${docsURL}/features/local-transcript.html`;
   const repoURL = "https://github.com/openclaw/clickclack";
   const appURL = typeof window !== "undefined" ? productAppURLForHost(window.location.hostname) : "/app";
 
@@ -164,7 +165,7 @@
       </p>
       <div class="hero-actions">
         <a class="primary-action" href={appURL}>Open app</a>
-        <a class="secondary-action" href={docsURL}>Read docs</a>
+        <a class="secondary-action" href={transcriptDocsURL}>Setup guide</a>
         <a class="ghost-action" href="#transcript">See transcript</a>
       </div>
     </div>
@@ -238,8 +239,8 @@
       <div class="empty-transcript">
         <p>{loading ? "Loading live data…" : status}</p>
         <p>
-          Sign in on localhost, configure the transcript bridge, and this card will show the real
-          transcript bodies here.
+          Configure the bridge on localhost and this card will show text from the selected session.
+          Tool calls, metadata rows, and local transcript paths stay out of the feed.
         </p>
       </div>
     {/if}
@@ -433,6 +434,7 @@
 
   .hero-copy {
     display: grid;
+    min-width: 0;
     gap: 22px;
     align-content: start;
     padding: clamp(8px, 1vw, 18px);
@@ -458,7 +460,7 @@
   h1 {
     max-width: 12ch;
     font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(58px, 7.8vw, 120px);
+    font-size: clamp(58px, 7vw, 108px);
     font-weight: 900;
     letter-spacing: -0.075em;
     line-height: 0.88;
@@ -507,6 +509,7 @@
   .proof-card,
   .proof-slab,
   .contract-grid article {
+    min-width: 0;
     border: 1px solid var(--ink);
     border-radius: var(--radius);
     background: #ffffff;
@@ -762,7 +765,9 @@
     }
 
     h1 {
-      font-size: clamp(48px, 16vw, 72px);
+      max-width: 100%;
+      font-size: clamp(46px, 13vw, 62px);
+      letter-spacing: -0.06em;
     }
 
     .message-meta,

@@ -119,10 +119,35 @@ coordination payloads from ClickClack messages:
 
 ```ts
 import { buildCoordinationHandoff, buildMessageEnvelope } from "@clickclack/sdk-ts";
+
+const envelope = buildMessageEnvelope({
+  project_key: "clickclack",
+  lane: "now",
+  source: "release-room",
+  intent: "review deployment proof",
+  receipts: ["https://github.com/openclaw/clickclack/actions/runs/123"],
+  needs_attention: true,
+});
+
+const handoff = buildCoordinationHandoff({
+  envelope,
+  message,
+  summary: "Deployment proof is ready for review.",
+});
 ```
 
 These helpers only build typed JSON objects. Transports, memory stores, and
-routing services stay outside the SDK.
+routing services stay outside the SDK. `buildMessageEnvelope` copies the
+receipt list so callers can safely retain their input. `buildCoordinationHandoff`
+adds stable ClickClack message, author, workspace, channel/direct-message,
+thread, route, and timestamp fields without sending or persisting anything.
+
+The four coordination lanes are exported as `coordinationLanes`:
+
+- `now` — active work.
+- `waiting` — blocked on another actor or event.
+- `watch` — no action yet; retain visibility.
+- `park` — intentionally deferred.
 
 ## Bot accounts
 

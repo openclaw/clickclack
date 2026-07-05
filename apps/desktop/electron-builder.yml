@@ -2,7 +2,7 @@ appId: chat.clickclack.desktop
 productName: ClickClack
 copyright: Copyright © OpenClaw contributors
 asar: true
-compression: maximum
+compression: normal
 directories:
   output: release
 files:

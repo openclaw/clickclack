@@ -42,6 +42,7 @@ linux:
   category: Network
   maintainer: OpenClaw contributors
   executableName: clickclack
+  syncDesktopName: true
   target:
     - AppImage
     - deb

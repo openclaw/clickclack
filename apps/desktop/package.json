@@ -4,6 +4,8 @@
   "private": true,
   "author": "OpenClaw contributors",
   "description": "Native ClickClack desktop shell for macOS, Windows, and Linux",
+  "desktopName": "clickclack.desktop",
+  "homepage": "https://clickclack.chat",
   "license": "MIT",
   "type": "module",
   "main": "dist/main.cjs",

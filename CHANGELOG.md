@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Integrated the desktop sidebar toggle and message search into native macOS, Windows, and Linux title bars while preserving the browser app header.
 - Added secure ClickClack desktop apps for macOS, Windows, and Linux with native notifications, unread badges, tray lifecycle, quick compose, deep links, downloads, spellcheck, and self-hosted server selection.
 - Opened desktop GitHub sign-in in the system browser, then returned securely through a short-lived, verifier-bound `clickclack://` callback so existing browser sessions, passkeys, and two-factor authentication work without exposing tokens in URLs.
 - Served clickclack.chat and www.clickclack.chat from the Cloudflare Worker as declarative custom domains in `wrangler.jsonc`, retiring the separate Hetzner web host; container image rollouts are forced by bumping the dated `CLICKCLACK_CONTAINER_NAME`.

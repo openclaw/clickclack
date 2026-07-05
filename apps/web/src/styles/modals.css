@@ -423,6 +423,10 @@
   .thread.open {
     transform: translateX(0);
   }
+  .desktop-shell .thread {
+    top: 52px;
+    bottom: 0;
+  }
 }
 
 @media (max-width: 820px) {
@@ -471,6 +475,17 @@
   }
   .nav-open .guild-rail {
     padding-top: calc(62px + var(--safe-area-top));
+  }
+  .desktop-shell .guild-rail,
+  .desktop-shell .sidebar {
+    top: 52px;
+    height: calc(100dvh - 52px);
+  }
+  .desktop-shell.nav-open .guild-rail {
+    padding-top: calc(14px + var(--safe-area-top));
+  }
+  .desktop-shell .mobile-nav-backdrop {
+    top: 52px;
   }
   .mobile-nav-backdrop {
     display: block;

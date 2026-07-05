@@ -38,6 +38,7 @@
   import SearchResults from "./components/search/SearchResults.svelte";
   import ThreadEmptyState from "./components/thread/ThreadEmptyState.svelte";
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
+  import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SlashCommand, ThreadState, Upload, User, Workspace } from "./lib/types";
 
@@ -50,6 +51,7 @@
   const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
   const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
   const appSessionStartedAt = Date.now();
+  const integratedTitleBar = desktop?.integratedTitleBar === true;
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -130,6 +132,7 @@
   let showWorkspaceCreate = false;
   let sidebarCollapsed = false;
   let mobileNavOpen = false;
+  let mobileNavViewport = false;
   let replyTarget: Message | null = null;
   let replyContext: "channel" | "dm" | "thread" | null = null;
   let messageInput: HTMLTextAreaElement | null = null;
@@ -234,7 +237,9 @@
     const mobileNavMedia = window.matchMedia(MOBILE_NAV_MEDIA_QUERY);
     const handleMobileNavBreakpoint = () => {
       mobileNavOpen = false;
+      mobileNavViewport = mobileNavMedia.matches;
     };
+    handleMobileNavBreakpoint();
     const stopDesktopNavigate = desktop?.onNavigate((route) => {
       void goto(route, { keepFocus: true, noScroll: true });
     });
@@ -2629,8 +2634,8 @@
   }
 
   function handleSidebarCollapse() {
-    if (mobileNavOpen && window.matchMedia(MOBILE_NAV_MEDIA_QUERY).matches) {
-      closeMobileNav();
+    if (mobileNavViewport) {
+      mobileNavOpen = !mobileNavOpen;
       return;
     }
     sidebarCollapsed = !sidebarCollapsed;
@@ -2644,6 +2649,9 @@
 <svelte:window onkeydowncapture={handleWindowKeydown} onpointerdowncapture={rememberTypeToFocusPointer} />
 
 {#if authRequired}
+  {#if integratedTitleBar && desktop}
+    <div class="desktop-auth-titlebar" data-platform={desktop.platform} aria-hidden="true"></div>
+  {/if}
   <main class="auth-shell">
     <section class="auth-panel" aria-label="Sign in">
       <div class="auth-brand">
@@ -2669,10 +2677,29 @@
 {:else}
 <div
   class="shell"
+  class:desktop-shell={integratedTitleBar}
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
   class:thread-open={sidePanelOpen}
 >
+  {#if integratedTitleBar && desktop}
+    <DesktopTitlebar
+      {connected}
+      platform={desktop.platform}
+      {searchQuery}
+      {sidebarCollapsed}
+      {mobileNavOpen}
+      mobileNavigation={mobileNavViewport}
+      {status}
+      workspaceName={selectedWorkspace?.name}
+      onOpenSettings={() => desktop.openSettings()}
+      onResetSearch={resetSearch}
+      onSearch={() => void searchMessages()}
+      onSearchQuery={(value) => (searchQuery = value)}
+      onToggleSidebar={handleSidebarCollapse}
+    />
+  {/if}
+
   <button
     class="mobile-nav-toggle"
     type="button"
@@ -2695,6 +2722,7 @@
 
   <GuildRail
     {workspaces}
+    homeHref={integratedTitleBar ? "/app" : "/"}
     {selectedWorkspaceID}
     {workspaceName}
     {showWorkspaceCreate}
@@ -2710,6 +2738,7 @@
     {status}
     {connected}
     {sidebarCollapsed}
+    showCollapse={!integratedTitleBar}
     {channels}
     {directConversations}
     {recentPeople}
@@ -2738,6 +2767,7 @@
       workspaceName={selectedWorkspace?.name}
       currentUserID={user?.id}
       {searchQuery}
+      showSearch={!integratedTitleBar}
       {sidePanelOpen}
       threadOpen={selectedThread !== null}
       onSearchQuery={(value) => (searchQuery = value)}

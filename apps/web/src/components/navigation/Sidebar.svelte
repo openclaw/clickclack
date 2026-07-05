@@ -10,6 +10,7 @@
     status: string;
     connected: boolean;
     sidebarCollapsed: boolean;
+    showCollapse?: boolean;
     channels: Channel[];
     directConversations: DirectConversation[];
     recentPeople: User[];
@@ -36,6 +37,7 @@
     status,
     connected,
     sidebarCollapsed,
+    showCollapse = true,
     channels,
     directConversations,
     recentPeople,
@@ -68,24 +70,26 @@
       <strong>{workspaceName || "Pick a workspace"}</strong>
       <span class="presence" class:online={connected}>{connected ? "Connected" : status}</span>
     </div>
-    <button
-      type="button"
-      class="sidebar-collapse"
-      aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-      title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-      onclick={onToggleCollapse}
-    >
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-        <path
-          fill="none"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d={sidebarCollapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
-        />
-      </svg>
-    </button>
+    {#if showCollapse}
+      <button
+        type="button"
+        class="sidebar-collapse"
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onclick={onToggleCollapse}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d={sidebarCollapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
+          />
+        </svg>
+      </button>
+    {/if}
   </header>
 
   <div class="sidebar-scroll">

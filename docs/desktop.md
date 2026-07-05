@@ -29,6 +29,14 @@ adds operating-system behavior around the existing web app and API.
 - **Remembered workspace.** Window bounds, maximized state, selected server,
   tray preference, and optional login launch are stored in the platform user-data
   directory.
+- **Integrated window chrome.** ClickClack extends into the native title bar:
+  macOS traffic lights and Windows/Linux caption controls share one compact row
+  with the sidebar toggle, centered message search, connection state, and desktop
+  settings. The browser app keeps these controls in the normal app header. The
+  desktop app checks for this renderer capability before hiding the standard
+  frame, so older self-hosted servers retain usable native window chrome. While
+  the integrated frame is active, non-app pages open in the system browser so
+  the desktop window always keeps its draggable control row.
 
 The desktop shell does not run ClickClack server code, read agent transcripts,
 or grant web content filesystem or Node.js access.

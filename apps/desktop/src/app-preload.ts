@@ -1,11 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   DESKTOP_SERVER_ORIGIN_ARG,
+  DESKTOP_TITLEBAR_ARG,
   desktopBridgeAllowed,
   type DesktopNotification,
 } from "./contract";
 
 export type ClickClackDesktopBridge = {
+  integratedTitleBar: boolean;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
   onQuickCompose(callback: () => void): () => void;
@@ -17,6 +19,7 @@ export type ClickClackDesktopBridge = {
 };
 
 const bridge: ClickClackDesktopBridge = {
+  integratedTitleBar: process.argv.includes(DESKTOP_TITLEBAR_ARG),
   platform: process.platform,
   notify: (notification) => ipcRenderer.invoke("desktop:notify", notification),
   setUnreadCount: (count) => ipcRenderer.send("desktop:set-unread", count),

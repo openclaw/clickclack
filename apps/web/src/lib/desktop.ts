@@ -6,6 +6,7 @@ export type DesktopNotification = {
 };
 
 export type ClickClackDesktopBridge = {
+  integratedTitleBar: boolean;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
   onQuickCompose(callback: () => void): () => void;

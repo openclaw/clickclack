@@ -1,6 +1,7 @@
 export const DEFAULT_SERVER_URL = "https://app.clickclack.chat";
 export const DEFAULT_APP_ROUTE = "/app";
 export const DESKTOP_SERVER_ORIGIN_ARG = "--clickclack-server-origin=";
+export const DESKTOP_TITLEBAR_ARG = "--clickclack-integrated-titlebar";
 
 export type WindowState = {
   height?: number;
@@ -26,11 +27,48 @@ export type DesktopNotification = {
   title: string;
 };
 
+export type DesktopTitleBarOptions = {
+  titleBarOverlay?: {
+    color: string;
+    height: number;
+    symbolColor: string;
+  };
+  titleBarStyle: "hidden" | "hiddenInset";
+  trafficLightPosition?: { x: number; y: number };
+};
+
 export const defaultSettings = (): DesktopSettings => ({
   closeToTray: true,
   serverUrl: DEFAULT_SERVER_URL,
   startAtLogin: false,
 });
+
+export function desktopTitleBarOptions(
+  platform: NodeJS.Platform,
+  dark: boolean,
+): DesktopTitleBarOptions {
+  if (platform === "darwin") {
+    return {
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 16, y: 18 },
+    };
+  }
+  return {
+    titleBarOverlay: {
+      color: dark ? "#17181e" : "#fbf6ee",
+      height: 52,
+      symbolColor: dark ? "#e7e9ee" : "#22201d",
+    },
+    titleBarStyle: "hidden",
+  };
+}
+
+export function hasIntegratedTitleBarCapability(html: string): boolean {
+  return (html.match(/<meta\b[^>]*>/gi) ?? []).some(
+    (tag) =>
+      /\bname=["']clickclack-desktop-titlebar["']/i.test(tag) && /\bcontent=["']1["']/i.test(tag),
+  );
+}
 
 export function normalizeServerURL(input: string): string {
   const raw = input.trim();
@@ -111,6 +149,21 @@ export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: strin
   if (!trustedOrigin) return false;
   try {
     return new URL(currentOrigin).origin === normalizeServerURL(trustedOrigin);
+  } catch {
+    return false;
+  }
+}
+
+export function desktopMainWindowNavigationAllowed(
+  input: string,
+  serverUrl: string,
+  integratedTitleBar: boolean,
+): boolean {
+  try {
+    const value = new URL(input);
+    if (value.origin !== normalizeServerURL(serverUrl)) return false;
+    if (!integratedTitleBar) return true;
+    return safeAppRoute(`${value.pathname}${value.search}${value.hash}`) !== null;
   } catch {
     return false;
   }

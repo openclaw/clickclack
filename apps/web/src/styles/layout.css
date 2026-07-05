@@ -130,6 +130,185 @@
   grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw);
 }
 
+.shell.desktop-shell {
+  grid-template-rows: 52px minmax(0, 1fr);
+}
+
+.desktop-shell > .desktop-titlebar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.desktop-shell > .guild-rail,
+.desktop-shell > .sidebar,
+.desktop-shell > .timeline,
+.desktop-shell > .thread {
+  grid-row: 2;
+}
+
+.desktop-shell .mobile-nav-toggle {
+  display: none;
+}
+
+/* ---------- DESKTOP WINDOW CHROME ---------- */
+
+.desktop-auth-titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 10;
+  height: 52px;
+  -webkit-app-region: drag;
+}
+
+.desktop-titlebar {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 52px;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    color-mix(in srgb, var(--panel) 88%, var(--bg));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.desktop-titlebar-safe-area {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 14px;
+  -webkit-app-region: drag;
+}
+
+.desktop-titlebar[data-platform="darwin"] .desktop-titlebar-safe-area {
+  padding-left: 78px;
+}
+
+.desktop-titlebar[data-platform="win32"] .desktop-titlebar-safe-area,
+.desktop-titlebar[data-platform="linux"] .desktop-titlebar-safe-area {
+  position: absolute;
+  left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, calc(100% - 148px));
+}
+
+.desktop-titlebar-leading,
+.desktop-titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-titlebar-actions {
+  margin-left: auto;
+}
+
+.desktop-titlebar button {
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.desktop-titlebar button:hover {
+  border-color: var(--line);
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.desktop-titlebar-leading > button,
+.desktop-titlebar-actions > button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.desktop-titlebar-workspace {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-titlebar-search.search {
+  position: absolute;
+  left: 50%;
+  width: min(520px, calc(100vw - 430px));
+  min-width: 280px;
+  height: 32px;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--panel-2) 84%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset;
+  transform: translateX(-50%);
+  -webkit-app-region: no-drag;
+}
+
+.desktop-titlebar-search.search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 66%, var(--line));
+  background: var(--panel-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.desktop-titlebar-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 110px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.desktop-titlebar-presence i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted-2);
+}
+
+.desktop-titlebar-presence i.online {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.desktop-titlebar-presence span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .desktop-titlebar-workspace,
+  .desktop-titlebar-presence {
+    display: none;
+  }
+
+  .desktop-titlebar[data-platform="win32"] .desktop-titlebar-actions,
+  .desktop-titlebar[data-platform="linux"] .desktop-titlebar-actions {
+    display: none;
+  }
+}
+
+@media (max-width: 940px) {
+  .desktop-titlebar-search.search {
+    width: min(430px, calc(100vw - 300px));
+  }
+}
+
 /* ---------- TIMELINE ---------- */
 
 .timeline {

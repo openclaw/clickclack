@@ -22,10 +22,14 @@ import {
   clampUnreadCount,
   deepLinkToRoute,
   defaultSettings,
+  desktopTitleBarOptions,
+  desktopMainWindowNavigationAllowed,
   DESKTOP_SERVER_ORIGIN_ARG,
+  DESKTOP_TITLEBAR_ARG,
   desktopOAuthCallbackCode,
   desktopOAuthStartURL,
   mergeSettings,
+  hasIntegratedTitleBarCapability,
   normalizeServerURL,
   safeAppRoute,
   sanitizeNotification,
@@ -51,6 +55,7 @@ let pendingProtocolURL: string | null = null;
 let pendingDesktopAuth: { serverUrl: string; verifier: string } | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
+let integratedTitleBar = false;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -74,6 +79,7 @@ async function start() {
   if (process.platform === "win32") app.setAppUserModelId("chat.clickclack.desktop");
   nativeTheme.themeSource = "system";
   settings = await readSettings();
+  integratedTitleBar = await serverSupportsIntegratedTitleBar(settings.serverUrl);
   applyLoginItemSetting();
   registerIPC();
   secureSession();
@@ -86,6 +92,7 @@ async function start() {
   pendingRoute = null;
   if (initialRoute) currentRoute = initialRoute;
   createMainWindow(currentRoute);
+  nativeTheme.on("updated", refreshMainWindowTitleBar);
   routesReady = true;
   if (pendingProtocolURL) {
     const link = pendingProtocolURL;
@@ -116,19 +123,23 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   const saved = visibleWindowState(settings.window);
   const window = new BrowserWindow({
-    backgroundColor: "#f7f3ed",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131419" : "#f7f3ed",
     height: saved.height ?? 860,
     icon: assetPath("icon.png"),
     minHeight: 560,
     minWidth: 760,
     show: false,
     title: APP_NAME,
+    ...(integratedTitleBar
+      ? desktopTitleBarOptions(process.platform, nativeTheme.shouldUseDarkColors)
+      : {}),
     width: saved.width ?? 1280,
     ...(saved.x === undefined ? {} : { x: saved.x }),
     ...(saved.y === undefined ? {} : { y: saved.y }),
     webPreferences: {
       additionalArguments: [
         `${DESKTOP_SERVER_ORIGIN_ARG}${normalizeServerURL(settings.serverUrl)}`,
+        ...(integratedTitleBar ? [DESKTOP_TITLEBAR_ARG] : []),
       ],
       backgroundThrottling: false,
       contextIsolation: true,
@@ -171,11 +182,57 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   return window;
 }
 
+function refreshMainWindowTitleBar() {
+  if (!integratedTitleBar || !mainWindow || mainWindow.isDestroyed()) return;
+  const overlay = desktopTitleBarOptions(
+    process.platform,
+    nativeTheme.shouldUseDarkColors,
+  ).titleBarOverlay;
+  if (overlay) mainWindow.setTitleBarOverlay(overlay);
+}
+
+async function serverSupportsIntegratedTitleBar(serverUrl: string): Promise<boolean> {
+  try {
+    const response = await net.fetch(appURL(serverUrl), {
+      headers: { Accept: "text/html" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) return false;
+    return hasIntegratedTitleBarCapability(await responsePrefix(response));
+  } catch {
+    // Older or unavailable self-hosted renderers keep the native frame.
+    return false;
+  }
+}
+
+async function responsePrefix(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let result = "";
+  let length = 0;
+  try {
+    while (length < 64 * 1024 && !result.includes("</head>")) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = 64 * 1024 - length;
+      const chunk = value.subarray(0, remaining);
+      result += decoder.decode(chunk, { stream: chunk.length === value.length });
+      length += chunk.length;
+      if (chunk.length < value.length) break;
+    }
+  } finally {
+    await reader.cancel();
+  }
+  return result + decoder.decode();
+}
+
 function configureWebContents(window: BrowserWindow) {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isGitHubLoginStartURL(url)) {
       void beginDesktopOAuth();
-    } else if (isSameServerURL(url)) {
+    } else if (isAllowedMainWindowURL(url)) {
       void window.loadURL(url);
     } else if (isExternalURL(url)) {
       void shell.openExternal(url);
@@ -237,7 +294,7 @@ function guardMainFrameNavigation(
     void beginDesktopOAuth();
     return;
   }
-  if (isSameServerURL(url)) {
+  if (isAllowedMainWindowURL(url)) {
     return;
   }
   event.preventDefault();
@@ -350,6 +407,7 @@ function registerIPC() {
     });
     settings = next;
     await persistSettings();
+    integratedTitleBar = await serverSupportsIntegratedTitleBar(settings.serverUrl);
     applyLoginItemSetting();
     currentRoute = "/app";
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -662,6 +720,10 @@ function isSameServerURL(input: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isAllowedMainWindowURL(input: string): boolean {
+  return desktopMainWindowNavigationAllowed(input, settings.serverUrl, integratedTitleBar);
 }
 
 function isGitHubLoginStartURL(input: string): boolean {

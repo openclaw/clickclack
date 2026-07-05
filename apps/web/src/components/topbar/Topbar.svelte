@@ -8,6 +8,7 @@
     workspaceName?: string;
     currentUserID?: string;
     searchQuery: string;
+    showSearch?: boolean;
     sidePanelOpen: boolean;
     threadOpen: boolean;
     onSearchQuery: (value: string) => void;
@@ -23,6 +24,7 @@
     workspaceName,
     currentUserID,
     searchQuery,
+    showSearch = true,
     sidePanelOpen,
     threadOpen,
     onSearchQuery,
@@ -45,28 +47,30 @@
     <span class="topbar-divider" aria-hidden="true"></span>
     <p class="topbar-meta">{workspaceName || "no workspace"}</p>
   </div>
-  <form
-    class="search"
-    onsubmit={(event) => {
-      event.preventDefault();
-      onSearch();
-    }}
-  >
-    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-      <path d="m20 20-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-    </svg>
-    <input
-      value={searchQuery}
-      placeholder="Search messages"
-      aria-label="Search messages"
-      oninput={(event) => onSearchQuery(event.currentTarget.value)}
-    />
-    {#if searchQuery}
-      <button type="button" class="search-clear" aria-label="Reset" onclick={onResetSearch}>×</button>
-    {/if}
-    <button type="submit" class="search-submit">Search</button>
-  </form>
+  {#if showSearch}
+    <form
+      class="search"
+      onsubmit={(event) => {
+        event.preventDefault();
+        onSearch();
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+        <path d="m20 20-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <input
+        value={searchQuery}
+        placeholder="Search messages"
+        aria-label="Search messages"
+        oninput={(event) => onSearchQuery(event.currentTarget.value)}
+      />
+      {#if searchQuery}
+        <button type="button" class="search-clear" aria-label="Reset" onclick={onResetSearch}>×</button>
+      {/if}
+      <button type="submit" class="search-submit">Search</button>
+    </form>
+  {/if}
   <div class="topbar-actions" aria-label="Channel tools">
     <button
       type="button"

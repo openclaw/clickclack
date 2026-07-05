@@ -4,9 +4,12 @@ import {
   appURL,
   clampUnreadCount,
   desktopBridgeAllowed,
+  desktopMainWindowNavigationAllowed,
   desktopOAuthCallbackCode,
   desktopOAuthStartURL,
+  desktopTitleBarOptions,
   deepLinkToRoute,
+  hasIntegratedTitleBarCapability,
   mergeSettings,
   normalizeServerURL,
   safeAppRoute,
@@ -67,6 +70,80 @@ test("exposes the desktop bridge only to the configured server origin", () => {
   );
   assert.equal(desktopBridgeAllowed("https://github.com", "https://app.clickclack.chat"), false);
   assert.equal(desktopBridgeAllowed("https://app.clickclack.chat", undefined), false);
+});
+
+test("keeps integrated desktop chrome on app routes", () => {
+  assert.equal(
+    desktopMainWindowNavigationAllowed(
+      "https://chat.example.com/app/team/general",
+      "https://chat.example.com",
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    desktopMainWindowNavigationAllowed(
+      "https://chat.example.com/",
+      "https://chat.example.com",
+      true,
+    ),
+    false,
+  );
+  assert.equal(
+    desktopMainWindowNavigationAllowed(
+      "https://chat.example.com/",
+      "https://chat.example.com",
+      false,
+    ),
+    true,
+  );
+  assert.equal(
+    desktopMainWindowNavigationAllowed(
+      "https://other.example/app",
+      "https://chat.example.com",
+      false,
+    ),
+    false,
+  );
+});
+
+test("uses integrated native title bars on each desktop platform", () => {
+  assert.deepEqual(desktopTitleBarOptions("darwin", true), {
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+  });
+  assert.deepEqual(desktopTitleBarOptions("win32", true), {
+    titleBarOverlay: {
+      color: "#17181e",
+      height: 52,
+      symbolColor: "#e7e9ee",
+    },
+    titleBarStyle: "hidden",
+  });
+  assert.deepEqual(desktopTitleBarOptions("linux", false), {
+    titleBarOverlay: {
+      color: "#fbf6ee",
+      height: 52,
+      symbolColor: "#22201d",
+    },
+    titleBarStyle: "hidden",
+  });
+});
+
+test("detects renderer support before replacing native window chrome", () => {
+  assert.equal(
+    hasIntegratedTitleBarCapability(
+      '<html><head><meta name="clickclack-desktop-titlebar" content="1" /></head></html>',
+    ),
+    true,
+  );
+  assert.equal(
+    hasIntegratedTitleBarCapability(
+      '<html><head><meta name="clickclack-desktop-titlebar" content="0" /></head></html>',
+    ),
+    false,
+  );
+  assert.equal(hasIntegratedTitleBarCapability("<html><head></head></html>"), false);
 });
 
 test("bounds badge and notification data from the renderer", () => {

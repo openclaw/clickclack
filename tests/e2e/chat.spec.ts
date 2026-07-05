@@ -525,6 +525,133 @@ test("desktop sidebar collapse preference still toggles", async ({ page }) => {
   await expect(shell).not.toHaveClass(/sidebar-collapsed/);
 });
 
+test("desktop shell moves sidebar and search controls into the title bar", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      clickclackDesktop: {
+        integratedTitleBar: true,
+        notify: async () => true,
+        onNavigate: () => () => {},
+        onQuickCompose: () => () => {},
+        openSettings: () => {},
+        platform: "darwin",
+        setActiveRoute: () => {},
+        setUnreadCount: () => {},
+        signInWithGitHub: async () => true,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+
+  const shell = page.locator(".shell");
+  const titlebar = page.locator(".desktop-titlebar");
+  const titlebarSearch = titlebar.getByLabel("Search messages");
+  await expect(titlebar).toBeVisible();
+  await expect(page.getByTitle("ClickClack home")).toHaveAttribute("href", "/app");
+  await expect(page.locator(".topbar .search")).toHaveCount(0);
+  await expect(page.locator(".sidebar .sidebar-collapse")).toHaveCount(0);
+  expect(
+    await titlebarSearch.evaluate((input) => {
+      const box = input.closest("form")?.getBoundingClientRect();
+      return box ? Math.abs(box.left + box.width / 2 - window.innerWidth / 2) : Infinity;
+    }),
+  ).toBeLessThan(1);
+
+  await titlebar.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(shell).toHaveClass(/sidebar-collapsed/);
+  await titlebar.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(shell).not.toHaveClass(/sidebar-collapsed/);
+
+  await page.getByLabel("Message body").fill("desktop titlebar search probe");
+  await page.getByRole("button", { name: "Send" }).click();
+  await titlebarSearch.fill("titlebar search probe");
+  await titlebar.getByRole("button", { name: "Search" }).click();
+  await expect(
+    page.getByLabel("Search results").getByText("desktop titlebar search probe"),
+  ).toBeVisible();
+  await titlebar.getByRole("button", { name: "Reset" }).click();
+  await expect(titlebarSearch).toHaveValue("");
+  await expect(page.getByLabel("Search results")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.getByRole("button", { name: "View profile for Local Captain" }).first().click();
+  await expect(page.getByRole("button", { name: "Close profile" })).toBeVisible();
+  expect(
+    await page.locator(".thread").evaluate((pane) => {
+      const titlebar = document.querySelector(".desktop-titlebar")?.getBoundingClientRect();
+      return titlebar ? pane.getBoundingClientRect().top - titlebar.bottom : -Infinity;
+    }),
+  ).toBeGreaterThanOrEqual(0);
+  await page.getByRole("button", { name: "Close profile" }).click();
+
+  await page.setViewportSize({ width: 760, height: 700 });
+  await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
+  const titlebarNavigation = titlebar.getByRole("button", { name: "Open navigation" });
+  await expect(titlebarNavigation).toBeVisible();
+  await titlebarNavigation.click();
+  await expect(shell).toHaveClass(/nav-open/);
+  await titlebar.getByRole("button", { name: "Close navigation" }).click();
+  await expect(shell).not.toHaveClass(/nav-open/);
+});
+
+test("desktop title bar preserves Windows caption-control space", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      clickclackDesktop: {
+        integratedTitleBar: true,
+        notify: async () => true,
+        onNavigate: () => () => {},
+        onQuickCompose: () => () => {},
+        openSettings: () => {},
+        platform: "win32",
+        setActiveRoute: () => {},
+        setUnreadCount: () => {},
+        signInWithGitHub: async () => true,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 760, height: 700 });
+  await page.goto("/app");
+
+  const titlebar = page.locator(".desktop-titlebar");
+  await expect(titlebar).toBeVisible();
+  await expect(titlebar.getByRole("button", { name: "Open settings" })).not.toBeVisible();
+  expect(
+    await titlebar.getByLabel("Search messages").evaluate((input) => {
+      const box = input.closest("form")?.getBoundingClientRect();
+      return box ? window.innerWidth - box.right : -Infinity;
+    }),
+  ).toBeGreaterThanOrEqual(148);
+});
+
+test("desktop bridge keeps native frame layout when renderer chrome is disabled", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      clickclackDesktop: {
+        integratedTitleBar: false,
+        notify: async () => true,
+        onNavigate: () => () => {},
+        onQuickCompose: () => () => {},
+        openSettings: () => {},
+        platform: "darwin",
+        setActiveRoute: () => {},
+        setUnreadCount: () => {},
+        signInWithGitHub: async () => true,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await page.goto("/app");
+
+  await expect(page.locator(".desktop-titlebar")).toHaveCount(0);
+  await expect(page.locator(".topbar .search")).toBeVisible();
+  await expect(page.locator(".sidebar .sidebar-collapse")).toBeVisible();
+});
+
 test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });

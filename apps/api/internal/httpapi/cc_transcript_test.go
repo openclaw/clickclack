@@ -148,15 +148,31 @@ print(json.dumps([{
 		t.Fatal(err)
 	}
 	t.Setenv(ccTruthStatusPathEnv, statusScript)
+	t.Setenv(ccTruthAccessTokenEnv, "test-transcript-token")
 
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{}).Handler())
 	t.Cleanup(server.Close)
+
+	missingTokenReq, err := http.NewRequest(http.MethodGet, server.URL+"/api/cc/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingTokenReq.Header.Set("X-ClickClack-User", owner.ID)
+	missingTokenResp, err := http.DefaultClient.Do(missingTokenReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingTokenResp.Body.Close()
+	if missingTokenResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected missing transcript access token to return 403, got %s", missingTokenResp.Status)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/cc/transcript?limit=1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("X-ClickClack-User", owner.ID)
+	req.Header.Set(ccTruthAccessTokenHeader, "test-transcript-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +212,7 @@ print(json.dumps([{
 		t.Fatal(err)
 	}
 	missingReq.Header.Set("X-ClickClack-User", owner.ID)
+	missingReq.Header.Set(ccTruthAccessTokenHeader, "test-transcript-token")
 	missingResp, err := http.DefaultClient.Do(missingReq)
 	if err != nil {
 		t.Fatal(err)

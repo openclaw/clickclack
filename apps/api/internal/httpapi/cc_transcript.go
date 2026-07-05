@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,11 @@ import (
 )
 
 const ccTruthStatusPathEnv = "CLICKCLACK_CC_TRUTH_STATUS_PATH"
+
+const (
+	ccTruthAccessTokenEnv    = "CLICKCLACK_CC_TRANSCRIPT_TOKEN"
+	ccTruthAccessTokenHeader = "X-ClickClack-Transcript-Token"
+)
 
 const maxCCTranscriptLineBytes = 8 * 1024 * 1024
 
@@ -96,6 +102,16 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript bridge is not configured"))
 		return
 	}
+	accessToken := strings.TrimSpace(os.Getenv(ccTruthAccessTokenEnv))
+	if accessToken == "" {
+		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript bridge access token is not configured"))
+		return
+	}
+	providedToken := r.Header.Get(ccTruthAccessTokenHeader)
+	if subtle.ConstantTimeCompare([]byte(providedToken), []byte(accessToken)) != 1 {
+		writeError(w, http.StatusForbidden, errors.New("cc transcript bridge access token is required"))
+		return
+	}
 	sessions, err := loadCCTruthSessions(r.Context(), script)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript bridge status is unavailable"))
@@ -143,6 +159,7 @@ func loadCCTruthSessions(ctx context.Context, script string) ([]ccTruthSession, 
 	probeCtx, cancel := context.WithTimeout(ctx, ccTruthStatusTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(probeCtx, "python3", script, "--json")
+	cmd.WaitDelay = 250 * time.Millisecond
 	stdout := newCCBoundedOutput(maxCCTruthStatusOutputBytes)
 	stderr := newCCBoundedOutput(maxCCTruthStatusErrorBytes)
 	cmd.Stdout = stdout

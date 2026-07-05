@@ -1449,7 +1449,10 @@ export interface operations {
         cwd?: string;
         limit?: number;
       };
-      header?: never;
+      header: {
+        /** @description Operator-configured capability token for the local transcript bridge. */
+        "X-ClickClack-Transcript-Token": string;
+      };
       path?: never;
       cookie?: never;
     };

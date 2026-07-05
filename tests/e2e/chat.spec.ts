@@ -199,6 +199,46 @@ test("product website links to app and docs", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("local transcript unlocks with a tab-scoped bridge token", async ({ page }) => {
+  let receivedToken = "";
+  await page.route("**/api/cc/transcript?limit=12", async (route) => {
+    receivedToken = route.request().headers()["x-clickclack-transcript-token"] ?? "";
+    if (receivedToken !== "test-bridge-token") {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "cc transcript bridge access token is required" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "now · active · /tmp/clickclack",
+        session: {
+          lane: "now",
+          truth_status: "active",
+          session_id: "fixture-session",
+          cwd: "/tmp/clickclack",
+        },
+        sessions: [],
+        messages: [{ role: "assistant", content: "Authorized reply" }],
+      }),
+    });
+  });
+
+  await page.goto("/talk");
+  await page.getByLabel("Bridge access token").fill("test-bridge-token");
+  await page.getByRole("button", { name: "Unlock this tab" }).click();
+
+  await expect(page.getByLabel("Live transcript").getByText("Authorized reply")).toBeVisible();
+  expect(receivedToken).toBe("test-bridge-token");
+  expect(await page.evaluate(() => sessionStorage.getItem("clickclack.cc-transcript-token"))).toBe(
+    "test-bridge-token",
+  );
+});
+
 test("self-hosted product website links stay on the local app route", async ({ page }) => {
   await page.goto("http://selfhost.localhost:18082/");
   await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();

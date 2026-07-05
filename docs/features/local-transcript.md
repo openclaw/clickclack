@@ -15,6 +15,8 @@ available only through loopback, and never exposed to bot tokens.
 All of these conditions must be true before ClickClack reads a transcript:
 
 - The server process has `CLICKCLACK_CC_TRUTH_STATUS_PATH` set.
+- The server process has `CLICKCLACK_CC_TRANSCRIPT_TOKEN` set, and the request
+  supplies that operator-held capability token.
 - The request is authenticated as a human session.
 - The request's socket address, host, browser origin, and forwarding headers
   are local. Reverse-proxied and remote requests fail closed.
@@ -27,11 +29,12 @@ local development data; do not proxy it to another machine.
 
 ## Configure it
 
-Set the environment variable to an absolute path for a Python status script,
-then start ClickClack normally:
+Set the status-script environment variable to an absolute path and choose a
+random bridge access token, then start ClickClack normally:
 
 ```sh
 CLICKCLACK_CC_TRUTH_STATUS_PATH=/absolute/path/to/cc_truth_status.py \
+CLICKCLACK_CC_TRANSCRIPT_TOKEN='replace-with-a-random-secret' \
   clickclack serve --addr 127.0.0.1:8080 --data ./data
 ```
 
@@ -63,7 +66,9 @@ minimum. Other status fields are optional.
 
 Open `http://127.0.0.1:8080/talk`. With local dev auth enabled, ClickClack uses
 the bootstrap human automatically. When dev auth is disabled, sign in normally
-from the same loopback origin.
+from the same loopback origin. Paste the matching bridge token when prompted.
+The page keeps it in tab-scoped session storage and sends it only in the
+same-origin `X-ClickClack-Transcript-Token` request header.
 
 ## Selection and parsing
 
@@ -89,7 +94,7 @@ list.
 | Status | Meaning |
 | --- | --- |
 | `401` | No valid human session. |
-| `403` | Bot token or non-loopback request. |
+| `403` | Bot token, non-loopback request, or missing/invalid bridge token. |
 | `503` | Bridge unset, status script failed, output was invalid, or transcript could not be read. |
 
 An unset bridge does not fall back to a machine-specific path. It returns

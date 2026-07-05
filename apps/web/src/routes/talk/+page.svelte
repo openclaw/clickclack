@@ -6,6 +6,7 @@
   const transcriptDocsURL = `${docsURL}/features/local-transcript.html`;
   const repoURL = "https://github.com/openclaw/clickclack";
   const appURL = typeof window !== "undefined" ? productAppURLForHost(window.location.hostname) : "/app";
+  const bridgeTokenStorageKey = "clickclack.cc-transcript-token";
 
   type AnyRecord = Record<string, any>;
 
@@ -63,9 +64,12 @@
   let session: CCSession | null = null;
   let transcript: TranscriptItem[] = [];
   let liveSessions: CCSession[] = [];
+  let bridgeToken = "";
+  let needsBridgeToken = false;
 
-  async function fetchJson(path: string) {
-    const response = await fetch(path, { credentials: "include" });
+  async function fetchJson(path: string, token: string) {
+    const headers = token ? { "X-ClickClack-Transcript-Token": token } : undefined;
+    const response = await fetch(path, { credentials: "include", headers });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = new Error(payload?.error ?? `${path} failed (${response.status})`);
@@ -96,35 +100,50 @@
     }
   }
 
-  onMount(() => {
-    void (async () => {
-      loading = true;
-      try {
-        const payload = await fetchJson("/api/cc/transcript?limit=12");
-        liveSessions = Array.isArray(payload.sessions) ? payload.sessions : [];
-        session = payload.session ?? null;
-        transcript = Array.isArray(payload.messages)
-          ? payload.messages.map((message: AnyRecord) => ({
-              id: message.id ?? crypto.randomUUID(),
-              author: pickAuthor(message.role ?? message.author ?? ""),
-              role: String(message.role ?? message.author ?? ""),
-              body: asText(message.content ?? message.body ?? message.text ?? "").trim(),
-              createdAt: formatClock(message.timestamp ?? message.created_at),
-              mine: String(message.role ?? message.author ?? "") === "assistant",
-            }))
-          : [];
-        status = payload.status ?? (session ? `${session.lane} · ${session.truth_status}` : "No local transcript session is attached yet.");
-      } catch (error) {
-        const err = error as Error & { status?: number };
-        if (err.status === 401) {
-          status = "Sign in to expose the live transcript.";
-        } else {
-          status = err.message || "Live transcript unavailable.";
-        }
-      } finally {
-        loading = false;
+  async function loadTranscript() {
+    loading = true;
+    try {
+      const payload = await fetchJson("/api/cc/transcript?limit=12", bridgeToken);
+      needsBridgeToken = false;
+      liveSessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      session = payload.session ?? null;
+      transcript = Array.isArray(payload.messages)
+        ? payload.messages.map((message: AnyRecord) => ({
+            id: message.id ?? crypto.randomUUID(),
+            author: pickAuthor(message.role ?? message.author ?? ""),
+            role: String(message.role ?? message.author ?? ""),
+            body: asText(message.content ?? message.body ?? message.text ?? "").trim(),
+            createdAt: formatClock(message.timestamp ?? message.created_at),
+            mine: String(message.role ?? message.author ?? "") === "assistant",
+          }))
+        : [];
+      status = payload.status ?? (session ? `${session.lane} · ${session.truth_status}` : "No local transcript session is attached yet.");
+    } catch (error) {
+      const err = error as Error & { status?: number };
+      needsBridgeToken = err.status === 403 && err.message.includes("access token");
+      if (err.status === 401) {
+        status = "Sign in to expose the live transcript.";
+      } else if (needsBridgeToken) {
+        status = "Enter the operator-configured bridge token to read this local transcript.";
+      } else {
+        status = err.message || "Live transcript unavailable.";
       }
-    })();
+    } finally {
+      loading = false;
+    }
+  }
+
+  function submitBridgeToken(event: SubmitEvent) {
+    event.preventDefault();
+    bridgeToken = bridgeToken.trim();
+    if (!bridgeToken) return;
+    sessionStorage.setItem(bridgeTokenStorageKey, bridgeToken);
+    void loadTranscript();
+  }
+
+  onMount(() => {
+    bridgeToken = sessionStorage.getItem(bridgeTokenStorageKey) ?? "";
+    void loadTranscript();
   });
 </script>
 
@@ -238,6 +257,23 @@
     {:else}
       <div class="empty-transcript">
         <p>{loading ? "Loading live data…" : status}</p>
+        {#if needsBridgeToken}
+          <form class="token-form" onsubmit={submitBridgeToken}>
+            <label for="bridge-token">Bridge access token</label>
+            <div>
+              <input
+                id="bridge-token"
+                bind:value={bridgeToken}
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Paste the configured token"
+              />
+              <button type="submit">Unlock this tab</button>
+            </div>
+            <small>Stored only in this tab's session storage and sent only to the same-origin API.</small>
+          </form>
+        {/if}
         <p>
           Configure the bridge on localhost and this card will show text from the selected session.
           Tool calls, metadata rows, and local transcript paths stay out of the feed.
@@ -662,6 +698,53 @@
     background: linear-gradient(180deg, rgba(93, 75, 255, 0.05), rgba(255, 255, 255, 0));
   }
 
+  .token-form {
+    display: grid;
+    gap: 8px;
+    max-width: 680px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .token-form label {
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  .token-form div {
+    display: flex;
+    gap: 8px;
+  }
+
+  .token-form input {
+    min-width: 0;
+    flex: 1;
+    padding: 11px 12px;
+    border: 1px solid var(--ink);
+    border-radius: 10px;
+    background: #ffffff;
+    color: var(--ink);
+    font: inherit;
+  }
+
+  .token-form button {
+    padding: 11px 14px;
+    border: 1px solid var(--ink);
+    border-radius: 10px;
+    background: var(--ink);
+    color: #ffffff;
+    font: inherit;
+    font-weight: 850;
+    cursor: pointer;
+  }
+
+  .token-form small {
+    color: var(--ink-soft);
+    line-height: 1.45;
+  }
+
   .contract-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -774,6 +857,10 @@
     .session-row {
       flex-direction: column;
       align-items: start;
+    }
+
+    .token-form div {
+      flex-direction: column;
     }
 
     .session-row strong {

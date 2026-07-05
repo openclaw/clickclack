@@ -21,6 +21,7 @@ import {
   clampUnreadCount,
   deepLinkToRoute,
   defaultSettings,
+  DESKTOP_SERVER_ORIGIN_ARG,
   mergeSettings,
   normalizeServerURL,
   safeAppRoute,
@@ -36,12 +37,12 @@ const APP_NAME = "ClickClack";
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
-let oauthWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settings = defaultSettings();
 let currentRoute = "/app";
 let unreadCount = 0;
 let quitting = false;
+let oauthInProgress = false;
 let routesReady = false;
 let pendingRoute: string | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
@@ -114,6 +115,9 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     ...(saved.x === undefined ? {} : { x: saved.x }),
     ...(saved.y === undefined ? {} : { y: saved.y }),
     webPreferences: {
+      additionalArguments: [
+        `${DESKTOP_SERVER_ORIGIN_ARG}${normalizeServerURL(settings.serverUrl)}`,
+      ],
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -138,13 +142,14 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     }
   });
   window.on("closed", () => {
-    mainWindow = null;
+    if (mainWindow === window) mainWindow = null;
   });
   window.on("resize", scheduleWindowStateSave);
   window.on("move", scheduleWindowStateSave);
   window.on("maximize", scheduleWindowStateSave);
   window.on("unmaximize", scheduleWindowStateSave);
   window.webContents.on("did-navigate", (_event, url) => {
+    if (isSameServerURL(url)) oauthInProgress = false;
     const parsed = routeFromServerURL(url);
     if (parsed) currentRoute = parsed;
   });
@@ -160,7 +165,8 @@ function configureWebContents(window: BrowserWindow) {
     if (isSameServerURL(url)) {
       void window.loadURL(url);
     } else if (isGitHubOAuthURL(url)) {
-      createOAuthWindow(url);
+      oauthInProgress = true;
+      void window.loadURL(url);
     } else if (isExternalURL(url)) {
       void shell.openExternal(url);
     }
@@ -215,70 +221,22 @@ function guardMainFrameNavigation(
   _isInPlace: boolean,
   isMainFrame: boolean,
 ) {
-  if (!isMainFrame || isSameServerURL(url)) return;
+  if (!isMainFrame) return;
+  if (isSameServerURL(url)) {
+    oauthInProgress = false;
+    return;
+  }
+  if (isGitHubOAuthURL(url)) {
+    oauthInProgress = true;
+    return;
+  }
+  if (oauthInProgress && isGitHubURL(url)) return;
   event.preventDefault();
   if (url.startsWith(`${PROTOCOL}://`)) {
     openRoute(deepLinkToRoute(url));
-  } else if (isGitHubOAuthURL(url)) {
-    createOAuthWindow(url);
   } else if (isExternalURL(url)) {
     void shell.openExternal(url);
   }
-}
-
-function createOAuthWindow(url: string) {
-  if (oauthWindow && !oauthWindow.isDestroyed()) {
-    void oauthWindow.loadURL(url);
-    oauthWindow.show();
-    oauthWindow.focus();
-    return;
-  }
-  const window = new BrowserWindow({
-    autoHideMenuBar: true,
-    backgroundColor: "#f7f3ed",
-    height: 760,
-    parent: mainWindow ?? undefined,
-    show: false,
-    title: "Sign in to ClickClack",
-    width: 620,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
-  });
-  oauthWindow = window;
-  window.once("ready-to-show", () => window.show());
-  window.on("closed", () => {
-    oauthWindow = null;
-  });
-  window.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (isExternalURL(target)) void shell.openExternal(target);
-    return { action: "deny" };
-  });
-  const guardOAuthNavigation = (
-    event: Electron.Event,
-    target: string,
-    _isInPlace: boolean,
-    isMainFrame: boolean,
-  ) => {
-    if (!isMainFrame || isGitHubURL(target) || isSameServerURL(target)) return;
-    event.preventDefault();
-    if (isExternalURL(target)) void shell.openExternal(target);
-  };
-  window.webContents.on("will-navigate", guardOAuthNavigation);
-  window.webContents.on("will-redirect", guardOAuthNavigation);
-  window.webContents.on("did-navigate", (_event, target) => {
-    const route = routeFromServerURL(target);
-    if (!route) return;
-    window.close();
-    currentRoute = route;
-    const main = mainWindow ?? createMainWindow(route);
-    void main.loadURL(appURL(settings.serverUrl, route));
-    showMainWindow();
-  });
-  void window.loadURL(url);
 }
 
 function createSettingsWindow() {
@@ -318,7 +276,7 @@ function createSettingsWindow() {
 
 function registerIPC() {
   ipcMain.handle("desktop:notify", (event, input) => {
-    if (!isMainSender(event.sender.id)) return false;
+    if (!isMainSender(event)) return false;
     const payload = sanitizeNotification(input);
     if (!payload || !Notification.isSupported()) return false;
     const notification = new Notification({
@@ -332,16 +290,16 @@ function registerIPC() {
     return true;
   });
   ipcMain.on("desktop:set-unread", (event, input) => {
-    if (!isMainSender(event.sender.id)) return;
+    if (!isMainSender(event)) return;
     setUnreadCount(clampUnreadCount(input));
   });
   ipcMain.on("desktop:set-active-route", (event, input) => {
-    if (!isMainSender(event.sender.id) || typeof input !== "string") return;
+    if (!isMainSender(event) || typeof input !== "string") return;
     const route = safeAppRoute(input);
     if (route) currentRoute = route;
   });
   ipcMain.on("desktop:open-settings", (event) => {
-    if (isMainSender(event.sender.id)) createSettingsWindow();
+    if (isMainSender(event)) createSettingsWindow();
   });
 
   ipcMain.handle("settings:get", (event) => {
@@ -381,8 +339,11 @@ function registerIPC() {
     applyLoginItemSetting();
     currentRoute = "/app";
     if (mainWindow && !mainWindow.isDestroyed()) {
-      await mainWindow.loadURL(appURL(settings.serverUrl));
-      showMainWindow();
+      rememberWindowState();
+      const previousWindow = mainWindow;
+      mainWindow = null;
+      previousWindow.destroy();
+      createMainWindow();
     } else {
       createMainWindow();
     }
@@ -402,8 +363,14 @@ function settingsInfo() {
   };
 }
 
-function isMainSender(id: number): boolean {
-  return Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.id === id);
+function isMainSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean {
+  return Boolean(
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    mainWindow.webContents.id === event.sender.id &&
+    event.senderFrame &&
+    isSameServerURL(event.senderFrame.url),
+  );
 }
 
 function requireSettingsSender(id: number) {
@@ -565,6 +532,11 @@ function openRoute(route: string | null | undefined) {
   currentRoute = safeRoute;
   const window = mainWindow ?? createMainWindow(safeRoute);
   showMainWindow();
+  if (oauthInProgress || !isSameServerURL(window.webContents.getURL())) {
+    oauthInProgress = false;
+    void window.loadURL(appURL(settings.serverUrl, safeRoute));
+    return;
+  }
   if (window.webContents.isLoading()) {
     window.webContents.once("did-finish-load", () =>
       window.webContents.send("desktop:navigate", safeRoute),

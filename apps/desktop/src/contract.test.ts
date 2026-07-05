@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appURL,
   clampUnreadCount,
+  desktopBridgeAllowed,
   deepLinkToRoute,
   mergeSettings,
   normalizeServerURL,
@@ -40,6 +41,15 @@ test("maps explicit deep-link forms to app routes", () => {
   );
   assert.equal(deepLinkToRoute("clickclack://evil/app/team"), null);
   assert.equal(deepLinkToRoute("https://chat.example.com/app/team"), null);
+});
+
+test("exposes the desktop bridge only to the configured server origin", () => {
+  assert.equal(
+    desktopBridgeAllowed("https://app.clickclack.chat", "https://app.clickclack.chat"),
+    true,
+  );
+  assert.equal(desktopBridgeAllowed("https://github.com", "https://app.clickclack.chat"), false);
+  assert.equal(desktopBridgeAllowed("https://app.clickclack.chat", undefined), false);
 });
 
 test("bounds badge and notification data from the renderer", () => {

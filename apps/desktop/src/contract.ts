@@ -1,5 +1,6 @@
 export const DEFAULT_SERVER_URL = "https://app.clickclack.chat";
 export const DEFAULT_APP_ROUTE = "/app";
+export const DESKTOP_SERVER_ORIGIN_ARG = "--clickclack-server-origin=";
 
 export type WindowState = {
   height?: number;
@@ -77,6 +78,15 @@ export function appURL(serverUrl: string, route = DEFAULT_APP_ROUTE): string {
   const safeRoute = safeAppRoute(route);
   if (!safeRoute) throw new Error("Invalid ClickClack app route");
   return new URL(safeRoute, origin).toString();
+}
+
+export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: string | undefined) {
+  if (!trustedOrigin) return false;
+  try {
+    return new URL(currentOrigin).origin === normalizeServerURL(trustedOrigin);
+  } catch {
+    return false;
+  }
 }
 
 export function deepLinkToRoute(input: string): string | null {

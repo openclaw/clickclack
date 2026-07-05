@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopNotification } from "./contract";
+import {
+  DESKTOP_SERVER_ORIGIN_ARG,
+  desktopBridgeAllowed,
+  type DesktopNotification,
+} from "./contract";
 
 export type ClickClackDesktopBridge = {
   notify(notification: DesktopNotification): Promise<boolean>;
@@ -29,4 +33,10 @@ const bridge: ClickClackDesktopBridge = {
   },
 };
 
-contextBridge.exposeInMainWorld("clickclackDesktop", Object.freeze(bridge));
+const trustedOrigin = process.argv
+  .find((argument) => argument.startsWith(DESKTOP_SERVER_ORIGIN_ARG))
+  ?.slice(DESKTOP_SERVER_ORIGIN_ARG.length);
+
+if (desktopBridgeAllowed(globalThis.location.origin, trustedOrigin)) {
+  contextBridge.exposeInMainWorld("clickclackDesktop", Object.freeze(bridge));
+}

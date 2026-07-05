@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -225,7 +226,7 @@ func TestReadCCTranscriptMessagesReturnsHonestEmptyState(t *testing.T) {
 	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := readCCTranscriptMessages(path, 20)
+	messages, err := readCCTranscriptMessages(context.Background(), path, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestReadCCTranscriptMessagesSkipsOversizedRows(t *testing.T) {
 	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := readCCTranscriptMessages(path, 20)
+	messages, err := readCCTranscriptMessages(context.Background(), path, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +296,7 @@ func TestReadCCTranscriptMessagesBoundsResponseBytes(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := readCCTranscriptMessages(path, 200)
+	messages, err := readCCTranscriptMessages(context.Background(), path, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,5 +312,32 @@ func TestReadCCTranscriptMessagesBoundsResponseBytes(t *testing.T) {
 	}
 	if !strings.HasPrefix(messages[0].Content, "02:") || !strings.HasPrefix(messages[9].Content, "11:") {
 		t.Fatalf("expected the newest ten messages, got %d from %.3q to %.3q", len(messages), messages[0].Content, messages[len(messages)-1].Content)
+	}
+}
+
+func TestReadCCTranscriptMessagesReadsBoundedRegularFileTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.jsonl")
+	rows := strings.Join([]string{
+		`{"type":"user","message":{"role":"user","content":"outside window"}}`,
+		`{"type":"progress","content":"` + strings.Repeat("x", maxCCTranscriptInputBytes) + `"}`,
+		`{"type":"assistant","message":{"role":"assistant","content":"inside window"}}`,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := readCCTranscriptMessages(context.Background(), path, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Content != "inside window" {
+		t.Fatalf("expected only the bounded tail message, got %#v", messages)
+	}
+	if _, err := readCCTranscriptMessages(context.Background(), t.TempDir(), 20); err == nil {
+		t.Fatal("expected non-regular transcript path to fail")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := readCCTranscriptMessages(ctx, path, 20); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected canceled transcript read, got %v", err)
 	}
 }

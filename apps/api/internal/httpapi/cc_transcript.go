@@ -26,6 +26,7 @@ const (
 	maxCCTruthStatusErrorBytes  = 64 * 1024
 	maxCCTranscriptMessageBytes = 256 * 1024
 	maxCCTranscriptTotalBytes   = 2 * 1024 * 1024
+	maxCCTranscriptInputBytes   = 16 * 1024 * 1024
 )
 
 // ccTruthSession mirrors the bridge status rows produced by cc_truth_status.py.
@@ -119,7 +120,7 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 	if limit > 200 {
 		limit = 200
 	}
-	messages, err := readCCTranscriptMessages(selected.Transcript, limit)
+	messages, err := readCCTranscriptMessages(r.Context(), selected.Transcript, limit)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, errors.New("cc transcript is unavailable"))
 		return
@@ -264,21 +265,58 @@ func normalizePath(path string) string {
 	return cleaned
 }
 
-func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, error) {
+func readCCTranscriptMessages(ctx context.Context, path string, limit int) ([]ccTranscriptMessage, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat transcript %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("transcript %s is not a regular file", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read transcript %s: %w", path, err)
 	}
 	defer file.Close()
+	info, err = file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat open transcript %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("open transcript %s is not a regular file", path)
+	}
 	if limit <= 0 {
 		limit = 20
+	}
+	start := info.Size() - maxCCTranscriptInputBytes
+	if start < 0 {
+		start = 0
+	}
+	partialFirstLine := false
+	if start > 0 {
+		var previous [1]byte
+		if _, err := file.ReadAt(previous[:], start-1); err != nil {
+			return nil, fmt.Errorf("inspect transcript %s: %w", path, err)
+		}
+		partialFirstLine = previous[0] != '\n'
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek transcript %s: %w", path, err)
 	}
 
 	messages := make([]ccTranscriptMessage, 0, limit)
 	totalBytes := 0
-	reader := bufio.NewReader(file)
+	reader := bufio.NewReader(io.LimitReader(file, maxCCTranscriptInputBytes))
+	if partialFirstLine {
+		if _, _, err := readCCTranscriptLine(ctx, reader); err != nil && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("read transcript %s: %w", path, err)
+		}
+	}
 	for {
-		line, oversized, err := readCCTranscriptLine(reader)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		line, oversized, err := readCCTranscriptLine(ctx, reader)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -319,10 +357,13 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 	return messages, nil
 }
 
-func readCCTranscriptLine(reader *bufio.Reader) ([]byte, bool, error) {
+func readCCTranscriptLine(ctx context.Context, reader *bufio.Reader) ([]byte, bool, error) {
 	line := make([]byte, 0, 4096)
 	oversized := false
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		fragment, isPrefix, err := reader.ReadLine()
 		if err != nil {
 			return nil, false, err

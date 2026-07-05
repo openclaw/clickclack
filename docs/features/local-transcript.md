@@ -78,10 +78,11 @@ finally the first reported session.
 
 The status helper has a five-second runtime and 1 MiB output budget. The reader
 streams the JSONL file and keeps only recent user/assistant text, with 256 KiB
-per-message and 2 MiB response budgets. Metadata, compaction summaries,
-sidechain traffic, tool-use, attachment, oversized, and malformed rows are
-ignored. If the selected file has no readable text, the API returns an honest
-empty message list.
+per-message, 2 MiB response, and 16 MiB newest-input-window budgets. Only
+regular files are accepted. Metadata, compaction summaries, sidechain traffic,
+tool-use, attachment, oversized, and malformed rows are ignored. If the
+selected file has no readable text, the API returns an honest empty message
+list.
 
 ## Failure behavior
 

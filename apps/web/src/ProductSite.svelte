@@ -1,9 +1,10 @@
 <script lang="ts">
   import "./product.css";
-  import { productAppURLForHost } from "./productLinks";
+  import { isLoopbackHostname, productAppURLForHost } from "./productLinks";
 
   const docsURL = "https://docs.clickclack.chat";
   const appURL = productAppURLForHost(window.location.hostname);
+  const showLocalTranscript = isLoopbackHostname(window.location.hostname);
   const repoURL = "https://github.com/openclaw/clickclack";
 
   const features = [
@@ -84,7 +85,7 @@
       </p>
       <div class="hero-actions">
         <a class="primary-action" href={appURL}>Open app</a>
-        {#if appURL === "/app"}
+        {#if showLocalTranscript}
           <a class="secondary-action" href="/talk">Local transcript</a>
         {/if}
         <a class="secondary-action" href={docsURL}>Read docs</a>

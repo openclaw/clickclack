@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { productAppURLForHost } from "../../apps/web/src/productLinks";
+import { isLoopbackHostname, productAppURLForHost } from "../../apps/web/src/productLinks";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -216,6 +216,14 @@ test("product website app URL host routing", () => {
   expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
   expect(productAppURLForHost("clickclack.lan")).toBe("/app");
   expect(productAppURLForHost("chat.example.com")).toBe("/app");
+
+  expect(isLoopbackHostname("localhost")).toBe(true);
+  expect(isLoopbackHostname("selfhost.localhost")).toBe(true);
+  expect(isLoopbackHostname("127.9.8.7")).toBe(true);
+  expect(isLoopbackHostname("[::1]")).toBe(true);
+  expect(isLoopbackHostname("ixandru.tail75b497.ts.net")).toBe(false);
+  expect(isLoopbackHostname("clickclack.lan")).toBe(false);
+  expect(isLoopbackHostname("chat.example.com")).toBe(false);
 });
 
 test("app subdomain root opens the chat app", async ({ page }) => {

@@ -76,10 +76,12 @@ Without `cwd`, selection prefers `truth_status=active`, then
 `api_status=busy`, `truth_status=api_busy_unverified`, `truth_status=idle`, and
 finally the first reported session.
 
-The reader streams the JSONL file and keeps only recent user/assistant text.
-Metadata, compaction summaries, sidechain traffic, tool-use, attachment,
-oversized, and malformed rows are ignored. If the selected file has no readable
-text, the API returns an honest empty message list.
+The status helper has a five-second runtime and 1 MiB output budget. The reader
+streams the JSONL file and keeps only recent user/assistant text, with 256 KiB
+per-message and 2 MiB response budgets. Metadata, compaction summaries,
+sidechain traffic, tool-use, attachment, oversized, and malformed rows are
+ignored. If the selected file has no readable text, the API returns an honest
+empty message list.
 
 ## Failure behavior
 

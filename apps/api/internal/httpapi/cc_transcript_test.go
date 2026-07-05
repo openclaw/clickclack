@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -235,9 +237,11 @@ func TestReadCCTranscriptMessagesReturnsHonestEmptyState(t *testing.T) {
 func TestReadCCTranscriptMessagesSkipsOversizedRows(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "oversized.jsonl")
 	oversized := `{"type":"progress","content":"` + strings.Repeat("x", maxCCTranscriptLineBytes) + `"}`
+	oversizedMessage := `{"type":"assistant","message":{"role":"assistant","content":"` + strings.Repeat("x", maxCCTranscriptMessageBytes+1) + `"}}`
 	rows := strings.Join([]string{
 		`{"type":"user","message":{"role":"user","content":"before"}}`,
 		oversized,
+		oversizedMessage,
 		`{"type":"assistant","message":{"role":"assistant","content":"after"}}`,
 	}, "\n")
 	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
@@ -249,5 +253,63 @@ func TestReadCCTranscriptMessagesSkipsOversizedRows(t *testing.T) {
 	}
 	if len(messages) != 2 || messages[0].Content != "before" || messages[1].Content != "after" {
 		t.Fatalf("expected surrounding messages to survive oversized row, got %#v", messages)
+	}
+}
+
+func TestLoadCCTruthSessionsBoundsHelper(t *testing.T) {
+	t.Run("timeout", func(t *testing.T) {
+		script := filepath.Join(t.TempDir(), "slow.py")
+		if err := os.WriteFile(script, []byte("import time\ntime.sleep(10)\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		started := time.Now()
+		if _, err := loadCCTruthSessions(ctx, script); err == nil {
+			t.Fatal("expected timed-out helper to fail")
+		}
+		if elapsed := time.Since(started); elapsed > time.Second {
+			t.Fatalf("helper ignored context timeout: %s", elapsed)
+		}
+	})
+
+	t.Run("output", func(t *testing.T) {
+		script := filepath.Join(t.TempDir(), "noisy.py")
+		body := fmt.Sprintf("import sys\nsys.stdout.write('x' * %d)\n", maxCCTruthStatusOutputBytes+1)
+		if err := os.WriteFile(script, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadCCTruthSessions(context.Background(), script); err == nil || !strings.Contains(err.Error(), "size limit") {
+			t.Fatalf("expected bounded helper output error, got %v", err)
+		}
+	})
+}
+
+func TestReadCCTranscriptMessagesBoundsResponseBytes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.jsonl")
+	rows := make([]string, 0, 12)
+	for i := range 12 {
+		content := fmt.Sprintf("%02d:", i) + strings.Repeat("x", 200*1024)
+		rows = append(rows, fmt.Sprintf(`{"type":"assistant","message":{"role":"assistant","content":%q}}`, content))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := readCCTranscriptMessages(path, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	totalBytes := 0
+	for _, message := range messages {
+		totalBytes += len(message.Content) + len(message.Timestamp)
+	}
+	if totalBytes > maxCCTranscriptTotalBytes {
+		t.Fatalf("response exceeded byte budget: %d", totalBytes)
+	}
+	if len(messages) != 10 {
+		t.Fatalf("expected ten messages within byte budget, got %d", len(messages))
+	}
+	if !strings.HasPrefix(messages[0].Content, "02:") || !strings.HasPrefix(messages[9].Content, "11:") {
+		t.Fatalf("expected the newest ten messages, got %d from %.3q to %.3q", len(messages), messages[0].Content, messages[len(messages)-1].Content)
 	}
 }

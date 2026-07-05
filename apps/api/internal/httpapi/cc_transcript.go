@@ -13,11 +13,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const ccTruthStatusPathEnv = "CLICKCLACK_CC_TRUTH_STATUS_PATH"
 
 const maxCCTranscriptLineBytes = 8 * 1024 * 1024
+
+const (
+	ccTruthStatusTimeout        = 5 * time.Second
+	maxCCTruthStatusOutputBytes = 1024 * 1024
+	maxCCTruthStatusErrorBytes  = 64 * 1024
+	maxCCTranscriptMessageBytes = 256 * 1024
+	maxCCTranscriptTotalBytes   = 2 * 1024 * 1024
+)
 
 // ccTruthSession mirrors the bridge status rows produced by cc_truth_status.py.
 type ccTruthSession struct {
@@ -130,16 +139,57 @@ func (s *Server) ccTranscript(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadCCTruthSessions(ctx context.Context, script string) ([]ccTruthSession, error) {
-	cmd := exec.CommandContext(ctx, "python3", script, "--json")
-	output, err := cmd.CombinedOutput()
+	probeCtx, cancel := context.WithTimeout(ctx, ccTruthStatusTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(probeCtx, "python3", script, "--json")
+	stdout := newCCBoundedOutput(maxCCTruthStatusOutputBytes)
+	stderr := newCCBoundedOutput(maxCCTruthStatusErrorBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
+	if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
+		return nil, errors.New("cc truth status timed out")
+	}
 	if err != nil {
-		return nil, fmt.Errorf("cc truth status failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("cc truth status failed: %w", err)
+	}
+	if stdout.truncated {
+		return nil, errors.New("cc truth status output exceeded the size limit")
 	}
 	var sessions []ccTruthSession
-	if err := json.Unmarshal(output, &sessions); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), &sessions); err != nil {
 		return nil, fmt.Errorf("decode cc truth status: %w", err)
 	}
 	return sessions, nil
+}
+
+type ccBoundedOutput struct {
+	buffer    bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func newCCBoundedOutput(limit int) *ccBoundedOutput {
+	return &ccBoundedOutput{limit: limit}
+}
+
+func (w *ccBoundedOutput) Write(p []byte) (int, error) {
+	written := len(p)
+	remaining := w.limit - w.buffer.Len()
+	if remaining <= 0 {
+		w.truncated = w.truncated || written > 0
+		return written, nil
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+		w.truncated = true
+	}
+	_, _ = w.buffer.Write(p)
+	return written, nil
+}
+
+func (w *ccBoundedOutput) Bytes() []byte {
+	return w.buffer.Bytes()
 }
 
 func sanitizeCCSessions(sessions []ccTruthSession) []ccTranscriptSession {
@@ -225,6 +275,7 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 	}
 
 	messages := make([]ccTranscriptMessage, 0, limit)
+	totalBytes := 0
 	reader := bufio.NewReader(file)
 	for {
 		line, oversized, err := readCCTranscriptLine(reader)
@@ -249,16 +300,20 @@ func readCCTranscriptMessages(path string, limit int) ([]ccTranscriptMessage, er
 			continue
 		}
 		role, content, timestamp := extractCCTranscriptMessage(row)
-		if role == "" || content == "" {
+		if role == "" || content == "" || len(content) > maxCCTranscriptMessageBytes {
 			continue
 		}
-		messages = append(messages, ccTranscriptMessage{
+		message := ccTranscriptMessage{
 			Role:      role,
 			Content:   content,
 			Timestamp: timestamp,
-		})
-		if limit > 0 && len(messages) > limit {
-			messages = messages[len(messages)-limit:]
+		}
+		messages = append(messages, message)
+		totalBytes += len(message.Content) + len(message.Timestamp)
+		for len(messages) > limit || totalBytes > maxCCTranscriptTotalBytes {
+			totalBytes -= len(messages[0].Content) + len(messages[0].Timestamp)
+			messages[0] = ccTranscriptMessage{}
+			messages = messages[1:]
 		}
 	}
 	return messages, nil
@@ -308,7 +363,7 @@ func extractCCTranscriptMessage(row map[string]any) (role string, content string
 		timestamp = ts
 	}
 	if msg, ok := row["message"].(map[string]any); ok {
-		if msgRole, ok := msg["role"].(string); ok && msgRole != "" {
+		if msgRole, ok := msg["role"].(string); ok && (msgRole == "user" || msgRole == "assistant") {
 			role = msgRole
 		}
 		content = ccContentText(msg["content"])
@@ -317,6 +372,9 @@ func extractCCTranscriptMessage(row map[string]any) (role string, content string
 		content = ccContentText(row["content"])
 	}
 	content = strings.TrimSpace(content)
+	if len(timestamp) > 128 {
+		timestamp = ""
+	}
 	return role, content, timestamp
 }
 

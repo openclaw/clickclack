@@ -52,6 +52,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/auth/github/desktop/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["startDesktopGitHubOAuth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/github/desktop/consume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["consumeDesktopGitHubOAuth"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/auth/github/callback": {
     parameters: {
       query?: never;
@@ -782,6 +814,10 @@ export interface components {
     ConsumeMagicLinkRequest: {
       token: string;
     };
+    ConsumeDesktopGitHubOAuthRequest: {
+      code: string;
+      code_verifier: string;
+    };
     UpdateMeRequest: {
       display_name: string;
       /** @description Unique user handle. Accepts an optional leading @ and stores the normalized value without it. */
@@ -1300,6 +1336,76 @@ export interface operations {
       };
     };
   };
+  startDesktopGitHubOAuth: {
+    parameters: {
+      query: {
+        code_challenge: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect the system browser to GitHub OAuth authorization */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid desktop code challenge */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description GitHub OAuth not configured */
+      501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  consumeDesktopGitHubOAuth: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConsumeDesktopGitHubOAuthRequest"];
+      };
+    };
+    responses: {
+      /** @description One-time desktop grant consumed and session cookie created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid, expired, or previously consumed desktop grant */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cross-site redemption rejected */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   finishGitHubOAuth: {
     parameters: {
       query?: {
@@ -1312,7 +1418,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Session created and redirected to app */
+      /** @description Session created and redirected to the web app or desktop callback */
       302: {
         headers: {
           [name: string]: unknown;

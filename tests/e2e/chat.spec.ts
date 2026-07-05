@@ -178,20 +178,24 @@ async function mobileGeometry(page: Page): Promise<MobileGeometry> {
 
 test("product website links to app and docs", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Team chat for humans/ })).toBeVisible();
   await expect(page.locator(".product-site")).toHaveCSS("display", "block");
-  await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
-  await expect(page.getByRole("link", { name: "Read docs" })).toHaveAttribute(
+  for (const openApp of await page.getByRole("link", { name: "Open app" }).all()) {
+    await expect(openApp).toHaveAttribute("href", "/app");
+  }
+  await expect(page.getByRole("link", { name: "Read the docs" })).toHaveAttribute(
     "href",
     "https://docs.clickclack.chat",
   );
-  await expect(page.getByText("Self-hostable chat. Serious tool. Mild brine.")).toBeVisible();
+  await expect(page.getByText("Open source · MIT · Single Go binary")).toBeVisible();
 });
 
 test("self-hosted product website links stay on the local app route", async ({ page }) => {
   await page.goto("http://selfhost.localhost:18082/");
-  await expect(page.getByRole("heading", { name: "ClickClack" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open app" })).toHaveAttribute("href", "/app");
+  await expect(page.getByRole("heading", { name: /Team chat for humans/ })).toBeVisible();
+  for (const openApp of await page.getByRole("link", { name: "Open app" }).all()) {
+    await expect(openApp).toHaveAttribute("href", "/app");
+  }
 });
 
 test("product website app URL host routing", () => {

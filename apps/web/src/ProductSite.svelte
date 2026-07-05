@@ -54,9 +54,15 @@
     { step: "Chat", code: "open http://localhost:8080" },
   ];
 
+  // Self-hosted instances keep App links on the local /app route, so the
+  // card label has to follow the real target instead of the hosted domain.
+  const appDestination = appURL.startsWith("http")
+    ? { href: appURL, host: "app.clickclack.chat", label: "Hosted app surface" }
+    : { href: appURL, host: "/app", label: "The app on this instance" };
+
   const destinations = [
     { href: docsURL, host: "docs.clickclack.chat", label: "Architecture, API, deploy guides" },
-    { href: appURL, host: "app.clickclack.chat", label: "Hosted app surface" },
+    appDestination,
     { href: repoURL, host: "github.com/openclaw/clickclack", label: "Source, issues, releases" },
   ];
 </script>
@@ -74,15 +80,7 @@
   <header class="site-nav-wrap">
     <nav class="site-nav" aria-label="Product navigation">
       <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 13a4 4 0 1 1 0-7c1.5 0 2.7.7 3.5 1.8" />
-            <path d="M16 13a4 4 0 1 0 0-7c-1.5 0-2.7.7-3.5 1.8" />
-            <path d="M7 13c-1.8 1.4-3 3.4-3 6" />
-            <path d="M17 13c1.8 1.4 3 3.4 3 6" />
-            <path d="M12 12v7" />
-          </svg>
-        </span>
+        <img class="brand-mark" src="/favicon.svg" alt="" width="34" height="34" />
         <span class="brand-name">ClickClack</span>
       </a>
       <div class="nav-links">
@@ -204,19 +202,21 @@
       {#each features as feature}
         <article>
           <span class="feature-icon" aria-hidden="true">
-            {#if feature.icon === "box"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" /></svg>
-            {:else if feature.icon === "bolt"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" /></svg>
-            {:else if feature.icon === "thread"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11a8 8 0 0 1-8 8H4l3-3" /><path d="M3 11a8 8 0 0 1 8-8h1" /><circle cx="17" cy="5" r="1.6" /><circle cx="7" cy="19" r="1.6" /></svg>
-            {:else if feature.icon === "robot"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 4v4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01M15 13h.01" /><path d="M9.5 16.5h5" /></svg>
-            {:else if feature.icon === "server"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2" /><rect x="3" y="13" width="18" height="7" rx="2" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>
-            {:else}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" /></svg>
-            {/if}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              {#if feature.icon === "box"}
+                <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" />
+              {:else if feature.icon === "bolt"}
+                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
+              {:else if feature.icon === "thread"}
+                <path d="M21 11a8 8 0 0 1-8 8H4l3-3" /><path d="M3 11a8 8 0 0 1 8-8h1" /><circle cx="17" cy="5" r="1.6" /><circle cx="7" cy="19" r="1.6" />
+              {:else if feature.icon === "robot"}
+                <rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 4v4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01M15 13h.01" /><path d="M9.5 16.5h5" />
+              {:else if feature.icon === "server"}
+                <rect x="3" y="4" width="18" height="7" rx="2" /><rect x="3" y="13" width="18" height="7" rx="2" /><path d="M7 7.5h.01M7 16.5h.01" />
+              {:else}
+                <path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" />
+              {/if}
+            </svg>
           </span>
           <h3>{feature.title}</h3>
           <p>{feature.body}</p>

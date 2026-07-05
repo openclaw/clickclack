@@ -124,6 +124,15 @@ textarea {
   color: inherit;
 }
 
+code,
+pre,
+kbd,
+samp {
+  /* Geist Mono's ligatures fuse " --" into a joined glyph, which
+     renders CLI flags like "send --channel" as "send--channel" in messages. */
+  font-variant-ligatures: none;
+}
+
 button {
   cursor: pointer;
 }

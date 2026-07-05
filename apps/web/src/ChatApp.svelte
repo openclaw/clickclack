@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
   import { APIError, api } from "./lib/api";
+  import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
   import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdownGifs";
@@ -177,6 +178,14 @@
       ? channels.find((channel) => channel.id === selectedChannelID) || {}
       : {};
   $: activeUnreadCount = unreadCountForKey(activeConversationKey, activeUnreadState);
+  $: desktopUnreadCount = status === "ready"
+    ? channels.reduce((total, channel) => total + (channel.unread_count || 0), 0) +
+      directConversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0)
+    : 0;
+  $: desktop?.setUnreadCount(desktopUnreadCount);
+  $: if (desktop && appliedRouteKey && typeof window !== "undefined") {
+    desktop.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+  }
   $: activeUnreadBoundarySeq = activeUnreadCount > 0 ? activeUnreadState.last_read_seq || 0 : 0;
   $: activeUnreadBoundaryLoaded = activeUnreadCount > 0
     ? unreadBoundaryLoadedForKey(activeConversationKey, activeUnreadBoundarySeq, messageWindows)
@@ -225,9 +234,24 @@
     const handleMobileNavBreakpoint = () => {
       mobileNavOpen = false;
     };
+    const stopDesktopNavigate = desktop?.onNavigate((route) => {
+      void goto(route, { keepFocus: true, noScroll: true });
+    });
+    const stopDesktopQuickCompose = desktop?.onQuickCompose(() => focusActiveComposer());
     mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
-    return () => mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
+    return () => {
+      mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
+      stopDesktopNavigate?.();
+      stopDesktopQuickCompose?.();
+    };
   });
+
+  function focusActiveComposer() {
+    void tick().then(() => {
+      const input = activeComposerContext === "thread" ? replyInput : messageInput;
+      input?.focus();
+    });
+  }
 
   function loadActivityPrefs() {
     try {
@@ -329,6 +353,12 @@
   }
 
   function syncBrowserNotificationState() {
+    if (desktop) {
+      browserNotificationsSupported = true;
+      browserNotificationPermission = "granted";
+      browserNotificationsEnabled = storedBrowserNotificationsEnabled();
+      return;
+    }
     browserNotificationsSupported = typeof Notification !== "undefined";
     browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
     const storedEnabled = storedBrowserNotificationsEnabled();
@@ -373,7 +403,17 @@
     if (!enabled) {
       storeBrowserNotificationsEnabled(false);
       browserNotificationsEnabled = false;
-      profileStatus = "Browser notifications disabled";
+      profileStatus = desktop ? "Desktop notifications disabled" : "Browser notifications disabled";
+      return;
+    }
+    if (desktop) {
+      browserNotificationsSupported = true;
+      browserNotificationPermission = "granted";
+      browserNotificationsEnabled = storeBrowserNotificationsEnabled(true);
+      profileStatus = browserNotificationsEnabled
+        ? "Desktop notifications enabled"
+        : "Desktop notification preference could not be saved";
+      profileStatusError = !browserNotificationsEnabled;
       return;
     }
     if (typeof Notification === "undefined") {
@@ -451,6 +491,15 @@
     const workspacePath = `/app/${encodeURIComponent(workspaceRouteID)}`;
     const targetRouteID = routeTargetIDFor(targetID);
     return targetRouteID ? `${workspacePath}/${encodeURIComponent(targetRouteID)}` : workspacePath;
+  }
+
+  function notificationHref(targetID: string): string {
+    const targetRouteID = channels.find((channel) => channel.id === targetID)?.route_id ||
+      directConversations.find((conversation) => conversation.id === targetID)?.route_id;
+    if (targetRouteID) return appHref(selectedWorkspaceID, targetRouteID);
+    if (!selectedWorkspaceID || !targetID) return "/app";
+    // Unknown realtime targets still form a valid legacy pair; the route API canonicalizes it.
+    return `/app/${encodeURIComponent(selectedWorkspaceID)}/${encodeURIComponent(targetID)}`;
   }
 
   function routeWorkspaceIDFor(workspaceID = selectedWorkspaceID): string {
@@ -1410,7 +1459,6 @@
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
     const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
     if (authorID && authorID === user?.id) return;
@@ -1421,6 +1469,16 @@
     const place = channel ? `#${channel.name}` : "Direct message";
     const rawBody = typeof payload.body === "string" ? payload.body : "New message";
     const messageID = typeof payload.message_id === "string" ? payload.message_id : `${channelID || dmID}:${event.seq || Date.now()}`;
+    if (desktop) {
+      void desktop.notify({
+        body: notificationBody(rawBody),
+        route: notificationHref(channelID || dmID),
+        tag: `clickclack:${messageID}`,
+        title: `${authorName} in ${place}`,
+      });
+      return;
+    }
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
       const notification = new Notification(`${authorName} in ${place}`, {
         body: notificationBody(rawBody),
@@ -2835,6 +2893,7 @@
     onHideCommentary={setHideCommentary}
     onHideToolCalls={setHideToolCalls}
     onUserAlign={setUserAlign}
+    notificationLabel={desktop ? "Desktop notifications" : "Browser notifications"}
     onBrowserNotificationsEnabled={(value) => void setBrowserNotificationsEnabled(value)}
     onClose={closeModal}
     onSave={() => void saveProfile()}

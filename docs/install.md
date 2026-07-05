@@ -5,8 +5,9 @@ description: Ways to get a ClickClack binary running — from-source, Docker, or
 
 # Install
 
-ClickClack ships as a single Go binary that embeds the Svelte SPA and the SQL
-migrations. There are three sensible ways to install it.
+ClickClack ships as a single Go server binary that embeds the Svelte SPA and SQL
+migrations, plus optional desktop clients for macOS, Windows, and Linux. There
+are three sensible ways to install the server.
 
 ## From source
 
@@ -81,6 +82,10 @@ and assets baked in. Data lives in whatever directory you pass to `--data`
   uploads/
   logs/
 ```
+
+The desktop clients connect to that server; they do not replace or bundle it.
+See [Desktop apps](desktop.html) for native features, self-hosted server setup,
+preview installers, and local packaging commands.
 
 ## Next
 

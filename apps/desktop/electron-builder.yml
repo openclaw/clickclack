@@ -1,0 +1,48 @@
+appId: chat.clickclack.desktop
+productName: ClickClack
+copyright: Copyright © OpenClaw contributors
+asar: true
+compression: maximum
+directories:
+  output: release
+files:
+  - dist/**/*
+  - resources/**/*
+  - assets/icon.png
+  - assets/icon.ico
+  - assets/icon.icns
+  - assets/trayTemplate.png
+  - assets/unread-badge.png
+protocols:
+  - name: ClickClack link
+    schemes:
+      - clickclack
+mac:
+  category: public.app-category.social-networking
+  icon: assets/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  minimumSystemVersion: "12.0"
+  target:
+    - dmg
+    - zip
+dmg:
+  sign: false
+win:
+  icon: assets/icon.ico
+  target:
+    - nsis
+    - zip
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+linux:
+  icon: assets/icon.png
+  category: Network
+  maintainer: OpenClaw contributors
+  executableName: clickclack
+  target:
+    - AppImage
+    - deb
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}

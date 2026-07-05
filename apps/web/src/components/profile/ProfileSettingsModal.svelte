@@ -16,6 +16,7 @@
     browserNotificationsSupported: boolean;
     browserNotificationsEnabled: boolean;
     browserNotificationPermission: NotificationPermission | "unsupported";
+    notificationLabel: string;
     status: string;
     statusError: boolean;
     onDisplayName: (value: string) => void;
@@ -44,6 +45,7 @@
     browserNotificationsSupported,
     browserNotificationsEnabled,
     browserNotificationPermission,
+    notificationLabel,
     status,
     statusError,
     onDisplayName,
@@ -129,7 +131,7 @@
           checked={browserNotificationsEnabled}
           onchange={(event) => onBrowserNotificationsEnabled(event.currentTarget.checked)}
         />
-        <span>Browser notifications</span>
+        <span>{notificationLabel}</span>
       </label>
       {#if !browserNotificationsSupported}
         <p class="profile-status error">Browser notifications are not supported</p>

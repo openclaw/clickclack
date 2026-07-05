@@ -1,0 +1,26 @@
+{
+  "name": "@clickclack/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "author": "OpenClaw contributors",
+  "description": "Native ClickClack desktop shell for macOS, Windows, and Linux",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "pnpm build && electron .",
+    "dist": "pnpm build && electron-builder --publish never",
+    "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64 --publish never",
+    "dist:mac": "pnpm build && electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "dist:win": "pnpm build && electron-builder --win nsis zip --x64 --publish never",
+    "pack": "pnpm build && electron-builder --dir --publish never",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "electron": "43.0.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1"
+  }
+}

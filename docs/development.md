@@ -50,10 +50,12 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 | `pnpm build`           | Builds the Svelte app and the SDK, then embeds `apps/web/dist` into `apps/api/internal/webassets/dist`. |
 | `pnpm build:web`       | Builds and normalizes the Svelte app without touching embedded Go assets. |
 | `pnpm build:sdk`       | Builds the TypeScript SDK. |
+| `pnpm build:desktop`   | Bundles the Electron main process, preloads, and settings renderer. |
 | `pnpm check`           | Full local gate: `pnpm test`, root/workspace `tsgo`, `oxlint`, and format checks. |
 | `pnpm coverage`        | Go tests with coverage; fails under 85% line coverage. |
 | `pnpm dev:api`         | `go run ./apps/api/cmd/clickclack serve --dev-bootstrap=true`. |
 | `pnpm dev:web`         | `vite dev` for the SPA. |
+| `pnpm dev:desktop`     | Builds and starts the Electron client against its configured server. |
 | `pnpm fmt`             | `gofmt` + `oxfmt` over Go and TS/Svelte. |
 | `pnpm fmt:check`       | CI-compatible formatting check with `gofmt -l` and `oxfmt --check`. |
 | `pnpm lint`            | `oxlint` over web, SDK, examples, and tests. |
@@ -61,6 +63,7 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 | `pnpm typecheck`       | `tsgo --noEmit -p tsconfig.json` for root Playwright config/tests. |
 | `pnpm test`            | Builds the web app and SDK, then runs Go tests against those fresh web assets in a temp copy without rewriting tracked embedded assets. |
 | `pnpm test:e2e`        | Playwright suite in `tests/e2e`. |
+| `pnpm test:desktop`    | Tests desktop URL, deep-link, notification, settings, and badge contracts. |
 
 `pnpm build` uses `CLICKCLACK_WEB_VERSION=dev` by default. That keeps repeated
 local builds deterministic while still allowing real source changes to update
@@ -82,6 +85,7 @@ apps/
         sqlite/         # SQLite implementation, migrations, backup, export
         postgres/       # Postgres implementation, migrations, export
       webassets/        # go:embed for the built SPA
+  desktop/              # Electron shell, platform assets, settings, packaging
   web/                  # Svelte 5 SPA
 packages/
   protocol/             # OpenAPI spec, source of truth for the wire shape

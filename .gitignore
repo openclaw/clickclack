@@ -1,6 +1,8 @@
 node_modules/
 apps/web/dist/
 apps/web/.svelte-kit/
+apps/desktop/.test/
+apps/desktop/release/
 packages/sdk-ts/dist/
 dist/
 !apps/api/internal/webassets/dist/

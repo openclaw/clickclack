@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClickClack Desktop Settings</title>
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <main class="settings-shell">
+      <header class="signal-header">
+        <div class="brand-lockup">
+          <img src="../assets/icon.png" alt="" width="74" height="74" />
+          <div>
+            <p class="eyebrow">Native signal desk</p>
+            <h1>ClickClack</h1>
+          </div>
+        </div>
+        <div class="platform-chip">
+          <span class="live-dot"></span>
+          <span id="platform-name">Desktop</span>
+        </div>
+      </header>
+
+      <section class="connection-card">
+        <div class="card-number">01</div>
+        <div class="card-copy">
+          <p class="eyebrow">Connection</p>
+          <h2>Your server, in a real window.</h2>
+          <p>
+            Hosted ClickClack works out of the box. Self-hosted servers need HTTPS; local development
+            may use loopback HTTP.
+          </p>
+        </div>
+
+        <form id="settings-form">
+          <label class="server-field" for="server-url">
+            <span>ClickClack server</span>
+            <div class="url-row">
+              <input
+                id="server-url"
+                name="server-url"
+                type="url"
+                autocomplete="url"
+                placeholder="https://app.clickclack.chat"
+                required
+              />
+              <button id="test-server" type="button" class="secondary-button">Test</button>
+            </div>
+          </label>
+
+          <div class="status-rail">
+            <span class="status-light"></span>
+            <span id="connection-status" data-state="idle">Loading settings…</span>
+          </div>
+
+          <div class="switch-stack">
+            <label class="switch-row">
+              <span>
+                <strong>Keep the signal alive</strong>
+                <small>Close hides the window; tray notifications and realtime continue.</small>
+              </span>
+              <input id="close-to-tray" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+
+            <label class="switch-row">
+              <span>
+                <strong>Launch at login</strong>
+                <small>Supported by the native macOS and Windows installers.</small>
+              </span>
+              <input id="start-at-login" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <button id="save-settings" type="submit" class="primary-button">
+            <span>Save &amp; reconnect</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+        </form>
+      </section>
+
+      <footer>
+        <span id="app-version">Desktop</span>
+        <span>Native notifications · deep links · unread badges · quick compose</span>
+      </footer>
+    </main>
+    <script src="../dist/settings.js"></script>
+  </body>
+</html>

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added secure ClickClack desktop apps for macOS, Windows, and Linux with native notifications, unread badges, tray lifecycle, quick compose, deep links, downloads, spellcheck, and self-hosted server selection.
 - Refreshed runtime, build, and CI dependencies to clear known JavaScript advisories and pin current GitHub Actions releases.
 - Wrote CLI client configuration atomically while preserving read-only-file and symlink safety. Thanks @KrasimirKralev.
 - Added bot-scoped durable agent commentary and tool activity, collapsed into per-turn preambles with independent visibility controls and configurable self-message alignment. Thanks @ragesaq.

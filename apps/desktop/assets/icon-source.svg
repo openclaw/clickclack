@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="ClickClack">
+  <defs>
+    <linearGradient id="tile" x1="150" y1="90" x2="850" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff8a72"/>
+      <stop offset="0.52" stop-color="#ed5947"/>
+      <stop offset="1" stop-color="#b92e27"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="300" y1="210" x2="690" y2="790" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#f5dfca"/>
+    </linearGradient>
+    <radialGradient id="pulse" cx="0" cy="0" r="1" gradientTransform="translate(512 512) rotate(90) scale(112)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e5ffff"/>
+      <stop offset="0.34" stop-color="#9ce7e1"/>
+      <stop offset="1" stop-color="#55b9b8"/>
+    </radialGradient>
+    <filter id="shadow" x="76" y="72" width="872" height="902" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="34" stdDeviation="32" flood-color="#551713" flood-opacity=".34"/>
+    </filter>
+    <filter id="soft" x="180" y="188" width="664" height="654" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#4e1712" flood-opacity=".28"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="92" y="82" width="840" height="840" rx="222" fill="url(#tile)"/>
+    <rect x="108" y="98" width="808" height="808" rx="206" fill="none" stroke="#ffb09a" stroke-opacity=".5" stroke-width="10"/>
+  </g>
+
+  <path d="M260 275C326 213 414 186 512 186c98 0 186 27 252 89" fill="none" stroke="#7d211d" stroke-opacity=".22" stroke-width="28" stroke-linecap="round"/>
+
+  <g filter="url(#soft)" fill="url(#shine)" stroke="#361512" stroke-width="22" stroke-linejoin="round">
+    <path d="M431 300h-74c-111 0-190 82-190 202s79 204 190 204h74V599h-62c-51 0-84-38-84-97 0-57 33-95 84-95h62l42-58-42-49Z"/>
+    <path d="M593 300h74c111 0 190 82 190 202s-79 204-190 204h-74V599h62c51 0 84-38 84-97 0-57-33-95-84-95h-62l-42-58 42-49Z"/>
+  </g>
+
+  <g fill="#351512">
+    <path d="M304 476c0-17 14-31 31-31s31 14 31 31-14 31-31 31-31-14-31-31Z"/>
+    <path d="M658 476c0-17 14-31 31-31s31 14 31 31-14 31-31 31-31-14-31-31Z"/>
+  </g>
+
+  <g>
+    <circle cx="512" cy="512" r="103" fill="#311714" stroke="#fff2df" stroke-width="17"/>
+    <circle cx="512" cy="512" r="72" fill="url(#pulse)"/>
+    <path d="M512 466v92M466 512h92" stroke="#153c3d" stroke-width="19" stroke-linecap="round"/>
+    <circle cx="512" cy="512" r="16" fill="#fffaf0"/>
+  </g>
+
+  <path d="M399 744c34 27 72 45 113 45s79-18 113-45" fill="none" stroke="#7d211d" stroke-opacity=".34" stroke-width="22" stroke-linecap="round"/>
+</svg>

@@ -5,6 +5,7 @@ packages:
 overrides:
   cookie: 0.7.2
 allowBuilds:
+  electron-winstaller: true
   esbuild: true
   sharp: true
   workerd: true

@@ -34,7 +34,7 @@
 
   const me = $derived(data.me);
   const workspaceID = $derived(data.workspaceID);
-  const workspaceRouteID = $derived(data.workspaceRouteID || data.workspace?.route_id || data.workspaceID);
+  const workspaceIdentifier = $derived(data.workspaceIdentifier || data.workspaceID);
   const canManage = $derived(isWorkspaceManager(data.workspace?.role));
   const canCreateService = $derived(canManage);
 
@@ -197,7 +197,7 @@
       token={revealed.token}
       botHandle={revealed.bot.handle}
       botUserID={revealed.bot.id}
-      workspaceRouteID={workspaceRouteID}
+      workspace={workspaceIdentifier}
       onDismiss={() => (revealed = null)}
     />
   {/if}

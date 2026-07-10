@@ -5,6 +5,7 @@ import { api, APIError } from "../../../../../lib/api";
 import {
   listWorkspaceBots,
   botLoadErrorMessage,
+  openClawWorkspaceIdentifier,
   type BotWithTokens,
 } from "../../../../../lib/bots";
 import type { User, Workspace } from "../../../../../lib/types";
@@ -18,7 +19,9 @@ export async function load({
 }) {
   const { workspace } = await parent();
   const workspaceID = workspace?.id ?? params.workspaceID;
-  const workspaceRouteID = workspace?.route_id || workspace?.id || params.workspaceID;
+  const workspaceIdentifier = workspace
+    ? openClawWorkspaceIdentifier(workspace)
+    : params.workspaceID;
   let bots: BotWithTokens[] = [];
   let me: User | null = null;
   let loadError = "";
@@ -38,7 +41,7 @@ export async function load({
   }
   return {
     workspaceID,
-    workspaceRouteID,
+    workspaceIdentifier,
     workspace,
     bots,
     me,

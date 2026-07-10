@@ -4,6 +4,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  buildOpenClawConfigSnippet,
+  buildOpenClawShellSnippet,
+  openClawWorkspaceIdentifier,
+} from "../../apps/web/src/lib/bots";
 import { productAppURLForHost } from "../../apps/web/src/productLinks";
 
 const serverURL = "http://127.0.0.1:18082";
@@ -209,6 +214,29 @@ test("product website app URL host routing", () => {
   expect(productAppURLForHost("ixandru.tail75b497.ts.net")).toBe("/app");
   expect(productAppURLForHost("clickclack.lan")).toBe("/app");
   expect(productAppURLForHost("chat.example.com")).toBe("/app");
+});
+
+test("OpenClaw install snippets use supported workspace identifiers", () => {
+  const workspace = openClawWorkspaceIdentifier({
+    id: "wsp_01test",
+    slug: "team-chat",
+  });
+  const config = buildOpenClawConfigSnippet({
+    workspace,
+    botHandle: "release-bot",
+    botUserID: "usr_01bot",
+    mode: "single",
+    baseURL: "https://chat.example.com",
+  });
+  expect(config).toContain('workspace: "team-chat"');
+  expect(config).not.toContain("route_id");
+
+  const shell = buildOpenClawShellSnippet({
+    botHandle: "release-bot",
+    token: "ccb_test'value",
+    mode: "single",
+  });
+  expect(shell).toContain(`export CLICKCLACK_BOT_TOKEN='ccb_test'"'"'value'`);
 });
 
 test("app subdomain root opens the chat app", async ({ page }) => {

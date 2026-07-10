@@ -80,6 +80,8 @@
     isLoadingInitial = true;
     isLoadingMore = false;
     loadError = "";
+    totalCount = undefined;
+    totalByRole = undefined;
     try {
       const page = await listWorkspaceMembersPage({
         workspaceID: data.workspaceID,
@@ -197,7 +199,11 @@
   }
 
   const countLabel = $derived.by(() => {
+    if (isLoadingInitial) return "Loading…";
     if (isFiltering()) {
+      if (totalCount != null) {
+        return formatCount(totalCount, "match", "matches");
+      }
       const noun = members.length === 1 ? "match" : "matches";
       return hasMore ? `${members.length}+ ${noun}` : `${members.length} ${noun}`;
     }

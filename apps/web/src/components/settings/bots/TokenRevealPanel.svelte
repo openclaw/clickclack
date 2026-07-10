@@ -10,11 +10,11 @@
     token: BotToken;
     botHandle: string;
     botUserID: string;
-    workspaceRouteID: string;
+    workspace: string;
     onDismiss: () => void;
   };
 
-  let { token, botHandle, botUserID, workspaceRouteID, onDismiss }: Props = $props();
+  let { token, botHandle, botUserID, workspace, onDismiss }: Props = $props();
 
   let acknowledged = $state(false);
   let mode = $state<OpenClawAccountMode>("single");
@@ -22,7 +22,7 @@
 
   const configSnippet = $derived(
     buildOpenClawConfigSnippet({
-      workspaceRouteID,
+      workspace,
       botHandle,
       botUserID,
       mode,

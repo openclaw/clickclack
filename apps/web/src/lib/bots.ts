@@ -1,5 +1,5 @@
 import { api, APIError } from "./api";
-import type { User } from "./types";
+import type { User, Workspace } from "./types";
 
 export type BotToken = {
   id: string;
@@ -174,6 +174,10 @@ export function suggestHandleFrom(displayName: string): string {
 
 export type OpenClawAccountMode = "single" | "named";
 
+export function openClawWorkspaceIdentifier(workspace: Pick<Workspace, "id" | "slug">): string {
+  return workspace.slug.trim() || workspace.id;
+}
+
 function jsonString(value: string): string {
   return JSON.stringify(value);
 }
@@ -192,7 +196,7 @@ function shellQuote(value: string): string {
 }
 
 export function buildOpenClawConfigSnippet(opts: {
-  workspaceRouteID: string;
+  workspace: string;
   botHandle: string;
   botUserID: string;
   mode: OpenClawAccountMode;
@@ -215,7 +219,7 @@ export function buildOpenClawConfigSnippet(opts: {
       accounts: {
         ${jsonString(handle)}: {
           token: { source: "env", provider: "default", id: ${jsonString(envName)} },
-          workspace: ${jsonString(opts.workspaceRouteID)},
+          workspace: ${jsonString(opts.workspace)},
           botUserId: ${jsonString(opts.botUserID)},
           defaultTo: "channel:general",
         },
@@ -231,7 +235,7 @@ export function buildOpenClawConfigSnippet(opts: {
       enabled: true,
       baseUrl: ${jsonString(baseURL)},
       token: { source: "env", provider: "default", id: ${jsonString(envName)} },
-      workspace: ${jsonString(opts.workspaceRouteID)},
+      workspace: ${jsonString(opts.workspace)},
       botUserId: ${jsonString(opts.botUserID)},
       defaultTo: "channel:general",
     },

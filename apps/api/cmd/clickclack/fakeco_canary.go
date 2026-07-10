@@ -20,6 +20,7 @@ import (
 
 type canaryOptions struct {
 	CorrelationID    string
+	RunID            string
 	GatewayHealthURL string
 	Timeout          time.Duration
 	PollInterval     time.Duration
@@ -28,6 +29,8 @@ type canaryOptions struct {
 type canaryResult struct {
 	Status              string `json:"status"`
 	CorrelationID       string `json:"correlation_id"`
+	RunID               string `json:"run_id,omitempty"`
+	CaseID              string `json:"case_id"`
 	GatewayPreflight    bool   `json:"gateway_preflight"`
 	WorkspaceID         string `json:"workspace_id"`
 	ChannelID           string `json:"channel_id"`
@@ -41,6 +44,7 @@ func (c apiClient) canary(args []string) error {
 	flags := flag.NewFlagSet("canary", flag.ExitOnError)
 	addClientFlags(flags, &opts)
 	correlationID := flags.String("correlation-id", "", "optional safe correlation ID")
+	runID := flags.String("run-id", "", "optional safe external run ID for evidence")
 	gatewayHealthURL := flags.String("gateway-health-url", os.Getenv("OPENCLAW_GATEWAY_HEALTH_URL"), "optional OpenClaw health URL")
 	timeout := flags.Duration("timeout", 2*time.Minute, "overall canary timeout")
 	pollInterval := flags.Duration("poll-interval", time.Second, "reply polling interval")
@@ -50,6 +54,7 @@ func (c apiClient) canary(args []string) error {
 	c = c.withOptions(opts, true)
 	result, err := c.runCanary(context.Background(), canaryOptions{
 		CorrelationID:    *correlationID,
+		RunID:            *runID,
 		GatewayHealthURL: *gatewayHealthURL,
 		Timeout:          *timeout,
 		PollInterval:     *pollInterval,
@@ -73,6 +78,10 @@ func (c apiClient) runCanary(parent context.Context, options canaryOptions) (can
 	}
 	if !validCanaryCorrelationID(correlationID) {
 		return canaryResult{}, errors.New("correlation ID must be 1-80 letters, numbers, dots, underscores, colons, or hyphens")
+	}
+	runID := strings.TrimSpace(options.RunID)
+	if runID != "" && !validCanaryCorrelationID(runID) {
+		return canaryResult{}, errors.New("run ID must be at most 80 letters, numbers, dots, underscores, colons, or hyphens")
 	}
 	c.correlationID = correlationID
 	ctx, cancel := context.WithTimeout(parent, options.Timeout)
@@ -131,6 +140,8 @@ func (c apiClient) runCanary(parent context.Context, options canaryOptions) (can
 			return canaryResult{
 				Status:              "passed",
 				CorrelationID:       correlationID,
+				RunID:               runID,
+				CaseID:              created.Message.ID,
 				GatewayPreflight:    gatewayPreflight,
 				WorkspaceID:         channel.WorkspaceID,
 				ChannelID:           channel.ID,

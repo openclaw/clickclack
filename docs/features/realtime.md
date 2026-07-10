@@ -75,7 +75,11 @@ conversation members.
 
 `message.created` carries the message sequence in top-level `seq` and includes
 `message_id`, `author_id`, optional `direct_conversation_id`, and optional
-`nonce` in `payload`. Read receipt events carry the updated read pointer in
+`nonce` in `payload`. `message.created` and `thread.reply_created` also include
+the request's validated `correlation_id` when one is available. This metadata
+survives both cursor replay and live WebSocket delivery; it is omitted for
+events created outside a correlated request and never contains message bodies.
+Read receipt events carry the updated read pointer in
 top-level `seq` and include `user_id` plus the channel or DM conversation ID in
 `payload`; they are delivered only to that user.
 Moderation events carry the target `user_id` and current `role`; they are

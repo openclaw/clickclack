@@ -335,7 +335,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if input.TurnID != "" {
 		dmEventFields["turn_id"] = input.TurnID
 	}
-	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(dmEventFields, nonce), recipients)
+	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(ctx, dmEventFields, nonce), recipients)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}

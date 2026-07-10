@@ -19,12 +19,15 @@ The server resolves callers in this order (see
 2. `cc_session` cookie.
 3. `X-ClickClack-User: usr_...` header (local/dev impersonation for tests).
 4. Dev fallback to the first user in the DB (only with
-   `--dev-bootstrap=true`).
+`--dev-bootstrap=true`).
 
 `/healthz`, `/readyz`, and the opt-in `/metrics` operator endpoint do not use
 chat authentication. Keep metrics private. Every HTTP response carries
 `X-Correlation-ID`; a caller-supplied value is accepted only when it uses the
-safe bounded character set.
+safe bounded character set. Durable `message.created` and
+`thread.reply_created` events copy that validated value to optional
+`payload.correlation_id` metadata for HTTP recovery and WebSocket consumers.
+The value is not stored on message rows or exported as a metrics label.
 
 ## Endpoint groups
 

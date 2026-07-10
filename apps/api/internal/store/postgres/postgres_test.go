@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
@@ -38,13 +39,16 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, event, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "hello postgres"})
+	messageCtx := requestmeta.WithCorrelationID(ctx, "corr-postgres-message")
+	created, event, err := st.CreateMessage(messageCtx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "hello postgres"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if event.ID == "" || event.Seq == nil || *event.Seq != 1 {
 		t.Fatalf("unexpected event: %#v", event)
 	}
+	assertPostgresEventPayloadValue(t, event, "correlation_id", "corr-postgres-message")
+	assertPostgresEventPayloadMissing(t, event, "body")
 	page, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{Limit: 10})
 	if err != nil {
 		t.Fatal(err)
@@ -52,9 +56,26 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if len(page.Messages) != 1 || page.Messages[0].ID != created.ID {
 		t.Fatalf("unexpected messages: %#v", page.Messages)
 	}
-	if _, state, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: created.ID, AuthorID: owner.ID, Body: "postgres thread reply"}); err != nil || state.ReplyCount != 1 {
+	replyCtx := requestmeta.WithCorrelationID(ctx, "corr-postgres-reply")
+	_, state, replyEvents, err := st.CreateThreadReply(replyCtx, store.CreateThreadReplyInput{RootMessageID: created.ID, AuthorID: owner.ID, Body: "postgres thread reply"})
+	if err != nil || state.ReplyCount != 1 {
 		t.Fatalf("unexpected thread reply result: %#v err=%v", state, err)
 	}
+	if len(replyEvents) != 2 || replyEvents[0].Type != "thread.reply_created" {
+		t.Fatalf("unexpected thread reply events: %#v", replyEvents)
+	}
+	assertPostgresEventPayloadValue(t, replyEvents[0], "correlation_id", "corr-postgres-reply")
+	assertPostgresEventPayloadMissing(t, replyEvents[1], "correlation_id")
+	persisted, err := st.ListEventsAfter(ctx, workspace.ID, owner.ID, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistedByID := make(map[string]store.Event, len(persisted))
+	for _, persistedEvent := range persisted {
+		persistedByID[persistedEvent.ID] = persistedEvent
+	}
+	assertPostgresEventPayloadValue(t, persistedByID[event.ID], "correlation_id", "corr-postgres-message")
+	assertPostgresEventPayloadValue(t, persistedByID[replyEvents[0].ID], "correlation_id", "corr-postgres-reply")
 	threadPage, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{Limit: 10})
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +87,43 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Message.ID != created.ID {
+	foundCreated := false
+	for _, result := range results {
+		if result.Message.ID == created.ID {
+			foundCreated = true
+			break
+		}
+	}
+	if !foundCreated {
 		t.Fatalf("unexpected search results: %#v", results)
+	}
+}
+
+func assertPostgresEventPayloadValue(t *testing.T, event store.Event, key, want string) {
+	t.Helper()
+	got, ok := postgresEventPayloadValue(event, key)
+	if !ok || got != want {
+		t.Fatalf("event %s payload[%q] = %q, %v; want %q", event.ID, key, got, ok, want)
+	}
+}
+
+func assertPostgresEventPayloadMissing(t *testing.T, event store.Event, key string) {
+	t.Helper()
+	if got, ok := postgresEventPayloadValue(event, key); ok {
+		t.Fatalf("event %s unexpectedly has payload[%q] = %q", event.ID, key, got)
+	}
+}
+
+func postgresEventPayloadValue(event store.Event, key string) (string, bool) {
+	switch payload := event.Payload.(type) {
+	case map[string]string:
+		value, ok := payload[key]
+		return value, ok
+	case map[string]any:
+		value, ok := payload[key].(string)
+		return value, ok
+	default:
+		return "", false
 	}
 }
 

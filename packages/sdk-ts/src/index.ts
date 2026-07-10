@@ -234,6 +234,11 @@ export type RouteTarget = {
   canonical_path: string;
 };
 
+export type RealtimeEventPayload = {
+  correlation_id?: string;
+  [key: string]: unknown;
+};
+
 export type RealtimeEvent = {
   id: string;
   cursor: string;
@@ -242,7 +247,7 @@ export type RealtimeEvent = {
   channel_id?: string;
   seq?: number;
   created_at: string;
-  payload: unknown;
+  payload: RealtimeEventPayload;
 };
 
 export type ClickClackClientOptions = {

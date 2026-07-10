@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/postgres/storedb"
 )
@@ -276,18 +277,23 @@ func insertEventWithRecipients(ctx context.Context, tx *sql.Tx, workspaceID, cha
 	return event, nil
 }
 
-// eventPayload returns the base payload with a "nonce" key only if non-empty.
-// Used so optimistic clients can correlate WS message.created with their pending
-// placeholder.
-func eventPayload(base map[string]string, nonce string) map[string]string {
-	if nonce == "" {
+// eventPayload adds optional client and request correlation metadata to durable
+// message creation events without copying message content.
+func eventPayload(ctx context.Context, base map[string]string, nonce string) map[string]string {
+	correlationID := requestmeta.CorrelationID(ctx)
+	if nonce == "" && correlationID == "" {
 		return base
 	}
-	out := make(map[string]string, len(base)+1)
+	out := make(map[string]string, len(base)+2)
 	for k, v := range base {
 		out[k] = v
 	}
-	out["nonce"] = nonce
+	if nonce != "" {
+		out["nonce"] = nonce
+	}
+	if correlationID != "" {
+		out["correlation_id"] = correlationID
+	}
 	return out
 }
 

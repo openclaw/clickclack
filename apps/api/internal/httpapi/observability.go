@@ -14,11 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
 )
 
 const correlationIDHeader = "X-Correlation-ID"
-
-type correlationIDContextKey struct{}
 
 func correlationIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,22 +26,13 @@ func correlationIDMiddleware(next http.Handler) http.Handler {
 			correlationID = newCorrelationID()
 		}
 		w.Header().Set(correlationIDHeader, correlationID)
-		ctx := context.WithValue(r.Context(), correlationIDContextKey{}, correlationID)
+		ctx := requestmeta.WithCorrelationID(r.Context(), correlationID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func validCorrelationID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, r := range value {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._:-", r) {
-			continue
-		}
-		return false
-	}
-	return true
+	return requestmeta.ValidCorrelationID(value)
 }
 
 func newCorrelationID() string {
@@ -54,8 +44,7 @@ func newCorrelationID() string {
 }
 
 func correlationIDFromContext(ctx context.Context) string {
-	value, _ := ctx.Value(correlationIDContextKey{}).(string)
-	return value
+	return requestmeta.CorrelationID(ctx)
 }
 
 type buildMetadata struct {

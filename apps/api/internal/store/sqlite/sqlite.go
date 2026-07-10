@@ -581,7 +581,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if input.TurnID != "" {
 		eventFields["turn_id"] = input.TurnID
 	}
-	event, err := insertEvent(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(eventFields, nonce))
+	event, err := insertEvent(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(ctx, eventFields, nonce))
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -743,7 +743,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
-	replyPayload := eventPayload(map[string]string{"message_id": id, "root_message_id": root.ID}, nonce)
+	replyPayload := eventPayload(ctx, map[string]string{"message_id": id, "root_message_id": root.ID}, nonce)
 	statePayload := map[string]string{"root_message_id": root.ID}
 	var recipients []string
 	if root.DirectConversationID != "" {

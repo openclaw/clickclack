@@ -16,6 +16,7 @@ import (
 
 func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 	const correlationID = "fakeco-test-001"
+	const runID = "fakeco-run-001"
 	quoted := "msg_request"
 	var mu sync.Mutex
 	var correlations []string
@@ -80,6 +81,7 @@ func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 	}
 	result, err := c.runCanary(context.Background(), canaryOptions{
 		CorrelationID:    correlationID,
+		RunID:            runID,
 		GatewayHealthURL: server.URL + "/gateway-healthz",
 		Timeout:          time.Second,
 		PollInterval:     time.Millisecond,
@@ -87,7 +89,7 @@ func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "passed" || !result.GatewayPreflight || result.RequestMessageID != quoted || result.ResponseMessageID != "msg_reply" {
+	if result.Status != "passed" || !result.GatewayPreflight || result.RunID != runID || result.CaseID != quoted || result.RequestMessageID != quoted || result.ResponseMessageID != "msg_reply" {
 		t.Fatalf("unexpected canary result: %#v", result)
 	}
 	mu.Lock()
@@ -117,6 +119,10 @@ func TestRunCanaryRejectsBotSessionAndUnsafeInputs(t *testing.T) {
 	_, err := c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco bot", Timeout: time.Second, PollInterval: time.Millisecond})
 	if err == nil || !strings.Contains(err.Error(), "correlation ID") {
 		t.Fatalf("expected invalid correlation error, got %v", err)
+	}
+	_, err = c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco-run", RunID: "unsafe run", Timeout: time.Second, PollInterval: time.Millisecond})
+	if err == nil || !strings.Contains(err.Error(), "run ID") {
+		t.Fatalf("expected invalid run ID error, got %v", err)
 	}
 	_, err = c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco-bot", Timeout: time.Second, PollInterval: time.Millisecond})
 	if err == nil || !strings.Contains(err.Error(), "human session token") {

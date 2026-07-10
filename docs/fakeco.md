@@ -147,7 +147,7 @@ CLICKCLACK_SERVER=https://chat.fakeco.example \
 CLICKCLACK_WORKSPACE=fakeco \
 CLICKCLACK_CHANNEL=e2e-canary \
 OPENCLAW_GATEWAY_HEALTH_URL=http://openclaw.fakeco.internal:18789/healthz \
-clickclack canary --json
+clickclack canary --run-id fakeco-smoke-20260709 --json
 ```
 
 The command first checks the configured Gateway health URL, then posts a unique
@@ -155,7 +155,10 @@ human message and polls for an ordinary bot reply that quotes that exact
 message and equals `fakeco-canary-ok <correlation-id>`. It exits non-zero on
 gateway failure, wrong credentials, a missing workspace/channel, a bot caller,
 or timeout. The correlation ID is also sent on every HTTP request as
-`X-Correlation-ID` and returned by ClickClack in the response header.
+`X-Correlation-ID`, returned by ClickClack in the response header, and retained
+as optional metadata on the durable creation event. `--run-id` adds an external
+run identifier to JSON evidence only; `case_id` always equals the canary request
+message ID. Neither value adds a new outbound gateway call.
 
 ## Health, logs, and telemetry
 

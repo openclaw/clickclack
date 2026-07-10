@@ -262,8 +262,9 @@ clickclack canary --workspace fakeco --channel e2e-canary --json
 Requires a human session token. It optionally preflights the OpenClaw health
 URL, posts a unique correlated prompt, and waits for a bot reply quoting the
 request and carrying the same marker. `--timeout`, `--poll-interval`, and
-`--correlation-id` are available for controlled tests. Never pass credentials
-inside the health URL.
+`--correlation-id` are available for controlled tests. Optional `--run-id`
+appears in JSON evidence without changing the request; `case_id` is the request
+message ID. Never pass credentials inside the health URL.
 
 ## Exit codes
 

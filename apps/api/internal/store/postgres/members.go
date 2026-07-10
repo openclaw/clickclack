@@ -33,6 +33,12 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 	if hasCursor && (cursor.Query != req.Query || cursor.Role != req.Role) {
 		return store.WorkspaceMemberPage{}, store.ErrInvalidWorkspaceMemberPage
 	}
+	if !hasCursor {
+		cursor.RoleSort = -1
+		if req.Role != "" {
+			cursor.RoleSort = store.WorkspaceMemberRoleSort(req.Role)
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.WorkspaceMemberPage{}, err
@@ -44,11 +50,7 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 		}
 		return store.WorkspaceMemberPage{}, err
 	}
-	totalCount, err := postgresWorkspaceMemberTotalCount(ctx, tx, workspaceID, req)
-	if err != nil {
-		return store.WorkspaceMemberPage{}, err
-	}
-	totalByRole, err := postgresWorkspaceMemberRoleCounts(ctx, tx, workspaceID, req)
+	totalCount, totalByRole, err := postgresWorkspaceMemberCounts(ctx, tx, workspaceID, req)
 	if err != nil {
 		return store.WorkspaceMemberPage{}, err
 	}
@@ -57,7 +59,7 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 		RoleFilter:       req.Role,
 		SearchQuery:      req.Query,
 		CursorUserID:     cursor.UserID,
-		CursorRoleSort:   int32(cursor.RoleSort),
+		CursorRoleSort:   int16(cursor.RoleSort),
 		CursorSortName:   cursor.SortName,
 		CursorSortHandle: cursor.SortHandle,
 		LimitCount:       int32(req.Limit + 1),
@@ -71,11 +73,25 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 	return postgresWorkspaceMemberPageFromRows(workspaceID, req, totalCount, totalByRole, rows)
 }
 
-func postgresWorkspaceMemberTotalCount(ctx context.Context, tx *sql.Tx, workspaceID string, req store.WorkspaceMemberPageRequest) (*int, error) {
+func postgresWorkspaceMemberCounts(ctx context.Context, tx *sql.Tx, workspaceID string, req store.WorkspaceMemberPageRequest) (*int, *store.WorkspaceMemberRoleCounts, error) {
 	if req.Cursor != "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	qtx := storedb.New(tx)
+	if req.Query == "" && req.Role == "" {
+		row, err := qtx.CountWorkspaceMemberRoles(ctx, workspaceID)
+		if err != nil {
+			return nil, nil, err
+		}
+		total := int(row.TotalCount)
+		return &total, &store.WorkspaceMemberRoleCounts{
+			Owner:     int(row.OwnerCount),
+			Moderator: int(row.ModeratorCount),
+			Member:    int(row.MemberCount),
+			Bot:       int(row.BotCount),
+			Guest:     int(row.GuestCount),
+		}, nil
+	}
 	var (
 		count int64
 		err   error
@@ -91,40 +107,10 @@ func postgresWorkspaceMemberTotalCount(ctx context.Context, tx *sql.Tx, workspac
 		count, err = qtx.CountWorkspaceMembers(ctx, workspaceID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	total := int(count)
-	return &total, nil
-}
-
-func postgresWorkspaceMemberRoleCounts(ctx context.Context, tx *sql.Tx, workspaceID string, req store.WorkspaceMemberPageRequest) (*store.WorkspaceMemberRoleCounts, error) {
-	if req.Cursor != "" || req.Query != "" || req.Role != "" {
-		return nil, nil
-	}
-	rows, err := tx.QueryContext(ctx, `
-		SELECT role, COUNT(*)
-		FROM workspace_members
-		WHERE workspace_id = $1
-		GROUP BY role`, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	counts := store.WorkspaceMemberRoleCounts{}
-	for rows.Next() {
-		var (
-			role  string
-			count int
-		)
-		if err := rows.Scan(&role, &count); err != nil {
-			return nil, err
-		}
-		counts.Set(role, count)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return &counts, nil
+	return &total, nil, nil
 }
 
 func postgresWorkspaceMemberPageFromRows(workspaceID string, req store.WorkspaceMemberPageRequest, totalCount *int, totalByRole *store.WorkspaceMemberRoleCounts, rows []storedb.ListWorkspaceMemberPageRow) (store.WorkspaceMemberPage, error) {

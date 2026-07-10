@@ -103,6 +103,36 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if _, err := st.RevokeBotToken(ctx, ownerRotation.ID, botOwner.ID); err != nil {
 		t.Fatal(err)
 	}
+	managerBots, err := st.ListBots(ctx, workspace.ID, moderator.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listedBotTokenCount(managerBots, serviceBot.ID); got != 2 {
+		t.Fatalf("expected manager to see service bot token metadata, got %d", got)
+	}
+	if got := listedBotTokenCount(managerBots, userBot.ID); got != 0 {
+		t.Fatalf("expected manager not to see user-owned bot token metadata, got %d", got)
+	}
+	ownerBots, err := st.ListBots(ctx, workspace.ID, botOwner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listedBotTokenCount(ownerBots, serviceBot.ID); got != 0 {
+		t.Fatalf("expected plain member not to see service bot token metadata, got %d", got)
+	}
+	if got := listedBotTokenCount(ownerBots, userBot.ID); got != 2 {
+		t.Fatalf("expected bot owner to see user-owned bot token metadata, got %d", got)
+	}
+	memberBots, err := st.ListBots(ctx, workspace.ID, member.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listedBotTokenCount(memberBots, serviceBot.ID); got != 0 {
+		t.Fatalf("expected plain member service token list to be empty, got %d", got)
+	}
+	if got := listedBotTokenCount(memberBots, userBot.ID); got != 0 {
+		t.Fatalf("expected non-owner user bot token list to be empty, got %d", got)
+	}
 
 	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other"}, owner.ID)
 	if err != nil {
@@ -163,4 +193,13 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if _, err := st.GetBotTokenAuth(ctx, serviceToken.Token); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected removed service bot token to stop authenticating, got %v", err)
 	}
+}
+
+func listedBotTokenCount(bots []store.BotWithTokens, botUserID string) int {
+	for _, bot := range bots {
+		if bot.Bot.ID == botUserID {
+			return len(bot.Tokens)
+		}
+	}
+	return -1
 }

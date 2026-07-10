@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -135,6 +136,72 @@ func TestListWorkspaceMemberPagePaginatesFiltersAndSearches(t *testing.T) {
 	_, err = st.ListWorkspaceMemberPage(ctx, workspace.ID, alpha.ID, store.WorkspaceMemberPageRequest{Limit: 2, Role: store.WorkspaceRoleGuest, Cursor: first.NextCursor})
 	if !errors.Is(err, store.ErrInvalidWorkspaceMemberPage) {
 		t.Fatalf("expected cursor filter mismatch rejection, got %v", err)
+	}
+
+	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{
+		UserID:      beta.ID,
+		DisplayName: "000 First",
+		Handle:      "first-member",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	renamed, err := st.ListWorkspaceMemberPage(ctx, workspace.ID, alpha.ID, store.WorkspaceMemberPageRequest{
+		Role:  store.WorkspaceRoleMember,
+		Limit: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := memberNames(renamed.Members); len(got) != 3 || got[0] != "000 First" {
+		t.Fatalf("expected profile update to refresh indexed member order, got %#v", got)
+	}
+	renamedSearch, err := st.ListWorkspaceMemberPage(ctx, workspace.ID, alpha.ID, store.WorkspaceMemberPageRequest{Query: "first-member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := memberNames(renamedSearch.Members); len(got) != 1 || got[0] != "000 First" {
+		t.Fatalf("expected profile update to refresh indexed member search, got %#v", got)
+	}
+}
+
+func TestWorkspaceMemberPageUsesRangeIndex(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	rows, err := st.db.QueryContext(ctx, `
+		EXPLAIN QUERY PLAN
+		SELECT u.id
+		FROM workspace_members wm
+		JOIN users u ON u.id = wm.user_id
+		WHERE wm.workspace_id = ?
+		  AND (wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id) > (?, ?, ?, ?)
+		ORDER BY wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id
+		LIMIT ?`,
+		"wsp_plan", -1, "", "", "", 101,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var details []string
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
+			t.Fatal(err)
+		}
+		details = append(details, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	plan := strings.Join(details, "\n")
+	if !strings.Contains(plan, "idx_workspace_members_page") {
+		t.Fatalf("expected member page index in query plan:\n%s", plan)
+	}
+	if strings.Contains(plan, "TEMP B-TREE") {
+		t.Fatalf("member page must not materialize a temporary sort:\n%s", plan)
 	}
 }
 

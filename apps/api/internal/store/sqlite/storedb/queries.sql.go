@@ -196,12 +196,46 @@ func (q *Queries) CountRecentWorkspaceMessagesByAuthor(ctx context.Context, arg 
 	return count, err
 }
 
+const countWorkspaceMemberRoles = `-- name: CountWorkspaceMemberRoles :one
+SELECT
+  COUNT(*) AS total_count,
+  COUNT(*) FILTER (WHERE role = 'owner') AS owner_count,
+  COUNT(*) FILTER (WHERE role = 'moderator') AS moderator_count,
+  COUNT(*) FILTER (WHERE role = 'member') AS member_count,
+  COUNT(*) FILTER (WHERE role = 'bot') AS bot_count,
+  COUNT(*) FILTER (WHERE role = 'guest') AS guest_count
+FROM workspace_members
+WHERE workspace_id = ?1
+`
+
+type CountWorkspaceMemberRolesRow struct {
+	TotalCount     int64 `json:"total_count"`
+	OwnerCount     int64 `json:"owner_count"`
+	ModeratorCount int64 `json:"moderator_count"`
+	MemberCount    int64 `json:"member_count"`
+	BotCount       int64 `json:"bot_count"`
+	GuestCount     int64 `json:"guest_count"`
+}
+
+func (q *Queries) CountWorkspaceMemberRoles(ctx context.Context, workspaceID string) (CountWorkspaceMemberRolesRow, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceMemberRoles, workspaceID)
+	var i CountWorkspaceMemberRolesRow
+	err := row.Scan(
+		&i.TotalCount,
+		&i.OwnerCount,
+		&i.ModeratorCount,
+		&i.MemberCount,
+		&i.BotCount,
+		&i.GuestCount,
+	)
+	return i, err
+}
+
 const countWorkspaceMemberSearch = `-- name: CountWorkspaceMemberSearch :one
 SELECT COUNT(*)
 FROM workspace_members wm
-JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = ?1
-  AND (instr(lower(u.display_name), ?2) > 0 OR instr(lower(u.handle), ?2) > 0)
+  AND (instr(wm.sort_name, ?2) > 0 OR instr(wm.sort_handle, ?2) > 0)
 `
 
 type CountWorkspaceMemberSearchParams struct {
@@ -219,10 +253,9 @@ func (q *Queries) CountWorkspaceMemberSearch(ctx context.Context, arg CountWorks
 const countWorkspaceMemberSearchByRole = `-- name: CountWorkspaceMemberSearchByRole :one
 SELECT COUNT(*)
 FROM workspace_members wm
-JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = ?1
   AND wm.role = ?2
-  AND (instr(lower(u.display_name), ?3) > 0 OR instr(lower(u.handle), ?3) > 0)
+  AND (instr(wm.sort_name, ?3) > 0 OR instr(wm.sort_handle, ?3) > 0)
 `
 
 type CountWorkspaceMemberSearchByRoleParams struct {
@@ -1410,8 +1443,24 @@ func (q *Queries) InsertDefaultChannel(ctx context.Context, arg InsertDefaultCha
 }
 
 const insertDefaultWorkspaceMember = `-- name: InsertDefaultWorkspaceMember :exec
-INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (?1, ?2, ?3, ?4)
+INSERT OR IGNORE INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  )
+)
 `
 
 type InsertDefaultWorkspaceMemberParams struct {
@@ -1829,8 +1878,24 @@ func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams
 }
 
 const insertWorkspaceMember = `-- name: InsertWorkspaceMember :exec
-INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (?1, ?2, ?3, ?4)
+INSERT OR IGNORE INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  )
+)
 `
 
 type InsertWorkspaceMemberParams struct {
@@ -2362,25 +2427,146 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 	return items, nil
 }
 
+const listVisibleWorkspaceBotTokens = `-- name: ListVisibleWorkspaceBotTokens :many
+SELECT bt.id, bt.bot_user_id, bt.workspace_id,
+       COALESCE(bt.owner_user_id, '') AS owner_user_id,
+       bt.name, bt.scopes_json,
+       COALESCE(bt.created_by, '') AS created_by,
+       bt.created_at,
+       COALESCE(bt.last_used_at, '') AS last_used_at,
+       COALESCE(bt.revoked_at, '') AS revoked_at
+FROM bot_tokens bt
+JOIN users u ON u.id = bt.bot_user_id
+WHERE bt.workspace_id = ?1
+  AND (
+    u.owner_user_id = ?2
+    OR (u.owner_user_id IS NULL AND CAST(?3 AS INTEGER) = 1)
+  )
+ORDER BY bt.bot_user_id, bt.created_at DESC, bt.id
+`
+
+type ListVisibleWorkspaceBotTokensParams struct {
+	WorkspaceID        string         `json:"workspace_id"`
+	RequesterID        sql.NullString `json:"requester_id"`
+	RequesterIsManager int64          `json:"requester_is_manager"`
+}
+
+type ListVisibleWorkspaceBotTokensRow struct {
+	ID          string `json:"id"`
+	BotUserID   string `json:"bot_user_id"`
+	WorkspaceID string `json:"workspace_id"`
+	OwnerUserID string `json:"owner_user_id"`
+	Name        string `json:"name"`
+	ScopesJson  string `json:"scopes_json"`
+	CreatedBy   string `json:"created_by"`
+	CreatedAt   string `json:"created_at"`
+	LastUsedAt  string `json:"last_used_at"`
+	RevokedAt   string `json:"revoked_at"`
+}
+
+func (q *Queries) ListVisibleWorkspaceBotTokens(ctx context.Context, arg ListVisibleWorkspaceBotTokensParams) ([]ListVisibleWorkspaceBotTokensRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleWorkspaceBotTokens, arg.WorkspaceID, arg.RequesterID, arg.RequesterIsManager)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVisibleWorkspaceBotTokensRow
+	for rows.Next() {
+		var i ListVisibleWorkspaceBotTokensRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotUserID,
+			&i.WorkspaceID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.ScopesJson,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspaceBots = `-- name: ListWorkspaceBots :many
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id,
+       u.display_name, u.handle, u.avatar_url, u.created_at
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = ?1
+  AND u.kind = 'bot'
+ORDER BY wm.sort_name, wm.sort_handle, wm.user_id
+`
+
+type ListWorkspaceBotsRow struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	OwnerUserID string `json:"owner_user_id"`
+	DisplayName string `json:"display_name"`
+	Handle      string `json:"handle"`
+	AvatarUrl   string `json:"avatar_url"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (q *Queries) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]ListWorkspaceBotsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceBots, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspaceBotsRow
+	for rows.Next() {
+		var i ListWorkspaceBotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaceMemberPage = `-- name: ListWorkspaceMemberPage :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
        wm.role, wm.created_at AS joined_at,
-       CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) AS role_sort,
-       lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) AS sort_name,
-       lower(COALESCE(NULLIF(u.handle, ''), u.id)) AS sort_handle
+       CAST(wm.role_sort AS INTEGER) AS role_sort,
+       wm.sort_name,
+       wm.sort_handle
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = ?1
   AND (CAST(?2 AS TEXT) = '' OR wm.role = CAST(?2 AS TEXT))
-  AND (CAST(?3 AS TEXT) = '' OR instr(lower(u.display_name), CAST(?3 AS TEXT)) > 0 OR instr(lower(u.handle), CAST(?3 AS TEXT)) > 0)
-  AND (
-    CAST(?4 AS TEXT) = ''
-    OR CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) > CAST(?5 AS INTEGER)
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(?5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) > CAST(?6 AS TEXT))
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(?5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(?6 AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) > CAST(?7 AS TEXT))
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(?5 AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(?6 AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) = CAST(?7 AS TEXT) AND u.id > CAST(?4 AS TEXT))
+  AND (CAST(?3 AS TEXT) = '' OR instr(wm.sort_name, CAST(?3 AS TEXT)) > 0 OR instr(wm.sort_handle, CAST(?3 AS TEXT)) > 0)
+  AND (wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id) > (
+    CAST(?4 AS INTEGER),
+    CAST(?5 AS TEXT),
+    CAST(?6 AS TEXT),
+    CAST(?7 AS TEXT)
   )
-ORDER BY role_sort, sort_name, sort_handle, id
+ORDER BY wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id
 LIMIT ?8
 `
 
@@ -2388,10 +2574,10 @@ type ListWorkspaceMemberPageParams struct {
 	WorkspaceID      string `json:"workspace_id"`
 	RoleFilter       string `json:"role_filter"`
 	SearchQuery      string `json:"search_query"`
-	CursorUserID     string `json:"cursor_user_id"`
 	CursorRoleSort   int64  `json:"cursor_role_sort"`
 	CursorSortName   string `json:"cursor_sort_name"`
 	CursorSortHandle string `json:"cursor_sort_handle"`
+	CursorUserID     string `json:"cursor_user_id"`
 	LimitCount       int64  `json:"limit_count"`
 }
 
@@ -2415,10 +2601,10 @@ func (q *Queries) ListWorkspaceMemberPage(ctx context.Context, arg ListWorkspace
 		arg.WorkspaceID,
 		arg.RoleFilter,
 		arg.SearchQuery,
-		arg.CursorUserID,
 		arg.CursorRoleSort,
 		arg.CursorSortName,
 		arg.CursorSortHandle,
+		arg.CursorUserID,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -2999,7 +3185,8 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 
 const updateWorkspaceMemberRole = `-- name: UpdateWorkspaceMemberRole :exec
 UPDATE workspace_members
-SET role = ?1
+SET role = ?1,
+    role_sort = CASE ?1 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END
 WHERE workspace_id = ?2
   AND user_id = ?3
 `
@@ -3012,6 +3199,24 @@ type UpdateWorkspaceMemberRoleParams struct {
 
 func (q *Queries) UpdateWorkspaceMemberRole(ctx context.Context, arg UpdateWorkspaceMemberRoleParams) error {
 	_, err := q.db.ExecContext(ctx, updateWorkspaceMemberRole, arg.Role, arg.WorkspaceID, arg.UserID)
+	return err
+}
+
+const updateWorkspaceMemberSortKeys = `-- name: UpdateWorkspaceMemberSortKeys :exec
+UPDATE workspace_members
+SET sort_name = lower(COALESCE(NULLIF(?1, ''), NULLIF(?2, ''), user_id)),
+    sort_handle = lower(COALESCE(NULLIF(?2, ''), user_id))
+WHERE user_id = ?3
+`
+
+type UpdateWorkspaceMemberSortKeysParams struct {
+	DisplayName interface{} `json:"display_name"`
+	Handle      interface{} `json:"handle"`
+	UserID      string      `json:"user_id"`
+}
+
+func (q *Queries) UpdateWorkspaceMemberSortKeys(ctx context.Context, arg UpdateWorkspaceMemberSortKeysParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceMemberSortKeys, arg.DisplayName, arg.Handle, arg.UserID)
 	return err
 }
 
@@ -3118,8 +3323,24 @@ func (q *Queries) UpsertDirectRead(ctx context.Context, arg UpsertDirectReadPara
 }
 
 const upsertGuestWorkspaceMemberRole = `-- name: UpsertGuestWorkspaceMemberRole :exec
-INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (?1, ?2, ?3, ?4)
+INSERT INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    lower(?2)
+  )
+)
 ON CONFLICT(workspace_id, user_id) DO UPDATE SET
   role = CASE
     WHEN workspace_members.role = 'owner' THEN workspace_members.role
@@ -3128,7 +3349,17 @@ ON CONFLICT(workspace_id, user_id) DO UPDATE SET
     WHEN workspace_members.role = 'member' AND excluded.role = 'moderator' THEN excluded.role
     WHEN workspace_members.role = 'guest' AND excluded.role IN ('member', 'moderator') THEN excluded.role
     ELSE workspace_members.role
-  END
+  END,
+  role_sort = CASE
+    WHEN workspace_members.role = 'owner' THEN 0
+    WHEN excluded.role = 'moderator' THEN 1
+    WHEN workspace_members.role = 'moderator' THEN CASE excluded.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END
+    WHEN workspace_members.role = 'member' AND excluded.role = 'moderator' THEN 1
+    WHEN workspace_members.role = 'guest' AND excluded.role IN ('member', 'moderator') THEN CASE excluded.role WHEN 'moderator' THEN 1 ELSE 2 END
+    ELSE workspace_members.role_sort
+  END,
+  sort_name = excluded.sort_name,
+  sort_handle = excluded.sort_handle
 `
 
 type UpsertGuestWorkspaceMemberRoleParams struct {

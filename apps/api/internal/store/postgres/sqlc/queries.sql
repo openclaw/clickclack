@@ -83,6 +83,12 @@ SET display_name = sqlc.arg(display_name),
     avatar_url = sqlc.arg(avatar_url)
 WHERE id = sqlc.arg(id);
 
+-- name: UpdateWorkspaceMemberSortKeys :exec
+UPDATE workspace_members
+SET sort_name = lower(COALESCE(NULLIF(sqlc.arg(display_name), ''), NULLIF(sqlc.arg(handle), ''), user_id)),
+    sort_handle = lower(COALESCE(NULLIF(sqlc.arg(handle), ''), user_id))
+WHERE user_id = sqlc.arg(user_id);
+
 -- name: UpsertNotificationSettings :exec
 INSERT INTO user_notification_settings (user_id, pushover_enabled, pushover_user_key)
 VALUES (sqlc.arg(user_id), sqlc.arg(pushover_enabled), sqlc.arg(pushover_user_key))
@@ -124,13 +130,45 @@ INSERT INTO invites (id, workspace_id, token, created_by, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(token), sqlc.arg(created_by), sqlc.arg(created_at));
 
 -- name: InsertWorkspaceMember :exec
-INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (sqlc.arg(workspace_id), sqlc.arg(user_id), sqlc.arg(role), sqlc.arg(created_at))
+INSERT INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  sqlc.arg(workspace_id),
+  sqlc.arg(user_id),
+  sqlc.arg(role),
+  sqlc.arg(created_at),
+  CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  )
+)
 ON CONFLICT DO NOTHING;
 
 -- name: UpsertGuestWorkspaceMemberRole :exec
-INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (sqlc.arg(workspace_id), sqlc.arg(user_id), sqlc.arg(role), sqlc.arg(created_at))
+INSERT INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  sqlc.arg(workspace_id),
+  sqlc.arg(user_id),
+  sqlc.arg(role),
+  sqlc.arg(created_at),
+  CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  )
+)
 ON CONFLICT(workspace_id, user_id) DO UPDATE SET
   role = CASE
     WHEN workspace_members.role = 'owner' THEN workspace_members.role
@@ -139,11 +177,37 @@ ON CONFLICT(workspace_id, user_id) DO UPDATE SET
     WHEN workspace_members.role = 'member' AND excluded.role = 'moderator' THEN excluded.role
     WHEN workspace_members.role = 'guest' AND excluded.role IN ('member', 'moderator') THEN excluded.role
     ELSE workspace_members.role
-  END;
+  END,
+  role_sort = CASE
+    WHEN workspace_members.role = 'owner' THEN 0
+    WHEN excluded.role = 'moderator' THEN 1
+    WHEN workspace_members.role = 'moderator' THEN CASE excluded.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END
+    WHEN workspace_members.role = 'member' AND excluded.role = 'moderator' THEN 1
+    WHEN workspace_members.role = 'guest' AND excluded.role IN ('member', 'moderator') THEN CASE excluded.role WHEN 'moderator' THEN 1 ELSE 2 END
+    ELSE workspace_members.role_sort
+  END,
+  sort_name = excluded.sort_name,
+  sort_handle = excluded.sort_handle;
 
 -- name: InsertDefaultWorkspaceMember :exec
-INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
-VALUES (sqlc.arg(workspace_id), sqlc.arg(user_id), sqlc.arg(role), sqlc.arg(created_at))
+INSERT INTO workspace_members (
+  workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
+)
+VALUES (
+  sqlc.arg(workspace_id),
+  sqlc.arg(user_id),
+  sqlc.arg(role),
+  sqlc.arg(created_at),
+  CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  ),
+  COALESCE(
+    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    lower(sqlc.arg(user_id))
+  )
+)
 ON CONFLICT DO NOTHING;
 
 -- name: FirstWorkspace :one
@@ -255,6 +319,32 @@ VALUES (sqlc.arg(id), 'bot', sqlc.arg(owner_user_id), sqlc.arg(display_name), sq
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(token_hash), sqlc.arg(bot_user_id), sqlc.arg(workspace_id), sqlc.arg(owner_user_id), sqlc.arg(name), sqlc.arg(scopes_json), sqlc.arg(created_by), sqlc.arg(created_at));
 
+-- name: ListWorkspaceBots :many
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id,
+       u.display_name, u.handle, u.avatar_url, u.created_at
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND u.kind = 'bot'
+ORDER BY wm.sort_name, wm.sort_handle, wm.user_id;
+
+-- name: ListVisibleWorkspaceBotTokens :many
+SELECT bt.id, bt.bot_user_id, bt.workspace_id,
+       COALESCE(bt.owner_user_id, '') AS owner_user_id,
+       bt.name, bt.scopes_json,
+       COALESCE(bt.created_by, '') AS created_by,
+       bt.created_at,
+       COALESCE(bt.last_used_at, '') AS last_used_at,
+       COALESCE(bt.revoked_at, '') AS revoked_at
+FROM bot_tokens bt
+JOIN users u ON u.id = bt.bot_user_id
+WHERE bt.workspace_id = sqlc.arg(workspace_id)
+  AND (
+    u.owner_user_id = sqlc.arg(requester_id)
+    OR (u.owner_user_id IS NULL AND CAST(sqlc.arg(requester_is_manager) AS INTEGER) = 1)
+  )
+ORDER BY bt.bot_user_id, bt.created_at DESC, bt.id;
+
 -- name: ListBotsOwnedBy :many
 SELECT
   u.id,
@@ -320,23 +410,33 @@ ORDER BY CASE wm.role WHEN 'owner' THEN 4 WHEN 'moderator' THEN 3 WHEN 'member' 
 -- name: ListWorkspaceMemberPage :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
        wm.role, wm.created_at AS joined_at,
-       CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) AS role_sort,
-       lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) AS sort_name,
-       lower(COALESCE(NULLIF(u.handle, ''), u.id)) AS sort_handle
+       CAST(wm.role_sort AS INTEGER) AS role_sort,
+       wm.sort_name,
+       wm.sort_handle
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
   AND (CAST(sqlc.arg(role_filter) AS TEXT) = '' OR wm.role = CAST(sqlc.arg(role_filter) AS TEXT))
-  AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.display_name)) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.handle)) > 0)
-  AND (
-    CAST(sqlc.arg(cursor_user_id) AS TEXT) = ''
-    OR CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) > CAST(sqlc.arg(cursor_role_sort) AS INTEGER)
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) > CAST(sqlc.arg(cursor_sort_name) AS TEXT))
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_name) AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) > CAST(sqlc.arg(cursor_sort_handle) AS TEXT))
-    OR (CAST(CASE wm.role WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END AS INTEGER) = CAST(sqlc.arg(cursor_role_sort) AS INTEGER) AND lower(COALESCE(NULLIF(u.display_name, ''), NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_name) AS TEXT) AND lower(COALESCE(NULLIF(u.handle, ''), u.id)) = CAST(sqlc.arg(cursor_sort_handle) AS TEXT) AND u.id > CAST(sqlc.arg(cursor_user_id) AS TEXT))
+  AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_name) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_handle) > 0)
+  AND (wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id) > (
+    CAST(sqlc.arg(cursor_role_sort) AS SMALLINT),
+    CAST(sqlc.arg(cursor_sort_name) AS TEXT),
+    CAST(sqlc.arg(cursor_sort_handle) AS TEXT),
+    CAST(sqlc.arg(cursor_user_id) AS TEXT)
   )
-ORDER BY role_sort, sort_name, sort_handle, id
+ORDER BY wm.role_sort, wm.sort_name, wm.sort_handle, wm.user_id
 LIMIT sqlc.arg(limit_count);
+
+-- name: CountWorkspaceMemberRoles :one
+SELECT
+  COUNT(*) AS total_count,
+  COUNT(*) FILTER (WHERE role = 'owner') AS owner_count,
+  COUNT(*) FILTER (WHERE role = 'moderator') AS moderator_count,
+  COUNT(*) FILTER (WHERE role = 'member') AS member_count,
+  COUNT(*) FILTER (WHERE role = 'bot') AS bot_count,
+  COUNT(*) FILTER (WHERE role = 'guest') AS guest_count
+FROM workspace_members
+WHERE workspace_id = sqlc.arg(workspace_id);
 
 -- name: CountWorkspaceMembers :one
 SELECT COUNT(*)
@@ -352,21 +452,20 @@ WHERE workspace_id = sqlc.arg(workspace_id)
 -- name: CountWorkspaceMemberSearch :one
 SELECT COUNT(*)
 FROM workspace_members wm
-JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
-  AND (position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.display_name)) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.handle)) > 0);
+  AND (position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_name) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_handle) > 0);
 
 -- name: CountWorkspaceMemberSearchByRole :one
 SELECT COUNT(*)
 FROM workspace_members wm
-JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
   AND wm.role = sqlc.arg(role_filter)
-  AND (position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.display_name)) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in lower(u.handle)) > 0);
+  AND (position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_name) > 0 OR position(CAST(sqlc.arg(search_query) AS TEXT) in wm.sort_handle) > 0);
 
 -- name: UpdateWorkspaceMemberRole :exec
 UPDATE workspace_members
-SET role = sqlc.arg(role)
+SET role = sqlc.arg(role),
+    role_sort = CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND user_id = sqlc.arg(user_id);
 

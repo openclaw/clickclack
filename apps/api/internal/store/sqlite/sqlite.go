@@ -184,13 +184,29 @@ func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserPro
 	if err != nil {
 		return store.User{}, err
 	}
-	if err := s.q.UpdateUserProfile(ctx, storedb.UpdateUserProfileParams{
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.User{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	if err := qtx.UpdateUserProfile(ctx, storedb.UpdateUserProfileParams{
 		DisplayName: displayName,
 		Handle:      handle,
 		AvatarUrl:   avatarURL,
 		ID:          input.UserID,
 	}); err != nil {
 		return store.User{}, profileUpdateError(err)
+	}
+	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
+		DisplayName: displayName,
+		Handle:      handle,
+		UserID:      input.UserID,
+	}); err != nil {
+		return store.User{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.User{}, err
 	}
 	return s.GetUser(ctx, input.UserID)
 }
@@ -226,6 +242,13 @@ func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, in
 		ID:          input.UserID,
 	}); err != nil {
 		return store.User{}, profileUpdateError(err)
+	}
+	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
+		DisplayName: displayName,
+		Handle:      handle,
+		UserID:      input.UserID,
+	}); err != nil {
+		return store.User{}, err
 	}
 	if input.NotificationSettings != nil {
 		if err := qtx.UpsertNotificationSettings(ctx, storedb.UpsertNotificationSettingsParams{

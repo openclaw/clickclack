@@ -35,10 +35,14 @@ CREATE TABLE workspace_members (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  role_sort INTEGER NOT NULL DEFAULT 9,
+  sort_name TEXT NOT NULL DEFAULT '',
+  sort_handle TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (workspace_id, user_id)
 );
 
 CREATE INDEX idx_workspace_members_workspace_role_user ON workspace_members(workspace_id, role, user_id);
+CREATE INDEX idx_workspace_members_page ON workspace_members(workspace_id, role_sort, sort_name, sort_handle, user_id);
 
 CREATE TABLE workspace_member_moderation (
   workspace_id TEXT NOT NULL,
@@ -299,6 +303,7 @@ CREATE TABLE bot_tokens (
 
 CREATE INDEX idx_bot_tokens_hash ON bot_tokens(token_hash);
 CREATE INDEX idx_bot_tokens_bot ON bot_tokens(bot_user_id);
+CREATE INDEX idx_bot_tokens_workspace_bot_revoked ON bot_tokens(workspace_id, bot_user_id, revoked_at);
 
 CREATE TABLE app_installations (
   id TEXT PRIMARY KEY,

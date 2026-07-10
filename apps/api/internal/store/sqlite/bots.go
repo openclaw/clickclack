@@ -227,45 +227,70 @@ func (s *Store) GetBotTokenAuth(ctx context.Context, token string) (store.BotTok
 }
 
 func (s *Store) ListBots(ctx context.Context, workspaceID, requesterID string) ([]store.BotWithTokens, error) {
-	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
-		return nil, err
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
-		FROM users u
-		JOIN workspace_members wm ON wm.user_id = u.id
-		WHERE wm.workspace_id = ? AND u.kind = 'bot'
-		ORDER BY u.display_name, u.id`, workspaceID)
+	role, err := s.memberRole(ctx, workspaceID, requesterID)
 	if err != nil {
 		return nil, err
 	}
-	bots := []store.User{}
-	for rows.Next() {
-		bot, err := scanUser(rows)
-		if err != nil {
-			return nil, err
-		}
-		bots = append(bots, bot)
-	}
-	if err := rows.Err(); err != nil {
+	botRows, err := s.q.ListWorkspaceBots(ctx, workspaceID)
+	if err != nil {
 		return nil, err
 	}
-	if err := rows.Close(); err != nil {
+	isManager := int64(0)
+	if role == store.WorkspaceRoleOwner || role == store.WorkspaceRoleModerator {
+		isManager = 1
+	}
+	tokenRows, err := s.q.ListVisibleWorkspaceBotTokens(ctx, storedb.ListVisibleWorkspaceBotTokensParams{
+		WorkspaceID:        workspaceID,
+		RequesterID:        sqlOptionalText(requesterID),
+		RequesterIsManager: isManager,
+	})
+	if err != nil {
 		return nil, err
 	}
-	out := []store.BotWithTokens{}
-	for _, bot := range bots {
-		tokens := []store.BotToken{}
-		if err := s.requireBotTokenManager(ctx, workspaceID, bot, requesterID); err == nil {
-			var tokenErr error
-			tokens, tokenErr = s.listBotTokensForBotWorkspace(ctx, bot.ID, workspaceID)
-			if tokenErr != nil {
-				return nil, tokenErr
-			}
-		} else if !errors.Is(err, store.ErrNotWorkspaceManager) && !errors.Is(err, store.ErrBotOwnerRequired) {
+	tokensByBot := make(map[string][]store.BotToken, len(botRows))
+	for _, row := range tokenRows {
+		var scopes []string
+		if err := json.Unmarshal([]byte(row.ScopesJson), &scopes); err != nil {
 			return nil, err
 		}
-		out = append(out, store.BotWithTokens{Bot: bot, Tokens: tokens})
+		token := store.BotToken{
+			ID:          row.ID,
+			BotUserID:   row.BotUserID,
+			WorkspaceID: row.WorkspaceID,
+			OwnerUserID: row.OwnerUserID,
+			Name:        row.Name,
+			Scopes:      scopes,
+			CreatedBy:   row.CreatedBy,
+			CreatedAt:   row.CreatedAt,
+		}
+		if row.LastUsedAt != "" {
+			lastUsedAt := row.LastUsedAt
+			token.LastUsedAt = &lastUsedAt
+		}
+		if row.RevokedAt != "" {
+			revokedAt := row.RevokedAt
+			token.RevokedAt = &revokedAt
+		}
+		tokensByBot[row.BotUserID] = append(tokensByBot[row.BotUserID], token)
+	}
+	out := make([]store.BotWithTokens, 0, len(botRows))
+	for _, row := range botRows {
+		tokens := tokensByBot[row.ID]
+		if tokens == nil {
+			tokens = []store.BotToken{}
+		}
+		out = append(out, store.BotWithTokens{
+			Bot: store.User{
+				ID:          row.ID,
+				Kind:        row.Kind,
+				OwnerUserID: row.OwnerUserID,
+				DisplayName: row.DisplayName,
+				Handle:      row.Handle,
+				AvatarURL:   row.AvatarUrl,
+				CreatedAt:   row.CreatedAt,
+			},
+			Tokens: tokens,
+		})
 	}
 	return out, nil
 }

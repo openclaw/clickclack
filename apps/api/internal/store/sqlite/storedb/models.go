@@ -321,6 +321,9 @@ type WorkspaceMember struct {
 	UserID      string `json:"user_id"`
 	Role        string `json:"role"`
 	CreatedAt   string `json:"created_at"`
+	RoleSort    int64  `json:"role_sort"`
+	SortName    string `json:"sort_name"`
+	SortHandle  string `json:"sort_handle"`
 }
 
 type WorkspaceMemberModeration struct {

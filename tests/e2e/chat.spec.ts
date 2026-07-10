@@ -423,9 +423,7 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
     .click({ button: "right" });
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
 
-  const browserNotifications = page
-    .locator("label.check-field", { hasText: "Browser notifications" })
-    .locator("input[type='checkbox']");
+  const browserNotifications = page.getByLabel("Browser notifications");
   await expect(browserNotifications).toBeEnabled();
   await browserNotifications.check();
 

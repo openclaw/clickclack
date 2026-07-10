@@ -188,7 +188,7 @@ function envNameForHandle(handle: string): string {
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 export function buildOpenClawConfigSnippet(opts: {

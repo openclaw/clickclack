@@ -2845,7 +2845,7 @@
     {hideCommentary}
     {hideToolCalls}
     {userAlign}
-    isDesktop={desktop !== null}
+    isDesktop={desktop != null}
     onUserUpdated={handleSettingsUserUpdated}
     onHideCommentary={setHideCommentary}
     onHideToolCalls={setHideToolCalls}

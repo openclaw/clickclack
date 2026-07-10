@@ -111,7 +111,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="settings-modal-scrim" role="presentation" onclick={handleScrimClick}>
-  <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
+  <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Account settings">
     <button type="button" class="settings-modal__close" onclick={onClose} aria-label="Close">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M18 6L6 18M6 6l12 12" />
@@ -212,10 +212,13 @@
           {hideCommentary}
           {hideToolCalls}
           {userAlign}
+          {isDesktop}
           onUserUpdated={handleUserUpdated}
+          onSaved={onClose}
           {onHideCommentary}
           {onHideToolCalls}
           {onUserAlign}
+          {onBrowserNotificationsChanged}
         />
       {:else if activeSection === "notifications"}
         <header class="settings-page__header">

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import BrowserNotificationSetting from "./BrowserNotificationSetting.svelte";
   import { api } from "../../lib/api";
   import type { User } from "../../lib/types";
 
@@ -8,10 +9,13 @@
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
+    isDesktop?: boolean;
     onUserUpdated?: (user: User) => void;
+    onSaved?: () => void;
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
     onUserAlign: (value: "left" | "right") => void;
+    onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
   let {
@@ -19,10 +23,13 @@
     hideCommentary,
     hideToolCalls,
     userAlign,
+    isDesktop = false,
     onUserUpdated,
+    onSaved,
     onHideCommentary,
     onHideToolCalls,
     onUserAlign,
+    onBrowserNotificationsChanged,
   }: Props = $props();
 
   let savedUser = $state<User | null>(null);
@@ -66,6 +73,7 @@
       savedUser = data.user;
       onUserUpdated?.(data.user);
       status = "Saved";
+      onSaved?.();
     } catch (error) {
       status = error instanceof Error ? error.message : "Could not save profile";
       statusError = true;
@@ -220,6 +228,14 @@
         </select>
       </div>
     </div>
+
+    <h3 class="settings-rows__head">Notifications</h3>
+
+    <BrowserNotificationSetting
+      user={currentUser}
+      {isDesktop}
+      onChanged={onBrowserNotificationsChanged}
+    />
   </div>
 
   <footer class="settings-footer">

@@ -1453,12 +1453,12 @@ VALUES (
   ?4,
   CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   )
 )
 `
@@ -1888,12 +1888,12 @@ VALUES (
   ?4,
   CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   )
 )
 `
@@ -3193,8 +3193,8 @@ func (q *Queries) UpdateWorkspaceMemberRole(ctx context.Context, arg UpdateWorks
 
 const updateWorkspaceMemberSortKeys = `-- name: UpdateWorkspaceMemberSortKeys :exec
 UPDATE workspace_members
-SET sort_name = lower(COALESCE(NULLIF(?1, ''), NULLIF(?2, ''), user_id)),
-    sort_handle = lower(COALESCE(NULLIF(?2, ''), user_id))
+SET sort_name = clickclack_lower(COALESCE(NULLIF(?1, ''), NULLIF(?2, ''), user_id)),
+    sort_handle = clickclack_lower(COALESCE(NULLIF(?2, ''), user_id))
 WHERE user_id = ?3
 `
 
@@ -3322,12 +3322,12 @@ VALUES (
   ?4,
   CASE ?3 WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
-    lower(?2)
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = ?2),
+    clickclack_lower(?2)
   )
 )
 ON CONFLICT(workspace_id, user_id) DO UPDATE SET

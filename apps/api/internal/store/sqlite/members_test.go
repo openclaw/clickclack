@@ -205,6 +205,66 @@ func TestWorkspaceMemberPageUsesRangeIndex(t *testing.T) {
 	}
 }
 
+func TestWorkspaceMemberSearchUsesUnicodeLowercaseKeys(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Owner",
+		Email:       "unicode-members-owner@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Initial",
+		Email:       "unicode-member@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{
+		UserID:      member.ID,
+		DisplayName: "ÉLODIE",
+		Handle:      "agent",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	inserted, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "ÅKE",
+		Email:       "unicode-inserted-member@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, inserted.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	for query, expected := range map[string]string{"élodie": "ÉLODIE", "åke": "ÅKE"} {
+		page, err := st.ListWorkspaceMemberPage(
+			ctx,
+			workspace.ID,
+			owner.ID,
+			store.WorkspaceMemberPageRequest{Query: query},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := memberNames(page.Members); len(got) != 1 || got[0] != expected {
+			t.Fatalf("expected Unicode-insensitive search for %q, got %#v", query, got)
+		}
+	}
+}
+
 func memberNames(members []store.WorkspaceMember) []string {
 	names := make([]string, 0, len(members))
 	for _, member := range members {

@@ -85,8 +85,8 @@ WHERE id = sqlc.arg(id);
 
 -- name: UpdateWorkspaceMemberSortKeys :exec
 UPDATE workspace_members
-SET sort_name = lower(COALESCE(NULLIF(sqlc.arg(display_name), ''), NULLIF(sqlc.arg(handle), ''), user_id)),
-    sort_handle = lower(COALESCE(NULLIF(sqlc.arg(handle), ''), user_id))
+SET sort_name = clickclack_lower(COALESCE(NULLIF(sqlc.arg(display_name), ''), NULLIF(sqlc.arg(handle), ''), user_id)),
+    sort_handle = clickclack_lower(COALESCE(NULLIF(sqlc.arg(handle), ''), user_id))
 WHERE user_id = sqlc.arg(user_id);
 
 -- name: UpsertNotificationSettings :exec
@@ -140,12 +140,12 @@ VALUES (
   sqlc.arg(created_at),
   CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   )
 );
 
@@ -160,12 +160,12 @@ VALUES (
   sqlc.arg(created_at),
   CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   )
 )
 ON CONFLICT(workspace_id, user_id) DO UPDATE SET
@@ -199,12 +199,12 @@ VALUES (
   sqlc.arg(created_at),
   CASE sqlc.arg(role) WHEN 'owner' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'bot' THEN 3 WHEN 'guest' THEN 4 ELSE 9 END,
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(display_name, ''), NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   ),
   COALESCE(
-    (SELECT lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
-    lower(sqlc.arg(user_id))
+    (SELECT clickclack_lower(COALESCE(NULLIF(handle, ''), id)) FROM users WHERE id = sqlc.arg(user_id)),
+    clickclack_lower(sqlc.arg(user_id))
   )
 );
 

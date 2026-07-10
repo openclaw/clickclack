@@ -20,16 +20,32 @@
     user: User;
     workspaces?: Workspace[];
     initialSection?: AccountSettingsSectionId;
+    hideCommentary: boolean;
+    hideToolCalls: boolean;
+    userAlign: "left" | "right";
+    isDesktop?: boolean;
     onClose: () => void;
     onUserUpdated?: (user: User) => void;
+    onHideCommentary: (value: boolean) => void;
+    onHideToolCalls: (value: boolean) => void;
+    onUserAlign: (value: "left" | "right") => void;
+    onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
   let {
     user: initialUser,
     workspaces = [],
     initialSection = DEFAULT_ACCOUNT_SETTINGS_SECTION,
+    hideCommentary,
+    hideToolCalls,
+    userAlign,
+    isDesktop = false,
     onClose,
     onUserUpdated,
+    onHideCommentary,
+    onHideToolCalls,
+    onUserAlign,
+    onBrowserNotificationsChanged,
   }: Props = $props();
 
   let activeSection = $state<AccountSettingsSectionId>(DEFAULT_ACCOUNT_SETTINGS_SECTION);
@@ -191,14 +207,28 @@
           <h2 class="settings-page__h1">Profile settings</h2>
           <p class="settings-page__lead">How you appear across ClickClack.</p>
         </header>
-        <ProfileSettingsForm {user} onUserUpdated={handleUserUpdated} />
+        <ProfileSettingsForm
+          {user}
+          {hideCommentary}
+          {hideToolCalls}
+          {userAlign}
+          onUserUpdated={handleUserUpdated}
+          {onHideCommentary}
+          {onHideToolCalls}
+          {onUserAlign}
+        />
       {:else if activeSection === "notifications"}
         <header class="settings-page__header">
           <p class="settings-page__eyebrow">Account</p>
           <h2 class="settings-page__h1">Notifications</h2>
           <p class="settings-page__lead">Decide when and how ClickClack should reach you.</p>
         </header>
-        <NotificationSettingsForm {user} onUserUpdated={handleUserUpdated} />
+        <NotificationSettingsForm
+          {user}
+          {isDesktop}
+          onUserUpdated={handleUserUpdated}
+          {onBrowserNotificationsChanged}
+        />
       {:else if activeSection === "bots"}
         <MyBotsSection {onClose} />
       {/if}

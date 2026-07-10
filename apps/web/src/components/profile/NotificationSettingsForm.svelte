@@ -8,10 +8,17 @@
 
   type Props = {
     user: User;
+    isDesktop?: boolean;
     onUserUpdated?: (user: User) => void;
+    onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
-  let { user, onUserUpdated }: Props = $props();
+  let {
+    user,
+    isDesktop = false,
+    onUserUpdated,
+    onBrowserNotificationsChanged,
+  }: Props = $props();
 
   let savedUser = $state<User | null>(null);
   const currentUser = $derived(savedUser ?? user);
@@ -33,6 +40,13 @@
   });
 
   function syncBrowserNotificationState() {
+    if (isDesktop) {
+      browserNotificationsSupported = true;
+      browserNotificationPermission = "granted";
+      browserNotificationsEnabled = readBrowserNotificationsEnabled(currentUser.id);
+      onBrowserNotificationsChanged?.(browserNotificationsEnabled);
+      return;
+    }
     browserNotificationsSupported = typeof Notification !== "undefined";
     browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
     const storedEnabled = readBrowserNotificationsEnabled(currentUser.id);
@@ -40,6 +54,7 @@
     if (storedEnabled && browserNotificationPermission !== "granted") {
       writeBrowserNotificationsEnabled(currentUser.id, false);
     }
+    onBrowserNotificationsChanged?.(browserNotificationsEnabled);
   }
 
   async function setBrowserNotifications(enabled: boolean) {
@@ -48,13 +63,24 @@
     if (!enabled) {
       writeBrowserNotificationsEnabled(currentUser.id, false);
       browserNotificationsEnabled = false;
-      status = "Browser notifications disabled";
+      onBrowserNotificationsChanged?.(false);
+      status = isDesktop ? "Desktop notifications disabled" : "Browser notifications disabled";
+      return;
+    }
+    if (isDesktop) {
+      browserNotificationsEnabled = writeBrowserNotificationsEnabled(currentUser.id, true);
+      onBrowserNotificationsChanged?.(browserNotificationsEnabled);
+      status = browserNotificationsEnabled
+        ? "Desktop notifications enabled"
+        : "Desktop notification preference could not be saved";
+      statusError = !browserNotificationsEnabled;
       return;
     }
     if (typeof Notification === "undefined") {
       browserNotificationsSupported = false;
       browserNotificationPermission = "unsupported";
       browserNotificationsEnabled = false;
+      onBrowserNotificationsChanged?.(false);
       status = "Browser notifications are not supported";
       statusError = true;
       return;
@@ -65,6 +91,7 @@
     browserNotificationPermission = permission;
     if (permission === "granted") {
       browserNotificationsEnabled = writeBrowserNotificationsEnabled(currentUser.id, true);
+      onBrowserNotificationsChanged?.(browserNotificationsEnabled);
       status = browserNotificationsEnabled
         ? "Browser notifications enabled"
         : "Browser notification preference could not be saved";
@@ -73,6 +100,7 @@
     }
     writeBrowserNotificationsEnabled(currentUser.id, false);
     browserNotificationsEnabled = false;
+    onBrowserNotificationsChanged?.(false);
     status =
       permission === "denied"
         ? "Browser notifications are blocked by this browser"
@@ -122,11 +150,13 @@
 
     <div class="settings-row2 settings-row2--toggle">
       <div class="settings-row2__desc">
-        <label class="settings-row2__label" for="notifications-browser">Browser notifications</label>
-        <p class="settings-row2__hint">Show desktop alerts when ClickClack is in the background.</p>
-        {#if !browserNotificationsSupported}
+        <label class="settings-row2__label" for="notifications-browser">
+          {isDesktop ? "Desktop notifications" : "Browser notifications"}
+        </label>
+        <p class="settings-row2__hint">Show alerts when ClickClack is in the background.</p>
+        {#if !isDesktop && !browserNotificationsSupported}
           <p class="settings-row2__hint is-error">Browser notifications are not supported on this device.</p>
-        {:else if browserNotificationPermission === "denied"}
+        {:else if !isDesktop && browserNotificationPermission === "denied"}
           <p class="settings-row2__hint is-error">Browser notifications are blocked by this browser.</p>
         {/if}
       </div>

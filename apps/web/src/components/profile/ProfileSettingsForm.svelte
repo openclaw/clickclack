@@ -5,10 +5,25 @@
 
   type Props = {
     user: User;
+    hideCommentary: boolean;
+    hideToolCalls: boolean;
+    userAlign: "left" | "right";
     onUserUpdated?: (user: User) => void;
+    onHideCommentary: (value: boolean) => void;
+    onHideToolCalls: (value: boolean) => void;
+    onUserAlign: (value: "left" | "right") => void;
   };
 
-  let { user, onUserUpdated }: Props = $props();
+  let {
+    user,
+    hideCommentary,
+    hideToolCalls,
+    userAlign,
+    onUserUpdated,
+    onHideCommentary,
+    onHideToolCalls,
+    onUserAlign,
+  }: Props = $props();
 
   let savedUser = $state<User | null>(null);
   const currentUser = $derived(savedUser ?? user);
@@ -151,6 +166,58 @@
             Remove
           </button>
         {/if}
+      </div>
+    </div>
+
+    <h3 class="settings-rows__head">Conversation display</h3>
+
+    <div class="settings-row2 settings-row2--toggle">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="profile-hide-commentary">Hide agent commentary</label>
+        <p class="settings-row2__hint">Keep agent reasoning summaries out of the message timeline.</p>
+      </div>
+      <div class="settings-row2__control settings-row2__control--end">
+        <input
+          id="profile-hide-commentary"
+          type="checkbox"
+          class="settings-switch"
+          checked={hideCommentary}
+          onchange={(event) => onHideCommentary(event.currentTarget.checked)}
+        />
+      </div>
+    </div>
+
+    <div class="settings-row2 settings-row2--toggle">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="profile-hide-tool-calls">Hide tool calls</label>
+        <p class="settings-row2__hint">Hide tool execution details while keeping ordinary messages visible.</p>
+      </div>
+      <div class="settings-row2__control settings-row2__control--end">
+        <input
+          id="profile-hide-tool-calls"
+          type="checkbox"
+          class="settings-switch"
+          checked={hideToolCalls}
+          onchange={(event) => onHideToolCalls(event.currentTarget.checked)}
+        />
+      </div>
+    </div>
+
+    <div class="settings-row2">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="profile-user-align">Your message alignment</label>
+        <p class="settings-row2__hint">Choose which side of the timeline shows your messages.</p>
+      </div>
+      <div class="settings-row2__control">
+        <select
+          id="profile-user-align"
+          class="settings-input"
+          value={userAlign}
+          onchange={(event) => onUserAlign(event.currentTarget.value === "right" ? "right" : "left")}
+        >
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
       </div>
     </div>
   </div>

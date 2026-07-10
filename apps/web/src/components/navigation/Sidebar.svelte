@@ -30,6 +30,7 @@
     onUndoHideDirect: () => void;
     onOpenProfile: (profile: User) => void;
     onOpenSettings: () => void;
+    onOpenWorkspaceSettings: () => void;
   };
 
   let {
@@ -57,6 +58,7 @@
     onUndoHideDirect,
     onOpenProfile,
     onOpenSettings,
+    onOpenWorkspaceSettings,
   }: Props = $props();
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
@@ -70,7 +72,20 @@
       <strong>{workspaceName || "Pick a workspace"}</strong>
       <span class="presence" class:online={connected}>{connected ? "Connected" : status}</span>
     </div>
-    {#if showCollapse}
+    <div class="workspace-header-actions">
+      <button
+        type="button"
+        class="workspace-settings"
+        aria-label="Workspace settings"
+        title="Workspace settings"
+        onclick={onOpenWorkspaceSettings}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      </button>
+      {#if showCollapse}
       <button
         type="button"
         class="sidebar-collapse"
@@ -89,7 +104,8 @@
           />
         </svg>
       </button>
-    {/if}
+      {/if}
+    </div>
   </header>
 
   <div class="sidebar-scroll">

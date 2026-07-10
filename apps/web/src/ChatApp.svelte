@@ -34,12 +34,13 @@
   import GuildRail from "./components/navigation/GuildRail.svelte";
   import Sidebar from "./components/navigation/Sidebar.svelte";
   import ProfilePane from "./components/profile/ProfilePane.svelte";
-  import ProfileSettingsModal from "./components/profile/ProfileSettingsModal.svelte";
   import SearchResults from "./components/search/SearchResults.svelte";
+  import SettingsModal from "./components/settings/SettingsModal.svelte";
   import ThreadEmptyState from "./components/thread/ThreadEmptyState.svelte";
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
+  import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SlashCommand, ThreadState, Upload, User, Workspace } from "./lib/types";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -81,20 +82,12 @@
   let searchResults: SearchResult[] = [];
   let pendingUpload: Upload | null = null;
   let showGifPicker = false;
-  let showProfileSettings = false;
+  let settingsModalOpen = false;
+  let settingsModalSection: AccountSettingsSectionId = "profile";
   let showCreateChannel = false;
   let showCreateDirect = false;
   let gifQuery = "";
-  let profileDisplayName = "";
-  let profileHandle = "";
-  let profileAvatarURL = "";
-  let profilePushoverEnabled = false;
-  let profilePushoverUserKey = "";
-  let browserNotificationsSupported = false;
   let browserNotificationsEnabled = false;
-  let browserNotificationPermission: NotificationPermission | "unsupported" = "default";
-  let profileStatus = "";
-  let profileStatusError = false;
   // Client-only preferences for agent activity. Consecutive same-turn
   // agent_commentary/agent_tool rows are coalesced into one preamble block;
   // these two independent flags drop the commentary prose and/or the tool-call
@@ -359,29 +352,39 @@
 
   function openProfileSettings() {
     if (!user) return;
-    syncBrowserNotificationState();
-    profileDisplayName = user.display_name;
-    profileHandle = user.handle ? `@${user.handle}` : "";
-    profileAvatarURL = user.avatar_url;
-    profilePushoverEnabled = user.notification_settings?.pushover_enabled ?? false;
-    profilePushoverUserKey = user.notification_settings?.pushover_user_key ?? "";
-    profileStatus = "";
-    profileStatusError = false;
-    showProfileSettings = true;
+    settingsModalSection = "profile";
+    settingsModalOpen = true;
+  }
+
+  function openWorkspaceSettings() {
+    const workspaceID = selectedWorkspace?.route_id || selectedWorkspaceID || routeWorkspaceID;
+    if (!workspaceID) return;
+    void goto(workspaceSettingsPath(workspaceID));
+  }
+
+  function handleSettingsUserUpdated(updated: User) {
+    user = updated;
+    setActiveMessages(messages.map((message) =>
+      message.author?.id === updated.id ? { ...message, author: updated } : message,
+    ));
+    replies = replies.map((reply) =>
+      reply.author?.id === updated.id ? { ...reply, author: updated } : reply,
+    );
+    if (selectedThread?.author?.id === updated.id) {
+      selectedThread = { ...selectedThread, author: updated };
+    }
   }
 
   function syncBrowserNotificationState() {
     if (desktop) {
-      browserNotificationsSupported = true;
-      browserNotificationPermission = "granted";
       browserNotificationsEnabled = storedBrowserNotificationsEnabled();
       return;
     }
-    browserNotificationsSupported = typeof Notification !== "undefined";
-    browserNotificationPermission = browserNotificationsSupported ? Notification.permission : "unsupported";
     const storedEnabled = storedBrowserNotificationsEnabled();
-    browserNotificationsEnabled = browserNotificationPermission === "granted" && storedEnabled;
-    if (storedEnabled && browserNotificationPermission !== "granted") {
+    browserNotificationsEnabled = typeof Notification !== "undefined" &&
+      Notification.permission === "granted" &&
+      storedEnabled;
+    if (storedEnabled && !browserNotificationsEnabled) {
       storeBrowserNotificationsEnabled(false);
     }
   }
@@ -412,85 +415,6 @@
       return true;
     } catch {
       return false;
-    }
-  }
-
-  async function setBrowserNotificationsEnabled(enabled: boolean) {
-    profileStatus = "";
-    profileStatusError = false;
-    if (!enabled) {
-      storeBrowserNotificationsEnabled(false);
-      browserNotificationsEnabled = false;
-      profileStatus = desktop ? "Desktop notifications disabled" : "Browser notifications disabled";
-      return;
-    }
-    if (desktop) {
-      browserNotificationsSupported = true;
-      browserNotificationPermission = "granted";
-      browserNotificationsEnabled = storeBrowserNotificationsEnabled(true);
-      profileStatus = browserNotificationsEnabled
-        ? "Desktop notifications enabled"
-        : "Desktop notification preference could not be saved";
-      profileStatusError = !browserNotificationsEnabled;
-      return;
-    }
-    if (typeof Notification === "undefined") {
-      browserNotificationsSupported = false;
-      browserNotificationPermission = "unsupported";
-      browserNotificationsEnabled = false;
-      profileStatus = "Browser notifications are not supported";
-      profileStatusError = true;
-      return;
-    }
-    const permission =
-      Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
-    browserNotificationsSupported = true;
-    browserNotificationPermission = permission;
-    if (permission === "granted") {
-      browserNotificationsEnabled = storeBrowserNotificationsEnabled(true);
-      profileStatus = browserNotificationsEnabled
-        ? "Browser notifications enabled"
-        : "Browser notification preference could not be saved";
-      profileStatusError = !browserNotificationsEnabled;
-      return;
-    }
-    storeBrowserNotificationsEnabled(false);
-    browserNotificationsEnabled = false;
-    profileStatus = permission === "denied"
-      ? "Browser notifications are blocked by this browser"
-      : "Browser notifications were not enabled";
-    profileStatusError = true;
-  }
-
-  async function saveProfile() {
-    profileStatus = "";
-    profileStatusError = false;
-    try {
-      const data = await api<{ user: User }>("/api/me", {
-        method: "PATCH",
-        body: JSON.stringify({
-          display_name: profileDisplayName,
-          handle: profileHandle,
-          avatar_url: profileAvatarURL,
-          notification_settings: {
-            pushover_enabled: profilePushoverEnabled,
-            pushover_user_key: profilePushoverUserKey,
-          },
-        }),
-      });
-      user = data.user;
-      setActiveMessages(messages.map((message) =>
-        message.author?.id === user?.id ? { ...message, author: data.user } : message,
-      ));
-      replies = replies.map((reply) =>
-        reply.author?.id === user?.id ? { ...reply, author: data.user } : reply,
-      );
-      if (selectedThread?.author?.id === user.id) selectedThread = { ...selectedThread, author: data.user };
-      profileStatus = "Saved";
-      showProfileSettings = false;
-    } catch (error) {
-      profileStatus = error instanceof Error ? error.message : "Could not save profile";
-      profileStatusError = true;
     }
   }
 
@@ -1922,7 +1846,7 @@
   }
 
   function isModalOpen(): boolean {
-    return selectedImage !== null || showProfileSettings || showCreateChannel || showCreateDirect;
+    return selectedImage !== null || settingsModalOpen || showCreateChannel || showCreateDirect;
   }
 
   function activeComposerTarget(): HTMLTextAreaElement | null {
@@ -2624,7 +2548,7 @@
 
   function closeModal() {
     selectedImage = null;
-    showProfileSettings = false;
+    settingsModalOpen = false;
     showCreateChannel = false;
     showCreateDirect = false;
   }
@@ -2758,6 +2682,7 @@
     onUndoHideDirect={() => void undoHideDirectConversation()}
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
+    onOpenWorkspaceSettings={openWorkspaceSettings}
   />
 
   <main class="timeline" inert={mobileNavOpen}>
@@ -2912,34 +2837,21 @@
     {/if}
   </aside>
 </div>
-{#if showProfileSettings && user}
-  <ProfileSettingsModal
+{#if settingsModalOpen && user}
+  <SettingsModal
     {user}
-    displayName={profileDisplayName}
-    handle={profileHandle}
-    avatarURL={profileAvatarURL}
-    pushoverEnabled={profilePushoverEnabled}
-    pushoverUserKey={profilePushoverUserKey}
+    {workspaces}
+    initialSection={settingsModalSection}
     {hideCommentary}
     {hideToolCalls}
     {userAlign}
-    {browserNotificationsSupported}
-    {browserNotificationsEnabled}
-    {browserNotificationPermission}
-    status={profileStatus}
-    statusError={profileStatusError}
-    onDisplayName={(value) => (profileDisplayName = value)}
-    onHandle={(value) => (profileHandle = value)}
-    onAvatarURL={(value) => (profileAvatarURL = value)}
-    onPushoverEnabled={(value) => (profilePushoverEnabled = value)}
-    onPushoverUserKey={(value) => (profilePushoverUserKey = value)}
+    isDesktop={desktop !== null}
+    onUserUpdated={handleSettingsUserUpdated}
     onHideCommentary={setHideCommentary}
     onHideToolCalls={setHideToolCalls}
     onUserAlign={setUserAlign}
-    notificationLabel={desktop ? "Desktop notifications" : "Browser notifications"}
-    onBrowserNotificationsEnabled={(value) => void setBrowserNotificationsEnabled(value)}
+    onBrowserNotificationsChanged={(value) => (browserNotificationsEnabled = value)}
     onClose={closeModal}
-    onSave={() => void saveProfile()}
   />
 {/if}
 {#if showCreateChannel}

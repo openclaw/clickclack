@@ -8,6 +8,7 @@ package storedb
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const addReaction = `-- name: AddReaction :execrows
@@ -794,6 +795,7 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> ?1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = ?1), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM direct_conversations dc
@@ -1239,6 +1241,24 @@ func (q *Queries) GetWorkspaceByRouteID(ctx context.Context, routeID sql.NullStr
 	return i, err
 }
 
+const hideDirectConversation = `-- name: HideDirectConversation :exec
+INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT(conversation_id, user_id) DO UPDATE SET
+  hidden_at = excluded.hidden_at
+`
+
+type HideDirectConversationParams struct {
+	ConversationID string `json:"conversation_id"`
+	UserID         string `json:"user_id"`
+	HiddenAt       string `json:"hidden_at"`
+}
+
+func (q *Queries) HideDirectConversation(ctx context.Context, arg HideDirectConversationParams) error {
+	_, err := q.db.ExecContext(ctx, hideDirectConversation, arg.ConversationID, arg.UserID, arg.HiddenAt)
+	return err
+}
+
 const insertBotToken = `-- name: InsertBotToken :exec
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -1324,8 +1344,8 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 }
 
 const insertChannelMessage = `-- name: InsertChannelMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (?1, ?2, ?3, NULL, ?4, NULL, ?5, ?6, ?7, NULL, ?8, 'markdown', ?9, ?10, ?11, ?12, ?13)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES (?1, ?2, ?3, NULL, ?4, NULL, ?5, ?6, ?7, NULL, ?8, 'markdown', ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 `
 
 type InsertChannelMessageParams struct {
@@ -1342,6 +1362,8 @@ type InsertChannelMessageParams struct {
 	QuotedBodySnapshot string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID     sql.NullString `json:"quoted_author_id"`
 	ClientNonce        string         `json:"client_nonce"`
+	Kind               string         `json:"kind"`
+	TurnID             sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMessageParams) error {
@@ -1359,6 +1381,8 @@ func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMes
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
+		arg.Kind,
+		arg.TurnID,
 	)
 	return err
 }
@@ -1452,8 +1476,8 @@ func (q *Queries) InsertDirectConversationMember(ctx context.Context, arg Insert
 }
 
 const insertDirectMessage = `-- name: InsertDirectMessage :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (?1, ?2, NULL, ?3, ?4, NULL, ?5, ?6, NULL, ?7, 'markdown', ?8, ?9, ?10, ?11, ?12)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
+VALUES (?1, ?2, NULL, ?3, ?4, NULL, ?5, ?6, NULL, ?7, 'markdown', ?8, ?9, ?10, ?11, ?12, ?13, ?14)
 `
 
 type InsertDirectMessageParams struct {
@@ -1469,6 +1493,8 @@ type InsertDirectMessageParams struct {
 	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
 	ClientNonce          string         `json:"client_nonce"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessageParams) error {
@@ -1485,6 +1511,8 @@ func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessa
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
+		arg.Kind,
+		arg.TurnID,
 	)
 	return err
 }
@@ -1822,6 +1850,84 @@ func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspace
 	return err
 }
 
+const latestEventCursor = `-- name: LatestEventCursor :one
+SELECT e.cursor
+FROM events e
+JOIN workspace_members viewer ON viewer.workspace_id = e.workspace_id AND viewer.user_id = ?1
+LEFT JOIN channels event_channel ON event_channel.id = e.channel_id AND event_channel.workspace_id = e.workspace_id
+WHERE e.workspace_id = ?2
+  AND (
+    e.is_private = 0
+    OR EXISTS (SELECT 1 FROM event_recipients er WHERE er.event_id = e.id AND er.user_id = ?1)
+  )
+  AND (
+    e.type NOT IN ('channel.read', 'dm.read')
+    OR COALESCE(json_extract(e.payload_json, '$.user_id'), '') = ?1
+  )
+  AND (
+    e.channel_id IS NULL
+    OR viewer.role <> 'guest'
+    OR event_channel.name = 'guest'
+  )
+  AND (
+    COALESCE(
+      json_extract(e.payload_json, '$.direct_conversation_id'),
+      (
+        SELECT m.direct_conversation_id
+        FROM messages m
+        WHERE m.workspace_id = e.workspace_id
+          AND m.id IN (
+            COALESCE(json_extract(e.payload_json, '$.message_id'), ''),
+            COALESCE(json_extract(e.payload_json, '$.root_message_id'), '')
+          )
+          AND m.direct_conversation_id IS NOT NULL
+          AND m.direct_conversation_id <> ''
+        LIMIT 1
+      ),
+      ''
+    ) = ''
+    OR (
+      viewer.role <> 'guest'
+      AND EXISTS (
+        SELECT 1
+        FROM direct_conversation_members dcm
+        JOIN direct_conversations dc ON dc.id = dcm.conversation_id
+        WHERE dc.workspace_id = e.workspace_id
+          AND dcm.conversation_id = COALESCE(
+            json_extract(e.payload_json, '$.direct_conversation_id'),
+            (
+              SELECT m.direct_conversation_id
+              FROM messages m
+              WHERE m.workspace_id = e.workspace_id
+                AND m.id IN (
+                  COALESCE(json_extract(e.payload_json, '$.message_id'), ''),
+                  COALESCE(json_extract(e.payload_json, '$.root_message_id'), '')
+                )
+                AND m.direct_conversation_id IS NOT NULL
+                AND m.direct_conversation_id <> ''
+              LIMIT 1
+            )
+          )
+          AND dcm.user_id = ?1
+      )
+    )
+  )
+ORDER BY e.cursor DESC
+LIMIT 1
+`
+
+type LatestEventCursorParams struct {
+	UserID      string `json:"user_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestEventCursor, arg.UserID, arg.WorkspaceID)
+	var cursor string
+	err := row.Scan(&cursor)
+	return cursor, err
+}
+
 const listBotsOwnedBy = `-- name: ListBotsOwnedBy :many
 SELECT
   u.id,
@@ -1910,6 +2016,7 @@ SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kin
          WHERE m.channel_id = c.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> ?1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT cr2.last_read_seq FROM channel_reads cr2 WHERE cr2.channel_id = c.id AND cr2.user_id = ?1), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM channels c
@@ -1979,12 +2086,19 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
          WHERE m.direct_conversation_id = dc.id
            AND m.parent_message_id IS NULL
            AND m.author_id <> ?1
+           AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = ?1), 0)
        ), 0) AS INTEGER) AS unread_count
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = ?2
   AND dcm.user_id = ?1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM direct_conversation_hidden dch
+    WHERE dch.conversation_id = dc.id
+      AND dch.user_id = ?1
+  )
 ORDER BY dc.created_at
 `
 
@@ -2094,6 +2208,10 @@ WHERE e.workspace_id = ?2
     OR EXISTS (SELECT 1 FROM event_recipients er WHERE er.event_id = e.id AND er.user_id = ?1)
   )
   AND (
+    e.type NOT IN ('channel.read', 'dm.read')
+    OR COALESCE(json_extract(e.payload_json, '$.user_id'), '') = ?1
+  )
+  AND (
     e.channel_id IS NULL
     OR viewer.role <> 'guest'
     OR event_channel.name = 'guest'
@@ -2186,6 +2304,50 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.Seq,
 			&i.PayloadJson,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listThreadStates = `-- name: ListThreadStates :many
+SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
+FROM thread_state
+WHERE root_message_id IN (/*SLICE:root_message_ids*/?)
+`
+
+func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string) ([]ThreadState, error) {
+	query := listThreadStates
+	var queryParams []interface{}
+	if len(rootMessageIds) > 0 {
+		for _, v := range rootMessageIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:root_message_ids*/?", strings.Repeat(",?", len(rootMessageIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:root_message_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ThreadState
+	for rows.Next() {
+		var i ThreadState
+		if err := rows.Scan(
+			&i.RootMessageID,
+			&i.ReplyCount,
+			&i.LastReplyAt,
+			&i.LastReplyAuthorIdsJson,
 		); err != nil {
 			return nil, err
 		}
@@ -2715,6 +2877,32 @@ type TouchBotTokenParams struct {
 
 func (q *Queries) TouchBotToken(ctx context.Context, arg TouchBotTokenParams) error {
 	_, err := q.db.ExecContext(ctx, touchBotToken, arg.LastUsedAt, arg.ID)
+	return err
+}
+
+const unhideDirectConversation = `-- name: UnhideDirectConversation :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = ?1
+  AND user_id = ?2
+`
+
+type UnhideDirectConversationParams struct {
+	ConversationID string `json:"conversation_id"`
+	UserID         string `json:"user_id"`
+}
+
+func (q *Queries) UnhideDirectConversation(ctx context.Context, arg UnhideDirectConversationParams) error {
+	_, err := q.db.ExecContext(ctx, unhideDirectConversation, arg.ConversationID, arg.UserID)
+	return err
+}
+
+const unhideDirectConversationForMembers = `-- name: UnhideDirectConversationForMembers :exec
+DELETE FROM direct_conversation_hidden
+WHERE conversation_id = ?1
+`
+
+func (q *Queries) UnhideDirectConversationForMembers(ctx context.Context, conversationID string) error {
+	_, err := q.db.ExecContext(ctx, unhideDirectConversationForMembers, conversationID)
 	return err
 }
 

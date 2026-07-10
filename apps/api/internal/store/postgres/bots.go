@@ -455,14 +455,6 @@ func botWorkspaceForTokenTx(ctx context.Context, tx *sql.Tx, botUserID, workspac
 	return matched, err
 }
 
-func (s *Store) listBotTokensForBot(ctx context.Context, botUserID string) ([]store.BotToken, error) {
-	workspaceID, err := s.botWorkspace(ctx, botUserID)
-	if err != nil {
-		return nil, err
-	}
-	return s.listBotTokensForBotWorkspace(ctx, botUserID, workspaceID)
-}
-
 func (s *Store) listBotTokensForBotWorkspace(ctx context.Context, botUserID, workspaceID string) ([]store.BotToken, error) {
 	rows, err := s.db.QueryContext(ctx, botTokenSelect()+`
 		WHERE bot_user_id = $1 AND workspace_id = $2

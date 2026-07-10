@@ -72,11 +72,13 @@ idempotent. The JSON manifest contains only synthetic metadata and generated
 resource IDs; it contains no token.
 
 The app has `dev-bootstrap=false`. Create a service bot after startup with the
-workspace ID from the manifest:
+workspace ID and the first user ID from the manifest. The first user is the
+workspace owner created by the deterministic seed:
 
 ```sh
 docker compose exec app clickclack admin bot create \
   --workspace wsp_replace_from_manifest \
+  --created-by usr_first_user_from_manifest \
   --name "FakeCo OpenClaw" \
   --handle fakeco-openclaw \
   --scopes bot:write \

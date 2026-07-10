@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/openclaw/clickclack/apps/api/internal/config"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
 
 func TestDispatchArgsDefaultsNoArgumentInvocationToServe(t *testing.T) {
@@ -60,6 +63,105 @@ func TestFakeCoSeedRequiresExplicitEnvironment(t *testing.T) {
 	err := admin([]string{"fakeco", "seed", "--data", t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), `must equal "fakeco"`) {
 		t.Fatalf("expected FakeCo environment refusal, got %v", err)
+	}
+}
+
+func TestAdminBotCreateValidatesActorBeforeOpeningDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "missing.db")
+	err := admin([]string{
+		"bot", "create",
+		"--db", "sqlite://" + dbPath,
+		"--workspace", "wsp_missing",
+		"--name", "Missing Actor",
+	})
+	if err == nil || err.Error() != "--created-by is required" {
+		t.Fatalf("expected missing actor error, got %v", err)
+	}
+	if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("validation opened the database before rejecting the command: %v", statErr)
+	}
+}
+
+func TestAdminBotCreateUsesExplicitAuthorizedActor(t *testing.T) {
+	ctx := context.Background()
+	dbURL := "sqlite://" + filepath.Join(t.TempDir(), "clickclack.db")
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "cli-owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "CLI Bots", Slug: "cli-bots"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "cli-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := admin([]string{
+		"bot", "create",
+		"--db", dbURL,
+		"--workspace", workspace.ID,
+		"--created-by", owner.ID,
+		"--name", "CLI Service",
+		"--handle", "cli-service",
+	}); err != nil {
+		t.Fatalf("create service bot: %v", err)
+	}
+	if err := admin([]string{
+		"bot", "create",
+		"--db", dbURL,
+		"--workspace", workspace.ID,
+		"--owner", member.ID,
+		"--created-by", member.ID,
+		"--name", "CLI Personal",
+		"--handle", "cli-personal",
+	}); err != nil {
+		t.Fatalf("create user-owned bot: %v", err)
+	}
+	err = admin([]string{
+		"bot", "create",
+		"--db", dbURL,
+		"--workspace", workspace.ID,
+		"--owner", member.ID,
+		"--created-by", owner.ID,
+		"--name", "Wrong Actor",
+	})
+	if !errors.Is(err, store.ErrBotOwnerCreateRequired) {
+		t.Fatalf("expected mismatched owner rejection, got %v", err)
+	}
+
+	st, err = sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	bots, err := st.ListBots(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bots) != 2 {
+		t.Fatalf("expected two bots, got %#v", bots)
+	}
+	ownersByHandle := make(map[string]string, len(bots))
+	for _, bot := range bots {
+		ownersByHandle[bot.Bot.Handle] = bot.Bot.OwnerUserID
+	}
+	if ownersByHandle["cli-service"] != "" || ownersByHandle["cli-personal"] != member.ID {
+		t.Fatalf("unexpected bot ownership: %#v", ownersByHandle)
 	}
 }
 

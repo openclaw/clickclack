@@ -308,6 +308,15 @@ func admin(args []string) error {
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
 		}
+		if strings.TrimSpace(*workspaceID) == "" {
+			return fmt.Errorf("--workspace is required")
+		}
+		if strings.TrimSpace(*createdBy) == "" {
+			return fmt.Errorf("--created-by is required")
+		}
+		if strings.TrimSpace(*name) == "" {
+			return fmt.Errorf("--name is required")
+		}
 		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
 			return err

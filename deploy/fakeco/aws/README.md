@@ -202,10 +202,10 @@ After CloudFormation completes, the workflow enables termination protection,
 replays the live ingress rules and rejects every CIDR, prefix list, unexpected
 port or protocol, source account, and unapproved source security group; it also
 replays the live instance profile and role policy boundary,
-waits at most five minutes for SSM, and gives the SSM command at most forty
-minutes. The complete job is capped at sixty minutes. First apply normally
-takes 15–30 minutes because the ARM VM builds the pinned multi-stage Docker
-image. `verify` normally takes 3–10 minutes. Snapshot duration makes teardown
+waits at most five minutes for SSM, and caps both the remote SSM script and its
+workflow poll at forty minutes. The complete job is capped at sixty minutes.
+First apply normally takes 15–30 minutes because the ARM VM builds the pinned
+multi-stage Docker image. `verify` normally takes 3–10 minutes. Snapshot duration makes teardown
 roughly 10–30 minutes; all bounds fail closed.
 
 ## Bootstrap and proof

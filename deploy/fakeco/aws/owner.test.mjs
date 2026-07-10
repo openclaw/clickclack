@@ -622,6 +622,7 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   );
   assert.match(workflow, /seq 1 60/u);
   assert.match(workflow, /seq 1 240/u);
+  assert.match(workflow, /executionTimeout: \["2400"\]/u);
   assert.match(workflow, /AWS-RunRemoteScript/u);
   assert.match(workflow, /::add-mask::%s/u);
   assert.match(workflow, /\.Action == "Remove"/u);

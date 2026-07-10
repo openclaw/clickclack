@@ -649,6 +649,7 @@ jobs:
             '{
               sourceType: ["S3"],
               sourceInfo: [$source_info],
+              executionTimeout: ["2400"],
               commandLine: [$command_line]
             }' >"$RUNNER_TEMP/ssm-parameters.json"
           command_id="$(aws ssm send-command \

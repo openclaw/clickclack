@@ -556,6 +556,14 @@ test("live workload IAM drift is rejected", async (t) => {
       },
       /inline policy ExactFakeCoObjects drifted/u,
     ],
+    [
+      "unexpected customer tag",
+      () => {},
+      (iam) => {
+        iam.Role.Tags.push({ Key: "Owner", Value: "unexpected" });
+      },
+      /workload role tag set drifted/u,
+    ],
   ];
   for (const [label, mutateInstance, mutateIAM, expected] of cases) {
     const instance = instanceResponse();
@@ -708,7 +716,10 @@ function stackResponse(rendered) {
         EnableTerminationProtection: true,
         RoleARN: rendered.target.cloudFormationServiceRoleArn,
         Parameters: rendered.parameters.map((entry) => ({ ...entry })),
-        Tags: rendered.tags.map((entry) => ({ ...entry })),
+        Tags: [
+          ...rendered.tags.map((entry) => ({ ...entry })),
+          ...cloudFormationTags("clickclack-fakeco"),
+        ],
         Outputs: [
           { OutputKey: "InstanceId", OutputValue: "i-1234abcd" },
           { OutputKey: "PrivateIp", OutputValue: "10.0.1.20" },
@@ -841,7 +852,10 @@ function workloadIAMResponse(rendered) {
         PermissionsBoundaryType: "Policy",
         PermissionsBoundaryArn: rendered.target.permissionsBoundaryArn,
       },
-      Tags: rendered.tags.map((entry) => ({ ...entry })),
+      Tags: [
+        ...rendered.tags.map((entry) => ({ ...entry })),
+        ...cloudFormationTags("InstanceRole"),
+      ],
     },
     AttachedPolicies: [],
     PolicyNames: ownerTemplate.Resources.InstanceRole.Properties.Policies.map(
@@ -853,6 +867,18 @@ function workloadIAMResponse(rendered) {
       PolicyDocument: resolvePolicyParameters(policy.PolicyDocument, rendered),
     })),
   };
+}
+
+function cloudFormationTags(logicalId) {
+  return [
+    { Key: "aws:cloudformation:logical-id", Value: logicalId },
+    {
+      Key: "aws:cloudformation:stack-id",
+      Value:
+        "arn:aws:cloudformation:us-west-2:123456789012:stack/clickclack-fakeco/12345678-1234-1234-1234-123456789abc",
+    },
+    { Key: "aws:cloudformation:stack-name", Value: "clickclack-fakeco" },
+  ];
 }
 
 function resolvePolicyParameters(value, rendered) {

@@ -408,9 +408,7 @@ function verifyStack(rendered, response) {
   }
   const expectedTags = new Map(rendered.tags.map((entry) => [entry.Key, entry.Value]));
   const observedTags = new Map(
-    (stack.Tags ?? [])
-      .filter((entry) => !entry.Key.startsWith("aws:"))
-      .map((entry) => [entry.Key, entry.Value]),
+    customerManagedTags(stack.Tags ?? []).map((entry) => [entry.Key, entry.Value]),
   );
   assert(expectedTags.size === observedTags.size, "observed stack tag set drifted");
   for (const [key, value] of expectedTags) {
@@ -591,7 +589,7 @@ function verifyWorkloadIAM(rendered, stack, response) {
       canonicalJSON(template.Resources.InstanceRole.Properties.AssumeRolePolicyDocument),
     "observed workload trust policy drifted",
   );
-  verifyExactTags(rendered.tags, role.Tags ?? [], "workload role");
+  verifyExactTags(rendered.tags, customerManagedTags(role.Tags ?? []), "workload role");
   assert(
     (response.AttachedPolicies ?? []).length === 0,
     "managed policies are forbidden on the workload role",
@@ -656,6 +654,10 @@ function verifyExactTags(expectedTags, observedTags, label) {
   for (const [key, value] of expected) {
     assert(observed.get(key) === value, `observed ${label} tag ${key} drifted`);
   }
+}
+
+function customerManagedTags(tags) {
+  return tags.filter((entry) => !entry.Key.toLowerCase().startsWith("aws:"));
 }
 
 function canonicalJSON(value) {

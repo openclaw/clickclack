@@ -831,6 +831,9 @@ test("teardown backup resolves and verifies the actually running release", async
 set -euo pipefail
 case "\${1:-}" in
   ps)
+    if [[ "\${NO_CONTAINERS:-false}" == true ]]; then
+      exit 0
+    fi
     printf '%s\n' running-container
     if [[ "\${MULTIPLE_CONTAINERS:-false}" == true ]]; then
       printf '%s\n' second-container
@@ -970,6 +973,10 @@ verify_persistent_runtime_config
   await t.test("rejects multiple running Compose app containers", () => {
     assert.notEqual(runResolver({ MULTIPLE_CONTAINERS: "true" }).status, 0);
   });
+
+  await t.test("rejects zero running Compose app containers", () => {
+    assert.notEqual(runResolver({ NO_CONTAINERS: "true" }).status, 0);
+  });
 });
 
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
@@ -1034,45 +1041,59 @@ cleanup_success "$TEST_ROOT/backup.db"
     STALE_COMMIT: stale,
     DOCKER_LOG: dockerLog,
   };
-  const result = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: cleanupEnvironment,
-  });
-  assert.equal(result.status, 0, result.stderr);
-  await stat(path.join(releaseRoot, current));
-  await stat(path.join(releaseRoot, "manual"));
-  await stat(path.join(stateRoot, `image-${current}.id`));
-  await assert.rejects(stat(path.join(releaseRoot, stale)), { code: "ENOENT" });
-  await assert.rejects(stat(path.join(stateRoot, `image-${stale}.id`)), { code: "ENOENT" });
-  await assert.rejects(stat(backup), { code: "ENOENT" });
-  const commands = await readFile(dockerLog, "utf8");
-  assert.match(commands, /container prune --force/u);
-  assert.match(commands, new RegExp(`image rm clickclack:fakeco-${stale}`, "u"));
-  assert.doesNotMatch(commands, new RegExp(`image rm clickclack:fakeco-${current}`, "u"));
-  assert.match(commands, /image prune --force/u);
-  assert.match(commands, /builder prune --force/u);
+  await t.test(
+    "normal cleanup retains active state and removes stale build artifacts",
+    async () => {
+      const result = spawnSync("bash", [scriptPath], {
+        encoding: "utf8",
+        env: cleanupEnvironment,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      await stat(path.join(releaseRoot, current));
+      await stat(path.join(releaseRoot, "manual"));
+      await stat(path.join(stateRoot, `image-${current}.id`));
+      await assert.rejects(stat(path.join(releaseRoot, stale)), { code: "ENOENT" });
+      await assert.rejects(stat(path.join(stateRoot, `image-${stale}.id`)), { code: "ENOENT" });
+      await assert.rejects(stat(backup), { code: "ENOENT" });
+      const commands = await readFile(dockerLog, "utf8");
+      assert.match(commands, /container prune --force/u);
+      assert.match(commands, new RegExp(`image rm clickclack:fakeco-${stale}`, "u"));
+      assert.doesNotMatch(commands, new RegExp(`image rm clickclack:fakeco-${current}`, "u"));
+      assert.match(commands, /image prune --force/u);
+      assert.match(commands, /builder prune --force/u);
+    },
+  );
 
-  await writeFile(backup, "failure-retained backup\n");
-  const failedCleanup = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: { ...cleanupEnvironment, FAIL_DOCKER_MATCH: "builder prune" },
+  await t.test("failed normal cleanup preserves the local backup", async () => {
+    await writeFile(backup, "failure-retained backup\n");
+    const failedCleanup = spawnSync("bash", [scriptPath], {
+      encoding: "utf8",
+      env: { ...cleanupEnvironment, FAIL_DOCKER_MATCH: "builder prune" },
+    });
+    assert.equal(failedCleanup.status, 17);
+    await stat(backup);
   });
-  assert.equal(failedCleanup.status, 17);
-  await stat(backup);
 
-  await mkdir(path.join(releaseRoot, stale), { recursive: true });
-  await writeFile(path.join(stateRoot, `image-${stale}.id`), `sha256:${"b".repeat(64)}\n`);
-  await writeFile(backup, "teardown backup\n");
-  const dockerCommandsBeforeBackup = await readFile(dockerLog, "utf8");
-  const backupCleanup = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: { ...cleanupEnvironment, TEST_ACTION: "backup" },
-  });
-  assert.equal(backupCleanup.status, 0, backupCleanup.stderr);
-  await stat(path.join(releaseRoot, stale));
-  await stat(path.join(stateRoot, `image-${stale}.id`));
-  await assert.rejects(stat(backup), { code: "ENOENT" });
-  assert.equal(await readFile(dockerLog, "utf8"), dockerCommandsBeforeBackup);
+  await t.test(
+    "teardown removes only the local backup and preserves old and new release and image state",
+    async () => {
+      await mkdir(path.join(releaseRoot, stale), { recursive: true });
+      await writeFile(path.join(stateRoot, `image-${stale}.id`), `sha256:${"b".repeat(64)}\n`);
+      await writeFile(backup, "teardown backup\n");
+      const dockerCommandsBeforeBackup = await readFile(dockerLog, "utf8");
+      const backupCleanup = spawnSync("bash", [scriptPath], {
+        encoding: "utf8",
+        env: { ...cleanupEnvironment, TEST_ACTION: "backup" },
+      });
+      assert.equal(backupCleanup.status, 0, backupCleanup.stderr);
+      await stat(path.join(releaseRoot, current));
+      await stat(path.join(releaseRoot, stale));
+      await stat(path.join(stateRoot, `image-${current}.id`));
+      await stat(path.join(stateRoot, `image-${stale}.id`));
+      await assert.rejects(stat(backup), { code: "ENOENT" });
+      assert.equal(await readFile(dockerLog, "utf8"), dockerCommandsBeforeBackup);
+    },
+  );
 });
 
 test("bootstrap proves seed equality, health, readiness, metadata metrics, and backup integrity", async () => {

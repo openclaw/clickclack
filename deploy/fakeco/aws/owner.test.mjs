@@ -838,17 +838,19 @@ case "\${1:-}" in
     ;;
   inspect)
     case "\${3:-}" in
-      '{{.Config.Image}}') printf 'clickclack:fakeco-%s\n' "$RUNNING_COMMIT" ;;
-      '{{.Image}}') printf '%s\n' "$IMAGE_ID" ;;
+      '{{.Config.Image}}')
+        printf '%s\n' "\${CONFIGURED_IMAGE:-clickclack:fakeco-$RUNNING_COMMIT}"
+        ;;
+      '{{.Image}}') printf '%s\n' "\${RUNNING_IMAGE_ID:-$IMAGE_ID}" ;;
       *) exit 64 ;;
     esac
     ;;
   image)
     [[ "\${2:-}" == inspect && "\${3:-}" == --format ]]
     case "\${4:-}" in
-      '{{.Id}}') printf '%s\n' "$IMAGE_ID" ;;
+      '{{.Id}}') printf '%s\n' "\${LOCAL_IMAGE_ID:-$IMAGE_ID}" ;;
       '{{index .Config.Labels "org.opencontainers.image.revision"}}')
-        printf '%s\n' "$RUNNING_COMMIT"
+        printf '%s\n' "\${OCI_REVISION:-$RUNNING_COMMIT}"
         ;;
       *) exit 64 ;;
     esac
@@ -883,7 +885,6 @@ resolve_backup_runtime
 [[ "$image_state" == "$state_root/image-$RUNNING_COMMIT.id" ]]
 [[ "$compose_override" == "$backup_runtime_override" ]]
 grep -Fx "    image: \\"clickclack:fakeco-$RUNNING_COMMIT\\"" "$backup_runtime_override"
-grep -Fx "    image: \\"clickclack:fakeco-$REQUESTED_COMMIT\\"" "$runtime_override"
 verify_persistent_runtime_config
 `,
     { mode: 0o755 },
@@ -898,40 +899,77 @@ verify_persistent_runtime_config
     RUNNING_SHA256: sourceDigest,
     IMAGE_ID: imageID,
   };
-  const resolved = spawnSync("bash", [scriptPath], { encoding: "utf8", env: environment });
-  assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
+  const runResolver = (overrides = {}) =>
+    spawnSync("bash", [scriptPath], {
+      encoding: "utf8",
+      env: { ...environment, ...overrides },
+    });
+  const requestedConfig = `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${requested}"\n`;
 
-  await writeFile(
-    path.join(temporary, "compose.owner.yaml"),
-    `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${running}"\n`,
-  );
-  const mixedPersistentImages = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: environment,
+  await t.test("accepts a verified runtime with requested persistent pins", () => {
+    const resolved = runResolver();
+    assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
   });
-  assert.notEqual(mixedPersistentImages.status, 0);
-  await writeFile(
-    path.join(temporary, "compose.owner.yaml"),
-    `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${requested}"\n`,
-  );
 
-  await writeFile(path.join(stateRoot, `image-${running}.id`), `sha256:${"f".repeat(64)}\n`);
-  assert.equal(
-    await readFile(path.join(stateRoot, `image-${running}.id`), "utf8"),
-    `sha256:${"f".repeat(64)}\n`,
-  );
-  const identityDrift = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: environment,
+  await t.test("accepts a verified runtime with observed persistent pins", async () => {
+    await writeFile(
+      path.join(temporary, "compose.owner.yaml"),
+      `services:\n  app:\n    image: "clickclack:fakeco-${running}"\n  seed:\n    image: "clickclack:fakeco-${running}"\n`,
+    );
+    await writeFile(path.join(temporary, "runtime.env"), `CLICKCLACK_WEB_VERSION=${running}\n`);
+    const resolved = runResolver();
+    assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
+    await writeFile(path.join(temporary, "compose.owner.yaml"), requestedConfig);
+    await writeFile(path.join(temporary, "runtime.env"), `CLICKCLACK_WEB_VERSION=${requested}\n`);
   });
-  assert.notEqual(identityDrift.status, 0, `${identityDrift.stdout}\n${identityDrift.stderr}`);
 
-  await writeFile(path.join(stateRoot, `image-${running}.id`), `${imageID}\n`);
-  const ambiguous = spawnSync("bash", [scriptPath], {
-    encoding: "utf8",
-    env: { ...environment, MULTIPLE_CONTAINERS: "true" },
+  await t.test("rejects mixed requested and observed persistent image pins", async () => {
+    await writeFile(
+      path.join(temporary, "compose.owner.yaml"),
+      `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${running}"\n`,
+    );
+    assert.notEqual(runResolver().status, 0);
+    await writeFile(path.join(temporary, "compose.owner.yaml"), requestedConfig);
   });
-  assert.notEqual(ambiguous.status, 0);
+
+  await t.test("rejects an unscoped configured image", () => {
+    assert.notEqual(runResolver({ CONFIGURED_IMAGE: "clickclack:latest" }).status, 0);
+  });
+
+  await t.test("rejects a runtime commit without a verified release", () => {
+    assert.notEqual(
+      runResolver({ CONFIGURED_IMAGE: `clickclack:fakeco-${"e".repeat(40)}` }).status,
+      0,
+    );
+  });
+
+  await t.test("rejects recorded image identity drift", async () => {
+    await writeFile(path.join(stateRoot, `image-${running}.id`), `sha256:${"f".repeat(64)}\n`);
+    assert.notEqual(runResolver().status, 0);
+    await writeFile(path.join(stateRoot, `image-${running}.id`), `${imageID}\n`);
+  });
+
+  await t.test("rejects running image identity drift", () => {
+    assert.notEqual(runResolver({ RUNNING_IMAGE_ID: `sha256:${"f".repeat(64)}` }).status, 0);
+  });
+
+  await t.test("rejects local image identity drift", () => {
+    assert.notEqual(runResolver({ LOCAL_IMAGE_ID: `sha256:${"f".repeat(64)}` }).status, 0);
+  });
+
+  await t.test("rejects OCI revision drift", () => {
+    assert.notEqual(runResolver({ OCI_REVISION: "f".repeat(40) }).status, 0);
+  });
+
+  await t.test("rejects an invalid stored release digest", async () => {
+    await writeFile(path.join(releaseRoot, running, ".source.sha256"), "invalid\n");
+    assert.notEqual(runResolver().status, 0);
+    await writeFile(path.join(releaseRoot, running, ".source.sha256"), `${sourceDigest}\n`);
+  });
+
+  await t.test("rejects multiple running Compose app containers", () => {
+    assert.notEqual(runResolver({ MULTIPLE_CONTAINERS: "true" }).status, 0);
+  });
 });
 
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
@@ -1105,6 +1143,9 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
     /CLICKCLACK_TOKEN|CLAWROUTER_API_KEY|OPENCLAW_GATEWAY_TOKEN|down --volumes/u,
   );
   assert.match(runbook, /runtime_override=\/etc\/clickclack-fakeco\/compose\.owner\.yaml/u);
+  assert.match(runbook, /runtime_commit="\$\(jq -er '\.source_commit/u);
+  assert.match(runbook, /release="\/opt\/clickclack\/releases\/\$runtime_commit"/u);
+  assert.match(runbook, /clickclack:fakeco-\$runtime_commit/u);
   assert.match(runbook, /-f "\$runtime_override"/u);
 });
 

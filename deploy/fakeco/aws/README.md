@@ -333,9 +333,13 @@ at the backup evidence's `source_commit` (the observed runtime commit), run
 perform these steps as root with the selected backup key and recorded SHA-256:
 
 ```sh
-release=/opt/clickclack/releases/1ef89aafc874f267e2a432c633148b1c1b200d2a
+evidence=/path/to/selected-backup-evidence.json
+runtime_commit="$(jq -er '.source_commit | strings | select(test("^[0-9a-f]{40}$"))' "$evidence")"
+release="/opt/clickclack/releases/$runtime_commit"
 runtime_env=/etc/clickclack-fakeco/runtime.env
 runtime_override=/etc/clickclack-fakeco/compose.owner.yaml
+test -d "$release"
+test "$(grep -Fxc "    image: \"clickclack:fakeco-$runtime_commit\"" "$runtime_override")" -eq 2
 compose=(docker compose --project-directory "$release/deploy/fakeco" \
   --env-file "$runtime_env" -f "$release/deploy/fakeco/compose.yaml" \
   -f "$runtime_override")

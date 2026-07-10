@@ -1,0 +1,1 @@
+var e=new Set([`owner`,`moderator`]);function t(t){return t?e.has(t):!1}export{t};

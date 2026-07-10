@@ -278,6 +278,11 @@ test("render fails closed on target, trust-boundary, and prefix drift", async (t
       /security group ID is invalid/u,
     ],
     [
+      "duplicate ingress sources",
+      { FAKECO_METRICS_SECURITY_GROUP_ID: "sg-1234abcd" },
+      /metrics security group must differ/u,
+    ],
+    [
       "broad prefix",
       { FAKECO_BACKUP_PREFIX: "clickclack" },
       /normalized clickclack\/fakeco prefix/u,

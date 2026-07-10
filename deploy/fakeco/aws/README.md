@@ -122,7 +122,7 @@ as Environment variables, not GitHub secrets:
 | `FAKECO_PRIVATE_SUBNET_ID` | Required without the network stack; if also supplied with it, must match `ApplicationSubnetA`. |
 | `FAKECO_EGRESS_RESOURCE_ID` | Existing `nat-...` or `tgw-...`; if also supplied with Crabhelm, must match `NatGateway`. |
 | `FAKECO_OPENCLAW_GATEWAY_SECURITY_GROUP_ID` | Required same-VPC source for TCP `8080`. |
-| `FAKECO_METRICS_SECURITY_GROUP_ID` | Optional same-VPC source for TCP `8080`. |
+| `FAKECO_METRICS_SECURITY_GROUP_ID` | Optional same-VPC source for TCP `8080`; must differ from the gateway group. |
 | `FAKECO_AMI_ID` | Exact Canonical Ubuntu 24.04 ARM64 EBS AMI owned by `099720109477`. |
 | `FAKECO_ARTIFACT_BUCKET` / `FAKECO_ARTIFACT_PREFIX` | Existing bucket and normalized prefix such as `clickclack/fakeco/artifacts`. |
 | `FAKECO_LOG_BUCKET` / `FAKECO_LOG_PREFIX` | Existing bucket and normalized prefix such as `clickclack/fakeco/logs`. |

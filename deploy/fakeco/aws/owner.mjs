@@ -212,6 +212,10 @@ async function render() {
   const metricsSecurityGroupId = optionalEnv("FAKECO_METRICS_SECURITY_GROUP_ID");
   if (metricsSecurityGroupId !== "") {
     validateId(metricsSecurityGroupId, /^sg-[0-9a-f]+$/u, "metrics security group ID");
+    assert(
+      metricsSecurityGroupId !== gatewaySecurityGroupId,
+      "metrics security group must differ from the OpenClaw gateway security group",
+    );
   }
   const imageId = validateId(requiredEnv("FAKECO_AMI_ID"), /^ami-[0-9a-f]+$/u, "AMI ID");
 

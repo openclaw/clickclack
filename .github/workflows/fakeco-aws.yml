@@ -37,7 +37,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.ref_protected
     environment: fakeco
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       OPERATION: ${{ inputs.operation }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -280,6 +280,66 @@ jobs:
           [[ "$(jq -r '.KeyMetadata.KeyManager' "$RUNNER_TEMP/kms.json")" == "CUSTOMER" ]]
           [[ "$(jq -r '.KeyMetadata.KeyUsage' "$RUNNER_TEMP/kms.json")" == "ENCRYPT_DECRYPT" ]]
           [[ "$(jq -r '.KeyMetadata.KeySpec' "$RUNNER_TEMP/kms.json")" == "SYMMETRIC_DEFAULT" ]]
+          aws kms get-key-policy \
+            --key-id "$FAKECO_DATA_KMS_KEY_ARN" \
+            --policy-name default \
+            --output json >"$RUNNER_TEMP/kms-key-policy-envelope.json"
+          jq -er '.Policy' "$RUNNER_TEMP/kms-key-policy-envelope.json" \
+            >"$RUNNER_TEMP/kms-key-policy.json"
+          node deploy/fakeco/aws/owner.mjs verify-kms-policy \
+            --policy "$RUNNER_TEMP/kms-key-policy.json" \
+            --account-id "$FAKECO_AWS_ACCOUNT_ID" >/dev/null
+
+          assert_kms_role() {
+            local label="$1"
+            local role_arn="$2"
+            shift 2
+            local actions_file="$RUNNER_TEMP/kms-$label-actions.json"
+            local grant_file="$RUNNER_TEMP/kms-$label-create-grant.json"
+            local unscoped_grant_file="$RUNNER_TEMP/kms-$label-unscoped-create-grant.json"
+            aws iam simulate-principal-policy \
+              --policy-source-arn "$role_arn" \
+              --action-names "$@" \
+              --resource-arns "$FAKECO_DATA_KMS_KEY_ARN" \
+              --output json >"$actions_file"
+            jq -e --argjson expected "$#" '
+              (.EvaluationResults | length) == $expected and
+              all(.EvaluationResults[]; .EvalDecision == "allowed")
+            ' "$actions_file" >/dev/null
+            aws iam simulate-principal-policy \
+              --policy-source-arn "$role_arn" \
+              --action-names kms:CreateGrant \
+              --resource-arns "$FAKECO_DATA_KMS_KEY_ARN" \
+              --context-entries \
+                ContextKeyName=kms:GrantIsForAWSResource,ContextKeyValues=true,ContextKeyType=boolean \
+              --output json >"$grant_file"
+            jq -e '
+              (.EvaluationResults | length) == 1 and
+              .EvaluationResults[0].EvalDecision == "allowed"
+            ' "$grant_file" >/dev/null
+            aws iam simulate-principal-policy \
+              --policy-source-arn "$role_arn" \
+              --action-names kms:CreateGrant \
+              --resource-arns "$FAKECO_DATA_KMS_KEY_ARN" \
+              --output json >"$unscoped_grant_file"
+            jq -e '
+              (.EvaluationResults | length) == 1 and
+              .EvaluationResults[0].EvalDecision == "implicitDeny"
+            ' "$unscoped_grant_file" >/dev/null
+          }
+          assert_kms_role github "$FAKECO_GITHUB_ROLE_ARN" \
+            kms:Decrypt \
+            kms:DescribeKey \
+            kms:GenerateDataKey \
+            kms:GenerateDataKeyWithoutPlaintext \
+            kms:ReEncryptFrom \
+            kms:ReEncryptTo
+          assert_kms_role cloudformation "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" \
+            kms:Decrypt \
+            kms:DescribeKey \
+            kms:GenerateDataKeyWithoutPlaintext \
+            kms:ReEncryptFrom \
+            kms:ReEncryptTo
           aws cloudformation validate-template \
             --template-body file://deploy/fakeco/aws/template.json >/dev/null
           printf '%s\n' 'FakeCo AWS account/resource preflight passed.'
@@ -742,7 +802,35 @@ jobs:
             --output text)"
           [[ "$snapshot_id" =~ ^snap-[0-9a-f]+$ ]]
           printf '::add-mask::%s\n' "$snapshot_id"
-          aws ec2 wait snapshot-completed --snapshot-ids "$snapshot_id"
+          snapshot_complete=false
+          for _ in $(seq 1 180); do
+            snapshot_state="$(aws ec2 describe-snapshots \
+              --snapshot-ids "$snapshot_id" \
+              --owner-ids "$FAKECO_AWS_ACCOUNT_ID" \
+              --query 'Snapshots[0].State' \
+              --output text)"
+            case "$snapshot_state" in
+              completed)
+                snapshot_complete=true
+                break
+                ;;
+              pending)
+                sleep 10
+                ;;
+              error)
+                printf 'Retained snapshot entered error state.\n' >&2
+                exit 1
+                ;;
+              *)
+                printf 'Retained snapshot returned an unexpected state.\n' >&2
+                exit 1
+                ;;
+            esac
+          done
+          if [[ "$snapshot_complete" != "true" ]]; then
+            printf 'Retained snapshot did not complete within thirty minutes.\n' >&2
+            exit 1
+          fi
           snapshot_file="$RUNNER_TEMP/fakeco-snapshot.json"
           aws ec2 describe-snapshots \
             --snapshot-ids "$snapshot_id" \

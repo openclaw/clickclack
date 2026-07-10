@@ -35,12 +35,15 @@ try {
     case "verify-backup":
       await verifyBackupCommand();
       break;
+    case "verify-kms-policy":
+      await verifyKMSPolicyCommand();
+      break;
     case "retention-manifest":
       await retentionManifest();
       break;
     default:
       throw new Error(
-        "usage: owner.mjs <validate-profile|render|parameters|verify-stack|verify-instance|verify-backup|retention-manifest>",
+        "usage: owner.mjs <validate-profile|render|parameters|verify-stack|verify-instance|verify-backup|verify-kms-policy|retention-manifest>",
       );
   }
 } catch (error) {
@@ -215,6 +218,11 @@ async function render() {
   const artifact = destination("ARTIFACT");
   const logs = destination("LOG");
   const backups = destination("BACKUP");
+  assertDestinationsDoNotOverlap([
+    ["artifact", artifact],
+    ["log", logs],
+    ["backup", backups],
+  ]);
   const kmsKeyArn = requiredEnv("FAKECO_DATA_KMS_KEY_ARN");
   assert(
     new RegExp(`^arn:aws:kms:${profile.region}:${accountId}:key/[0-9a-f-]{36}$`, "u").test(
@@ -273,6 +281,39 @@ async function writeParameters() {
   const rendered = await readRendered(requiredOption("rendered"));
   await writeJSON(requiredOption("output"), rendered.parameters);
   print({ ok: true, parameterCount: rendered.parameters.length });
+}
+
+async function verifyKMSPolicyCommand() {
+  const accountId = requiredOption("account-id");
+  assert(/^[0-9]{12}$/u.test(accountId), "--account-id must be 12 digits");
+  const policy = await readJSON(requiredOption("policy"));
+  const accountRoot = `arn:aws:iam::${accountId}:root`;
+  const delegatedActions = scalarList(policy.Statement)
+    .filter(
+      (statement) =>
+        statement?.Effect === "Allow" &&
+        scalarList(statement?.Principal?.AWS).includes(accountRoot) &&
+        scalarList(statement?.Resource).includes("*") &&
+        statement?.Condition === undefined,
+    )
+    .flatMap((statement) => scalarList(statement.Action));
+  for (const action of [
+    "kms:CreateGrant",
+    "kms:Decrypt",
+    "kms:DescribeKey",
+    "kms:Encrypt",
+    "kms:GenerateDataKey",
+    "kms:GenerateDataKeyWithoutPlaintext",
+    "kms:GetKeyPolicy",
+    "kms:ReEncryptFrom",
+    "kms:ReEncryptTo",
+  ]) {
+    assert(
+      delegatedActions.some((candidate) => actionPatternAllows(candidate, action)),
+      "KMS key policy must delegate required actions to target-account IAM policies",
+    );
+  }
+  print({ ok: true, accountId });
 }
 
 async function verifyStackCommand() {
@@ -743,6 +784,37 @@ function destination(kind) {
     `FAKECO_${kind}_PREFIX must be a normalized clickclack/fakeco prefix`,
   );
   return { bucket, prefix, arn: `arn:aws:s3:::${bucket}` };
+}
+
+function assertDestinationsDoNotOverlap(destinations) {
+  for (let left = 0; left < destinations.length; left += 1) {
+    for (let right = left + 1; right < destinations.length; right += 1) {
+      const [leftLabel, leftDestination] = destinations[left];
+      const [rightLabel, rightDestination] = destinations[right];
+      if (leftDestination.bucket !== rightDestination.bucket) continue;
+      const overlap =
+        leftDestination.prefix === rightDestination.prefix ||
+        leftDestination.prefix.startsWith(`${rightDestination.prefix}/`) ||
+        rightDestination.prefix.startsWith(`${leftDestination.prefix}/`);
+      assert(
+        !overlap,
+        `${leftLabel} and ${rightLabel} prefixes must not overlap when buckets are shared`,
+      );
+    }
+  }
+}
+
+function scalarList(value) {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function actionPatternAllows(pattern, action) {
+  if (typeof pattern !== "string") return false;
+  const normalizedPattern = pattern.toLowerCase();
+  const normalizedAction = action.toLowerCase();
+  if (!normalizedPattern.endsWith("*")) return normalizedPattern === normalizedAction;
+  return normalizedAction.startsWith(normalizedPattern.slice(0, -1));
 }
 
 function exactRoleArn(value, accountId, rolePath, label) {

@@ -131,6 +131,52 @@ test("instance role contains standard SSM core plus exact object destinations on
   assert.doesNotMatch(serialized, /s3:ListAllMyBuckets/u);
 });
 
+test("KMS key policy verification requires target-account IAM delegation", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const policyPath = path.join(temporary, "kms-policy.json");
+  const policy = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: "arn:aws:iam::123456789012:root" },
+        Action: [
+          "kms:CreateGrant",
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:Encrypt",
+          "kms:GenerateDataKey*",
+          "kms:GetKeyPolicy",
+          "kms:ReEncrypt*",
+        ],
+        Resource: "*",
+      },
+    ],
+  };
+  await writeFile(policyPath, JSON.stringify(policy));
+  const valid = runOwner([
+    "verify-kms-policy",
+    "--policy",
+    policyPath,
+    "--account-id",
+    "123456789012",
+  ]);
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.deepEqual(JSON.parse(valid.stdout), { ok: true, accountId: "123456789012" });
+
+  policy.Statement[0].Condition = { Bool: { "kms:GrantIsForAWSResource": "true" } };
+  await writeFile(policyPath, JSON.stringify(policy));
+  const conditioned = runOwner([
+    "verify-kms-policy",
+    "--policy",
+    policyPath,
+    "--account-id",
+    "123456789012",
+  ]);
+  assert.notEqual(conditioned.status, 0);
+  assert.match(conditioned.stderr, /must delegate required actions/u);
+});
+
 test("render emits a secret-free exact deployment and parameter file", async (t) => {
   const temporary = await temporaryDirectory(t);
   const renderedPath = path.join(temporary, "rendered.json");
@@ -195,6 +241,25 @@ test("render emits a secret-free exact deployment and parameter file", async (t)
 
 test("render fails closed on target, trust-boundary, and prefix drift", async (t) => {
   const temporary = await temporaryDirectory(t);
+  const sharedBucketEnvironment = fakecoEnvironment();
+  sharedBucketEnvironment.FAKECO_LOG_BUCKET = sharedBucketEnvironment.FAKECO_ARTIFACT_BUCKET;
+  sharedBucketEnvironment.FAKECO_BACKUP_BUCKET = sharedBucketEnvironment.FAKECO_ARTIFACT_BUCKET;
+  const sharedBucket = runOwner(
+    [
+      "render",
+      "--phase",
+      "apply",
+      "--commit",
+      sourceCommit,
+      "--owner-commit",
+      ownerCommit,
+      "--output",
+      path.join(temporary, "shared-bucket.json"),
+    ],
+    sharedBucketEnvironment,
+  );
+  assert.equal(sharedBucket.status, 0, sharedBucket.stderr);
+
   const cases = [
     ["region", { FAKECO_AWS_REGION: "us-east-1" }, /must equal us-west-2/u],
     [
@@ -221,6 +286,22 @@ test("render fails closed on target, trust-boundary, and prefix drift", async (t
       "unsafe prefix",
       { FAKECO_LOG_PREFIX: "clickclack/fakeco/logs/*" },
       /normalized clickclack\/fakeco prefix/u,
+    ],
+    [
+      "equal shared-bucket prefixes",
+      {
+        FAKECO_LOG_BUCKET: "openclaw-fakeco-artifact-123456789012",
+        FAKECO_LOG_PREFIX: "clickclack/fakeco/artifacts",
+      },
+      /prefixes must not overlap when buckets are shared/u,
+    ],
+    [
+      "nested shared-bucket prefixes",
+      {
+        FAKECO_BACKUP_BUCKET: "openclaw-fakeco-logs-123456789012",
+        FAKECO_BACKUP_PREFIX: "clickclack/fakeco/logs/backups",
+      },
+      /prefixes must not overlap when buckets are shared/u,
     ],
     [
       "cross-account key",
@@ -616,6 +697,7 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   assert.match(workflow, /role-to-assume: \$\{\{ vars\.FAKECO_GITHUB_ROLE_ARN \}\}/u);
   assert.doesNotMatch(workflow, /secrets\./u);
   assert.doesNotMatch(workflow, /CLICKCLACK_TOKEN|CLAWROUTER_API_KEY|OPENCLAW_GATEWAY_TOKEN/u);
+  assert.match(workflow, /timeout-minutes: 90/u);
   assert.ok(
     workflow.indexOf("create-change-set") < workflow.indexOf("execute-change-set"),
     "change set must be created before it can execute",
@@ -623,6 +705,11 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   assert.match(workflow, /seq 1 60/u);
   assert.match(workflow, /seq 1 240/u);
   assert.match(workflow, /executionTimeout: \["2400"\]/u);
+  assert.match(workflow, /verify-kms-policy/u);
+  assert.match(workflow, /simulate-principal-policy/u);
+  assert.match(workflow, /kms:GrantIsForAWSResource/u);
+  assert.match(workflow, /kms:GenerateDataKeyWithoutPlaintext/u);
+  assert.match(workflow, /unscoped-create-grant/u);
   assert.match(workflow, /AWS-RunRemoteScript/u);
   assert.match(workflow, /::add-mask::%s/u);
   assert.match(workflow, /\.Action == "Remove"/u);
@@ -652,6 +739,9 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
     workflow.indexOf("create-snapshot") < workflow.lastIndexOf("delete-stack"),
     "snapshot must complete before stack deletion",
   );
+  assert.match(workflow, /seq 1 180/u);
+  assert.match(workflow, /snapshot_state/u);
+  assert.doesNotMatch(workflow, /ec2 wait snapshot-completed/u);
   assert.match(workflow, /destroy-clickclack-fakeco-retain-data/u);
   assert.match(workflow, /deletion-mode STANDARD/u);
   assert.doesNotMatch(

@@ -49,10 +49,11 @@ workflow. The workflow only verifies and reuses them:
    `openclaw/fakeco/clickclack-workload-boundary` that permits no more than the
    instance-role actions declared in `template.json`.
 5. One customer-managed symmetric KMS key in `us-west-2` for EBS and the three
-   S3 destinations.
+   S3 destinations, with the account-delegation and role grants below.
 6. Existing encrypted artifact, log, and backup buckets in `us-west-2`. One
    bucket may serve all three roles if its prefixes and policies remain
-   distinct. Backup-bucket versioning must be enabled.
+   pairwise disjoint: no prefix may equal, contain, or be contained by another.
+   Backup-bucket versioning must be enabled.
 7. An existing VPC, private subnet with `MapPublicIpOnLaunch=false`, and an
    explicit default route to an existing NAT or transit gateway. The subnet
    must offer `t4g.small`.
@@ -60,14 +61,43 @@ workflow. The workflow only verifies and reuses them:
    metrics collector security group.
 
 The GitHub OIDC role needs read-only preflight calls for STS, IAM, EC2, S3,
-KMS, SSM, and CloudFormation; `iam:PassRole` only for the exact CloudFormation
-service role; change-set and stack lifecycle access only for
-`clickclack-fakeco`; SSM Run Command only for that stack's instance; artifact
-`PutObject`/`GetObject`/`HeadObject`; backup/log `HeadObject` and list access; EBS snapshot
-create/describe/wait; and no secret-read actions. The CloudFormation service
-role needs only the EC2 security group, instance, IAM role/profile, and tag
-operations represented in `template.json`, constrained by the workload
-permissions boundary.
+KMS, SSM, and CloudFormation; `iam:SimulatePrincipalPolicy` on only the two
+owner roles; `iam:PassRole` only for the exact CloudFormation service role;
+change-set and stack lifecycle access only for `clickclack-fakeco`; SSM Run
+Command only for that stack's instance; artifact
+`PutObject`/`GetObject`/`HeadObject`; backup/log `HeadObject` and list access;
+EBS snapshot create/describe; and no secret-read actions. The CloudFormation
+service role needs only the EC2 security group, instance, IAM role/profile,
+and tag operations represented in `template.json`, constrained by the
+workload permissions boundary.
+
+The KMS key policy must delegate the required actions to target-account IAM
+policies through an unconditional `arn:aws:iam::<account-id>:root` principal
+statement on resource `*`. That statement may use `kms:*`, or the narrower
+set `kms:CreateGrant`, `kms:Decrypt`, `kms:DescribeKey`, `kms:Encrypt`,
+`kms:GenerateDataKey*`, `kms:GetKeyPolicy`, and `kms:ReEncrypt*`. The identity
+policies remain the least-privilege control:
+
+- On the exact key, the GitHub OIDC role needs `kms:GetKeyPolicy` plus
+  `kms:Decrypt`, `kms:DescribeKey`, `kms:GenerateDataKey`,
+  `kms:GenerateDataKeyWithoutPlaintext`, and `kms:ReEncrypt*`. `Decrypt` and
+  `GenerateDataKey` support the workflow's SSE-KMS downloads/uploads;
+  `GetKeyPolicy` and `DescribeKey` support preflight; the remaining actions
+  support its retained EBS snapshot.
+- On the exact key, the CloudFormation service role needs `kms:Decrypt`,
+  `kms:DescribeKey`, `kms:GenerateDataKeyWithoutPlaintext`, and
+  `kms:ReEncrypt*` for the encrypted root volume.
+- Both roles need `kms:CreateGrant` on the exact key only when
+  `kms:GrantIsForAWSResource` is `true`. Unconditioned `CreateGrant` must remain
+  denied.
+
+Preflight reads and validates the key policy, then uses IAM policy simulation
+to require every role/action/resource decision above and to prove that
+`CreateGrant` is allowed only with the AWS-resource condition. The simulation
+does not execute a KMS operation. AWS documents
+[account IAM-policy delegation](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html),
+[S3 SSE-KMS permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html),
+and [EBS encryption permissions](https://docs.aws.amazon.com/ebs/latest/userguide/ebs-encryption-requirements.html).
 
 The IAM read set must include `GetInstanceProfile`, `GetRole`,
 `ListAttachedRolePolicies`, `ListRolePolicies`, and `GetRolePolicy`. Every
@@ -203,10 +233,11 @@ replays the live ingress rules and rejects every CIDR, prefix list, unexpected
 port or protocol, source account, and unapproved source security group; it also
 replays the live instance profile and role policy boundary,
 waits at most five minutes for SSM, and caps both the remote SSM script and its
-workflow poll at forty minutes. The complete job is capped at sixty minutes.
-First apply normally takes 15–30 minutes because the ARM VM builds the pinned
-multi-stage Docker image. `verify` normally takes 3–10 minutes. Snapshot duration makes teardown
-roughly 10–30 minutes; all bounds fail closed.
+workflow poll at forty minutes. Teardown polls the retained snapshot for at
+most thirty minutes, and the complete job is capped at ninety minutes. First
+apply normally takes 15–30 minutes because the ARM VM builds the pinned
+multi-stage Docker image. `verify` normally takes 3–10 minutes. Snapshot
+duration makes teardown roughly 10–30 minutes; all bounds fail closed.
 
 ## Bootstrap and proof
 

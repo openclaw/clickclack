@@ -212,6 +212,23 @@
               "Version": "2012-10-17",
               "Statement": [
                 {
+                  "Sid": "ListRemoteScriptPrefix",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": {
+                    "Ref": "ArtifactBucketArn"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": {
+                        "Fn::Sub": "${ArtifactPrefix}/owner/*"
+                      }
+                    }
+                  }
+                },
+                {
                   "Sid": "ReadExactArtifacts",
                   "Effect": "Allow",
                   "Action": [

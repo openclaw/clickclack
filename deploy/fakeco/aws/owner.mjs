@@ -133,9 +133,19 @@ function validateProfile() {
   assert(policies.length === 2, "instance role policy set drifted");
   const objectPolicy = policies.find((entry) => entry.PolicyName === "ExactFakeCoObjects");
   const statements = objectPolicy?.PolicyDocument?.Statement ?? [];
-  assert(statements.length === 4, "exact object policy statement set drifted");
-  for (const statement of statements.filter((entry) =>
-    entry.Action.some((action) => action.startsWith("s3:")),
+  assert(statements.length === 5, "exact object policy statement set drifted");
+  const listRemoteScriptPrefix = statements.find((entry) => entry.Sid === "ListRemoteScriptPrefix");
+  assert(
+    canonicalJSON(listRemoteScriptPrefix?.Action) === canonicalJSON(["s3:ListBucket"]) &&
+      listRemoteScriptPrefix?.Resource?.Ref === "ArtifactBucketArn" &&
+      listRemoteScriptPrefix?.Condition?.StringLike?.["s3:prefix"]?.["Fn::Sub"] ===
+        "${ArtifactPrefix}/owner/*",
+    "remote script listing must be limited to the artifact owner prefix",
+  );
+  for (const statement of statements.filter(
+    (entry) =>
+      entry.Sid !== "ListRemoteScriptPrefix" &&
+      entry.Action.some((action) => action.startsWith("s3:")),
   )) {
     const resource = statement.Resource?.["Fn::Sub"] ?? "";
     assert(

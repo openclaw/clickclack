@@ -97,8 +97,19 @@ test("instance role contains standard SSM core plus exact object destinations on
     ["SsmManagedInstanceCore", "ExactFakeCoObjects"],
   );
   const objectStatements = role.Policies[1].PolicyDocument.Statement;
-  assert.deepEqual(objectStatements[1].Action, ["s3:AbortMultipartUpload", "s3:PutObject"]);
-  assert.deepEqual(objectStatements[2].Action, [
+  assert.deepEqual(objectStatements[0], {
+    Sid: "ListRemoteScriptPrefix",
+    Effect: "Allow",
+    Action: ["s3:ListBucket"],
+    Resource: { Ref: "ArtifactBucketArn" },
+    Condition: {
+      StringLike: {
+        "s3:prefix": { "Fn::Sub": "${ArtifactPrefix}/owner/*" },
+      },
+    },
+  });
+  assert.deepEqual(objectStatements[2].Action, ["s3:AbortMultipartUpload", "s3:PutObject"]);
+  assert.deepEqual(objectStatements[3].Action, [
     "s3:AbortMultipartUpload",
     "s3:GetObject",
     "s3:PutObject",
@@ -106,6 +117,7 @@ test("instance role contains standard SSM core plus exact object destinations on
   assert.deepEqual(
     objectStatements.map((statement) => statement.Resource),
     [
+      { Ref: "ArtifactBucketArn" },
       { "Fn::Sub": "${ArtifactBucketArn}/${ArtifactPrefix}/*" },
       { "Fn::Sub": "${LogBucketArn}/${LogPrefix}/*" },
       { "Fn::Sub": "${BackupBucketArn}/${BackupPrefix}/*" },
@@ -116,6 +128,7 @@ test("instance role contains standard SSM core plus exact object destinations on
   assert.doesNotMatch(serialized, /secretsmanager|dynamodb|cloudwatch|logs:/iu);
   assert.doesNotMatch(serialized, /ssm:GetParameters?/u);
   assert.doesNotMatch(serialized, /s3:\*/u);
+  assert.doesNotMatch(serialized, /s3:ListAllMyBuckets/u);
 });
 
 test("render emits a secret-free exact deployment and parameter file", async (t) => {

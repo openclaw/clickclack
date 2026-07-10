@@ -25,6 +25,7 @@ The locked shape is:
   stack never creates a VPC, subnet, Internet gateway, route table, NAT
   gateway, load balancer, DNS record, or another egress charge.
 - A reduced inline SSM agent core role with Parameter Store reads removed, plus
+  prefix-conditioned `ListBucket` for the remote-script subprefix,
   `GetObject` on one artifact prefix, `PutObject` on one log prefix,
   `GetObject`/`PutObject` on one backup prefix, and use of one KMS key. It has
   no application-secret access.
@@ -212,7 +213,9 @@ roughly 10–30 minutes; all bounds fail closed.
 SSM fetches the bootstrap script from the exact artifact prefix with
 `AWS-RunRemoteScript`. Its command line checks the downloaded bytes against the
 workflow's expected SHA-256 before invoking `bash`, so a swapped object never
-executes. The instance profile cannot fetch GitHub, Parameter Store, or secrets.
+executes. Its required bucket listing is limited by `s3:prefix` to
+`<artifact-prefix>/owner/*`; it cannot list unrelated bucket keys. The instance
+profile cannot fetch GitHub, Parameter Store, or secrets.
 Bootstrap:
 
 1. Installs Docker, Compose, SQLite, and probe tools from Noble, then installs

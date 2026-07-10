@@ -144,6 +144,72 @@ test("app routes restore channels, DMs, threads, fallbacks, and history navigati
   await expect(page.getByText("Could not load ClickClack")).toHaveCount(0);
 });
 
+test("workspace settings discard bot state when navigating between workspaces", async ({
+  page,
+}) => {
+  const stamp = Date.now();
+  const createWorkspace = async (suffix: string) => {
+    const response = await page.request.post("/api/workspaces", {
+      data: {
+        name: `Settings ${suffix} ${stamp}`,
+        slug: `settings-${suffix.toLowerCase()}-${stamp}`,
+      },
+    });
+    expect(response.ok()).toBe(true);
+    const body = (await response.json()) as {
+      workspace: { id: string; route_id: string };
+    };
+    return body.workspace;
+  };
+  const createBot = async (workspaceID: string, suffix: string) => {
+    const displayName = `Settings ${suffix} Bot ${stamp}`;
+    const response = await page.request.post(`/api/workspaces/${workspaceID}/bots`, {
+      data: {
+        display_name: displayName,
+        handle: `settings-${suffix.toLowerCase()}-bot-${stamp}`,
+        token_name: "e2e",
+      },
+    });
+    expect(response.ok()).toBe(true);
+    return displayName;
+  };
+
+  const workspaceA = await createWorkspace("A");
+  const workspaceB = await createWorkspace("B");
+  const botA = await createBot(workspaceA.id, "A");
+  const botB = await createBot(workspaceB.id, "B");
+
+  await page.goto(`/app/${workspaceA.route_id}/settings/bots`);
+  await expect(page.getByText(botA, { exact: true })).toBeVisible();
+  await expect(page.getByText(botB, { exact: true })).toHaveCount(0);
+
+  const destination = `/app/${workspaceB.route_id}/settings/bots`;
+  await page.evaluate((href) => {
+    (
+      window as typeof window & { __settingsNavigationMarker?: boolean }
+    ).__settingsNavigationMarker = true;
+    const link = document.createElement("a");
+    link.href = href;
+    link.dataset.workspaceNavigation = "true";
+    link.textContent = "Switch workspace";
+    document.body.append(link);
+  }, destination);
+  await page.locator("a[data-workspace-navigation]").dispatchEvent("click");
+
+  await expect(page).toHaveURL(new RegExp(`${destination}$`));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __settingsNavigationMarker?: boolean })
+            .__settingsNavigationMarker,
+      ),
+    )
+    .toBe(true);
+  await expect(page.getByText(botB, { exact: true })).toBeVisible();
+  await expect(page.getByText(botA, { exact: true })).toHaveCount(0);
+});
+
 test("creating the first workspace enters the routed app state", async ({ page }) => {
   const requestedPaths: string[] = [];
   let workspaceCreated = false;

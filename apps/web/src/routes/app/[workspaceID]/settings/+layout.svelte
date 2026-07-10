@@ -95,7 +95,9 @@
       {#if data.loadError}
         <div class="ws-settings__error">{data.loadError}</div>
       {:else}
-        {@render children?.()}
+        {#key workspaceID}
+          {@render children?.()}
+        {/key}
       {/if}
     </div>
   </main>

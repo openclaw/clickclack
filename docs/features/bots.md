@@ -227,9 +227,10 @@ installed in exactly one workspace.
 `POST /api/workspaces/{workspace_id}/bots` returns `{bot, bot_token}`. The
 `bot_token.token` field is the one-time raw `ccb_...` token and is never
 returned by list calls. `GET /api/workspaces/{workspace_id}/bots` returns
-`{bots: [{bot, tokens}]}`; token metadata is only populated for callers allowed
-to manage that bot's tokens. Rotation is create-new, move the runtime, then
-revoke-old through `POST /api/bot-tokens/{token_id}/revoke`.
+`{bots: [{bot, tokens}]}` with redacted token metadata for workspace members.
+Raw token values are never returned by list calls. Rotation is create-new, move
+the runtime, then revoke-old through
+`POST /api/bot-tokens/{token_id}/revoke`.
 
 Workspace owners and moderators can remove any bot from a workspace with
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this

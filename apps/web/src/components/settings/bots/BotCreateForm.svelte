@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     createWorkspaceBot,
     suggestHandleFrom,
@@ -29,7 +30,7 @@
   let displayName = $state("");
   let handle = $state("");
   let handleEdited = $state(false);
-  let ownership = $state<Ownership>(canCreateService ? "service" : "user");
+  let ownership = $state<Ownership>(untrack(() => (canCreateService ? "service" : "user")));
   let tokenName = $state("default");
   let selectedScope = $state<BotScopeBundle>("bot:write");
   let submitting = $state(false);

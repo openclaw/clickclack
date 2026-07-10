@@ -1912,6 +1912,24 @@
   gap: 8px;
 }
 
+.ws-bots__token-form-panel {
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.ws-bots__token-form .ws-bots__choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .ws-bots__token-form .ws-bots__choices {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Token reveal */
 .ws-bots__reveal {
   display: flex;
@@ -1983,6 +2001,35 @@
   gap: 8px;
 }
 
+.ws-bots__setup-mode {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(320px, 100%);
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.ws-bots__setup-mode button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ws-bots__setup-mode button.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
 .ws-bots__reveal-snippet {
   margin: 0;
   padding: 12px 14px;
@@ -1993,7 +2040,7 @@
   font-size: 12.5px;
   color: var(--text);
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-x: auto;
 }
 
 .ws-bots__reveal-ack {

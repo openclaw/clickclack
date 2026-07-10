@@ -2,7 +2,6 @@
   import {
     activeTokens,
     botLoadErrorMessage,
-    createWorkspaceBotToken,
     isServiceBot,
     listWorkspaceBots,
     listWorkspaceBotTokens,
@@ -14,6 +13,7 @@
   } from "../../../../../lib/bots";
   import { isWorkspaceManager } from "../../../../../lib/permissions";
   import BotCreateForm from "../../../../../components/settings/bots/BotCreateForm.svelte";
+  import BotTokenForm from "../../../../../components/settings/bots/BotTokenForm.svelte";
   import TokenRevealPanel from "../../../../../components/settings/bots/TokenRevealPanel.svelte";
   import { untrack } from "svelte";
 
@@ -28,7 +28,8 @@
     token: BotToken;
   } | null>(null);
   let expandedBotID = $state<string | null>(null);
-  let pendingAction = $state<{ botID: string; kind: "rotate" | "revoke" | "remove" } | null>(null);
+  let mintingBotID = $state<string | null>(null);
+  let pendingAction = $state<{ botID: string; kind: "revoke" | "remove" } | null>(null);
   let actionError = $state("");
 
   const me = $derived(data.me);
@@ -44,12 +45,12 @@
   }
 
   function canRotate(bot: BotWithTokens["bot"]): boolean {
-    if (isServiceBot(bot)) return true; // backend will gate
+    if (isServiceBot(bot)) return canManage;
     return !!me && bot.owner_user_id === me.id;
   }
 
   function canRemove(): boolean {
-    return true; // managers only — backend gates; we show inline error on 403
+    return canManage;
   }
 
   function toggleExpand(botID: string) {
@@ -84,21 +85,15 @@
     expandedBotID = response.bot.id;
   }
 
-  async function rotateToken(bot: BotWithTokens["bot"]) {
-    pendingAction = { botID: bot.id, kind: "rotate" };
+  function startMinting(botID: string) {
     actionError = "";
-    try {
-      const token = await createWorkspaceBotToken(workspaceID, bot.id, {
-        name: "rotated",
-        scopes: ["bot:write"],
-      });
-      revealed = { bot, token };
-      await refreshOneBotTokens(bot.id);
-    } catch (err) {
-      actionError = botLoadErrorMessage(err);
-    } finally {
-      pendingAction = null;
-    }
+    mintingBotID = botID;
+  }
+
+  async function handleTokenCreated(bot: BotWithTokens["bot"], token: BotToken) {
+    mintingBotID = null;
+    revealed = { bot, token };
+    await refreshOneBotTokens(bot.id);
   }
 
   async function revokeOne(bot: BotWithTokens["bot"], token: BotToken) {
@@ -118,9 +113,7 @@
   }
 
   async function removeBot(bot: BotWithTokens["bot"]) {
-    const message = isServiceBot(bot)
-      ? `Delete service bot @${bot.handle}? All of its tokens will be revoked.`
-      : `Remove @${bot.handle} from this workspace? Its tokens here will be revoked.`;
+    const message = `Remove @${bot.handle} from this workspace? Its tokens here will be revoked.`;
     if (!confirm(message)) return;
     pendingAction = { botID: bot.id, kind: "remove" };
     actionError = "";
@@ -176,7 +169,7 @@
       >
         {refreshing ? "Refreshing…" : "Refresh"}
       </button>
-      {#if canCreateService}
+      {#if me}
         <button
           type="button"
           class="ws-btn ws-btn--primary"
@@ -202,7 +195,8 @@
   {#if revealed && me}
     <TokenRevealPanel
       token={revealed.token}
-      botHandle={formatHandle(revealed.bot.handle)}
+      botHandle={revealed.bot.handle}
+      botUserID={revealed.bot.id}
       workspaceRouteID={workspaceRouteID}
       onDismiss={() => (revealed = null)}
     />
@@ -235,6 +229,7 @@
         {@const tokens = activeTokens(entry.tokens)}
         {@const expanded = expandedBotID === bot.id}
         {@const acting = pendingAction?.botID === bot.id}
+        {@const minting = mintingBotID === bot.id}
         <div class="ws-bots__row" class:is-expanded={expanded}>
           <button
             type="button"
@@ -287,10 +282,10 @@
                     <button
                       type="button"
                       class="ws-btn"
-                      onclick={() => rotateToken(bot)}
-                      disabled={acting}
+                      onclick={() => startMinting(bot.id)}
+                      disabled={acting || minting}
                     >
-                      {acting && pendingAction?.kind === "rotate" ? "Rotating…" : "Mint new token"}
+                      Mint new token
                     </button>
                   {/if}
                   {#if canRemove()}
@@ -302,13 +297,22 @@
                     >
                       {acting && pendingAction?.kind === "remove"
                         ? "Removing…"
-                        : isServiceBot(bot)
-                          ? "Delete bot"
-                          : "Remove from workspace"}
+                        : "Remove from workspace"}
                     </button>
                   {/if}
                 </div>
               </div>
+
+              {#if minting}
+                <div class="ws-bots__token-form-panel">
+                  <BotTokenForm
+                    {workspaceID}
+                    botUserID={bot.id}
+                    onCreated={(token) => handleTokenCreated(bot, token)}
+                    onCancel={() => (mintingBotID = null)}
+                  />
+                </div>
+              {/if}
 
               {#if tokens.length === 0}
                 <p class="ws-bots__detail-empty">No active tokens. Mint one to get this bot online.</p>

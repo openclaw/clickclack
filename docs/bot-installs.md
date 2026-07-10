@@ -126,46 +126,67 @@ Current MVP scopes are documented in [features/bots.md](features/bots.md).
 OpenClaw's ClickClack extension reads ClickClack accounts from
 `channels.clickclack`. Keep tokens in env-backed secret refs:
 
-```jsonc
+```json5
 {
-  "channels": {
-    "clickclack": {
-      "enabled": true,
-      "baseUrl": "https://app.clickclack.chat",
-      "workspace": "clickclack",
-      "defaultAccount": "service",
-      "accounts": {
-        "service": {
-          "name": "OpenClaw Service",
-          "token": { "source": "env", "provider": "default", "id": "CLICKCLACK_SERVICE_TOKEN" },
-          "botUserId": "usr_...",
-          "defaultTo": "channel:general",
-          "allowFrom": ["*"]
-        },
-        "peter": {
-          "name": "Peter's OpenClaw",
-          "token": { "source": "env", "provider": "default", "id": "CLICKCLACK_PETER_TOKEN" },
-          "botUserId": "usr_...",
-          "defaultTo": "channel:general",
-          "replyMode": "model",
-          "model": "openai/gpt-5.4-mini",
-          "senderIsOwner": true
-        }
-      }
-    }
-  }
+  channels: {
+    clickclack: {
+      enabled: true,
+      baseUrl: "https://app.clickclack.chat",
+      token: { source: "env", provider: "default", id: "CLICKCLACK_BOT_TOKEN" },
+      workspace: "clickclack",
+      botUserId: "usr_...",
+      defaultTo: "channel:general",
+    },
+  },
 }
 ```
 
 Then set the environment on the OpenClaw process:
 
 ```sh
-export CLICKCLACK_SERVICE_TOKEN=ccb_...
-export CLICKCLACK_PETER_TOKEN=ccb_...
+export CLICKCLACK_BOT_TOKEN="ccb_..."
+openclaw gateway
+```
+
+For multiple bots in one OpenClaw install, use named accounts:
+
+```json5
+{
+  channels: {
+    clickclack: {
+      enabled: true,
+      baseUrl: "https://app.clickclack.chat",
+      defaultAccount: "service",
+      accounts: {
+        service: {
+          token: { source: "env", provider: "default", id: "CLICKCLACK_SERVICE_BOT_TOKEN" },
+          workspace: "clickclack",
+          botUserId: "usr_service",
+          defaultTo: "channel:general",
+        },
+        peter: {
+          token: { source: "env", provider: "default", id: "CLICKCLACK_PETER_BOT_TOKEN" },
+          workspace: "clickclack",
+          botUserId: "usr_peter",
+          defaultTo: "channel:general",
+        },
+      },
+    },
+  },
+}
+```
+
+```sh
+export CLICKCLACK_SERVICE_BOT_TOKEN="ccb_..."
+export CLICKCLACK_PETER_BOT_TOKEN="ccb_..."
+openclaw gateway
 ```
 
 `workspace` may be the workspace ID (`wsp_...`) or slug. Targets are
 `channel:<name-or-id>`, `thread:<message-id>`, or `dm:<user-id>`.
+The default `replyMode` is `agent`. Using `replyMode: "model"` requires the
+explicit OpenClaw trust setting
+`plugins.entries.clickclack.llm.allowAgentIdOverride: true`.
 
 ## Install into a small SDK bot
 

@@ -172,19 +172,80 @@ export function suggestHandleFrom(displayName: string): string {
     .slice(0, 32);
 }
 
-export function buildInstallSnippet(opts: {
+export type OpenClawAccountMode = "single" | "named";
+
+function jsonString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function envNameForHandle(handle: string): string {
+  const suffix = handle
+    .replace(/^@/, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return suffix ? `CLICKCLACK_${suffix}_BOT_TOKEN` : "CLICKCLACK_BOT_TOKEN";
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
+}
+
+export function buildOpenClawConfigSnippet(opts: {
   workspaceRouteID: string;
   botHandle: string;
-  token: string;
+  botUserID: string;
+  mode: OpenClawAccountMode;
   baseURL?: string;
 }): string {
   const base = (
     opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")
   ).replace(/\/$/, "");
-  return [
-    `# Install ${opts.botHandle} into OpenClaw`,
-    `export CLICKCLACK_BASE_URL=${base || "https://your-clickclack.example.com"}`,
-    `export CLICKCLACK_WORKSPACE=${opts.workspaceRouteID}`,
-    `export CLICKCLACK_TOKEN=${opts.token}`,
-  ].join("\n");
+  const handle = opts.botHandle.replace(/^@/, "");
+  const envName = opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(handle);
+  const baseURL = base || "https://your-clickclack.example.com";
+
+  if (opts.mode === "named") {
+    return `{
+  channels: {
+    clickclack: {
+      enabled: true,
+      baseUrl: ${jsonString(baseURL)},
+      defaultAccount: ${jsonString(handle)},
+      accounts: {
+        ${jsonString(handle)}: {
+          token: { source: "env", provider: "default", id: ${jsonString(envName)} },
+          workspace: ${jsonString(opts.workspaceRouteID)},
+          botUserId: ${jsonString(opts.botUserID)},
+          defaultTo: "channel:general",
+        },
+      },
+    },
+  },
+}`;
+  }
+
+  return `{
+  channels: {
+    clickclack: {
+      enabled: true,
+      baseUrl: ${jsonString(baseURL)},
+      token: { source: "env", provider: "default", id: ${jsonString(envName)} },
+      workspace: ${jsonString(opts.workspaceRouteID)},
+      botUserId: ${jsonString(opts.botUserID)},
+      defaultTo: "channel:general",
+    },
+  },
+}`;
+}
+
+export function buildOpenClawShellSnippet(opts: {
+  botHandle: string;
+  token: string;
+  mode: OpenClawAccountMode;
+}): string {
+  const envName =
+    opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(opts.botHandle);
+  return `export ${envName}=${shellQuote(opts.token)}
+openclaw gateway`;
 }

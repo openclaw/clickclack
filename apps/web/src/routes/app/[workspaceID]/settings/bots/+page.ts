@@ -39,6 +39,7 @@ export async function load({
   return {
     workspaceID,
     workspaceRouteID,
+    workspace,
     bots,
     me,
     loadError,

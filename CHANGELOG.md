@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added production bot management in workspace and account settings, including service and user-owned authorization, redacted token metadata, token rotation and removal, owned-bot listings, and paste-ready OpenClaw configuration. Thanks @shakkernerd.
 - Added an opt-in realtime tail cursor so fresh clients can skip retained history without racing new events, and applied read-receipt visibility before event pagination. Thanks @shakkernerd.
 - Preserved validated request correlation IDs as optional metadata on durable message and thread-reply events across replay and realtime delivery, and added canary run/case evidence IDs without changing message storage or gateway traffic.
 - Added an isolated FakeCo small-VM deployment path with idempotent synthetic chat seed data, OpenClaw and ClawRouter SecretRef configuration, correlated health/readiness and metadata-only telemetry, a quoted-reply end-to-end canary, tests, and teardown guidance.

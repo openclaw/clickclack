@@ -1,38 +1,48 @@
 <script lang="ts">
   import type { BotToken } from "../../../lib/bots";
-  import { buildInstallSnippet } from "../../../lib/bots";
+  import {
+    buildOpenClawConfigSnippet,
+    buildOpenClawShellSnippet,
+    type OpenClawAccountMode,
+  } from "../../../lib/bots";
 
   type Props = {
     token: BotToken;
     botHandle: string;
+    botUserID: string;
     workspaceRouteID: string;
     onDismiss: () => void;
   };
 
-  let { token, botHandle, workspaceRouteID, onDismiss }: Props = $props();
+  let { token, botHandle, botUserID, workspaceRouteID, onDismiss }: Props = $props();
 
   let acknowledged = $state(false);
-  let copiedToken = $state(false);
-  let copiedSnippet = $state(false);
+  let mode = $state<OpenClawAccountMode>("single");
+  let copied = $state<"token" | "config" | "shell" | null>(null);
 
-  const snippet = $derived(
-    buildInstallSnippet({
+  const configSnippet = $derived(
+    buildOpenClawConfigSnippet({
       workspaceRouteID,
       botHandle,
+      botUserID,
+      mode,
+    }),
+  );
+  const shellSnippet = $derived(
+    buildOpenClawShellSnippet({
+      botHandle,
       token: token.token ?? "",
+      mode,
     }),
   );
 
-  async function copyTo(value: string, kind: "token" | "snippet") {
+  async function copyTo(value: string, kind: "token" | "config" | "shell") {
     try {
       await navigator.clipboard.writeText(value);
-      if (kind === "token") {
-        copiedToken = true;
-        setTimeout(() => (copiedToken = false), 1800);
-      } else {
-        copiedSnippet = true;
-        setTimeout(() => (copiedSnippet = false), 1800);
-      }
+      copied = kind;
+      setTimeout(() => {
+        if (copied === kind) copied = null;
+      }, 1800);
     } catch {
       // Clipboard may be blocked; the value is still visible in the input.
     }
@@ -65,23 +75,57 @@
         class="ws-btn ws-btn--primary"
         onclick={() => copyTo(token.token ?? "", "token")}
       >
-        {copiedToken ? "Copied" : "Copy"}
+        {copied === "token" ? "Copied" : "Copy"}
+      </button>
+    </div>
+  </div>
+
+  <div class="ws-bots__reveal-field">
+    <span class="ws-bots__reveal-label">OpenClaw account shape</span>
+    <div class="ws-bots__setup-mode" role="group" aria-label="OpenClaw account shape">
+      <button
+        type="button"
+        class:is-active={mode === "single"}
+        onclick={() => (mode = "single")}
+      >
+        Single bot
+      </button>
+      <button
+        type="button"
+        class:is-active={mode === "named"}
+        onclick={() => (mode = "named")}
+      >
+        Named account
       </button>
     </div>
   </div>
 
   <div class="ws-bots__reveal-field">
     <div class="ws-bots__reveal-snippet-header">
-      <span class="ws-bots__reveal-label">Install in OpenClaw</span>
+      <span class="ws-bots__reveal-label">OpenClaw config</span>
       <button
         type="button"
         class="ws-btn"
-        onclick={() => copyTo(snippet, "snippet")}
+        onclick={() => copyTo(configSnippet, "config")}
       >
-        {copiedSnippet ? "Copied" : "Copy snippet"}
+        {copied === "config" ? "Copied" : "Copy config"}
       </button>
     </div>
-    <pre class="ws-bots__reveal-snippet"><code>{snippet}</code></pre>
+    <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
+  </div>
+
+  <div class="ws-bots__reveal-field">
+    <div class="ws-bots__reveal-snippet-header">
+      <span class="ws-bots__reveal-label">Export and start</span>
+      <button
+        type="button"
+        class="ws-btn"
+        onclick={() => copyTo(shellSnippet, "shell")}
+      >
+        {copied === "shell" ? "Copied" : "Copy commands"}
+      </button>
+    </div>
+    <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
   </div>
 
   {#if token.scopes?.length}

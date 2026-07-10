@@ -33,15 +33,25 @@ message. ClickClack never needs the Gateway or ClawRouter credential.
 - `deploy/fakeco/.env.example` — non-secret instance values.
 - `deploy/fakeco/openclaw.config.jsonc` — OpenClaw channel, gateway auth, and
   ClawRouter target contract. Every credential is an env-backed SecretRef.
+- `deploy/fakeco/aws/` — locked single-VM CloudFormation owner, deterministic
+  SSM bootstrap, backup/restore contract, and local tests.
+- `.github/workflows/fakeco-aws.yml` — manual protected-Environment operations:
+  `plan`, `apply`, `verify`, `teardown-plan`, and `teardown`.
 
 ## VM shape and network
 
-Start with 1 vCPU, 1 GiB RAM, and an 8–16 GiB encrypted persistent volume. Put
-the VM in the dedicated FakeCo AWS account and a private subnet, without a
-public IP. Keep the default loopback port binding when access is through an SSM
-tunnel or same-host reverse proxy. If a private load balancer or another
-private VM must connect directly, bind only the VM's private address and limit
-the security group to those sources.
+The guarded AWS owner locks one `t4g.small` ARM64 VM (2 vCPU, 2 GiB RAM) and an
+encrypted 16 GiB `gp3` root volume in `us-west-2`. It requires IMDSv2, assigns
+no public IP or SSH key, and uses SSM for administration. A persistent 2 GiB
+swap file keeps the initial Node + Go image build inside this small shape; CPU
+credits use cost-bounded standard mode.
+
+The owner reuses an explicitly supplied VPC, private subnet, and existing NAT
+or transit gateway. Prefer the current `crabhelm-fakeco` stack's `VpcId`,
+`ApplicationSubnetA`, and `NatGateway` resources. It never creates another NAT.
+TCP `8080` is allowed only from the supplied OpenClaw gateway security group
+and an optional metrics security group. See the complete [AWS owner
+runbook](../deploy/fakeco/aws/README.md).
 
 SQLite is the supported small-instance store. Run one application replica;
 do not place multiple containers over the same SQLite volume. Move to the
@@ -51,6 +61,10 @@ existing Postgres adapter only if the test outgrows one VM.
 
 These are deployment instructions only; repository validation does not run
 them against a cloud account.
+
+The AWS `apply` operation performs these same steps through bounded SSM and
+stores seed-equality, endpoint, metrics, backup, and integrity evidence. The
+commands below remain useful for local or inside-VM diagnosis.
 
 ```sh
 cd deploy/fakeco
@@ -184,15 +198,17 @@ For a retained test, run an online SQLite backup before stopping the service.
 `docker compose down` removes containers and the network but preserves the
 named `clickclack-fakeco-data` volume.
 
-For deliberate full teardown:
+For AWS, run `teardown-plan` first. Guarded `teardown` then requires the exact
+confirmation string and protected-Environment approval, creates a fresh hot
+backup with `PRAGMA integrity_check`, waits for an encrypted EBS snapshot,
+writes a versioned retained-resource manifest, and only then performs standard
+stack deletion. The root EBS mapping has `DeleteOnTermination=false`; the
+workflow proves that the volume remains `available` and the snapshot remains
+`completed`. It never deletes a volume, snapshot, backup, manifest, or Docker
+volume.
 
-1. Disable the OpenClaw ClickClack account, revoke its ClickClack bot token,
-   revoke/rotate the ClawRouter and Gateway credentials, and delete all four
-   external secret records (including the canary human session token).
-2. Stop ClickClack with `docker compose down`.
-3. After confirming no backup is needed, remove the disposable data with
-   `docker compose down --volumes`.
-4. Remove the private DNS/load-balancer target and terminate the FakeCo VM
-   through the owning infrastructure workflow.
-5. Verify production Cloudflare Worker, domains, Postgres, and R2 were never in
-   the plan or teardown set.
+Before teardown, disable the OpenClaw ClickClack account and revoke or rotate
+its ClickClack, ClawRouter, Gateway, and canary-human credentials in their
+external secret stores. Final disposal of retained AWS data is a separate
+account-owner action. Verify the production Cloudflare Worker, domains,
+Postgres, and R2 never appear in the plan or teardown set.

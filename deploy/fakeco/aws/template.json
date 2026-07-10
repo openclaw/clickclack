@@ -1,0 +1,438 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Guarded single-VM ClickClack owner for the isolated FakeCo environment.",
+  "Parameters": {
+    "SourceCommit": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9a-f]{40}$"
+    },
+    "ImageId": {
+      "Type": "AWS::EC2::Image::Id"
+    },
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PrivateSubnetId": {
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "OpenClawGatewaySecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "MetricsSecurityGroupId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "ArtifactBucketArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "ArtifactPrefix": {
+      "Type": "String",
+      "AllowedPattern": "^clickclack/fakeco/[a-z0-9/_-]+$"
+    },
+    "LogBucketArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "LogPrefix": {
+      "Type": "String",
+      "AllowedPattern": "^clickclack/fakeco/[a-z0-9/_-]+$"
+    },
+    "BackupBucketArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "BackupPrefix": {
+      "Type": "String",
+      "AllowedPattern": "^clickclack/fakeco/[a-z0-9/_-]+$"
+    },
+    "DataKmsKeyArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:kms:us-west-2:[0-9]{12}:key/[0-9a-f-]{36}$"
+    },
+    "WorkloadPermissionsBoundaryArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:policy/openclaw/fakeco/clickclack-workload-boundary$"
+    }
+  },
+  "Conditions": {
+    "AllowMetricsSource": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "MetricsSecurityGroupId"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "InstanceSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "FakeCo ClickClack ingress from explicitly trusted security groups",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupEgress": [
+          {
+            "Description": "Use the supplied private subnet egress path",
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": "fakeco"
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "github-actions"
+          },
+          {
+            "Key": "Project",
+            "Value": "clickclack"
+          }
+        ]
+      }
+    },
+    "GatewayIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "OpenClaw gateway to ClickClack",
+        "GroupId": {
+          "Fn::GetAtt": [
+            "InstanceSecurityGroup",
+            "GroupId"
+          ]
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 8080,
+        "ToPort": 8080,
+        "SourceSecurityGroupId": {
+          "Ref": "OpenClawGatewaySecurityGroupId"
+        }
+      }
+    },
+    "MetricsIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Condition": "AllowMetricsSource",
+      "Properties": {
+        "Description": "Optional private metrics collector to ClickClack",
+        "GroupId": {
+          "Fn::GetAtt": [
+            "InstanceSecurityGroup",
+            "GroupId"
+          ]
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 8080,
+        "ToPort": 8080,
+        "SourceSecurityGroupId": {
+          "Ref": "MetricsSecurityGroupId"
+        }
+      }
+    },
+    "InstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Path": "/openclaw/fakeco/clickclack/",
+        "PermissionsBoundary": {
+          "Ref": "WorkloadPermissionsBoundaryArn"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "SsmManagedInstanceCore",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:DescribeAssociation",
+                    "ssm:GetDeployablePatchSnapshotForInstance",
+                    "ssm:GetDocument",
+                    "ssm:DescribeDocument",
+                    "ssm:GetManifest",
+                    "ssm:ListAssociations",
+                    "ssm:ListInstanceAssociations",
+                    "ssm:PutInventory",
+                    "ssm:PutComplianceItems",
+                    "ssm:PutConfigurePackageResult",
+                    "ssm:UpdateAssociationStatus",
+                    "ssm:UpdateInstanceAssociationStatus",
+                    "ssm:UpdateInstanceInformation"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssmmessages:CreateControlChannel",
+                    "ssmmessages:CreateDataChannel",
+                    "ssmmessages:OpenControlChannel",
+                    "ssmmessages:OpenDataChannel"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2messages:AcknowledgeMessage",
+                    "ec2messages:DeleteMessage",
+                    "ec2messages:FailMessage",
+                    "ec2messages:GetEndpoint",
+                    "ec2messages:GetMessages",
+                    "ec2messages:SendReply"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "ExactFakeCoObjects",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadExactArtifacts",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${ArtifactBucketArn}/${ArtifactPrefix}/*"
+                  }
+                },
+                {
+                  "Sid": "WriteExactLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${LogBucketArn}/${LogPrefix}/*"
+                  }
+                },
+                {
+                  "Sid": "ReadWriteExactBackups",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${BackupBucketArn}/${BackupPrefix}/*"
+                  }
+                },
+                {
+                  "Sid": "UseExactDataKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:Decrypt",
+                    "kms:DescribeKey",
+                    "kms:Encrypt",
+                    "kms:GenerateDataKey"
+                  ],
+                  "Resource": {
+                    "Ref": "DataKmsKeyArn"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": "fakeco"
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "github-actions"
+          },
+          {
+            "Key": "Project",
+            "Value": "clickclack"
+          }
+        ]
+      }
+    },
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/openclaw/fakeco/clickclack/",
+        "Roles": [
+          {
+            "Ref": "InstanceRole"
+          }
+        ]
+      }
+    },
+    "Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "InstanceType": "t4g.small",
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "InstanceInitiatedShutdownBehavior": "stop",
+        "Monitoring": false,
+        "EbsOptimized": true,
+        "PropagateTagsToVolumeOnCreation": true,
+        "MetadataOptions": {
+          "HttpEndpoint": "enabled",
+          "HttpProtocolIpv6": "disabled",
+          "HttpPutResponseHopLimit": 1,
+          "HttpTokens": "required",
+          "InstanceMetadataTags": "disabled"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": false,
+            "DeleteOnTermination": true,
+            "DeviceIndex": "0",
+            "GroupSet": [
+              {
+                "Fn::GetAtt": [
+                  "InstanceSecurityGroup",
+                  "GroupId"
+                ]
+              }
+            ],
+            "SubnetId": {
+              "Ref": "PrivateSubnetId"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "DeleteOnTermination": false,
+              "Encrypted": true,
+              "KmsKeyId": {
+                "Ref": "DataKmsKeyArn"
+              },
+              "VolumeSize": 16,
+              "VolumeType": "gp3"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "clickclack-fakeco"
+          },
+          {
+            "Key": "Environment",
+            "Value": "fakeco"
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "github-actions"
+          },
+          {
+            "Key": "Project",
+            "Value": "clickclack"
+          },
+          {
+            "Key": "SourceCommit",
+            "Value": {
+              "Ref": "SourceCommit"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "InstanceId": {
+      "Value": {
+        "Ref": "Instance"
+      }
+    },
+    "PrivateIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Instance",
+          "PrivateIp"
+        ]
+      }
+    },
+    "SecurityGroupId": {
+      "Value": {
+        "Fn::GetAtt": [
+          "InstanceSecurityGroup",
+          "GroupId"
+        ]
+      }
+    },
+    "InstanceProfileArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "InstanceProfile",
+          "Arn"
+        ]
+      }
+    },
+    "InstanceProfileName": {
+      "Value": {
+        "Ref": "InstanceProfile"
+      }
+    },
+    "InstanceRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "InstanceRole",
+          "Arn"
+        ]
+      }
+    },
+    "InstanceRoleName": {
+      "Value": {
+        "Ref": "InstanceRole"
+      }
+    },
+    "SourceCommit": {
+      "Value": {
+        "Ref": "SourceCommit"
+      }
+    },
+    "VpcId": {
+      "Value": {
+        "Ref": "VpcId"
+      }
+    },
+    "PrivateSubnetId": {
+      "Value": {
+        "Ref": "PrivateSubnetId"
+      }
+    }
+  }
+}

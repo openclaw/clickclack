@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "fakeco",
+  "repository": "openclaw/clickclack",
+  "environment": "fakeco",
+  "region": "us-west-2",
+  "stackName": "clickclack-fakeco",
+  "defaultCommit": "1ef89aafc874f267e2a432c633148b1c1b200d2a",
+  "concurrencyGroup": "clickclack-fakeco-aws",
+  "githubRolePath": "openclaw/fakeco/github/clickclack-owner",
+  "cloudFormationServiceRolePath": "openclaw/fakeco/cloudformation/clickclack-service",
+  "workloadPermissionsBoundaryPath": "openclaw/fakeco/clickclack-workload-boundary",
+  "network": {
+    "preferredStackName": "crabhelm-fakeco",
+    "vpcOutput": "VpcId",
+    "privateSubnetLogicalResource": "ApplicationSubnetA",
+    "egressLogicalResource": "NatGateway"
+  },
+  "instance": {
+    "type": "t4g.small",
+    "architecture": "arm64",
+    "amiOwnerAccountId": "099720109477",
+    "amiParameter": "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id",
+    "rootDeviceName": "/dev/sda1",
+    "rootVolumeGiB": 16,
+    "rootVolumeType": "gp3"
+  },
+  "artifactNames": {
+    "source": "source.tar.gz",
+    "bootstrap": "bootstrap.sh"
+  },
+  "tags": {
+    "Environment": "fakeco",
+    "ManagedBy": "github-actions",
+    "Project": "clickclack"
+  }
+}

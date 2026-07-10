@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a guarded FakeCo-only AWS owner for one private ARM64 ClickClack VM, with existing-network reuse, exact account and role preflight, change-set-first manual operations, bounded SSM bootstrap, deterministic seed and service proof, and backup-first retained-data teardown.
 - Added an opt-in realtime tail cursor so fresh clients can skip retained history without racing new events, and applied read-receipt visibility before event pagination. Thanks @shakkernerd.
 - Preserved validated request correlation IDs as optional metadata on durable message and thread-reply events across replay and realtime delivery, and added canary run/case evidence IDs without changing message storage or gateway traffic.
 - Added an isolated FakeCo small-VM deployment path with idempotent synthetic chat seed data, OpenClaw and ClawRouter SecretRef configuration, correlated health/readiness and metadata-only telemetry, a quoted-reply end-to-end canary, tests, and teardown guidance.

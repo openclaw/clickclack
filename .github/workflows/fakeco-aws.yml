@@ -1,0 +1,827 @@
+name: FakeCo AWS owner
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Guarded owner operation.
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+          - verify
+          - teardown-plan
+          - teardown
+      source_commit:
+        description: Full ClickClack commit to build and verify.
+        required: true
+        default: 1ef89aafc874f267e2a432c633148b1c1b200d2a
+        type: string
+      confirm:
+        description: Apply requires clickclack-fakeco; teardown requires destroy-clickclack-fakeco-retain-data.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: clickclack-fakeco-aws
+  cancel-in-progress: false
+
+jobs:
+  owner:
+    if: github.ref == 'refs/heads/main' && github.ref_protected
+    environment: fakeco
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      OPERATION: ${{ inputs.operation }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      CONFIRM: ${{ inputs.confirm }}
+      FAKECO_AWS_ACCOUNT_ID: ${{ vars.FAKECO_AWS_ACCOUNT_ID }}
+      FAKECO_AWS_REGION: ${{ vars.FAKECO_AWS_REGION }}
+      FAKECO_GITHUB_ROLE_ARN: ${{ vars.FAKECO_GITHUB_ROLE_ARN }}
+      FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN: ${{ vars.FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN }}
+      FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN: ${{ vars.FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN }}
+      FAKECO_NETWORK_STACK_NAME: ${{ vars.FAKECO_NETWORK_STACK_NAME }}
+      FAKECO_VPC_ID_INPUT: ${{ vars.FAKECO_VPC_ID }}
+      FAKECO_PRIVATE_SUBNET_ID_INPUT: ${{ vars.FAKECO_PRIVATE_SUBNET_ID }}
+      FAKECO_EGRESS_RESOURCE_ID_INPUT: ${{ vars.FAKECO_EGRESS_RESOURCE_ID }}
+      FAKECO_OPENCLAW_GATEWAY_SECURITY_GROUP_ID: ${{ vars.FAKECO_OPENCLAW_GATEWAY_SECURITY_GROUP_ID }}
+      FAKECO_METRICS_SECURITY_GROUP_ID: ${{ vars.FAKECO_METRICS_SECURITY_GROUP_ID }}
+      FAKECO_AMI_ID: ${{ vars.FAKECO_AMI_ID }}
+      FAKECO_ARTIFACT_BUCKET: ${{ vars.FAKECO_ARTIFACT_BUCKET }}
+      FAKECO_ARTIFACT_PREFIX: ${{ vars.FAKECO_ARTIFACT_PREFIX }}
+      FAKECO_LOG_BUCKET: ${{ vars.FAKECO_LOG_BUCKET }}
+      FAKECO_LOG_PREFIX: ${{ vars.FAKECO_LOG_PREFIX }}
+      FAKECO_BACKUP_BUCKET: ${{ vars.FAKECO_BACKUP_BUCKET }}
+      FAKECO_BACKUP_PREFIX: ${{ vars.FAKECO_BACKUP_PREFIX }}
+      FAKECO_DATA_KMS_KEY_ARN: ${{ vars.FAKECO_DATA_KMS_KEY_ARN }}
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate locked owner and dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "openclaw/clickclack" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_REF_PROTECTED" == "true" ]]
+          [[ "$FAKECO_AWS_REGION" == "us-west-2" ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "${SOURCE_COMMIT}^{commit}"
+          git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+          case "$OPERATION" in
+            plan | verify | teardown-plan)
+              [[ -z "$CONFIRM" ]]
+              ;;
+            apply)
+              [[ "$CONFIRM" == "clickclack-fakeco" ]]
+              ;;
+            teardown)
+              [[ "$CONFIRM" == "destroy-clickclack-fakeco-retain-data" ]]
+              ;;
+            *)
+              exit 64
+              ;;
+          esac
+          node deploy/fakeco/aws/owner.mjs validate-profile
+
+      - name: Configure exact target-account role
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
+        with:
+          allowed-account-ids: ${{ vars.FAKECO_AWS_ACCOUNT_ID }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+          role-session-name: clickclack-fakeco-owner
+          role-to-assume: ${{ vars.FAKECO_GITHUB_ROLE_ARN }}
+          unset-current-credentials: true
+
+      - name: Resolve the explicitly owned network path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$FAKECO_NETWORK_STACK_NAME" ]]; then
+            [[ "$FAKECO_NETWORK_STACK_NAME" == "crabhelm-fakeco" ]]
+            aws cloudformation describe-stacks \
+              --stack-name "$FAKECO_NETWORK_STACK_NAME" \
+              --output json >"$RUNNER_TEMP/network-stack.json"
+            vpc_id="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "VpcId") | .OutputValue' "$RUNNER_TEMP/network-stack.json")"
+            subnet_id="$(aws cloudformation describe-stack-resource \
+              --stack-name "$FAKECO_NETWORK_STACK_NAME" \
+              --logical-resource-id ApplicationSubnetA \
+              --query 'StackResourceDetail.PhysicalResourceId' \
+              --output text)"
+            egress_id="$(aws cloudformation describe-stack-resource \
+              --stack-name "$FAKECO_NETWORK_STACK_NAME" \
+              --logical-resource-id NatGateway \
+              --query 'StackResourceDetail.PhysicalResourceId' \
+              --output text)"
+            [[ -z "$FAKECO_VPC_ID_INPUT" || "$FAKECO_VPC_ID_INPUT" == "$vpc_id" ]]
+            [[ -z "$FAKECO_PRIVATE_SUBNET_ID_INPUT" || "$FAKECO_PRIVATE_SUBNET_ID_INPUT" == "$subnet_id" ]]
+            [[ -z "$FAKECO_EGRESS_RESOURCE_ID_INPUT" || "$FAKECO_EGRESS_RESOURCE_ID_INPUT" == "$egress_id" ]]
+          else
+            vpc_id="$FAKECO_VPC_ID_INPUT"
+            subnet_id="$FAKECO_PRIVATE_SUBNET_ID_INPUT"
+            egress_id="$FAKECO_EGRESS_RESOURCE_ID_INPUT"
+          fi
+          [[ "$vpc_id" =~ ^vpc-[0-9a-f]+$ ]]
+          [[ "$subnet_id" =~ ^subnet-[0-9a-f]+$ ]]
+          [[ "$egress_id" =~ ^(nat|tgw)-[0-9a-f]+$ ]]
+          {
+            printf 'FAKECO_VPC_ID=%s\n' "$vpc_id"
+            printf 'FAKECO_PRIVATE_SUBNET_ID=%s\n' "$subnet_id"
+            printf 'FAKECO_EGRESS_RESOURCE_ID=%s\n' "$egress_id"
+          } >>"$GITHUB_ENV"
+
+      - name: Mask non-public infrastructure identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          identifiers=(
+            "$FAKECO_GITHUB_ROLE_ARN"
+            "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN"
+            "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN"
+            "$FAKECO_VPC_ID"
+            "$FAKECO_PRIVATE_SUBNET_ID"
+            "$FAKECO_EGRESS_RESOURCE_ID"
+            "$FAKECO_OPENCLAW_GATEWAY_SECURITY_GROUP_ID"
+            "$FAKECO_AMI_ID"
+            "$FAKECO_ARTIFACT_BUCKET"
+            "$FAKECO_LOG_BUCKET"
+            "$FAKECO_BACKUP_BUCKET"
+            "$FAKECO_DATA_KMS_KEY_ARN"
+          )
+          if [[ -n "$FAKECO_METRICS_SECURITY_GROUP_ID" ]]; then
+            identifiers+=("$FAKECO_METRICS_SECURITY_GROUP_ID")
+          fi
+          for identifier in "${identifiers[@]}"; do
+            [[ -n "$identifier" ]]
+            printf '::add-mask::%s\n' "$identifier"
+          done
+
+      - name: Preflight account, roles, network, image, and storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          actual_account="$(aws sts get-caller-identity --query Account --output text)"
+          caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          [[ "$actual_account" == "$FAKECO_AWS_ACCOUNT_ID" ]]
+          [[ "$caller_arn" == "arn:aws:sts::${actual_account}:assumed-role/clickclack-owner/clickclack-fakeco-owner" ]]
+          [[ "$FAKECO_GITHUB_ROLE_ARN" == "arn:aws:iam::${actual_account}:role/openclaw/fakeco/github/clickclack-owner" ]]
+          [[ "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" == "arn:aws:iam::${actual_account}:role/openclaw/fakeco/cloudformation/clickclack-service" ]]
+          [[ "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN" == "arn:aws:iam::${actual_account}:policy/openclaw/fakeco/clickclack-workload-boundary" ]]
+          [[ "$(aws iam get-role \
+            --role-name "${FAKECO_GITHUB_ROLE_ARN##*/}" \
+            --query 'Role.Arn' --output text)" == "$FAKECO_GITHUB_ROLE_ARN" ]]
+          [[ "$(aws iam get-role \
+            --role-name "${FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN##*/}" \
+            --query 'Role.Arn' --output text)" == "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" ]]
+          [[ "$(aws iam get-policy \
+            --policy-arn "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN" \
+            --query 'Policy.Arn' --output text)" == "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN" ]]
+
+          [[ "$(aws ec2 describe-vpcs --vpc-ids "$FAKECO_VPC_ID" \
+            --query 'Vpcs[0].State' --output text)" == "available" ]]
+          [[ "$(aws ec2 describe-vpc-attribute --vpc-id "$FAKECO_VPC_ID" \
+            --attribute enableDnsSupport --query 'EnableDnsSupport.Value' --output text)" == "True" ]]
+          [[ "$(aws ec2 describe-vpc-attribute --vpc-id "$FAKECO_VPC_ID" \
+            --attribute enableDnsHostnames --query 'EnableDnsHostnames.Value' --output text)" == "True" ]]
+          aws ec2 describe-subnets --subnet-ids "$FAKECO_PRIVATE_SUBNET_ID" \
+            --output json >"$RUNNER_TEMP/subnet.json"
+          [[ "$(jq -r '.Subnets[0].VpcId' "$RUNNER_TEMP/subnet.json")" == "$FAKECO_VPC_ID" ]]
+          [[ "$(jq -r '.Subnets[0].State' "$RUNNER_TEMP/subnet.json")" == "available" ]]
+          [[ "$(jq -r '.Subnets[0].MapPublicIpOnLaunch' "$RUNNER_TEMP/subnet.json")" == "false" ]]
+          availability_zone="$(jq -r '.Subnets[0].AvailabilityZone' "$RUNNER_TEMP/subnet.json")"
+          [[ "$(aws ec2 describe-instance-type-offerings \
+            --location-type availability-zone \
+            --filters Name=location,Values="$availability_zone" Name=instance-type,Values=t4g.small \
+            --query 'length(InstanceTypeOfferings)' --output text)" == "1" ]]
+
+          security_groups=("$FAKECO_OPENCLAW_GATEWAY_SECURITY_GROUP_ID")
+          if [[ -n "$FAKECO_METRICS_SECURITY_GROUP_ID" ]]; then
+            security_groups+=("$FAKECO_METRICS_SECURITY_GROUP_ID")
+          fi
+          for security_group in "${security_groups[@]}"; do
+            [[ "$security_group" =~ ^sg-[0-9a-f]+$ ]]
+            [[ "$(aws ec2 describe-security-groups --group-ids "$security_group" \
+              --query 'SecurityGroups[0].VpcId' --output text)" == "$FAKECO_VPC_ID" ]]
+          done
+
+          aws ec2 describe-route-tables \
+            --filters Name=association.subnet-id,Values="$FAKECO_PRIVATE_SUBNET_ID" \
+            --output json >"$RUNNER_TEMP/route-table.json"
+          if [[ "$(jq '.RouteTables | length' "$RUNNER_TEMP/route-table.json")" == "0" ]]; then
+            aws ec2 describe-route-tables \
+              --filters Name=vpc-id,Values="$FAKECO_VPC_ID" Name=association.main,Values=true \
+              --output json >"$RUNNER_TEMP/route-table.json"
+          fi
+          [[ "$(jq '.RouteTables | length' "$RUNNER_TEMP/route-table.json")" == "1" ]]
+          observed_egress="$(jq -r '
+            .RouteTables[0].Routes[] |
+            select(.DestinationCidrBlock == "0.0.0.0/0" and .State == "active") |
+            (.NatGatewayId // .TransitGatewayId // empty)
+          ' "$RUNNER_TEMP/route-table.json")"
+          [[ "$observed_egress" == "$FAKECO_EGRESS_RESOURCE_ID" ]]
+          case "$FAKECO_EGRESS_RESOURCE_ID" in
+            nat-*)
+              aws ec2 describe-nat-gateways \
+                --nat-gateway-ids "$FAKECO_EGRESS_RESOURCE_ID" \
+                --output json >"$RUNNER_TEMP/egress.json"
+              [[ "$(jq -r '.NatGateways[0].State' "$RUNNER_TEMP/egress.json")" == "available" ]]
+              [[ "$(jq -r '.NatGateways[0].VpcId' "$RUNNER_TEMP/egress.json")" == "$FAKECO_VPC_ID" ]]
+              ;;
+            tgw-*)
+              [[ "$(aws ec2 describe-transit-gateways \
+                --transit-gateway-ids "$FAKECO_EGRESS_RESOURCE_ID" \
+                --query 'TransitGateways[0].State' --output text)" == "available" ]]
+              ;;
+          esac
+
+          [[ "$FAKECO_AMI_ID" =~ ^ami-[0-9a-f]+$ ]]
+          aws ec2 describe-images \
+            --owners 099720109477 \
+            --image-ids "$FAKECO_AMI_ID" \
+            --output json >"$RUNNER_TEMP/ami.json"
+          jq -e '
+            (.Images | length) == 1 and
+            .Images[0].State == "available" and
+            .Images[0].Architecture == "arm64" and
+            .Images[0].RootDeviceType == "ebs" and
+            .Images[0].RootDeviceName == "/dev/sda1" and
+            .Images[0].VirtualizationType == "hvm" and
+            .Images[0].EnaSupport == true and
+            (.Images[0].Name | contains("ubuntu-noble-24.04-arm64-server"))
+          ' "$RUNNER_TEMP/ami.json" >/dev/null
+
+          for bucket in "$FAKECO_ARTIFACT_BUCKET" "$FAKECO_LOG_BUCKET" "$FAKECO_BACKUP_BUCKET"; do
+            aws s3api head-bucket --bucket "$bucket" --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID"
+            [[ "$(aws s3api get-bucket-location --bucket "$bucket" \
+              --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+              --query LocationConstraint --output text)" == "us-west-2" ]]
+          done
+          [[ "$(aws s3api get-bucket-versioning \
+            --bucket "$FAKECO_BACKUP_BUCKET" \
+            --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+            --query Status --output text)" == "Enabled" ]]
+          aws kms describe-key --key-id "$FAKECO_DATA_KMS_KEY_ARN" \
+            --output json >"$RUNNER_TEMP/kms.json"
+          [[ "$(jq -r '.KeyMetadata.Arn' "$RUNNER_TEMP/kms.json")" == "$FAKECO_DATA_KMS_KEY_ARN" ]]
+          [[ "$(jq -r '.KeyMetadata.KeyState' "$RUNNER_TEMP/kms.json")" == "Enabled" ]]
+          [[ "$(jq -r '.KeyMetadata.KeyManager' "$RUNNER_TEMP/kms.json")" == "CUSTOMER" ]]
+          [[ "$(jq -r '.KeyMetadata.KeyUsage' "$RUNNER_TEMP/kms.json")" == "ENCRYPT_DECRYPT" ]]
+          [[ "$(jq -r '.KeyMetadata.KeySpec' "$RUNNER_TEMP/kms.json")" == "SYMMETRIC_DEFAULT" ]]
+          aws cloudformation validate-template \
+            --template-body file://deploy/fakeco/aws/template.json >/dev/null
+          printf '%s\n' 'FakeCo AWS account/resource preflight passed.'
+
+      - name: Render exact owner inputs and deterministic artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          source_archive="$RUNNER_TEMP/clickclack-source.tar.gz"
+          bootstrap_file="$RUNNER_TEMP/bootstrap.sh"
+          git archive --format=tar "$SOURCE_COMMIT" | gzip --no-name >"$source_archive"
+          git show "$GITHUB_SHA:deploy/fakeco/aws/bootstrap.sh" >"$bootstrap_file"
+          chmod 0600 "$source_archive" "$bootstrap_file"
+          source_sha256="$(sha256sum "$source_archive" | cut -d' ' -f1)"
+          bootstrap_sha256="$(sha256sum "$bootstrap_file" | cut -d' ' -f1)"
+          rendered="$RUNNER_TEMP/fakeco-rendered.json"
+          parameters="$RUNNER_TEMP/fakeco-parameters.json"
+          node deploy/fakeco/aws/owner.mjs render \
+            --phase "$OPERATION" \
+            --commit "$SOURCE_COMMIT" \
+            --owner-commit "$GITHUB_SHA" \
+            --output "$rendered"
+          node deploy/fakeco/aws/owner.mjs parameters \
+            --rendered "$rendered" \
+            --output "$parameters"
+          {
+            printf 'CLICKCLACK_SOURCE_ARCHIVE=%s\n' "$source_archive"
+            printf 'CLICKCLACK_BOOTSTRAP_FILE=%s\n' "$bootstrap_file"
+            printf 'CLICKCLACK_SOURCE_SHA256=%s\n' "$source_sha256"
+            printf 'CLICKCLACK_BOOTSTRAP_SHA256=%s\n' "$bootstrap_sha256"
+            printf 'CLICKCLACK_RENDERED=%s\n' "$rendered"
+            printf 'CLICKCLACK_PARAMETERS=%s\n' "$parameters"
+          } >>"$GITHUB_ENV"
+
+      - name: Create and inspect CloudFormation change set
+        if: inputs.operation == 'plan' || inputs.operation == 'apply'
+        shell: bash
+        run: |
+          set -euo pipefail
+          change_set="clickclack-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if aws cloudformation describe-stacks --stack-name clickclack-fakeco >/dev/null 2>&1; then
+            change_type=UPDATE
+          else
+            change_type=CREATE
+          fi
+          cleanup_failed_plan() {
+            local exit_code=$?
+            trap - ERR
+            if [[ "$OPERATION" == "plan" && "$change_type" == "CREATE" ]]; then
+              aws cloudformation delete-change-set \
+                --stack-name clickclack-fakeco \
+                --change-set-name "$change_set" >/dev/null 2>&1 || true
+              aws cloudformation delete-stack \
+                --stack-name clickclack-fakeco \
+                --role-arn "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" \
+                --deletion-mode STANDARD >/dev/null 2>&1 || true
+              aws cloudformation wait stack-delete-complete \
+                --stack-name clickclack-fakeco >/dev/null 2>&1 || true
+            fi
+            exit "$exit_code"
+          }
+          trap cleanup_failed_plan ERR
+          aws cloudformation create-change-set \
+            --stack-name clickclack-fakeco \
+            --change-set-name "$change_set" \
+            --change-set-type "$change_type" \
+            --description "Guarded FakeCo ClickClack ${OPERATION} from protected main" \
+            --template-body file://deploy/fakeco/aws/template.json \
+            --parameters file://"$CLICKCLACK_PARAMETERS" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --role-arn "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" \
+            --tags \
+              Key=Environment,Value=fakeco \
+              Key=ManagedBy,Value=github-actions \
+              Key=Project,Value=clickclack >/dev/null
+          set +e
+          aws cloudformation wait change-set-create-complete \
+            --stack-name clickclack-fakeco \
+            --change-set-name "$change_set"
+          wait_status=$?
+          set -e
+          aws cloudformation describe-change-set \
+            --stack-name clickclack-fakeco \
+            --change-set-name "$change_set" \
+            --output json >"$RUNNER_TEMP/change-set.json"
+          status="$(jq -r '.Status' "$RUNNER_TEMP/change-set.json")"
+          reason="$(jq -r '.StatusReason // ""' "$RUNNER_TEMP/change-set.json")"
+          has_changes=true
+          if [[ "$wait_status" != "0" || "$status" != "CREATE_COMPLETE" ]]; then
+            if [[ "$reason" == *"didn't contain changes"* || "$reason" == *"No updates are to be performed"* ]]; then
+              has_changes=false
+            else
+              printf '%s\n' 'CloudFormation rejected the change set.' >&2
+              exit 1
+            fi
+          fi
+          jq '{
+            Status,
+            ExecutionStatus,
+            Changes: [.Changes[]?.ResourceChange | {
+              Action,
+              LogicalResourceId,
+              ResourceType,
+              Replacement
+            }]
+          }' "$RUNNER_TEMP/change-set.json"
+          if [[ "$OPERATION" == "apply" ]]; then
+            jq -e '[
+              .Changes[]?.ResourceChange |
+              select(
+                .Action == "Remove" or
+                .Replacement == "True" or
+                .Replacement == "Conditional"
+              )
+            ] | length == 0' "$RUNNER_TEMP/change-set.json" >/dev/null || {
+              printf '%s\n' 'Apply refuses removals and actual or conditional replacements; retain and tear down first.' >&2
+              exit 1
+            }
+          fi
+          {
+            printf 'CLICKCLACK_CHANGE_SET=%s\n' "$change_set"
+            printf 'CLICKCLACK_CHANGE_TYPE=%s\n' "$change_type"
+            printf 'CLICKCLACK_HAS_CHANGES=%s\n' "$has_changes"
+          } >>"$GITHUB_ENV"
+          trap - ERR
+
+      - name: Complete dry-run without resource execution
+        if: inputs.operation == 'plan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation delete-change-set \
+            --stack-name clickclack-fakeco \
+            --change-set-name "$CLICKCLACK_CHANGE_SET"
+          if [[ "$CLICKCLACK_CHANGE_TYPE" == "CREATE" ]]; then
+            aws cloudformation delete-stack \
+              --stack-name clickclack-fakeco \
+              --role-arn "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" \
+              --deletion-mode STANDARD
+            aws cloudformation wait stack-delete-complete --stack-name clickclack-fakeco
+          fi
+          printf '%s\n' \
+            '### FakeCo AWS plan complete' \
+            '- account, role, network, AMI, storage, and KMS preflight passed' \
+            '- CloudFormation change set inspected' \
+            '- no change set executed' \
+            '- no artifact uploaded' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Materialize immutable owner artifacts
+        if: inputs.operation == 'apply' || inputs.operation == 'verify' || inputs.operation == 'teardown'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          artifact_key="$(jq -r '.source.artifactKey' "$CLICKCLACK_RENDERED")"
+          bootstrap_key="$(jq -r '.source.bootstrapKey' "$CLICKCLACK_RENDERED")"
+          ensure_object() {
+            local file=$1
+            local key=$2
+            local digest=$3
+            local kind=$4
+            local verified_object="$RUNNER_TEMP/verified-$kind"
+            if aws s3api head-object \
+              --bucket "$FAKECO_ARTIFACT_BUCKET" \
+              --key "$key" \
+              --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+              --output json >"$RUNNER_TEMP/head-$kind.json" 2>/dev/null; then
+              :
+            else
+              aws s3 cp "$file" "s3://$FAKECO_ARTIFACT_BUCKET/$key" \
+                --only-show-errors \
+                --checksum-algorithm SHA256 \
+                --metadata "sha256=$digest,source-commit=$SOURCE_COMMIT,owner-commit=$GITHUB_SHA" \
+                --sse aws:kms \
+                --sse-kms-key-id "$FAKECO_DATA_KMS_KEY_ARN"
+            fi
+            aws s3api head-object \
+              --bucket "$FAKECO_ARTIFACT_BUCKET" \
+              --key "$key" \
+              --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+              --output json >"$RUNNER_TEMP/head-$kind.json"
+            [[ "$(jq -r '.Metadata.sha256' "$RUNNER_TEMP/head-$kind.json")" == "$digest" ]]
+            [[ "$(jq -r '.ServerSideEncryption' "$RUNNER_TEMP/head-$kind.json")" == "aws:kms" ]]
+            [[ "$(jq -r '.SSEKMSKeyId' "$RUNNER_TEMP/head-$kind.json")" == "$FAKECO_DATA_KMS_KEY_ARN" ]]
+            aws s3 cp "s3://$FAKECO_ARTIFACT_BUCKET/$key" "$verified_object" --only-show-errors
+            [[ "$(sha256sum "$verified_object" | cut -d' ' -f1)" == "$digest" ]]
+          }
+          ensure_object \
+            "$CLICKCLACK_BOOTSTRAP_FILE" "$bootstrap_key" "$CLICKCLACK_BOOTSTRAP_SHA256" bootstrap
+          if [[ "$OPERATION" == "apply" ]]; then
+            ensure_object \
+              "$CLICKCLACK_SOURCE_ARCHIVE" "$artifact_key" "$CLICKCLACK_SOURCE_SHA256" source
+          fi
+          {
+            printf 'CLICKCLACK_ARTIFACT_KEY=%s\n' "$artifact_key"
+            printf 'CLICKCLACK_BOOTSTRAP_KEY=%s\n' "$bootstrap_key"
+          } >>"$GITHUB_ENV"
+
+      - name: Execute approved change set
+        if: inputs.operation == 'apply'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$CLICKCLACK_HAS_CHANGES" == "true" ]]; then
+            aws cloudformation execute-change-set \
+              --stack-name clickclack-fakeco \
+              --change-set-name "$CLICKCLACK_CHANGE_SET"
+            if [[ "$CLICKCLACK_CHANGE_TYPE" == "CREATE" ]]; then
+              aws cloudformation wait stack-create-complete --stack-name clickclack-fakeco
+            else
+              aws cloudformation wait stack-update-complete --stack-name clickclack-fakeco
+            fi
+          else
+            aws cloudformation delete-change-set \
+              --stack-name clickclack-fakeco \
+              --change-set-name "$CLICKCLACK_CHANGE_SET"
+          fi
+          aws cloudformation update-termination-protection \
+            --stack-name clickclack-fakeco \
+            --enable-termination-protection >/dev/null
+
+      - name: Verify exact stack and instance
+        if: inputs.operation != 'plan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          stack_file="$RUNNER_TEMP/fakeco-stack.json"
+          instance_file="$RUNNER_TEMP/fakeco-instance.json"
+          volume_file="$RUNNER_TEMP/fakeco-volume.json"
+          security_group_file="$RUNNER_TEMP/fakeco-security-group.json"
+          workload_iam_file="$RUNNER_TEMP/fakeco-workload-iam.json"
+          aws cloudformation describe-stacks \
+            --stack-name clickclack-fakeco \
+            --output json >"$stack_file"
+          node deploy/fakeco/aws/owner.mjs verify-stack \
+            --rendered "$CLICKCLACK_RENDERED" \
+            --stack "$stack_file"
+          instance_id="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "InstanceId") | .OutputValue' "$stack_file")"
+          [[ "$instance_id" =~ ^i-[0-9a-f]+$ ]]
+          printf '::add-mask::%s\n' "$instance_id"
+          aws ec2 wait instance-running --instance-ids "$instance_id"
+          aws ec2 wait instance-status-ok --instance-ids "$instance_id"
+          aws ec2 describe-instances \
+            --instance-ids "$instance_id" \
+            --output json >"$instance_file"
+          volume_id="$(jq -r '
+            .Reservations[0].Instances[0].BlockDeviceMappings[] |
+            select(.DeviceName == "/dev/sda1") |
+            .Ebs.VolumeId
+          ' "$instance_file")"
+          [[ "$volume_id" =~ ^vol-[0-9a-f]+$ ]]
+          printf '::add-mask::%s\n' "$volume_id"
+          private_ip="$(jq -r '.Reservations[0].Instances[0].PrivateIpAddress' "$instance_file")"
+          [[ "$private_ip" =~ ^[0-9.]+$ ]]
+          printf '::add-mask::%s\n' "$private_ip"
+          aws ec2 describe-volumes \
+            --volume-ids "$volume_id" \
+            --output json >"$volume_file"
+          security_group_id="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "SecurityGroupId") | .OutputValue' "$stack_file")"
+          [[ "$security_group_id" =~ ^sg-[0-9a-f]+$ ]]
+          printf '::add-mask::%s\n' "$security_group_id"
+          aws ec2 describe-security-groups \
+            --group-ids "$security_group_id" \
+            --output json >"$security_group_file"
+          instance_profile_name="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "InstanceProfileName") | .OutputValue' "$stack_file")"
+          instance_role_name="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "InstanceRoleName") | .OutputValue' "$stack_file")"
+          [[ "$instance_profile_name" =~ ^[A-Za-z0-9+=,.@_-]{1,128}$ ]]
+          [[ "$instance_role_name" =~ ^[A-Za-z0-9+=,.@_-]{1,64}$ ]]
+          printf '::add-mask::%s\n' "$instance_profile_name"
+          printf '::add-mask::%s\n' "$instance_role_name"
+          aws iam get-instance-profile \
+            --instance-profile-name "$instance_profile_name" \
+            --output json >"$RUNNER_TEMP/instance-profile.json"
+          aws iam get-role \
+            --role-name "$instance_role_name" \
+            --output json >"$RUNNER_TEMP/workload-role.json"
+          aws iam list-attached-role-policies \
+            --role-name "$instance_role_name" \
+            --output json >"$RUNNER_TEMP/attached-role-policies.json"
+          aws iam list-role-policies \
+            --role-name "$instance_role_name" \
+            --output json >"$RUNNER_TEMP/inline-policy-names.json"
+          aws iam get-role-policy \
+            --role-name "$instance_role_name" \
+            --policy-name SsmManagedInstanceCore \
+            --output json >"$RUNNER_TEMP/ssm-role-policy.json"
+          aws iam get-role-policy \
+            --role-name "$instance_role_name" \
+            --policy-name ExactFakeCoObjects \
+            --output json >"$RUNNER_TEMP/object-role-policy.json"
+          jq -n \
+            --slurpfile profile "$RUNNER_TEMP/instance-profile.json" \
+            --slurpfile role "$RUNNER_TEMP/workload-role.json" \
+            --slurpfile attached "$RUNNER_TEMP/attached-role-policies.json" \
+            --slurpfile names "$RUNNER_TEMP/inline-policy-names.json" \
+            --slurpfile ssm "$RUNNER_TEMP/ssm-role-policy.json" \
+            --slurpfile objects "$RUNNER_TEMP/object-role-policy.json" \
+            '{
+              InstanceProfile: $profile[0].InstanceProfile,
+              Role: $role[0].Role,
+              AttachedPolicies: $attached[0].AttachedPolicies,
+              PolicyNames: $names[0].PolicyNames,
+              RolePolicies: [$ssm[0], $objects[0]]
+            }' >"$workload_iam_file"
+          node deploy/fakeco/aws/owner.mjs verify-instance \
+            --rendered "$CLICKCLACK_RENDERED" \
+            --stack "$stack_file" \
+            --instance "$instance_file" \
+            --volume "$volume_file" \
+            --security-group "$security_group_file" \
+            --workload-iam "$workload_iam_file"
+          {
+            printf 'CLICKCLACK_STACK_FILE=%s\n' "$stack_file"
+            printf 'CLICKCLACK_INSTANCE_FILE=%s\n' "$instance_file"
+            printf 'CLICKCLACK_VOLUME_FILE=%s\n' "$volume_file"
+            printf 'CLICKCLACK_SECURITY_GROUP_FILE=%s\n' "$security_group_file"
+            printf 'CLICKCLACK_WORKLOAD_IAM_FILE=%s\n' "$workload_iam_file"
+            printf 'CLICKCLACK_INSTANCE_ID=%s\n' "$instance_id"
+            printf 'CLICKCLACK_VOLUME_ID=%s\n' "$volume_id"
+          } >>"$GITHUB_ENV"
+
+      - name: Run bounded SSM bootstrap or verification
+        if: inputs.operation == 'apply' || inputs.operation == 'verify' || inputs.operation == 'teardown'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          online=false
+          for _ in $(seq 1 60); do
+            if [[ "$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=$CLICKCLACK_INSTANCE_ID" \
+              --query 'InstanceInformationList[0].PingStatus' \
+              --output text 2>/dev/null)" == "Online" ]]; then
+              online=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "$online" == "true" ]]
+          case "$OPERATION" in
+            apply) ssm_action=bootstrap ;;
+            verify) ssm_action=verify ;;
+            teardown) ssm_action=backup ;;
+          esac
+          source_uri="s3://$FAKECO_ARTIFACT_BUCKET/$CLICKCLACK_ARTIFACT_KEY"
+          source_info="$(jq -cn \
+            --arg path "https://s3.us-west-2.amazonaws.com/$FAKECO_ARTIFACT_BUCKET/$CLICKCLACK_BOOTSTRAP_KEY" \
+            '{path:$path}')"
+          command_line="$(printf \
+            'printf "%%s  %%s\\n" %s bootstrap.sh | sha256sum --check --status && env CLICKCLACK_SOURCE_COMMIT=%s CLICKCLACK_OWNER_COMMIT=%s CLICKCLACK_SOURCE_URI=%s CLICKCLACK_SOURCE_SHA256=%s CLICKCLACK_BACKUP_BUCKET=%s CLICKCLACK_BACKUP_PREFIX=%s CLICKCLACK_LOG_BUCKET=%s CLICKCLACK_LOG_PREFIX=%s CLICKCLACK_DATA_KMS_KEY_ARN=%s bash bootstrap.sh %s' \
+            "$CLICKCLACK_BOOTSTRAP_SHA256" \
+            "$SOURCE_COMMIT" \
+            "$GITHUB_SHA" \
+            "$source_uri" \
+            "$CLICKCLACK_SOURCE_SHA256" \
+            "$FAKECO_BACKUP_BUCKET" \
+            "$FAKECO_BACKUP_PREFIX" \
+            "$FAKECO_LOG_BUCKET" \
+            "$FAKECO_LOG_PREFIX" \
+            "$FAKECO_DATA_KMS_KEY_ARN" \
+            "$ssm_action")"
+          jq -n \
+            --arg source_info "$source_info" \
+            --arg command_line "$command_line" \
+            '{
+              sourceType: ["S3"],
+              sourceInfo: [$source_info],
+              commandLine: [$command_line]
+            }' >"$RUNNER_TEMP/ssm-parameters.json"
+          command_id="$(aws ssm send-command \
+            --instance-ids "$CLICKCLACK_INSTANCE_ID" \
+            --document-name AWS-RunRemoteScript \
+            --comment "Guarded ClickClack FakeCo owner operation" \
+            --timeout-seconds 2400 \
+            --parameters file://"$RUNNER_TEMP/ssm-parameters.json" \
+            --query 'Command.CommandId' \
+            --output text)"
+          [[ "$command_id" =~ ^[0-9a-f-]{36}$ ]]
+          terminal=false
+          for _ in $(seq 1 240); do
+            status="$(aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$CLICKCLACK_INSTANCE_ID" \
+              --query Status \
+              --output text 2>/dev/null || true)"
+            case "$status" in
+              Success)
+                terminal=true
+                break
+                ;;
+              Cancelled | Failed | TimedOut | Cancelling)
+                printf 'SSM owner operation failed with status %s.\n' "$status" >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          [[ "$terminal" == "true" ]]
+          aws ssm get-command-invocation \
+            --command-id "$command_id" \
+            --instance-id "$CLICKCLACK_INSTANCE_ID" \
+            --output json >"$RUNNER_TEMP/ssm-invocation.json"
+          evidence="$RUNNER_TEMP/fakeco-backup-evidence.json"
+          jq -r '.StandardOutputContent' "$RUNNER_TEMP/ssm-invocation.json" >"$evidence"
+          node deploy/fakeco/aws/owner.mjs verify-backup \
+            --rendered "$CLICKCLACK_RENDERED" \
+            --evidence "$evidence"
+          printf 'CLICKCLACK_BACKUP_EVIDENCE=%s\n' "$evidence" >>"$GITHUB_ENV"
+
+      - name: Report runtime proof and canary handoff
+        if: inputs.operation == 'apply' || inputs.operation == 'verify'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            '### FakeCo ClickClack VM verified' \
+            '- one private ARM64 t4g.small; no public IP or SSH key' \
+            '- IMDSv2 required; encrypted 16 GiB gp3 root retained on termination' \
+            '- deterministic seed rerun equality passed' \
+            '- /healthz, /readyz, and metadata-only /metrics passed' \
+            '- hot SQLite backup and integrity check passed' \
+            '- human-to-bot canary remains on the OpenClaw host; use docs/fakeco.md with its approved human token' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Produce read-only teardown plan
+        if: inputs.operation == 'teardown-plan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_count="$(aws s3api list-objects-v2 \
+            --bucket "$FAKECO_BACKUP_BUCKET" \
+            --prefix "$FAKECO_BACKUP_PREFIX/manifests/" \
+            --max-items 1 \
+            --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+            --query 'length(Contents)' \
+            --output text)"
+          [[ "$backup_count" == "1" ]]
+          printf '%s\n' \
+            '### FakeCo teardown plan verified' \
+            '- current stack, instance, and attached root volume match the locked profile' \
+            '- at least one retained SQLite backup manifest exists' \
+            '- teardown will take a fresh hot backup and encrypted EBS snapshot first' \
+            '- stack deletion is STANDARD; root volume, snapshot, and S3 objects are retained' \
+            '- no deletion was performed by this plan' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Retain backup, snapshot, and manifest before teardown
+        if: inputs.operation == 'teardown'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          snapshot_id="$(aws ec2 create-snapshot \
+            --volume-id "$CLICKCLACK_VOLUME_ID" \
+            --description 'Retained before guarded ClickClack FakeCo teardown' \
+            --tag-specifications \
+              'ResourceType=snapshot,Tags=[{Key=Environment,Value=fakeco},{Key=ManagedBy,Value=github-actions},{Key=Project,Value=clickclack}]' \
+            --query SnapshotId \
+            --output text)"
+          [[ "$snapshot_id" =~ ^snap-[0-9a-f]+$ ]]
+          printf '::add-mask::%s\n' "$snapshot_id"
+          aws ec2 wait snapshot-completed --snapshot-ids "$snapshot_id"
+          snapshot_file="$RUNNER_TEMP/fakeco-snapshot.json"
+          aws ec2 describe-snapshots \
+            --snapshot-ids "$snapshot_id" \
+            --owner-ids "$FAKECO_AWS_ACCOUNT_ID" \
+            --output json >"$snapshot_file"
+          retention_manifest="$RUNNER_TEMP/fakeco-retention-manifest.json"
+          node deploy/fakeco/aws/owner.mjs retention-manifest \
+            --rendered "$CLICKCLACK_RENDERED" \
+            --stack "$CLICKCLACK_STACK_FILE" \
+            --instance "$CLICKCLACK_INSTANCE_FILE" \
+            --volume "$CLICKCLACK_VOLUME_FILE" \
+            --security-group "$CLICKCLACK_SECURITY_GROUP_FILE" \
+            --workload-iam "$CLICKCLACK_WORKLOAD_IAM_FILE" \
+            --snapshot "$snapshot_file" \
+            --backup-evidence "$CLICKCLACK_BACKUP_EVIDENCE" \
+            --output "$retention_manifest"
+          retention_key="$FAKECO_BACKUP_PREFIX/retention/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          retention_sha="$(sha256sum "$retention_manifest" | cut -d' ' -f1)"
+          aws s3 cp "$retention_manifest" "s3://$FAKECO_BACKUP_BUCKET/$retention_key" \
+            --only-show-errors \
+            --content-type application/json \
+            --metadata "sha256=$retention_sha,owner-commit=$GITHUB_SHA" \
+            --sse aws:kms \
+            --sse-kms-key-id "$FAKECO_DATA_KMS_KEY_ARN"
+          [[ "$(aws s3api head-object \
+            --bucket "$FAKECO_BACKUP_BUCKET" \
+            --key "$retention_key" \
+            --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+            --query 'Metadata.sha256' --output text)" == "$retention_sha" ]]
+
+          restore_termination_protection=true
+          restore_guard() {
+            local exit_code=$?
+            trap - ERR
+            if [[ "$restore_termination_protection" == "true" ]]; then
+              aws cloudformation update-termination-protection \
+                --stack-name clickclack-fakeco \
+                --enable-termination-protection >/dev/null 2>&1 || true
+            fi
+            exit "$exit_code"
+          }
+          trap restore_guard ERR
+          aws cloudformation update-termination-protection \
+            --stack-name clickclack-fakeco \
+            --no-enable-termination-protection >/dev/null
+          aws cloudformation delete-stack \
+            --stack-name clickclack-fakeco \
+            --role-arn "$FAKECO_CLOUDFORMATION_SERVICE_ROLE_ARN" \
+            --deletion-mode STANDARD
+          aws cloudformation wait stack-delete-complete --stack-name clickclack-fakeco
+          restore_termination_protection=false
+          trap - ERR
+          aws ec2 wait volume-available --volume-ids "$CLICKCLACK_VOLUME_ID"
+          [[ "$(aws ec2 describe-volumes --volume-ids "$CLICKCLACK_VOLUME_ID" \
+            --query 'Volumes[0].State' --output text)" == "available" ]]
+          [[ "$(aws ec2 describe-snapshots --snapshot-ids "$snapshot_id" \
+            --owner-ids "$FAKECO_AWS_ACCOUNT_ID" \
+            --query 'Snapshots[0].State' --output text)" == "completed" ]]
+
+          finalized="$RUNNER_TEMP/fakeco-retention-manifest-final.json"
+          jq --arg deleted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '. + {stack_deleted: true, stack_deleted_at: $deleted_at, retained_root_volume_state: "available"}' \
+            "$retention_manifest" >"$finalized"
+          finalized_sha="$(sha256sum "$finalized" | cut -d' ' -f1)"
+          aws s3 cp "$finalized" "s3://$FAKECO_BACKUP_BUCKET/$retention_key" \
+            --only-show-errors \
+            --content-type application/json \
+            --metadata "sha256=$finalized_sha,owner-commit=$GITHUB_SHA" \
+            --sse aws:kms \
+            --sse-kms-key-id "$FAKECO_DATA_KMS_KEY_ARN"
+          [[ "$(aws s3api head-object \
+            --bucket "$FAKECO_BACKUP_BUCKET" \
+            --key "$retention_key" \
+            --expected-bucket-owner "$FAKECO_AWS_ACCOUNT_ID" \
+            --query 'Metadata.sha256' --output text)" == "$finalized_sha" ]]
+          printf '%s\n' \
+            '### FakeCo ClickClack teardown complete' \
+            '- fresh SQLite backup and integrity evidence retained' \
+            '- encrypted EBS snapshot retained' \
+            '- encrypted root volume retained and available' \
+            '- versioned retention manifest finalized' \
+            '- stack deleted in STANDARD mode' \
+            '- no snapshot, volume, or S3 object deletion performed' >>"$GITHUB_STEP_SUMMARY"

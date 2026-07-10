@@ -94,7 +94,8 @@ docker run --rm -v clickclack-data:/app/data clickclack \
 For the isolated non-production small-VM topology, deterministic synthetic
 seed, OpenClaw/ClawRouter SecretRef contract, canary, and teardown, see
 [FakeCo staging](fakeco.md). It uses this same Docker image and SQLite adapter;
-it does not add a second ClickClack cloud runtime.
+it does not add a second ClickClack cloud runtime. The guarded FakeCo-only AWS
+owner is documented in [deploy/fakeco/aws/README.md](../deploy/fakeco/aws/README.md).
 
 ## Health and telemetry
 

@@ -110,6 +110,9 @@ jobs:
       - name: Lint TypeScript
         run: pnpm lint
 
+      - name: Test FakeCo AWS owner
+        run: pnpm test:fakeco-aws
+
       - name: Typecheck root tests
         run: pnpm typecheck
 

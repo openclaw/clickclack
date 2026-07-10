@@ -7,6 +7,65 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Process liveness
+      security: []
+      responses:
+        "200":
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Database readiness
+      security: []
+      responses:
+        "200":
+          description: Database is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ready
+        "503":
+          description: Database is unavailable; internal error details are omitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: unavailable
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Opt-in metadata-only Prometheus metrics
+      security: []
+      responses:
+        "200":
+          description: Prometheus text exposition when metrics are enabled
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Metrics are disabled
   /api/auth/magic/request:
     post:
       operationId: requestMagicLink

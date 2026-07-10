@@ -74,6 +74,7 @@ it for anything that isn't a local clone.
   for humans, agents, and CI jobs.
 - [Configuration](configuration.md) — flag/env/file precedence.
 - [Deployment](deployment.md) — single binary, Docker, data layout, OAuth.
+- [FakeCo staging](fakeco.md) — isolated small-VM chat, synthetic seed, OpenClaw canary, and teardown.
 - [Bot installs](bot-installs.md) — create bot identities and wire their
   tokens into OpenClaw or SDK runtimes.
 - [Development](development.md) — pnpm scripts, monorepo layout, gates.

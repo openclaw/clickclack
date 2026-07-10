@@ -21,6 +21,11 @@ The server resolves callers in this order (see
 4. Dev fallback to the first user in the DB (only with
    `--dev-bootstrap=true`).
 
+`/healthz`, `/readyz`, and the opt-in `/metrics` operator endpoint do not use
+chat authentication. Keep metrics private. Every HTTP response carries
+`X-Correlation-ID`; a caller-supplied value is accepted only when it uses the
+safe bounded character set.
+
 ## Endpoint groups
 
 | Group         | Endpoints | Doc |
@@ -46,6 +51,7 @@ The server resolves callers in this order (see
 | Uploads       | `/api/uploads`, `/api/messages/{id}/attachments` | [uploads](../features/uploads.md) |
 | DMs           | `/api/dms`, `/api/dms/{id}`, `/api/dms/{id}/open`, `/api/dms/{id}/messages` | [dms](../features/dms.md) |
 | Integrations  | `/api/hooks/mattermost/{channel}` | [integrations](../features/integrations.md) |
+| Operations    | `/healthz`, `/readyz`, opt-in `/metrics` | [deployment](../deployment.md) |
 
 ## Conventions
 

@@ -17,13 +17,14 @@ clickclack <command> [flags]
 Commands:
   serve      run the HTTP/WebSocket server (default if no command given)
   migrate    apply embedded SQL migrations
-  admin      bootstrap, user create, invite create, bot create, events prune, magic-link create
+  admin      bootstrap, FakeCo seed, user create, invite create, bot create, events prune, magic-link create
   backup     write a SQLite backup file
   export     write a JSON dump to a file or stdout
   login      consume a magic-link token and store/print a session token
   logout     remove stored client credentials
   whoami     print the current server-side user
   status     print selected server/user/workspace/channel
+  canary     prove a human ClickClack -> OpenClaw -> quoted bot reply round trip
   workspaces list
   channels list
   send
@@ -78,6 +79,8 @@ clickclack serve \
 - When `--dev-bootstrap=true`, creates a `Local Captain` user and a
   `ClickClack` workspace if the DB is empty. The default is `false`.
 - Logs the resolved listen URL and the dev-auth user ID.
+- `--environment` labels opt-in metrics; `--metrics-enabled=true` exposes them
+  at `/metrics`.
 
 ## `migrate`
 
@@ -110,6 +113,18 @@ clickclack admin user create --name "Ari" --email ari@example.com [--workspace w
 
 Creates a user. With `--workspace`, also adds them to that workspace as a
 `member`. Prints the new user ID.
+
+### `admin fakeco seed`
+
+```sh
+CLICKCLACK_ENVIRONMENT=fakeco clickclack admin fakeco seed --data ./data
+```
+
+Creates the deterministic synthetic FakeCo workspace, users, channels, roots,
+and thread replies. Reruns reuse fixed identity subjects and message nonces.
+The exact environment confirmation prevents accidental use against an
+unlabelled or production deployment. The JSON output is a non-secret resource
+manifest. See [fakeco.md](fakeco.md).
 
 ### `admin invite create`
 
@@ -235,6 +250,20 @@ clickclack --server http://localhost:8080 --token sst_... threads reply msg_... 
 inline-quote an existing message in the same channel/thread (see
 [features/replies.md](features/replies.md)). `--plain` prints only the
 created message ID; `--json` prints the API response.
+
+## `canary`
+
+```sh
+CLICKCLACK_TOKEN=... \
+OPENCLAW_GATEWAY_HEALTH_URL=http://openclaw.internal:18789/healthz \
+clickclack canary --workspace fakeco --channel e2e-canary --json
+```
+
+Requires a human session token. It optionally preflights the OpenClaw health
+URL, posts a unique correlated prompt, and waits for a bot reply quoting the
+request and carrying the same marker. `--timeout`, `--poll-interval`, and
+`--correlation-id` are available for controlled tests. Never pass credentials
+inside the health URL.
 
 ## Exit codes
 

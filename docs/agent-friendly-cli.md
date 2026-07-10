@@ -37,6 +37,7 @@ Implemented now:
 - `channels list`.
 - `send`, `messages send`, `messages list`.
 - `threads open`, `threads reply`, and `reply`.
+- `canary` for a correlated human-to-OpenClaw quoted-reply check.
 - `--server`, `--token`, `--user` / `--user-id`, `--workspace`, `--channel`,
   `--json`, `--plain`, `--no-input`, and `--verbose`.
 
@@ -61,6 +62,7 @@ Client:
   logout                        remove stored credentials
   whoami                        print the current caller
   status                        print server, auth, workspace, and channel
+  canary                        prove an OpenClaw quoted-reply round trip
 
 Workspaces:
   workspaces list               list visible workspaces

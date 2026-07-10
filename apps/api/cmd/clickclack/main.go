@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/config"
+	"github.com/openclaw/clickclack/apps/api/internal/fakeco"
 	"github.com/openclaw/clickclack/apps/api/internal/httpapi"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -80,8 +82,10 @@ func serve(args []string) error {
 	flags.String("data", defaultData(), "data directory")
 	flags.String("db", defaultDB(), "database URL")
 	flags.String("uploads", defaultUploads(), "upload storage URL")
+	flags.String("environment", "", "deployment environment label")
 	configPath := flags.String("config", "", "config file")
 	flags.Bool("dev-bootstrap", false, "create a local owner/workspace/channel if no user exists")
+	flags.Bool("metrics-enabled", false, "expose metadata-only Prometheus metrics at /metrics")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -130,7 +134,11 @@ func serve(args []string) error {
 			AllowedOrg:   cfg.GitHubAllowedOrg,
 			ModeratorOrg: cfg.GitHubModeratorOrg,
 		},
-		PushNotifier: pushNotifier,
+		PushNotifier:   pushNotifier,
+		MetricsEnabled: cfg.MetricsEnabled,
+		Environment:    cfg.Environment,
+		Version:        version,
+		Commit:         commit,
 	})
 	return httpapi.ListenAndServe(ctx, cfg.Addr, server.Handler())
 }
@@ -185,6 +193,37 @@ func admin(args []string) error {
 		}
 		fmt.Printf("%s\n", user.ID)
 		return nil
+	case "fakeco":
+		if len(args) < 2 || args[1] != "seed" {
+			return fmt.Errorf("usage: clickclack admin fakeco seed --environment fakeco [--data PATH] [--db URL]")
+		}
+		flags := flag.NewFlagSet("admin fakeco seed", flag.ExitOnError)
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
+		environment := flags.String("environment", os.Getenv("CLICKCLACK_ENVIRONMENT"), "deployment environment confirmation")
+		if err := flags.Parse(args[2:]); err != nil {
+			return err
+		}
+		if *environment != "fakeco" {
+			return errors.New("refusing FakeCo seed: --environment or CLICKCLACK_ENVIRONMENT must equal \"fakeco\"")
+		}
+		if err := ensureDirs(*data); err != nil {
+			return err
+		}
+		st, err := openStore(resolveDB(*data, *dbURL))
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		ctx := context.Background()
+		if err := st.Migrate(ctx); err != nil {
+			return err
+		}
+		manifest, err := fakeco.Seed(ctx, st)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(manifest)
 	case "user":
 		if len(args) < 2 || args[1] != "create" {
 			return fmt.Errorf("usage: clickclack admin user create --name NAME --email EMAIL")
@@ -512,8 +551,12 @@ func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {
 			cfg.DB = f.Value.String()
 		case "uploads":
 			cfg.Uploads = f.Value.String()
+		case "environment":
+			cfg.Environment = f.Value.String()
 		case "dev-bootstrap":
 			cfg.DevBootstrap = f.Value.String() == "true"
+		case "metrics-enabled":
+			cfg.MetricsEnabled = f.Value.String() == "true"
 		}
 	})
 }

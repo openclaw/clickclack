@@ -47,6 +47,7 @@ short `read_when` hint at the top — open the one that matches your change.
 - **Start here:** [docs/README.md](docs/README.md) — landing page + index.
 - [Architecture](docs/architecture/overview.md) — process layout, durable vs
   realtime split.
+- [FakeCo staging](docs/fakeco.md) — isolated Docker/VM deployment, deterministic synthetic data, and OpenClaw round-trip canary.
 - [API overview](docs/api/overview.md) — REST/WebSocket surface and where to
   find each endpoint.
 - [Data model](docs/data-model.md) — tables, IDs, invariants.

@@ -11,6 +11,8 @@ type Config struct {
 	Data               string `json:"data"`
 	DB                 string `json:"db"`
 	Uploads            string `json:"uploads"`
+	Environment        string `json:"environment"`
+	MetricsEnabled     bool   `json:"metrics_enabled"`
 	PublicURL          string `json:"public_url"`
 	DevBootstrap       bool   `json:"dev_bootstrap"`
 	GitHubClientID     string `json:"github_client_id"`
@@ -56,6 +58,16 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_UPLOADS"); env != "" {
 		cfg.Uploads = env
+	}
+	if env := os.Getenv("CLICKCLACK_ENVIRONMENT"); env != "" {
+		cfg.Environment = env
+	}
+	if env := os.Getenv("CLICKCLACK_METRICS_ENABLED"); env != "" {
+		value, err := strconv.ParseBool(env)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.MetricsEnabled = value
 	}
 	if env := os.Getenv("CLICKCLACK_PUBLIC_URL"); env != "" {
 		cfg.PublicURL = env

@@ -25,6 +25,8 @@ hook in `cmd/clickclack/main.go`.
 | `--data`              | `CLICKCLACK_DATA`                | `./data`    | Data root for DB, uploads, logs. |
 | `--db`                | `CLICKCLACK_DB`                  | derived     | DB URL. Defaults to `sqlite://<data>/clickclack.db`. |
 | `--uploads`           | `CLICKCLACK_UPLOADS`             | derived     | Upload storage URL. Defaults to `file://<data>/uploads`; use `r2://bucket/prefix` for Cloudflare R2. |
+| `--environment`       | `CLICKCLACK_ENVIRONMENT`         | unset       | Low-cardinality deployment label used only by opt-in metrics. |
+| `--metrics-enabled`   | `CLICKCLACK_METRICS_ENABLED`     | `false`     | Expose metadata-only Prometheus metrics at `/metrics`; keep private. |
 | `--config`            | —                                | unset       | JSON config file. |
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | External URL. Used to build the GitHub OAuth callback. |
@@ -46,6 +48,8 @@ hook in `cmd/clickclack/main.go`.
   "data": "./data",
   "db": "sqlite:///var/lib/clickclack/clickclack.db",
   "uploads": "file:///var/lib/clickclack/uploads",
+  "environment": "staging",
+  "metrics_enabled": false,
   "dev_bootstrap": false,
   "public_url": "https://chat.example.com",
   "github_client_id": "Iv1.xxxxxxxxxxxx",

@@ -91,6 +91,23 @@ docker run --rm -v clickclack-data:/app/data clickclack \
   admin bootstrap --name "Peter" --email steipete@gmail.com
 ```
 
+For the isolated non-production small-VM topology, deterministic synthetic
+seed, OpenClaw/ClawRouter SecretRef contract, canary, and teardown, see
+[FakeCo staging](fakeco.md). It uses this same Docker image and SQLite adapter;
+it does not add a second ClickClack cloud runtime.
+
+## Health and telemetry
+
+`GET /healthz` reports process liveness. `GET /readyz` checks database
+connectivity and returns `503` without the database error when unavailable.
+Both responses include an `X-Correlation-ID`; callers may supply a safe ID or
+let the server generate one.
+
+Set `CLICKCLACK_METRICS_ENABLED=true` only on a private operator network to
+expose Prometheus text at `/metrics`. Metrics use normalized route patterns and
+status classes; they do not label users, workspaces, channels, messages, query
+values, or body content. When disabled, `/metrics` returns `404`.
+
 ## Data layout
 
 SQLite layout:

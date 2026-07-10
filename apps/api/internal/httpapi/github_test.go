@@ -13,8 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
@@ -660,17 +661,20 @@ func TestRequestLoggerOmitsQueryString(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
 	formatter := &pathOnlyLogFormatter{Logger: log.New(&logs, "", 0)}
+	router := chi.NewRouter()
+	router.Use(middleware.RequestLogger(formatter))
+	router.Get("/api/auth/github/callback", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusFound)
+	})
 	req := httptest.NewRequest(http.MethodGet, "https://example.test/api/auth/github/callback?code=secret-code&state=secret-state&after_cursor=secret-cursor", nil)
-
-	entry := formatter.NewLogEntry(req)
-	entry.Write(http.StatusFound, 0, nil, time.Millisecond, nil)
+	router.ServeHTTP(httptest.NewRecorder(), req)
 
 	got := logs.String()
 	if strings.Contains(got, "secret-code") || strings.Contains(got, "secret-state") || strings.Contains(got, "secret-cursor") || strings.Contains(got, "?") {
 		t.Fatalf("expected query string to be omitted from request log, got %q", got)
 	}
-	if !strings.Contains(got, "/api/auth/github/callback") {
-		t.Fatalf("expected path in request log, got %q", got)
+	if !strings.Contains(got, `route="/api/auth/github/callback"`) {
+		t.Fatalf("expected route pattern in request log, got %q", got)
 	}
 }
 

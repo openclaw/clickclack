@@ -1,0 +1,71 @@
+name: clickclack-fakeco
+
+x-clickclack-image: &clickclack-image
+  image: clickclack:fakeco
+  build:
+    context: ../..
+    args:
+      CLICKCLACK_WEB_VERSION: ${CLICKCLACK_WEB_VERSION:-fakeco-local}
+
+x-clickclack-environment: &clickclack-environment
+  CLICKCLACK_ADDR: ":8080"
+  CLICKCLACK_DATA: "/app/data"
+  CLICKCLACK_DB: "sqlite:///app/data/clickclack.db"
+  CLICKCLACK_UPLOADS: "file:///app/data/uploads"
+  CLICKCLACK_PUBLIC_URL: ${CLICKCLACK_PUBLIC_URL:?set CLICKCLACK_PUBLIC_URL in deploy/fakeco/.env}
+  CLICKCLACK_DEV_BOOTSTRAP: "false"
+  CLICKCLACK_ENVIRONMENT: "fakeco"
+  CLICKCLACK_METRICS_ENABLED: "true"
+
+services:
+  app:
+    <<: *clickclack-image
+    command: ["serve"]
+    environment: *clickclack-environment
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - clickclack-data:/app/data
+    ports:
+      - "${CLICKCLACK_BIND_ADDR:-127.0.0.1}:${CLICKCLACK_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.0
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  seed:
+    <<: *clickclack-image
+    profiles: ["tools"]
+    command: ["admin", "fakeco", "seed"]
+    environment: *clickclack-environment
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - clickclack-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  clickclack-data:
+    name: clickclack-fakeco-data

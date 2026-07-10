@@ -32,6 +32,8 @@ type Server struct {
 	desktopOAuth   *desktopOAuthBroker
 	disableDevAuth bool
 	pushNotifier   PushNotifier
+	metrics        *metricsRegistry
+	build          buildMetadata
 }
 
 const (
@@ -56,12 +58,20 @@ type Options struct {
 	GitHubOAuth    GitHubOAuthConfig
 	DisableDevAuth bool
 	PushNotifier   PushNotifier
+	MetricsEnabled bool
+	Environment    string
+	Version        string
+	Commit         string
 }
 
 func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	uploadStorage := options.UploadStorage
 	if uploadStorage == nil && options.UploadDir != "" {
 		uploadStorage = uploadstore.NewLocal(options.UploadDir)
+	}
+	var metrics *metricsRegistry
+	if options.MetricsEnabled {
+		metrics = newMetricsRegistry()
 	}
 	return &Server{
 		store:          st,
@@ -72,14 +82,27 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		desktopOAuth:   newDesktopOAuthBroker(),
 		disableDevAuth: options.DisableDevAuth,
 		pushNotifier:   options.PushNotifier,
+		metrics:        metrics,
+		build: buildMetadata{
+			Environment: options.Environment,
+			Version:     options.Version,
+			Commit:      options.Commit,
+		},
 	}
 }
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(correlationIDMiddleware)
+	if s.metrics != nil {
+		r.Use(s.metrics.middleware)
+	}
 	r.Use(middleware.RequestLogger(&pathOnlyLogFormatter{}))
 	r.Use(middleware.Recoverer)
+	r.Get("/healthz", s.healthz)
+	r.Get("/readyz", s.readyz)
+	r.Get("/metrics", s.metricsHandler)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.requireCookieCSRF)
@@ -197,12 +220,8 @@ func (f *pathOnlyLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry 
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	path := r.URL.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	prefix := fmt.Sprintf("\"%s %s://%s%s %s\" from %s - ", r.Method, scheme, r.Host, path, r.Proto, r.RemoteAddr)
-	return &pathOnlyLogEntry{logger: f.logger(), prefix: prefix}
+	prefix := fmt.Sprintf("method=%q scheme=%q host=%q proto=%q remote=%q correlation_id=%q ", r.Method, scheme, r.Host, r.Proto, r.RemoteAddr, correlationIDFromContext(r.Context()))
+	return &pathOnlyLogEntry{logger: f.logger(), prefix: prefix, request: r}
 }
 
 func (f *pathOnlyLogFormatter) logger() middleware.LoggerInterface {
@@ -213,12 +232,17 @@ func (f *pathOnlyLogFormatter) logger() middleware.LoggerInterface {
 }
 
 type pathOnlyLogEntry struct {
-	logger middleware.LoggerInterface
-	prefix string
+	logger  middleware.LoggerInterface
+	prefix  string
+	request *http.Request
 }
 
 func (e *pathOnlyLogEntry) Write(status, bytes int, _ http.Header, elapsed time.Duration, _ interface{}) {
-	e.logger.Print(fmt.Sprintf("%s%03d %dB in %s", e.prefix, status, bytes, elapsed))
+	route := chi.RouteContext(e.request.Context()).RoutePattern()
+	if route == "" {
+		route = "unmatched"
+	}
+	e.logger.Print(fmt.Sprintf("%sroute=%q status=%03d bytes=%d elapsed=%s", e.prefix, route, status, bytes, elapsed))
 }
 
 func (e *pathOnlyLogEntry) Panic(v interface{}, _ []byte) {

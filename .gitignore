@@ -23,3 +23,5 @@ playwright-report/
 cloudflare-seed/uploads/*
 !cloudflare-seed/uploads/.gitkeep
 supabase/.temp/
+deploy/fakeco/.env
+deploy/fakeco/seed-manifest.json

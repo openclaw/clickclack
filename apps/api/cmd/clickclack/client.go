@@ -38,9 +38,10 @@ type clientConfig struct {
 }
 
 type apiClient struct {
-	opts     clientOptions
-	defaults clientDefaults
-	http     *http.Client
+	opts          clientOptions
+	defaults      clientDefaults
+	http          *http.Client
+	correlationID string
 }
 
 type clientDefaults struct {
@@ -71,6 +72,8 @@ func client(args []string) error {
 		return c.whoami(rest[1:])
 	case "status":
 		return c.status(rest[1:])
+	case "canary":
+		return c.canary(rest[1:])
 	case "workspaces":
 		return c.workspaces(rest[1:])
 	case "channels":
@@ -161,27 +164,39 @@ func (c apiClient) withOptions(opts clientOptions, useStoredToken bool) apiClien
 }
 
 func (c apiClient) currentUser() (store.User, error) {
+	return c.currentUserContext(context.Background())
+}
+
+func (c apiClient) currentUserContext(ctx context.Context) (store.User, error) {
 	var result struct {
 		User store.User `json:"user"`
 	}
-	if err := c.get("/api/me", &result); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/api/me", nil, &result); err != nil {
 		return store.User{}, err
 	}
 	return result.User, nil
 }
 
 func (c apiClient) listWorkspaces() ([]store.Workspace, error) {
+	return c.listWorkspacesContext(context.Background())
+}
+
+func (c apiClient) listWorkspacesContext(ctx context.Context) ([]store.Workspace, error) {
 	var result struct {
 		Workspaces []store.Workspace `json:"workspaces"`
 	}
-	if err := c.get("/api/workspaces", &result); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/api/workspaces", nil, &result); err != nil {
 		return nil, err
 	}
 	return result.Workspaces, nil
 }
 
 func (c apiClient) resolveWorkspace() (store.Workspace, error) {
-	items, err := c.listWorkspaces()
+	return c.resolveWorkspaceContext(context.Background())
+}
+
+func (c apiClient) resolveWorkspaceContext(ctx context.Context) (store.Workspace, error) {
+	items, err := c.listWorkspacesContext(ctx)
 	if err != nil {
 		return store.Workspace{}, err
 	}
@@ -201,24 +216,32 @@ func (c apiClient) resolveWorkspace() (store.Workspace, error) {
 }
 
 func (c apiClient) listChannels(workspaceID string) ([]store.Channel, error) {
+	return c.listChannelsContext(context.Background(), workspaceID)
+}
+
+func (c apiClient) listChannelsContext(ctx context.Context, workspaceID string) ([]store.Channel, error) {
 	var result struct {
 		Channels []store.Channel `json:"channels"`
 	}
-	if err := c.get("/api/workspaces/"+url.PathEscape(workspaceID)+"/channels", &result); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/api/workspaces/"+url.PathEscape(workspaceID)+"/channels", nil, &result); err != nil {
 		return nil, err
 	}
 	return result.Channels, nil
 }
 
 func (c apiClient) resolveChannel() (store.Channel, error) {
+	return c.resolveChannelContext(context.Background())
+}
+
+func (c apiClient) resolveChannelContext(ctx context.Context) (store.Channel, error) {
 	needle := strings.TrimSpace(c.opts.Channel)
 	if strings.HasPrefix(needle, "chn_") {
-		workspaces, err := c.channelSearchWorkspaces()
+		workspaces, err := c.channelSearchWorkspacesContext(ctx)
 		if err != nil {
 			return store.Channel{}, err
 		}
 		for _, workspace := range workspaces {
-			items, err := c.listChannels(workspace.ID)
+			items, err := c.listChannelsContext(ctx, workspace.ID)
 			if err != nil {
 				return store.Channel{}, err
 			}
@@ -230,11 +253,11 @@ func (c apiClient) resolveChannel() (store.Channel, error) {
 		}
 		return store.Channel{}, fmt.Errorf("channel %q not found", needle)
 	}
-	workspace, err := c.resolveWorkspace()
+	workspace, err := c.resolveWorkspaceContext(ctx)
 	if err != nil {
 		return store.Channel{}, err
 	}
-	items, err := c.listChannels(workspace.ID)
+	items, err := c.listChannelsContext(ctx, workspace.ID)
 	if err != nil {
 		return store.Channel{}, err
 	}
@@ -258,14 +281,18 @@ func (c apiClient) resolveChannel() (store.Channel, error) {
 }
 
 func (c apiClient) channelSearchWorkspaces() ([]store.Workspace, error) {
+	return c.channelSearchWorkspacesContext(context.Background())
+}
+
+func (c apiClient) channelSearchWorkspacesContext(ctx context.Context) ([]store.Workspace, error) {
 	if strings.TrimSpace(c.opts.Workspace) != "" {
-		workspace, err := c.resolveWorkspace()
+		workspace, err := c.resolveWorkspaceContext(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return []store.Workspace{workspace}, nil
 	}
-	return c.listWorkspaces()
+	return c.listWorkspacesContext(ctx)
 }
 
 func (c apiClient) get(path string, out any) error {
@@ -289,6 +316,9 @@ func (c apiClient) doJSON(ctx context.Context, method, path string, body any, ou
 	}
 	if c.opts.UserID != "" {
 		req.Header.Set("X-ClickClack-User", c.opts.UserID)
+	}
+	if c.correlationID != "" {
+		req.Header.Set("X-Correlation-ID", c.correlationID)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

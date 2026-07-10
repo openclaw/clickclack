@@ -55,6 +55,14 @@ func TestCommandDBDefaultsUseEnvironment(t *testing.T) {
 	}
 }
 
+func TestFakeCoSeedRequiresExplicitEnvironment(t *testing.T) {
+	t.Setenv("CLICKCLACK_ENVIRONMENT", "")
+	err := admin([]string{"fakeco", "seed", "--data", t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), `must equal "fakeco"`) {
+		t.Fatalf("expected FakeCo environment refusal, got %v", err)
+	}
+}
+
 func TestOpenUploadStorageValidation(t *testing.T) {
 	if _, err := openUploadStorage(config.Config{Data: t.TempDir(), Uploads: "r2://bucket/prod"}); err == nil {
 		t.Fatal("expected missing r2 credentials error")

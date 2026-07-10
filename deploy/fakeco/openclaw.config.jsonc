@@ -1,0 +1,58 @@
+{
+  // Non-secret targets are environment-substituted by OpenClaw at load time.
+  "models": {
+    "providers": {
+      "clawrouter": {
+        "baseUrl": "${CLAWROUTER_BASE_URL}",
+        "apiKey": {
+          "source": "env",
+          "provider": "default",
+          "id": "CLAWROUTER_API_KEY"
+        }
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "clawrouter/${CLAWROUTER_MODEL_ID}"
+      }
+    }
+  },
+  "gateway": {
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "OPENCLAW_GATEWAY_TOKEN"
+      }
+    }
+  },
+  "channels": {
+    "clickclack": {
+      "enabled": true,
+      "baseUrl": "${CLICKCLACK_FAKECO_BASE_URL}",
+      "workspace": "fakeco",
+      "defaultAccount": "fakeco",
+      "accounts": {
+        "fakeco": {
+          "name": "FakeCo OpenClaw",
+          "token": {
+            "source": "env",
+            "provider": "default",
+            "id": "CLICKCLACK_FAKECO_BOT_TOKEN"
+          },
+          "defaultTo": "channel:e2e-canary",
+          "allowFrom": ["*"]
+        }
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "clawrouter": { "enabled": true },
+      "clickclack": { "enabled": true }
+    }
+  }
+}

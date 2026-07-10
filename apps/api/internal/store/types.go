@@ -688,6 +688,7 @@ type UpdateMemberModerationInput struct {
 
 type Store interface {
 	Close() error
+	Ping(ctx context.Context) error
 	Migrate(ctx context.Context) error
 	EnsureBootstrap(ctx context.Context, name, email string) (User, error)
 	CreateUser(ctx context.Context, input CreateUserInput) (User, error)

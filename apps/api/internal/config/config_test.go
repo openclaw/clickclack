@@ -11,6 +11,8 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_DATA", "/tmp/clickclack")
 	t.Setenv("CLICKCLACK_DB", "sqlite:///tmp/clickclack.db")
 	t.Setenv("CLICKCLACK_UPLOADS", "r2://clickclack-uploads/prod")
+	t.Setenv("CLICKCLACK_ENVIRONMENT", "fakeco")
+	t.Setenv("CLICKCLACK_METRICS_ENABLED", "true")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "https://clickclack.test")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "false")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "client")
@@ -26,7 +28,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.PublicURL != "https://clickclack.test" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
 		t.Fatalf("unexpected env config: %#v", cfg)
 	}
 
@@ -46,6 +48,8 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_DATA", "")
 	t.Setenv("CLICKCLACK_DB", "")
 	t.Setenv("CLICKCLACK_UPLOADS", "")
+	t.Setenv("CLICKCLACK_ENVIRONMENT", "")
+	t.Setenv("CLICKCLACK_METRICS_ENABLED", "")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "")
@@ -71,6 +75,11 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Fatal("expected missing config error")
 	}
+	t.Setenv("CLICKCLACK_METRICS_ENABLED", "not-bool")
+	if _, err := Load(""); err == nil {
+		t.Fatal("expected bad metrics bool env error")
+	}
+	t.Setenv("CLICKCLACK_METRICS_ENABLED", "")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "not-bool")
 	if _, err := Load(""); err == nil {
 		t.Fatal("expected bad bool env error")

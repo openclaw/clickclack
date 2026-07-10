@@ -44,6 +44,8 @@ func Open(dbURL string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
 func (s *Store) Migrate(ctx context.Context) (err error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {

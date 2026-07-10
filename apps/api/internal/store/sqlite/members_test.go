@@ -265,6 +265,72 @@ func TestWorkspaceMemberSearchUsesUnicodeLowercaseKeys(t *testing.T) {
 	}
 }
 
+func TestWorkspaceMemberPageMigrationsUpgradeExistingData(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := Open("sqlite://" + t.TempDir() + "/clickclack.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	applySQLiteMigrationsBefore(t, ctx, st, "0019_workspace_member_page_indexes.sql")
+	mustExecSQL(t, ctx, st, `
+		INSERT INTO users (id, display_name, handle, created_at)
+		VALUES
+			('usr_owner', 'Owner', 'owner', ?),
+			('usr_unicode', 'ÉLODIE', 'ÉLODIE-HANDLE', ?)`,
+		now(), now(),
+	)
+	mustExecSQL(t, ctx, st, `
+		INSERT INTO workspaces (id, name, slug, created_at)
+		VALUES ('wsp_upgrade', 'Upgrade', 'upgrade', ?)`,
+		now(),
+	)
+	mustExecSQL(t, ctx, st, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES
+			('wsp_upgrade', 'usr_owner', 'owner', ?),
+			('wsp_upgrade', 'usr_unicode', 'member', ?)`,
+		now(), now(),
+	)
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var roleSort int
+	var sortName, sortHandle string
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT role_sort, sort_name, sort_handle
+		FROM workspace_members
+		WHERE workspace_id = 'wsp_upgrade' AND user_id = 'usr_unicode'`,
+	).Scan(&roleSort, &sortName, &sortHandle); err != nil {
+		t.Fatal(err)
+	}
+	if roleSort != 2 || sortName != "élodie" || sortHandle != "élodie-handle" {
+		t.Fatalf("unexpected migrated sort keys: role=%d name=%q handle=%q", roleSort, sortName, sortHandle)
+	}
+	if got := scalarCount(t, ctx, st, `
+		SELECT COUNT(*)
+		FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_workspace_members_page'`,
+	); got != 1 {
+		t.Fatalf("expected workspace member page index, got %d", got)
+	}
+
+	page, err := st.ListWorkspaceMemberPage(ctx, "wsp_upgrade", "usr_owner", store.WorkspaceMemberPageRequest{
+		Query: "ÉLO",
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TotalCount == nil || *page.TotalCount != 1 || len(page.Members) != 1 || page.Members[0].User.ID != "usr_unicode" {
+		t.Fatalf("unexpected migrated member page: %#v", page)
+	}
+}
+
 func memberNames(members []store.WorkspaceMember) []string {
 	names := make([]string, 0, len(members))
 	for _, member := range members {

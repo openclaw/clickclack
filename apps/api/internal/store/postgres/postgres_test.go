@@ -2,6 +2,10 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"io/fs"
+	"net/url"
 	"os"
 	"sort"
 	"sync"
@@ -11,6 +15,78 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
+
+func TestWorkspaceMemberPageMigrationUpgradesExistingData(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	applyPostgresMigrationsBefore(t, ctx, st, "0013_workspace_member_page_indexes.sql")
+
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, handle, created_at)
+		VALUES
+			('usr_owner', 'Owner', 'owner', $1),
+			('usr_unicode', 'ÉLODIE', 'ÉLODIE-HANDLE', $2)`,
+		now(), now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspaces (id, name, slug, created_at)
+		VALUES ('wsp_upgrade', 'Upgrade', 'upgrade', $1)`,
+		now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES
+			('wsp_upgrade', 'usr_owner', 'owner', $1),
+			('wsp_upgrade', 'usr_unicode', 'member', $2)`,
+		now(), now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var roleSort int
+	var sortName, sortHandle string
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT role_sort, sort_name, sort_handle
+		FROM workspace_members
+		WHERE workspace_id = 'wsp_upgrade' AND user_id = 'usr_unicode'`,
+	).Scan(&roleSort, &sortName, &sortHandle); err != nil {
+		t.Fatal(err)
+	}
+	if roleSort != 2 || sortName != "élodie" || sortHandle != "élodie-handle" {
+		t.Fatalf("unexpected migrated sort keys: role=%d name=%q handle=%q", roleSort, sortName, sortHandle)
+	}
+	var indexCount int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM pg_indexes
+		WHERE schemaname = current_schema()
+		  AND indexname = 'idx_workspace_members_page'`,
+	).Scan(&indexCount); err != nil {
+		t.Fatal(err)
+	}
+	if indexCount != 1 {
+		t.Fatalf("expected workspace member page index, got %d", indexCount)
+	}
+
+	page, err := st.ListWorkspaceMemberPage(ctx, "wsp_upgrade", "usr_owner", store.WorkspaceMemberPageRequest{
+		Query: "ÉLO",
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TotalCount == nil || *page.TotalCount != 1 || len(page.Members) != 1 || page.Members[0].User.ID != "usr_unicode" {
+		t.Fatalf("unexpected migrated member page: %#v", page)
+	}
+}
 
 func TestPostgresStoreSmoke(t *testing.T) {
 	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
@@ -96,6 +172,85 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	}
 	if !foundCreated {
 		t.Fatalf("unexpected search results: %#v", results)
+	}
+}
+
+func newIsolatedPostgresTestStore(t *testing.T) *Store {
+	t.Helper()
+	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set CLICKCLACK_POSTGRES_TEST_DSN to run Postgres integration smoke")
+	}
+	adminDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adminDB.Ping(); err != nil {
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	schema := fmt.Sprintf("member_upgrade_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE SCHEMA ` + schema); err != nil {
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		_, _ = adminDB.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	st, err := Open(parsed.String())
+	if err != nil {
+		_, _ = adminDB.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = st.Close()
+		_, _ = adminDB.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+		_ = adminDB.Close()
+	})
+	return st
+}
+
+func applyPostgresMigrationsBefore(t *testing.T, ctx context.Context, st *Store, cutoff string) {
+	t.Helper()
+	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		name := entry.Name()
+		if name >= cutoff {
+			continue
+		}
+		body, err := migrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := st.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
+			_ = tx.Rollback()
+			t.Fatalf("%s: %v", name, err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES ($1, $2)`, name, now()); err != nil {
+			_ = tx.Rollback()
+			t.Fatalf("%s migration record: %v", name, err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

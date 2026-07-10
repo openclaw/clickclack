@@ -26,6 +26,22 @@ jobs:
     name: Go
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: clickclack_test
+          POSTGRES_PASSWORD: clickclack
+          POSTGRES_USER: clickclack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clickclack -d clickclack_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CLICKCLACK_POSTGRES_TEST_DSN: postgres://clickclack:clickclack@127.0.0.1:5432/clickclack_test?sslmode=disable
     steps:
       - name: Check out
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3

@@ -298,7 +298,12 @@ func TestHTTPBotManagementAuthorization(t *testing.T) {
 	if serviceBot.Bot.OwnerUserID != "" || serviceBot.BotToken.Token == "" {
 		t.Fatalf("unexpected service bot payload: %#v", serviceBot)
 	}
-	expectStatusAsUser(t, member.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens", nil, http.StatusForbidden)
+	serviceTokens := getJSONAsUser[struct {
+		BotTokens []store.BotToken `json:"bot_tokens"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens")
+	if len(serviceTokens.BotTokens) != 1 || serviceTokens.BotTokens[0].Token != "" {
+		t.Fatalf("expected member to see redacted service token metadata, got %#v", serviceTokens.BotTokens)
+	}
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceBot.Bot.ID+"/tokens", strings.NewReader(`{"name":"member rotate"}`), http.StatusForbidden)
 	serviceRotation := postJSONAsUser[struct {
 		BotToken store.BotToken `json:"bot_token"`
@@ -321,7 +326,12 @@ func TestHTTPBotManagementAuthorization(t *testing.T) {
 	if userBot.Bot.OwnerUserID != botOwner.ID {
 		t.Fatalf("expected user-owned bot, got %#v", userBot.Bot)
 	}
-	expectStatusAsUser(t, moderator.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens", nil, http.StatusForbidden)
+	userTokens := getJSONAsUser[struct {
+		BotTokens []store.BotToken `json:"bot_tokens"`
+	}](t, moderator.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens")
+	if len(userTokens.BotTokens) != 1 || userTokens.BotTokens[0].Token != "" {
+		t.Fatalf("expected manager to see redacted user-owned token metadata, got %#v", userTokens.BotTokens)
+	}
 	expectStatusAsUser(t, moderator.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+userBot.Bot.ID+"/tokens", strings.NewReader(`{"name":"manager rotate"}`), http.StatusForbidden)
 	ownerRotation := postJSONAsUser[struct {
 		BotToken store.BotToken `json:"bot_token"`

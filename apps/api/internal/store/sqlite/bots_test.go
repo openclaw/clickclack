@@ -60,8 +60,12 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if _, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{WorkspaceID: workspace.ID, BotUserID: serviceBot.ID, Name: "member", CreatedBy: member.ID}); !errors.Is(err, store.ErrNotWorkspaceManager) {
 		t.Fatalf("expected member service token create to require manager, got %v", err)
 	}
-	if _, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, serviceBot.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
-		t.Fatalf("expected member service token list to require manager, got %v", err)
+	serviceTokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, serviceBot.ID, member.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(serviceTokens) != 1 || serviceTokens[0].Token != "" {
+		t.Fatalf("expected member to see one redacted service token, got %#v", serviceTokens)
 	}
 	serviceRotation, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{WorkspaceID: workspace.ID, BotUserID: serviceBot.ID, Name: "manager", CreatedBy: owner.ID})
 	if err != nil {
@@ -87,8 +91,12 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, userBot.ID, moderator.ID); !errors.Is(err, store.ErrBotOwnerRequired) {
-		t.Fatalf("expected manager user-owned token list to require owner, got %v", err)
+	userTokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, userBot.ID, moderator.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(userTokens) != 1 || userTokens[0].Token != "" {
+		t.Fatalf("expected manager to see one redacted user-owned token, got %#v", userTokens)
 	}
 	if _, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{WorkspaceID: workspace.ID, BotUserID: userBot.ID, Name: "manager", CreatedBy: moderator.ID}); !errors.Is(err, store.ErrBotOwnerRequired) {
 		t.Fatalf("expected manager user-owned token create to require owner, got %v", err)
@@ -110,15 +118,15 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if got := listedBotTokenCount(managerBots, serviceBot.ID); got != 2 {
 		t.Fatalf("expected manager to see service bot token metadata, got %d", got)
 	}
-	if got := listedBotTokenCount(managerBots, userBot.ID); got != 0 {
-		t.Fatalf("expected manager not to see user-owned bot token metadata, got %d", got)
+	if got := listedBotTokenCount(managerBots, userBot.ID); got != 2 {
+		t.Fatalf("expected manager to see user-owned bot token metadata, got %d", got)
 	}
 	ownerBots, err := st.ListBots(ctx, workspace.ID, botOwner.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := listedBotTokenCount(ownerBots, serviceBot.ID); got != 0 {
-		t.Fatalf("expected plain member not to see service bot token metadata, got %d", got)
+	if got := listedBotTokenCount(ownerBots, serviceBot.ID); got != 2 {
+		t.Fatalf("expected plain member to see service bot token metadata, got %d", got)
 	}
 	if got := listedBotTokenCount(ownerBots, userBot.ID); got != 2 {
 		t.Fatalf("expected bot owner to see user-owned bot token metadata, got %d", got)
@@ -127,11 +135,11 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := listedBotTokenCount(memberBots, serviceBot.ID); got != 0 {
-		t.Fatalf("expected plain member service token list to be empty, got %d", got)
+	if got := listedBotTokenCount(memberBots, serviceBot.ID); got != 2 {
+		t.Fatalf("expected plain member to see service bot token metadata, got %d", got)
 	}
-	if got := listedBotTokenCount(memberBots, userBot.ID); got != 0 {
-		t.Fatalf("expected non-owner user bot token list to be empty, got %d", got)
+	if got := listedBotTokenCount(memberBots, userBot.ID); got != 2 {
+		t.Fatalf("expected non-owner to see user-owned bot token metadata, got %d", got)
 	}
 
 	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other"}, owner.ID)
@@ -167,8 +175,8 @@ func TestBotManagementAuthorization(t *testing.T) {
 	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspace.ID, botOwner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, userBot.ID, botOwner.ID); !errors.Is(err, store.ErrBotOwnerMembershipRequired) {
-		t.Fatalf("expected stale owner token list to require workspace membership, got %v", err)
+	if _, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, userBot.ID, botOwner.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected stale owner token list to require requester membership, got %v", err)
 	}
 	if _, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{WorkspaceID: workspace.ID, BotUserID: userBot.ID, Name: "stale owner", CreatedBy: botOwner.ID}); !errors.Is(err, store.ErrBotOwnerMembershipRequired) {
 		t.Fatalf("expected stale owner token create to require workspace membership, got %v", err)

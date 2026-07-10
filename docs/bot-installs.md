@@ -39,8 +39,11 @@ workspace.
 User-owned bots are personal automation identities. Only the human owner can
 create the bot and rotate or revoke its tokens, even if that owner is only a
 plain workspace member. Workspace owners and moderators can remove the bot from
-a workspace, but they do not gain access to that bot's token metadata or token
-rotation.
+a workspace, but they do not gain token rotation or revocation rights.
+
+Any workspace member can inspect redacted token metadata such as the token name,
+scopes, creation time, last-use time, and revocation state. Raw token values are
+returned only once, when a token is created.
 
 Removing either bot shape from a workspace deletes that workspace membership
 and revokes that bot's tokens for that workspace. The bot user row stays so old

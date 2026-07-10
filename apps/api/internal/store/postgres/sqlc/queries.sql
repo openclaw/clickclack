@@ -328,7 +328,7 @@ WHERE wm.workspace_id = sqlc.arg(workspace_id)
   AND u.kind = 'bot'
 ORDER BY wm.sort_name, wm.sort_handle, wm.user_id;
 
--- name: ListVisibleWorkspaceBotTokens :many
+-- name: ListWorkspaceBotTokenMetadata :many
 SELECT bt.id, bt.bot_user_id, bt.workspace_id,
        COALESCE(bt.owner_user_id, '') AS owner_user_id,
        bt.name, bt.scopes_json,
@@ -337,12 +337,7 @@ SELECT bt.id, bt.bot_user_id, bt.workspace_id,
        COALESCE(bt.last_used_at, '') AS last_used_at,
        COALESCE(bt.revoked_at, '') AS revoked_at
 FROM bot_tokens bt
-JOIN users u ON u.id = bt.bot_user_id
 WHERE bt.workspace_id = sqlc.arg(workspace_id)
-  AND (
-    u.owner_user_id = sqlc.arg(requester_id)
-    OR (u.owner_user_id IS NULL AND CAST(sqlc.arg(requester_is_manager) AS INTEGER) = 1)
-  )
 ORDER BY bt.bot_user_id, bt.created_at DESC, bt.id;
 
 -- name: ListBotsOwnedBy :many

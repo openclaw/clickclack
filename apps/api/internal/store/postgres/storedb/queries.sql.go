@@ -2422,7 +2422,7 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 	return items, nil
 }
 
-const listVisibleWorkspaceBotTokens = `-- name: ListVisibleWorkspaceBotTokens :many
+const listWorkspaceBotTokenMetadata = `-- name: ListWorkspaceBotTokenMetadata :many
 SELECT bt.id, bt.bot_user_id, bt.workspace_id,
        COALESCE(bt.owner_user_id, '') AS owner_user_id,
        bt.name, bt.scopes_json,
@@ -2431,22 +2431,11 @@ SELECT bt.id, bt.bot_user_id, bt.workspace_id,
        COALESCE(bt.last_used_at, '') AS last_used_at,
        COALESCE(bt.revoked_at, '') AS revoked_at
 FROM bot_tokens bt
-JOIN users u ON u.id = bt.bot_user_id
 WHERE bt.workspace_id = $1
-  AND (
-    u.owner_user_id = $2
-    OR (u.owner_user_id IS NULL AND CAST($3 AS INTEGER) = 1)
-  )
 ORDER BY bt.bot_user_id, bt.created_at DESC, bt.id
 `
 
-type ListVisibleWorkspaceBotTokensParams struct {
-	WorkspaceID        string         `json:"workspace_id"`
-	RequesterID        sql.NullString `json:"requester_id"`
-	RequesterIsManager int32          `json:"requester_is_manager"`
-}
-
-type ListVisibleWorkspaceBotTokensRow struct {
+type ListWorkspaceBotTokenMetadataRow struct {
 	ID          string `json:"id"`
 	BotUserID   string `json:"bot_user_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -2459,15 +2448,15 @@ type ListVisibleWorkspaceBotTokensRow struct {
 	RevokedAt   string `json:"revoked_at"`
 }
 
-func (q *Queries) ListVisibleWorkspaceBotTokens(ctx context.Context, arg ListVisibleWorkspaceBotTokensParams) ([]ListVisibleWorkspaceBotTokensRow, error) {
-	rows, err := q.db.QueryContext(ctx, listVisibleWorkspaceBotTokens, arg.WorkspaceID, arg.RequesterID, arg.RequesterIsManager)
+func (q *Queries) ListWorkspaceBotTokenMetadata(ctx context.Context, workspaceID string) ([]ListWorkspaceBotTokenMetadataRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceBotTokenMetadata, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListVisibleWorkspaceBotTokensRow
+	var items []ListWorkspaceBotTokenMetadataRow
 	for rows.Next() {
-		var i ListVisibleWorkspaceBotTokensRow
+		var i ListWorkspaceBotTokenMetadataRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.BotUserID,

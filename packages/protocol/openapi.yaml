@@ -450,7 +450,7 @@ paths:
                     items:
                       $ref: "#/components/schemas/BotToken"
         "403":
-          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+          description: Workspace membership required
     post:
       operationId: createWorkspaceBotToken
       parameters:
@@ -492,7 +492,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BotTokenListResponse"
         "403":
-          description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+          description: Workspace membership required
     post:
       operationId: createBotToken
       parameters:

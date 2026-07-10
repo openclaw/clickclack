@@ -2129,7 +2129,7 @@ export interface operations {
           };
         };
       };
-      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      /** @description Workspace membership required */
       403: {
         headers: {
           [name: string]: unknown;
@@ -2192,7 +2192,7 @@ export interface operations {
           "application/json": components["schemas"]["BotTokenListResponse"];
         };
       };
-      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      /** @description Workspace membership required */
       403: {
         headers: {
           [name: string]: unknown;

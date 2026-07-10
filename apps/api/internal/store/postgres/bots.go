@@ -227,23 +227,14 @@ func (s *Store) GetBotTokenAuth(ctx context.Context, token string) (store.BotTok
 }
 
 func (s *Store) ListBots(ctx context.Context, workspaceID, requesterID string) ([]store.BotWithTokens, error) {
-	role, err := s.memberRole(ctx, workspaceID, requesterID)
-	if err != nil {
+	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
 		return nil, err
 	}
 	botRows, err := s.q.ListWorkspaceBots(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	isManager := int32(0)
-	if role == store.WorkspaceRoleOwner || role == store.WorkspaceRoleModerator {
-		isManager = 1
-	}
-	tokenRows, err := s.q.ListVisibleWorkspaceBotTokens(ctx, storedb.ListVisibleWorkspaceBotTokensParams{
-		WorkspaceID:        workspaceID,
-		RequesterID:        sqlOptionalText(requesterID),
-		RequesterIsManager: isManager,
-	})
+	tokenRows, err := s.q.ListWorkspaceBotTokenMetadata(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -383,14 +374,13 @@ func (s *Store) ListBotTokensForWorkspace(ctx context.Context, workspaceID, botU
 	if botUserID == "" {
 		return nil, errors.New("bot_user_id is required")
 	}
-	bot, err := s.getWorkspaceBot(ctx, workspaceID, botUserID)
-	if err != nil {
+	if _, err := s.getWorkspaceBot(ctx, workspaceID, botUserID); err != nil {
 		return nil, err
 	}
-	if err := s.requireBotTokenManager(ctx, workspaceID, bot, requesterID); err != nil {
+	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
 		return nil, err
 	}
-	return s.listBotTokensForBotWorkspace(ctx, bot.ID, workspaceID)
+	return s.listBotTokensForBotWorkspace(ctx, botUserID, workspaceID)
 }
 
 func (s *Store) RevokeBotToken(ctx context.Context, tokenID, requesterID string) (store.BotToken, error) {

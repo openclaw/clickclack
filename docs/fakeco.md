@@ -95,8 +95,9 @@ Render `openclaw.config.jsonc` on the OpenClaw VM with these non-secret values:
 
 - `CLICKCLACK_FAKECO_BASE_URL` — private ClickClack origin.
 - `CLAWROUTER_BASE_URL` — isolated staging ClawRouter origin.
-- `CLAWROUTER_MODEL_ID` — one credential-granted catalog ID, without the
-  leading `clawrouter/`.
+- `CLAWROUTER_MODEL_ID` — one credential-granted catalog ID such as
+  `openai/gpt-5.5`, without the leading `clawrouter/`. The template expands it
+  to the canonical `clawrouter/<catalog-provider>/<catalog-model>` form.
 
 Inject these credentials from the OpenClaw process's approved secret provider:
 
@@ -104,15 +105,35 @@ Inject these credentials from the OpenClaw process's approved secret provider:
 - `CLAWROUTER_API_KEY`
 - `OPENCLAW_GATEWAY_TOKEN`
 
-The committed template contains SecretRef objects, never values. ClawRouter
-owns upstream provider credentials; none belong on the ClickClack or OpenClaw
-VMs. After OpenClaw starts, require both of these operator checks before the
-chat canary:
+The committed template contains SecretRef objects, never values. In particular,
+`models.providers.clawrouter.apiKey` resolves the env SecretRef
+`CLAWROUTER_API_KEY`. ClawRouter owns upstream provider credentials; none
+belong on the ClickClack or OpenClaw VMs.
+
+Merge the template into the isolated OpenClaw config without replacing an
+existing `plugins.allow`. When that allowlist exists, preserve its entries and
+include both `clawrouter` and `clickclack`; keep
+`plugins.entries.clawrouter.enabled=true`.
+
+After OpenClaw starts, require all of these operator checks before the chat
+canary:
 
 ```sh
-openclaw gateway status --deep
+curl -fsS "${CLAWROUTER_BASE_URL%/}/v1/health"
+curl -fsS http://127.0.0.1:18789/healthz
+curl -fsS http://127.0.0.1:18789/readyz
+openclaw models status --probe --probe-provider clawrouter \
+  --probe-max-tokens 8 --json
+openclaw agent --agent main --model clawrouter/openai/gpt-5.5 \
+  --message "Reply exactly: CLAWROUTER_CANARY_OK" --json
 openclaw channels status --probe --channel clickclack
 ```
+
+ClawRouter's `/v1/health` proves router liveness. Gateway `/healthz` is shallow
+liveness; `/readyz` proves startup readiness. The model probe verifies the
+configured provider credential and catalog path, while the direct agent canary
+proves inference through the canonical model syntax before ClickClack adds the
+channel round trip.
 
 ## End-to-end canary
 
@@ -131,9 +152,9 @@ clickclack canary --json
 
 The command first checks the configured Gateway health URL, then posts a unique
 human message and polls for an ordinary bot reply that quotes that exact
-message and contains the same correlation ID. It exits non-zero on gateway
-failure, wrong credentials, a missing workspace/channel, a bot caller, or
-timeout. The correlation ID is also sent on every HTTP request as
+message and equals `fakeco-canary-ok <correlation-id>`. It exits non-zero on
+gateway failure, wrong credentials, a missing workspace/channel, a bot caller,
+or timeout. The correlation ID is also sent on every HTTP request as
 `X-Correlation-ID` and returned by ClickClack in the response header.
 
 ## Health, logs, and telemetry

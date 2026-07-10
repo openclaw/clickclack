@@ -1250,6 +1250,15 @@ export interface components {
       has_more: boolean;
       /** @description Exact filtered member count, included only on the first page. */
       total_count?: number;
+      /** @description Exact unfiltered role totals, included only on the unfiltered first page. */
+      total_by_role?: components["schemas"]["WorkspaceMemberRoleCounts"];
+    };
+    WorkspaceMemberRoleCounts: {
+      owner: number;
+      moderator: number;
+      member: number;
+      bot: number;
+      guest: number;
     };
     MemberModeration: {
       workspace_id: string;

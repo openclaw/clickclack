@@ -1746,6 +1746,29 @@ components:
         total_count:
           type: integer
           description: Exact filtered member count, included only on the first page.
+        total_by_role:
+          allOf:
+            - $ref: "#/components/schemas/WorkspaceMemberRoleCounts"
+          description: Exact unfiltered role totals, included only on the unfiltered first page.
+    WorkspaceMemberRoleCounts:
+      type: object
+      required: [owner, moderator, member, bot, guest]
+      properties:
+        owner:
+          type: integer
+          minimum: 0
+        moderator:
+          type: integer
+          minimum: 0
+        member:
+          type: integer
+          minimum: 0
+        bot:
+          type: integer
+          minimum: 0
+        guest:
+          type: integer
+          minimum: 0
     MemberModeration:
       type: object
       required: [workspace_id, user, role, posts_remaining, post_limit]

@@ -52,6 +52,8 @@ image_state="$state_root/image-$CLICKCLACK_SOURCE_COMMIT.id"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${CLICKCLACK_SOURCE_COMMIT:0:12}"
 log_file="$log_root/$run_id.log"
 stage=initialize
+readonly aws_cli_version=2.35.20
+readonly aws_cli_archive_sha256=58799ce9276d4e8815fd19e4dc35649626c6b4fbd4d0e3df7433af9cfde41882
 
 install -d -m 0750 "$owner_root" "$release_root" "$state_root" "$log_root" "$(dirname "$runtime_env")"
 touch "$log_file"
@@ -81,12 +83,41 @@ compose() {
     "$@"
 }
 
+install_aws_cli() {
+  stage=install-aws-cli
+  dpkg --print-architecture | grep -Fx arm64
+  if /usr/local/bin/aws --version 2>&1 | grep -F "aws-cli/$aws_cli_version " >/dev/null; then
+    return
+  fi
+
+  local work archive
+  work="$(mktemp -d "$owner_root/aws-cli.XXXXXX")"
+  archive="$work/awscliv2.zip"
+  curl --proto '=https' --tlsv1.2 --fail --show-error --silent --location \
+    --retry 3 --max-time 180 \
+    "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-$aws_cli_version.zip" \
+    --output "$archive"
+  printf '%s  %s\n' "$aws_cli_archive_sha256" "$archive" | sha256sum --check --status
+  unzip -q "$archive" -d "$work"
+  if [[ -x /usr/local/aws-cli/v2/current/bin/aws ]]; then
+    "$work/aws/install" \
+      --bin-dir /usr/local/bin \
+      --install-dir /usr/local/aws-cli \
+      --update
+  else
+    "$work/aws/install" \
+      --bin-dir /usr/local/bin \
+      --install-dir /usr/local/aws-cli
+  fi
+  rm -rf "$work"
+  /usr/local/bin/aws --version 2>&1 | grep -F "aws-cli/$aws_cli_version "
+}
+
 install_runtime() {
   stage=install-runtime
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
   apt-get install -y -qq \
-    awscli \
     ca-certificates \
     curl \
     docker-compose-v2 \
@@ -94,7 +125,10 @@ install_runtime() {
     gzip \
     jq \
     sqlite3 \
-    tar
+    tar \
+    unzip
+  install_aws_cli
+  stage=install-runtime
   systemctl enable --now docker
   if ! swapon --show=NAME --noheadings | grep -Fx '/var/lib/clickclack-owner/build.swap' >/dev/null; then
     if [[ ! -f /var/lib/clickclack-owner/build.swap ]]; then

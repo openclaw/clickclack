@@ -215,8 +215,10 @@ workflow's expected SHA-256 before invoking `bash`, so a swapped object never
 executes. The instance profile cannot fetch GitHub, Parameter Store, or secrets.
 Bootstrap:
 
-1. Installs Docker, Compose, AWS CLI, SQLite, and probe tools on the Canonical
-   ARM64 image; confirms Docker reports `arm64`.
+1. Installs Docker, Compose, SQLite, and probe tools from Noble, then installs
+   a pinned official AWS CLI v2 ARM64 archive after checking its locked
+   SHA-256; confirms both the host package architecture and Docker report
+   `arm64`.
 2. Creates a persistent 2 GiB build-only swap file inside the encrypted root
    volume, then builds the repo's digest-pinned multi-architecture Dockerfile
    into a commit-specific image with a matching OCI revision label.

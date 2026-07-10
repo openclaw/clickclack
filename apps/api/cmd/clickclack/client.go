@@ -280,10 +280,6 @@ func (c apiClient) resolveChannelContext(ctx context.Context) (store.Channel, er
 	return store.Channel{}, fmt.Errorf("channel %q not found", needle)
 }
 
-func (c apiClient) channelSearchWorkspaces() ([]store.Workspace, error) {
-	return c.channelSearchWorkspacesContext(context.Background())
-}
-
 func (c apiClient) channelSearchWorkspacesContext(ctx context.Context) ([]store.Workspace, error) {
 	if strings.TrimSpace(c.opts.Workspace) != "" {
 		workspace, err := c.resolveWorkspaceContext(ctx)

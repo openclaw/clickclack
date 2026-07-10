@@ -46,9 +46,14 @@ state_root=/var/lib/clickclack-owner
 log_root=/var/log/clickclack-fakeco
 runtime_env=/etc/clickclack-fakeco/runtime.env
 runtime_override=/etc/clickclack-fakeco/compose.owner.yaml
-release="$release_root/$CLICKCLACK_SOURCE_COMMIT"
-image_name="clickclack:fakeco-$CLICKCLACK_SOURCE_COMMIT"
-image_state="$state_root/image-$CLICKCLACK_SOURCE_COMMIT.id"
+requested_source_commit="$CLICKCLACK_SOURCE_COMMIT"
+runtime_source_commit="$CLICKCLACK_SOURCE_COMMIT"
+runtime_source_sha256="$CLICKCLACK_SOURCE_SHA256"
+release="$release_root/$runtime_source_commit"
+image_name="clickclack:fakeco-$runtime_source_commit"
+image_state="$state_root/image-$runtime_source_commit.id"
+compose_override="$runtime_override"
+backup_runtime_override="$state_root/compose.backup.yaml"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${CLICKCLACK_SOURCE_COMMIT:0:12}"
 log_file="$log_root/$run_id.log"
 stage=initialize
@@ -79,8 +84,66 @@ compose() {
     --project-directory "$release/deploy/fakeco" \
     --env-file "$runtime_env" \
     -f "$release/deploy/fakeco/compose.yaml" \
-    -f "$runtime_override" \
+    -f "$compose_override" \
     "$@"
+}
+
+set_runtime_paths() {
+  release="$release_root/$runtime_source_commit"
+  image_name="clickclack:fakeco-$runtime_source_commit"
+  image_state="$state_root/image-$runtime_source_commit.id"
+}
+
+resolve_backup_runtime() {
+  stage=resolve-backup-runtime
+  local container_id configured_image running_image_id recorded_image_id
+  container_id="$(docker ps \
+    --filter 'label=com.docker.compose.project=clickclack-fakeco' \
+    --filter 'label=com.docker.compose.service=app' \
+    --format '{{.ID}}')" || return 1
+  [[ -n "$container_id" && "$container_id" != *$'\n'* ]] || return 1
+  configured_image="$(docker inspect --format '{{.Config.Image}}' "$container_id")" || return 1
+  [[ "$configured_image" =~ ^clickclack:fakeco-([0-9a-f]{40})$ ]] || return 1
+  runtime_source_commit="${BASH_REMATCH[1]}"
+  set_runtime_paths
+  [[ -d "$release" && -f "$release/.source.sha256" && -f "$image_state" ]] || return 1
+  runtime_source_sha256="$(<"$release/.source.sha256")"
+  [[ "$runtime_source_sha256" =~ ^[0-9a-f]{64}$ ]] || return 1
+  recorded_image_id="$(<"$image_state")"
+  [[ "$recorded_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+  running_image_id="$(docker inspect --format '{{.Image}}' "$container_id")" || return 1
+  [[ "$running_image_id" == "$recorded_image_id" ]] || return 1
+  [[ "$(docker image inspect --format '{{.Id}}' "$image_name")" == "$recorded_image_id" ]] || return 1
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]] || return 1
+  {
+    printf '%s\n' 'services:'
+    printf '%s\n' '  app:'
+    printf '    image: "%s"\n' "$image_name"
+    printf '%s\n' '  seed:'
+    printf '    image: "%s"\n' "$image_name"
+  } >"$backup_runtime_override" || return 1
+  chmod 0600 "$backup_runtime_override" || return 1
+  compose_override="$backup_runtime_override"
+}
+
+verify_persistent_runtime_config() {
+  local configured_images requested_images runtime_images
+  [[ -f "$runtime_env" && -f "$runtime_override" ]] || return 1
+  configured_images="$(grep -c '^    image:' "$runtime_override" || true)"
+  [[ "$configured_images" == "2" ]] || return 1
+  if [[ "$action" == "backup" ]]; then
+    grep -Eq "^CLICKCLACK_WEB_VERSION=($requested_source_commit|$runtime_source_commit)$" "$runtime_env" || return 1
+    requested_images="$(grep -Fxc "    image: \"clickclack:fakeco-$requested_source_commit\"" "$runtime_override" || true)"
+    if [[ "$requested_source_commit" == "$runtime_source_commit" ]]; then
+      [[ "$requested_images" == "2" ]] || return 1
+    else
+      runtime_images="$(grep -Fxc "    image: \"clickclack:fakeco-$runtime_source_commit\"" "$runtime_override" || true)"
+      [[ "$requested_images" == "2" || "$runtime_images" == "2" ]] || return 1
+    fi
+  else
+    grep -Fx "CLICKCLACK_WEB_VERSION=$runtime_source_commit" "$runtime_env" >/dev/null || return 1
+    [[ "$(grep -Fxc "    image: \"$image_name\"" "$runtime_override" || true)" == "2" ]] || return 1
+  fi
 }
 
 install_aws_cli() {
@@ -158,9 +221,9 @@ install_source() {
   [[ -f "$candidate/Dockerfile" ]]
   [[ -f "$candidate/deploy/fakeco/compose.yaml" ]]
   if [[ -d "$release" ]]; then
-    [[ "$(<"$release/.source.sha256")" == "$CLICKCLACK_SOURCE_SHA256" ]]
+    [[ "$(<"$release/.source.sha256")" == "$runtime_source_sha256" ]]
   else
-    printf '%s\n' "$CLICKCLACK_SOURCE_SHA256" >"$candidate/.source.sha256"
+    printf '%s\n' "$runtime_source_sha256" >"$candidate/.source.sha256"
     mv "$candidate" "$release"
   fi
   rm -rf "$work"
@@ -181,7 +244,7 @@ write_runtime_config() {
     printf 'CLICKCLACK_PUBLIC_URL=http://%s:8080\n' "$private_ip"
     printf 'CLICKCLACK_BIND_ADDR=0.0.0.0\n'
     printf 'CLICKCLACK_PORT=8080\n'
-    printf 'CLICKCLACK_WEB_VERSION=%s\n' "$CLICKCLACK_SOURCE_COMMIT"
+    printf 'CLICKCLACK_WEB_VERSION=%s\n' "$runtime_source_commit"
   } >"$runtime_env"
   {
     printf '%s\n' 'services:'
@@ -189,12 +252,12 @@ write_runtime_config() {
     printf '    image: "%s"\n' "$image_name"
     printf '%s\n' '    build:'
     printf '%s\n' '      labels:'
-    printf '        org.opencontainers.image.revision: "%s"\n' "$CLICKCLACK_SOURCE_COMMIT"
+    printf '        org.opencontainers.image.revision: "%s"\n' "$runtime_source_commit"
     printf '%s\n' '  seed:'
     printf '    image: "%s"\n' "$image_name"
     printf '%s\n' '    build:'
     printf '%s\n' '      labels:'
-    printf '        org.opencontainers.image.revision: "%s"\n' "$CLICKCLACK_SOURCE_COMMIT"
+    printf '        org.opencontainers.image.revision: "%s"\n' "$runtime_source_commit"
   } >"$runtime_override"
   chmod 0640 "$runtime_env"
   chmod 0640 "$runtime_override"
@@ -205,7 +268,7 @@ build_and_start() {
   compose build --pull app
   image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
   [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$CLICKCLACK_SOURCE_COMMIT" ]]
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]]
   printf '%s\n' "$image_id" >"$image_state"
   stage=start
   compose up -d app
@@ -213,22 +276,21 @@ build_and_start() {
 }
 
 verify_running_image() {
-  stage=runtime-identity
-  [[ -f "$release/.source.sha256" ]]
-  [[ "$(<"$release/.source.sha256")" == "$CLICKCLACK_SOURCE_SHA256" ]]
-  [[ -f "$runtime_env" && -f "$runtime_override" && -f "$image_state" ]]
-  grep -Fx "CLICKCLACK_WEB_VERSION=$CLICKCLACK_SOURCE_COMMIT" "$runtime_env" >/dev/null
-  grep -Fx "    image: \"$image_name\"" "$runtime_override" >/dev/null
-  image_id="$(<"$image_state")"
-  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-  [[ "$(docker image inspect --format '{{.Id}}' "$image_name")" == "$image_id" ]]
-  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$CLICKCLACK_SOURCE_COMMIT" ]]
   local container_id
+  stage=runtime-identity
+  [[ -f "$release/.source.sha256" ]] || return 1
+  [[ "$(<"$release/.source.sha256")" == "$runtime_source_sha256" ]] || return 1
+  [[ -f "$image_state" ]] || return 1
+  verify_persistent_runtime_config
+  image_id="$(<"$image_state")"
+  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+  [[ "$(docker image inspect --format '{{.Id}}' "$image_name")" == "$image_id" ]] || return 1
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]] || return 1
   container_id="$(compose ps -q app)"
-  [[ -n "$container_id" ]]
-  [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" == "true" ]]
-  [[ "$(docker inspect --format '{{.Image}}' "$container_id")" == "$image_id" ]]
-  [[ "$(docker inspect --format '{{.Config.Image}}' "$container_id")" == "$image_name" ]]
+  [[ -n "$container_id" && "$container_id" != *$'\n'* ]] || return 1
+  [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" == "true" ]] || return 1
+  [[ "$(docker inspect --format '{{.Image}}' "$container_id")" == "$image_id" ]] || return 1
+  [[ "$(docker inspect --format '{{.Config.Image}}' "$container_id")" == "$image_name" ]] || return 1
 }
 
 prove_seed_equality() {
@@ -288,38 +350,40 @@ cleanup_success() {
   local backup_path="$1"
   local candidate name stale_image_list
   stage=cleanup-success
-  docker container prune --force \
-    --filter 'label=com.docker.compose.project=clickclack-fakeco'
-  stale_image_list="$(docker image ls \
-    --filter 'reference=clickclack:fakeco-*' \
-    --format '{{.Repository}}:{{.Tag}}')"
-  if [[ -n "$stale_image_list" ]]; then
-    while IFS= read -r candidate; do
-      [[ "$candidate" =~ ^clickclack:fakeco-[0-9a-f]{40}$ ]]
-      if [[ "$candidate" != "$image_name" ]]; then
-        docker image rm "$candidate"
-      fi
-    done <<<"$stale_image_list"
-  fi
-  docker image prune --force
-  docker builder prune --force
+  if [[ "$action" != "backup" ]]; then
+    docker container prune --force \
+      --filter 'label=com.docker.compose.project=clickclack-fakeco'
+    stale_image_list="$(docker image ls \
+      --filter 'reference=clickclack:fakeco-*' \
+      --format '{{.Repository}}:{{.Tag}}')"
+    if [[ -n "$stale_image_list" ]]; then
+      while IFS= read -r candidate; do
+        [[ "$candidate" =~ ^clickclack:fakeco-[0-9a-f]{40}$ ]]
+        if [[ "$candidate" != "$image_name" ]]; then
+          docker image rm "$candidate"
+        fi
+      done <<<"$stale_image_list"
+    fi
+    docker image prune --force
+    docker builder prune --force
 
-  for candidate in "$release_root"/*; do
-    [[ -d "$candidate" ]] || continue
-    name="${candidate##*/}"
-    [[ "$name" =~ ^[0-9a-f]{40}$ ]] || continue
-    if [[ "$candidate" != "$release" ]]; then
-      rm -rf -- "$candidate"
-    fi
-  done
-  for candidate in "$state_root"/image-*.id; do
-    [[ -f "$candidate" ]] || continue
-    name="${candidate##*/}"
-    [[ "$name" =~ ^image-[0-9a-f]{40}\.id$ ]] || continue
-    if [[ "$candidate" != "$image_state" ]]; then
-      rm -f -- "$candidate"
-    fi
-  done
+    for candidate in "$release_root"/*; do
+      [[ -d "$candidate" ]] || continue
+      name="${candidate##*/}"
+      [[ "$name" =~ ^[0-9a-f]{40}$ ]] || continue
+      if [[ "$candidate" != "$release" ]]; then
+        rm -rf -- "$candidate"
+      fi
+    done
+    for candidate in "$state_root"/image-*.id; do
+      [[ -f "$candidate" ]] || continue
+      name="${candidate##*/}"
+      [[ "$name" =~ ^image-[0-9a-f]{40}\.id$ ]] || continue
+      if [[ "$candidate" != "$image_state" ]]; then
+        rm -f -- "$candidate"
+      fi
+    done
+  fi
   rm -f -- "$backup_path"
 }
 
@@ -338,6 +402,9 @@ cleanup_run_files() {
     "$state_root/backup-head-$run_id.json" \
     "$state_root/app-$run_id.log" \
     "$log_file"
+  if [[ "$action" == "backup" ]]; then
+    rm -f -- "$backup_runtime_override"
+  fi
 }
 
 create_backup() {
@@ -353,7 +420,7 @@ create_backup() {
   [[ "$integrity" == "ok" ]]
   backup_sha="$(sha256sum "$host_path" | cut -d' ' -f1)"
   backup_size="$(stat -c '%s' "$host_path")"
-  backup_key="$CLICKCLACK_BACKUP_PREFIX/sqlite/$CLICKCLACK_SOURCE_COMMIT/clickclack-$run_id.db"
+  backup_key="$CLICKCLACK_BACKUP_PREFIX/sqlite/$runtime_source_commit/clickclack-$run_id.db"
   backup_head="$state_root/backup-head-$run_id.json"
   manifest_key="$CLICKCLACK_BACKUP_PREFIX/manifests/$run_id.json"
   log_key="$CLICKCLACK_LOG_PREFIX/runs/$run_id/owner.log"
@@ -361,7 +428,7 @@ create_backup() {
   stage=upload-backup
   aws s3 cp "$host_path" "s3://$CLICKCLACK_BACKUP_BUCKET/$backup_key" \
     --only-show-errors \
-    --metadata "sha256=$backup_sha,source-commit=$CLICKCLACK_SOURCE_COMMIT" \
+    --metadata "sha256=$backup_sha,source-commit=$runtime_source_commit" \
     --sse aws:kms \
     --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
   aws s3api head-object \
@@ -370,7 +437,7 @@ create_backup() {
     --output json >"$backup_head"
   jq -e \
     --arg sha256 "$backup_sha" \
-    --arg source_commit "$CLICKCLACK_SOURCE_COMMIT" \
+    --arg source_commit "$runtime_source_commit" \
     --arg kms_key "$CLICKCLACK_DATA_KMS_KEY_ARN" \
     --argjson size "$backup_size" \
     '.Metadata.sha256 == $sha256 and
@@ -378,17 +445,14 @@ create_backup() {
      .ServerSideEncryption == "aws:kms" and
      .SSEKMSKeyId == $kms_key and
      .ContentLength == $size' "$backup_head" >/dev/null
-  docker compose \
-    --project-directory "$release/deploy/fakeco" \
-    --env-file "$runtime_env" \
-    -f "$release/deploy/fakeco/compose.yaml" \
-    logs --no-color --tail 500 app >"$state_root/app-$run_id.log"
+  compose logs --no-color --tail 500 app >"$state_root/app-$run_id.log"
 
   evidence_file="$state_root/evidence-$run_id.json"
   jq -n \
     --arg action "$action" \
     --arg run_id "$run_id" \
-    --arg source_commit "$CLICKCLACK_SOURCE_COMMIT" \
+    --arg source_commit "$runtime_source_commit" \
+    --arg stack_source_commit "$requested_source_commit" \
     --arg owner_commit "$CLICKCLACK_OWNER_COMMIT" \
     --arg image_id "$image_id" \
     --arg seed_sha256 "$seed_sha256" \
@@ -405,6 +469,7 @@ create_backup() {
       action: $action,
       run_id: $run_id,
       source_commit: $source_commit,
+      stack_source_commit: $stack_source_commit,
       owner_commit: $owner_commit,
       runtime_commit_verified: true,
       image_id: $image_id,
@@ -443,8 +508,12 @@ if [[ "$action" == "bootstrap" ]]; then
   build_and_start
 else
   stage=existing-runtime
-  [[ -d "$release" ]]
   systemctl is-active --quiet docker
+  if [[ "$action" == "backup" ]]; then
+    resolve_backup_runtime
+  else
+    [[ -d "$release" ]]
+  fi
   verify_running_image
 fi
 

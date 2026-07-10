@@ -270,11 +270,12 @@ Bootstrap:
 7. Uses `clickclack backup`, runs `PRAGMA integrity_check`, hashes the file,
    and uploads the encrypted database, metadata-only evidence, and bounded safe
    logs to the exact prefixes.
-8. Only after the backup and evidence are durable, removes the local backup,
-   stopped project containers, obsolete commit-scoped images/releases/image
-   records, and unused image/build cache. The active commit remains intact;
-   failures before durable retention preserve their local candidate and backup
-   for diagnosis.
+8. Only after the backup and evidence are durable, removes the local backup.
+   Apply and verify runs also remove stopped project containers, obsolete
+   commit-scoped images/releases/image records, and unused image/build cache.
+   The active commit remains intact; teardown preserves any failed update
+   candidate until the retained-volume snapshot, and failures before durable
+   retention preserve their local candidate and backup for diagnosis.
 
 Evidence records commit IDs, verified image ID, run ID, seed-manifest hash,
 boolean probe results, backup object key/hash, and log object key. It contains
@@ -318,16 +319,26 @@ integrity manifest. Backups and manifests are immutable by key; the guarded
 teardown manifest is written once before deletion and finalized as a new S3
 object version after deletion.
 
+For teardown, the owner derives the runtime commit from the one running Compose
+app container, then verifies its commit-scoped image tag, image ID, image label,
+state record, and release. This deliberately allows a retained backup after a
+failed update advances the stack parameter while the prior verified release is
+still serving. Evidence records both the stack commit and the observed runtime
+commit, and the backup uses the observed commit's immutable image through a
+temporary Compose override.
+
 Restore is intentionally manual and SSM-administered. Start from an applied VM
-at the same source commit, run `verify` to retain a fresh pre-restore backup,
-then open an SSM session and perform these steps as root with the selected
-backup key and recorded SHA-256:
+at the backup evidence's `source_commit` (the observed runtime commit), run
+`verify` to retain a fresh pre-restore backup, then open an SSM session and
+perform these steps as root with the selected backup key and recorded SHA-256:
 
 ```sh
 release=/opt/clickclack/releases/1ef89aafc874f267e2a432c633148b1c1b200d2a
 runtime_env=/etc/clickclack-fakeco/runtime.env
+runtime_override=/etc/clickclack-fakeco/compose.owner.yaml
 compose=(docker compose --project-directory "$release/deploy/fakeco" \
-  --env-file "$runtime_env" -f "$release/deploy/fakeco/compose.yaml")
+  --env-file "$runtime_env" -f "$release/deploy/fakeco/compose.yaml" \
+  -f "$runtime_override")
 mount_path="$(docker volume inspect clickclack-fakeco-data --format '{{.Mountpoint}}')"
 restore_dir="/var/lib/clickclack-owner/restore-$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 0700 "$restore_dir"

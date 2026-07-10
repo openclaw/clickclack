@@ -392,6 +392,7 @@ async function retentionManifest() {
     environment: "fakeco",
     stack_name: rendered.stackName,
     source_commit: rendered.source.commit,
+    runtime_source_commit: backup.source_commit,
     owner_commit: rendered.source.ownerCommit,
     created_at: new Date().toISOString(),
     retained: {
@@ -731,7 +732,19 @@ function canonicalJSON(value) {
 function validateBackupEvidence(rendered, evidence) {
   assert(evidence.schema_version === 1, "backup evidence schema drifted");
   assert(evidence.status === "passed", "backup evidence did not pass");
-  assert(evidence.source_commit === rendered.source.commit, "backup source commit drifted");
+  const expectedAction = { apply: "bootstrap", verify: "verify", teardown: "backup" }[
+    rendered.phase
+  ];
+  assert(expectedAction !== undefined, "rendered phase does not produce backup evidence");
+  assert(evidence.action === expectedAction, "backup action drifted");
+  assert(
+    evidence.stack_source_commit === rendered.source.commit,
+    "backup stack source commit drifted",
+  );
+  validateCommit(evidence.source_commit, "backup runtime source commit");
+  if (rendered.phase !== "teardown") {
+    assert(evidence.source_commit === rendered.source.commit, "backup source commit drifted");
+  }
   assert(evidence.owner_commit === rendered.source.ownerCommit, "backup owner commit drifted");
   assert(evidence.runtime_commit_verified === true, "backup evidence lacks runtime commit proof");
   assert(/^sha256:[0-9a-f]{64}$/u.test(evidence.image_id ?? ""), "backup image ID is invalid");
@@ -751,8 +764,10 @@ function validateBackupEvidence(rendered, evidence) {
   assert(evidence.integrity_check === "ok", "backup SQLite integrity proof failed");
   assert(evidence.backup?.bucket === rendered.destinations.backups.bucket, "backup bucket drifted");
   assert(
-    evidence.backup?.key?.startsWith(`${rendered.destinations.backups.prefix}/`),
-    "backup object escaped the locked prefix",
+    evidence.backup?.key?.startsWith(
+      `${rendered.destinations.backups.prefix}/sqlite/${evidence.source_commit}/`,
+    ),
+    "backup object escaped the locked runtime prefix",
   );
   assert(/^[0-9a-f]{64}$/u.test(evidence.backup?.sha256 ?? ""), "backup SHA-256 is invalid");
   assert(
@@ -760,7 +775,7 @@ function validateBackupEvidence(rendered, evidence) {
     "backup manifest bucket drifted",
   );
   assert(
-    evidence.manifest?.key?.startsWith(`${rendered.destinations.backups.prefix}/`),
+    evidence.manifest?.key?.startsWith(`${rendered.destinations.backups.prefix}/manifests/`),
     "backup manifest escaped the locked prefix",
   );
 }

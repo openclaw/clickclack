@@ -11,6 +11,7 @@ const ownerPath = path.join(directory, "owner.mjs");
 const profilePath = path.join(directory, "profile.json");
 const templatePath = path.join(directory, "template.json");
 const bootstrapPath = path.join(directory, "bootstrap.sh");
+const runbookPath = path.join(directory, "README.md");
 const workflowPath = path.join(repositoryRoot, ".github/workflows/fakeco-aws.yml");
 const ownerTemplate = JSON.parse(await readFile(templatePath, "utf8"));
 const sourceCommit = "1ef89aafc874f267e2a432c633148b1c1b200d2a";
@@ -418,7 +419,49 @@ test("stack, instance, backup, and retention replay verify the observed resource
   ]);
   assert.notEqual(incompleteSeed.status, 0);
   assert.match(incompleteSeed.stderr, /seed manifest SHA-256/u);
-  await writeFile(evidencePath, JSON.stringify(backupEvidence(rendered)));
+  const runningCommit = "e".repeat(40);
+  const rollbackEvidence = backupEvidence(rendered, runningCommit);
+  await writeFile(evidencePath, JSON.stringify(rollbackEvidence));
+  assert.equal(
+    runOwner(["verify-backup", "--rendered", renderedPath, "--evidence", evidencePath]).status,
+    0,
+    "teardown must accept a separately verified running commit after a failed update",
+  );
+  const verifyRenderedPath = path.join(temporary, "verify-rendered.json");
+  await writeFile(verifyRenderedPath, JSON.stringify({ ...rendered, phase: "verify" }));
+  const verifyMismatch = runOwner([
+    "verify-backup",
+    "--rendered",
+    verifyRenderedPath,
+    "--evidence",
+    evidencePath,
+  ]);
+  assert.notEqual(verifyMismatch.status, 0);
+  assert.match(verifyMismatch.stderr, /backup action drifted/u);
+  const verifyRuntimeMismatchEvidence = { ...rollbackEvidence, action: "verify" };
+  await writeFile(evidencePath, JSON.stringify(verifyRuntimeMismatchEvidence));
+  const verifyRuntimeMismatch = runOwner([
+    "verify-backup",
+    "--rendered",
+    verifyRenderedPath,
+    "--evidence",
+    evidencePath,
+  ]);
+  assert.notEqual(verifyRuntimeMismatch.status, 0);
+  assert.match(verifyRuntimeMismatch.stderr, /backup source commit drifted/u);
+  const stackDriftEvidence = backupEvidence(rendered, runningCommit);
+  stackDriftEvidence.stack_source_commit = "f".repeat(40);
+  await writeFile(evidencePath, JSON.stringify(stackDriftEvidence));
+  const stackDrift = runOwner([
+    "verify-backup",
+    "--rendered",
+    renderedPath,
+    "--evidence",
+    evidencePath,
+  ]);
+  assert.notEqual(stackDrift.status, 0);
+  assert.match(stackDrift.stderr, /stack source commit drifted/u);
+  await writeFile(evidencePath, JSON.stringify(rollbackEvidence));
   const retention = runOwner([
     "retention-manifest",
     "--rendered",
@@ -446,6 +489,8 @@ test("stack, instance, backup, and retention replay verify the observed resource
   assert.equal(manifest.retained.root_volume.id, "vol-1234abcd");
   assert.equal(manifest.retained.snapshot.id, "snap-1234abcd");
   assert.equal(manifest.retained.sqlite_backup.sha256, "b".repeat(64));
+  assert.equal(manifest.source_commit, sourceCommit);
+  assert.equal(manifest.runtime_source_commit, runningCommit);
   assert.deepEqual(manifest.deletion_contract, {
     cloudformation_mode: "STANDARD",
     snapshots_deleted: false,
@@ -755,6 +800,140 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   );
 });
 
+test("teardown backup resolves and verifies the actually running release", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const bootstrap = await readFile(bootstrapPath, "utf8");
+  const functionsStart = bootstrap.indexOf("set_runtime_paths() {");
+  const functionsEnd = bootstrap.indexOf("\ninstall_aws_cli() {", functionsStart);
+  assert.notEqual(functionsStart, -1);
+  assert.notEqual(functionsEnd, -1);
+  const runtimeFunctions = bootstrap.slice(functionsStart, functionsEnd).trim();
+  const requested = "a".repeat(40);
+  const running = "b".repeat(40);
+  const sourceDigest = "c".repeat(64);
+  const imageID = `sha256:${"d".repeat(64)}`;
+  const releaseRoot = path.join(temporary, "releases");
+  const stateRoot = path.join(temporary, "state");
+  const bin = path.join(temporary, "bin");
+  await mkdir(path.join(releaseRoot, running), { recursive: true });
+  await mkdir(stateRoot, { recursive: true });
+  await mkdir(bin, { recursive: true });
+  await writeFile(path.join(releaseRoot, running, ".source.sha256"), `${sourceDigest}\n`);
+  await writeFile(path.join(stateRoot, `image-${running}.id`), `${imageID}\n`);
+  await writeFile(
+    path.join(temporary, "compose.owner.yaml"),
+    `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${requested}"\n`,
+  );
+  await writeFile(path.join(temporary, "runtime.env"), `CLICKCLACK_WEB_VERSION=${requested}\n`);
+  await writeFile(
+    path.join(bin, "docker"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+  ps)
+    printf '%s\n' running-container
+    if [[ "\${MULTIPLE_CONTAINERS:-false}" == true ]]; then
+      printf '%s\n' second-container
+    fi
+    ;;
+  inspect)
+    case "\${3:-}" in
+      '{{.Config.Image}}') printf 'clickclack:fakeco-%s\n' "$RUNNING_COMMIT" ;;
+      '{{.Image}}') printf '%s\n' "$IMAGE_ID" ;;
+      *) exit 64 ;;
+    esac
+    ;;
+  image)
+    [[ "\${2:-}" == inspect && "\${3:-}" == --format ]]
+    case "\${4:-}" in
+      '{{.Id}}') printf '%s\n' "$IMAGE_ID" ;;
+      '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+        printf '%s\n' "$RUNNING_COMMIT"
+        ;;
+      *) exit 64 ;;
+    esac
+    ;;
+  *) exit 64 ;;
+esac
+`,
+    { mode: 0o755 },
+  );
+  const scriptPath = path.join(temporary, "resolve-runtime.sh");
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+${runtimeFunctions}
+stage=initialize
+release_root="$TEST_ROOT/releases"
+state_root="$TEST_ROOT/state"
+runtime_override="$TEST_ROOT/compose.owner.yaml"
+runtime_env="$TEST_ROOT/runtime.env"
+backup_runtime_override="$state_root/compose.backup.yaml"
+compose_override="$runtime_override"
+action=backup
+requested_source_commit="$REQUESTED_COMMIT"
+runtime_source_commit="$requested_source_commit"
+runtime_source_sha256="$REQUESTED_SHA256"
+set_runtime_paths
+resolve_backup_runtime
+[[ "$runtime_source_commit" == "$RUNNING_COMMIT" ]]
+[[ "$runtime_source_sha256" == "$RUNNING_SHA256" ]]
+[[ "$release" == "$release_root/$RUNNING_COMMIT" ]]
+[[ "$image_state" == "$state_root/image-$RUNNING_COMMIT.id" ]]
+[[ "$compose_override" == "$backup_runtime_override" ]]
+grep -Fx "    image: \\"clickclack:fakeco-$RUNNING_COMMIT\\"" "$backup_runtime_override"
+grep -Fx "    image: \\"clickclack:fakeco-$REQUESTED_COMMIT\\"" "$runtime_override"
+verify_persistent_runtime_config
+`,
+    { mode: 0o755 },
+  );
+  const environment = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH}`,
+    TEST_ROOT: temporary,
+    REQUESTED_COMMIT: requested,
+    REQUESTED_SHA256: "e".repeat(64),
+    RUNNING_COMMIT: running,
+    RUNNING_SHA256: sourceDigest,
+    IMAGE_ID: imageID,
+  };
+  const resolved = spawnSync("bash", [scriptPath], { encoding: "utf8", env: environment });
+  assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
+
+  await writeFile(
+    path.join(temporary, "compose.owner.yaml"),
+    `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${running}"\n`,
+  );
+  const mixedPersistentImages = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: environment,
+  });
+  assert.notEqual(mixedPersistentImages.status, 0);
+  await writeFile(
+    path.join(temporary, "compose.owner.yaml"),
+    `services:\n  app:\n    image: "clickclack:fakeco-${requested}"\n  seed:\n    image: "clickclack:fakeco-${requested}"\n`,
+  );
+
+  await writeFile(path.join(stateRoot, `image-${running}.id`), `sha256:${"f".repeat(64)}\n`);
+  assert.equal(
+    await readFile(path.join(stateRoot, `image-${running}.id`), "utf8"),
+    `sha256:${"f".repeat(64)}\n`,
+  );
+  const identityDrift = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: environment,
+  });
+  assert.notEqual(identityDrift.status, 0, `${identityDrift.stdout}\n${identityDrift.stderr}`);
+
+  await writeFile(path.join(stateRoot, `image-${running}.id`), `${imageID}\n`);
+  const ambiguous = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: { ...environment, MULTIPLE_CONTAINERS: "true" },
+  });
+  assert.notEqual(ambiguous.status, 0);
+});
+
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
   const temporary = await temporaryDirectory(t);
   const bootstrap = await readFile(bootstrapPath, "utf8");
@@ -799,6 +978,7 @@ fi
 set -euo pipefail
 ${cleanupFunction}
 stage=initialize
+action="\${TEST_ACTION:-verify}"
 release_root="$TEST_ROOT/releases"
 state_root="$TEST_ROOT/state"
 release="$release_root/$CURRENT_COMMIT"
@@ -841,10 +1021,25 @@ cleanup_success "$TEST_ROOT/backup.db"
   });
   assert.equal(failedCleanup.status, 17);
   await stat(backup);
+
+  await mkdir(path.join(releaseRoot, stale), { recursive: true });
+  await writeFile(path.join(stateRoot, `image-${stale}.id`), `sha256:${"b".repeat(64)}\n`);
+  await writeFile(backup, "teardown backup\n");
+  const dockerCommandsBeforeBackup = await readFile(dockerLog, "utf8");
+  const backupCleanup = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: { ...cleanupEnvironment, TEST_ACTION: "backup" },
+  });
+  assert.equal(backupCleanup.status, 0, backupCleanup.stderr);
+  await stat(path.join(releaseRoot, stale));
+  await stat(path.join(stateRoot, `image-${stale}.id`));
+  await assert.rejects(stat(backup), { code: "ENOENT" });
+  assert.equal(await readFile(dockerLog, "utf8"), dockerCommandsBeforeBackup);
 });
 
 test("bootstrap proves seed equality, health, readiness, metadata metrics, and backup integrity", async () => {
   const bootstrap = await readFile(bootstrapPath, "utf8");
+  const runbook = await readFile(runbookPath, "utf8");
   assert.doesNotMatch(bootstrap, /^\s*awscli\s*\\\s*$/mu);
   assert.match(bootstrap, /readonly aws_cli_version=2\.35\.20/u);
   assert.match(
@@ -857,7 +1052,7 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /unzip -q "\$archive"/u);
   assert.match(bootstrap, /\/usr\/local\/bin\/aws --version/u);
   assert.match(bootstrap, /docker version --format '\{\{\.Server\.Arch\}\}' \| grep -Fx 'arm64'/u);
-  assert.match(bootstrap, /clickclack:fakeco-\$CLICKCLACK_SOURCE_COMMIT/u);
+  assert.match(bootstrap, /clickclack:fakeco-\$runtime_source_commit/u);
   assert.match(bootstrap, /org\.opencontainers\.image\.revision/u);
   assert.match(bootstrap, /\.source\.sha256/u);
   assert.match(bootstrap, /docker inspect --format '\{\{\.Image\}\}'/u);
@@ -874,7 +1069,16 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /--sse aws:kms/u);
   assert.match(
     bootstrap,
-    /--metadata "sha256=\$backup_sha,source-commit=\$CLICKCLACK_SOURCE_COMMIT"/u,
+    /--metadata "sha256=\$backup_sha,source-commit=\$runtime_source_commit"/u,
+  );
+  assert.match(bootstrap, /stack_source_commit: \$stack_source_commit/u);
+  assert.match(bootstrap, /resolve_backup_runtime/u);
+  assert.match(bootstrap, /label=com\.docker\.compose\.project=clickclack-fakeco/u);
+  assert.match(bootstrap, /label=com\.docker\.compose\.service=app/u);
+  assert.match(bootstrap, /compose\.backup\.yaml/u);
+  assert.ok(
+    bootstrap.lastIndexOf("resolve_backup_runtime") < bootstrap.lastIndexOf("verify_running_image"),
+    "backup must resolve the running release before identity verification",
   );
   assert.match(bootstrap, /aws s3api head-object/u);
   assert.match(bootstrap, /\.ContentLength == \$size/u);
@@ -900,6 +1104,8 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
     bootstrap,
     /CLICKCLACK_TOKEN|CLAWROUTER_API_KEY|OPENCLAW_GATEWAY_TOKEN|down --volumes/u,
   );
+  assert.match(runbook, /runtime_override=\/etc\/clickclack-fakeco\/compose\.owner\.yaml/u);
+  assert.match(runbook, /-f "\$runtime_override"/u);
 });
 
 function fakecoEnvironment() {
@@ -1137,11 +1343,14 @@ function snapshotResponse() {
   };
 }
 
-function backupEvidence(rendered) {
+function backupEvidence(rendered, runtimeCommit = rendered.source.commit) {
+  const action = { apply: "bootstrap", verify: "verify", teardown: "backup" }[rendered.phase];
   return {
     schema_version: 1,
     status: "passed",
-    source_commit: rendered.source.commit,
+    action,
+    source_commit: runtimeCommit,
+    stack_source_commit: rendered.source.commit,
     owner_commit: rendered.source.ownerCommit,
     runtime_commit_verified: true,
     image_id: `sha256:${"c".repeat(64)}`,
@@ -1153,7 +1362,7 @@ function backupEvidence(rendered) {
     integrity_check: "ok",
     backup: {
       bucket: rendered.destinations.backups.bucket,
-      key: `${rendered.destinations.backups.prefix}/sqlite/${sourceCommit}/clickclack.db`,
+      key: `${rendered.destinations.backups.prefix}/sqlite/${runtimeCommit}/clickclack.db`,
       sha256: "b".repeat(64),
     },
     manifest: {

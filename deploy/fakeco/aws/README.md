@@ -333,8 +333,17 @@ at the backup evidence's `source_commit` (the observed runtime commit), run
 perform these steps as root with the selected backup key and recorded SHA-256:
 
 ```sh
+(
+set -euo pipefail
+umask 077
 evidence=/path/to/selected-backup-evidence.json
 runtime_commit="$(jq -er '.source_commit | strings | select(test("^[0-9a-f]{40}$"))' "$evidence")"
+backup_bucket="$(jq -er '.backup.bucket | strings' "$evidence")"
+backup_key="$(jq -er '.backup.key | strings' "$evidence")"
+backup_sha256="$(jq -er '.backup.sha256 | strings | select(test("^[0-9a-f]{64}$"))' "$evidence")"
+[[ "$backup_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
+[[ "$backup_key" =~ ^clickclack/fakeco/[a-z0-9/_-]+/sqlite/$runtime_commit/clickclack-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.db$ ]]
+[[ "$backup_key" != *//* ]]
 release="/opt/clickclack/releases/$runtime_commit"
 runtime_env=/etc/clickclack-fakeco/runtime.env
 runtime_override=/etc/clickclack-fakeco/compose.owner.yaml
@@ -346,8 +355,8 @@ compose=(docker compose --project-directory "$release/deploy/fakeco" \
 mount_path="$(docker volume inspect clickclack-fakeco-data --format '{{.Mountpoint}}')"
 restore_dir="/var/lib/clickclack-owner/restore-$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 0700 "$restore_dir"
-aws s3 cp "s3://BACKUP_BUCKET/BACKUP_KEY" "$restore_dir/clickclack.db" --only-show-errors
-printf '%s  %s\n' 'RECORDED_SHA256' "$restore_dir/clickclack.db" | sha256sum --check
+aws s3 cp "s3://$backup_bucket/$backup_key" "$restore_dir/clickclack.db" --only-show-errors
+printf '%s  %s\n' "$backup_sha256" "$restore_dir/clickclack.db" | sha256sum --check
 test "$(sqlite3 "$restore_dir/clickclack.db" 'PRAGMA integrity_check;')" = ok
 "${compose[@]}" stop app
 owner_uid="$(stat -c %u "$mount_path/clickclack.db")"
@@ -361,6 +370,7 @@ install -o "$owner_uid" -g "$owner_gid" -m 0600 \
 "${compose[@]}" up -d app
 curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/readyz
+)
 ```
 
 The previous database and WAL files remain in the restore directory. Run

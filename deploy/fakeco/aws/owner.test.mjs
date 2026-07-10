@@ -1164,10 +1164,17 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
     /CLICKCLACK_TOKEN|CLAWROUTER_API_KEY|OPENCLAW_GATEWAY_TOKEN|down --volumes/u,
   );
   assert.match(runbook, /runtime_override=\/etc\/clickclack-fakeco\/compose\.owner\.yaml/u);
+  assert.match(runbook, /\(\nset -euo pipefail\numask 077/u);
   assert.match(runbook, /runtime_commit="\$\(jq -er '\.source_commit/u);
+  assert.match(runbook, /backup_bucket="\$\(jq -er '\.backup\.bucket/u);
+  assert.match(runbook, /backup_key="\$\(jq -er '\.backup\.key/u);
+  assert.match(runbook, /backup_sha256="\$\(jq -er '\.backup\.sha256/u);
+  assert.match(runbook, /sqlite\/\$runtime_commit\/clickclack-/u);
   assert.match(runbook, /release="\/opt\/clickclack\/releases\/\$runtime_commit"/u);
   assert.match(runbook, /clickclack:fakeco-\$runtime_commit/u);
   assert.match(runbook, /-f "\$runtime_override"/u);
+  assert.match(runbook, /s3:\/\/\$backup_bucket\/\$backup_key/u);
+  assert.match(runbook, /"\$backup_sha256" "\$restore_dir\/clickclack\.db"/u);
 });
 
 function fakecoEnvironment() {

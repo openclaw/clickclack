@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -755,6 +755,94 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   );
 });
 
+test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const bootstrap = await readFile(bootstrapPath, "utf8");
+  const cleanupStart = bootstrap.indexOf("cleanup_success() {");
+  const cleanupEnd = bootstrap.indexOf("\ncleanup_run_files() {", cleanupStart);
+  assert.notEqual(cleanupStart, -1);
+  assert.notEqual(cleanupEnd, -1);
+  const cleanupFunction = bootstrap.slice(cleanupStart, cleanupEnd).trim();
+  const current = "a".repeat(40);
+  const stale = "b".repeat(40);
+  const releaseRoot = path.join(temporary, "releases");
+  const stateRoot = path.join(temporary, "state");
+  const bin = path.join(temporary, "bin");
+  const backup = path.join(temporary, "backup.db");
+  const dockerLog = path.join(temporary, "docker.log");
+  await mkdir(path.join(releaseRoot, current), { recursive: true });
+  await mkdir(path.join(releaseRoot, stale), { recursive: true });
+  await mkdir(path.join(releaseRoot, "manual"), { recursive: true });
+  await mkdir(stateRoot, { recursive: true });
+  await mkdir(bin, { recursive: true });
+  await writeFile(path.join(stateRoot, `image-${current}.id`), `sha256:${"a".repeat(64)}\n`);
+  await writeFile(path.join(stateRoot, `image-${stale}.id`), `sha256:${"b".repeat(64)}\n`);
+  await writeFile(backup, "synthetic backup\n");
+  await writeFile(
+    path.join(bin, "docker"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >>"$DOCKER_LOG"
+if [[ "\${1:-} \${2:-}" == "image ls" ]]; then
+  printf '%s\\n' "clickclack:fakeco-$CURRENT_COMMIT" "clickclack:fakeco-$STALE_COMMIT"
+fi
+if [[ -n "\${FAIL_DOCKER_MATCH:-}" && "$*" == *"$FAIL_DOCKER_MATCH"* ]]; then
+  exit 17
+fi
+`,
+    { mode: 0o755 },
+  );
+  const scriptPath = path.join(temporary, "cleanup-test.sh");
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+${cleanupFunction}
+stage=initialize
+release_root="$TEST_ROOT/releases"
+state_root="$TEST_ROOT/state"
+release="$release_root/$CURRENT_COMMIT"
+image_state="$state_root/image-$CURRENT_COMMIT.id"
+image_name="clickclack:fakeco-$CURRENT_COMMIT"
+cleanup_success "$TEST_ROOT/backup.db"
+`,
+    { mode: 0o755 },
+  );
+  const cleanupEnvironment = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH}`,
+    TEST_ROOT: temporary,
+    CURRENT_COMMIT: current,
+    STALE_COMMIT: stale,
+    DOCKER_LOG: dockerLog,
+  };
+  const result = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: cleanupEnvironment,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  await stat(path.join(releaseRoot, current));
+  await stat(path.join(releaseRoot, "manual"));
+  await stat(path.join(stateRoot, `image-${current}.id`));
+  await assert.rejects(stat(path.join(releaseRoot, stale)), { code: "ENOENT" });
+  await assert.rejects(stat(path.join(stateRoot, `image-${stale}.id`)), { code: "ENOENT" });
+  await assert.rejects(stat(backup), { code: "ENOENT" });
+  const commands = await readFile(dockerLog, "utf8");
+  assert.match(commands, /container prune --force/u);
+  assert.match(commands, new RegExp(`image rm clickclack:fakeco-${stale}`, "u"));
+  assert.doesNotMatch(commands, new RegExp(`image rm clickclack:fakeco-${current}`, "u"));
+  assert.match(commands, /image prune --force/u);
+  assert.match(commands, /builder prune --force/u);
+
+  await writeFile(backup, "failure-retained backup\n");
+  const failedCleanup = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: { ...cleanupEnvironment, FAIL_DOCKER_MATCH: "builder prune" },
+  });
+  assert.equal(failedCleanup.status, 17);
+  await stat(backup);
+});
+
 test("bootstrap proves seed equality, health, readiness, metadata metrics, and backup integrity", async () => {
   const bootstrap = await readFile(bootstrapPath, "utf8");
   assert.doesNotMatch(bootstrap, /^\s*awscli\s*\\\s*$/mu);
@@ -784,6 +872,30 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /clickclack backup/u);
   assert.match(bootstrap, /PRAGMA integrity_check/u);
   assert.match(bootstrap, /--sse aws:kms/u);
+  assert.match(
+    bootstrap,
+    /--metadata "sha256=\$backup_sha,source-commit=\$CLICKCLACK_SOURCE_COMMIT"/u,
+  );
+  assert.match(bootstrap, /aws s3api head-object/u);
+  assert.match(bootstrap, /\.ContentLength == \$size/u);
+  assert.match(bootstrap, /cleanup_success "\$host_path"/u);
+  assert.match(bootstrap, /rm -f -- "\$backup_path"/u);
+  assert.match(bootstrap, /reference=clickclack:fakeco-\*/u);
+  assert.match(bootstrap, /docker image prune --force/u);
+  assert.match(bootstrap, /docker builder prune --force/u);
+  assert.match(bootstrap, /\^\[0-9a-f\]\{40\}\$/u);
+  assert.match(bootstrap, /\^image-\[0-9a-f\]\{40\}\\\.id\$/u);
+  assert.ok(
+    bootstrap.lastIndexOf('aws s3 cp "$evidence_file"') <
+      bootstrap.lastIndexOf('cleanup_success "$host_path"'),
+    "cleanup must wait for durable backup evidence",
+  );
+  assert.ok(
+    bootstrap.lastIndexOf("aws s3api head-object") <
+      bootstrap.lastIndexOf('cleanup_success "$host_path"'),
+    "cleanup must wait for remote backup metadata verification",
+  );
+  assert.doesNotMatch(bootstrap, /docker (system|volume) prune/u);
   assert.doesNotMatch(
     bootstrap,
     /CLICKCLACK_TOKEN|CLAWROUTER_API_KEY|OPENCLAW_GATEWAY_TOKEN|down --volumes/u,

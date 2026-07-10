@@ -284,9 +284,65 @@ probe_service() {
   fi
 }
 
+cleanup_success() {
+  local backup_path="$1"
+  local candidate name stale_image_list
+  stage=cleanup-success
+  docker container prune --force \
+    --filter 'label=com.docker.compose.project=clickclack-fakeco'
+  stale_image_list="$(docker image ls \
+    --filter 'reference=clickclack:fakeco-*' \
+    --format '{{.Repository}}:{{.Tag}}')"
+  if [[ -n "$stale_image_list" ]]; then
+    while IFS= read -r candidate; do
+      [[ "$candidate" =~ ^clickclack:fakeco-[0-9a-f]{40}$ ]]
+      if [[ "$candidate" != "$image_name" ]]; then
+        docker image rm "$candidate"
+      fi
+    done <<<"$stale_image_list"
+  fi
+  docker image prune --force
+  docker builder prune --force
+
+  for candidate in "$release_root"/*; do
+    [[ -d "$candidate" ]] || continue
+    name="${candidate##*/}"
+    [[ "$name" =~ ^[0-9a-f]{40}$ ]] || continue
+    if [[ "$candidate" != "$release" ]]; then
+      rm -rf -- "$candidate"
+    fi
+  done
+  for candidate in "$state_root"/image-*.id; do
+    [[ -f "$candidate" ]] || continue
+    name="${candidate##*/}"
+    [[ "$name" =~ ^image-[0-9a-f]{40}\.id$ ]] || continue
+    if [[ "$candidate" != "$image_state" ]]; then
+      rm -f -- "$candidate"
+    fi
+  done
+  rm -f -- "$backup_path"
+}
+
+cleanup_run_files() {
+  stage=cleanup-run-files
+  rm -f -- \
+    "$state_root/seed-$run_id-first.json" \
+    "$state_root/seed-$run_id-second.json" \
+    "$state_root/seed-$run_id-first.json.sorted" \
+    "$state_root/seed-$run_id-second.json.sorted" \
+    "$state_root/health-$run_id.headers" \
+    "$state_root/health-$run_id.json" \
+    "$state_root/ready-$run_id.headers" \
+    "$state_root/ready-$run_id.json" \
+    "$state_root/metrics-$run_id.txt" \
+    "$state_root/backup-head-$run_id.json" \
+    "$state_root/app-$run_id.log" \
+    "$log_file"
+}
+
 create_backup() {
   stage=sqlite-backup
-  local container_path mount_path host_path integrity backup_sha backup_key manifest_key log_key
+  local container_path mount_path host_path integrity backup_sha backup_size backup_key backup_head manifest_key log_key
   container_path="/app/data/backups/clickclack-$run_id.db"
   compose exec -T app sh -c 'mkdir -p /app/data/backups'
   compose exec -T app clickclack backup --data /app/data --out "$container_path"
@@ -296,15 +352,32 @@ create_backup() {
   integrity="$(sqlite3 "$host_path" 'PRAGMA integrity_check;')"
   [[ "$integrity" == "ok" ]]
   backup_sha="$(sha256sum "$host_path" | cut -d' ' -f1)"
+  backup_size="$(stat -c '%s' "$host_path")"
   backup_key="$CLICKCLACK_BACKUP_PREFIX/sqlite/$CLICKCLACK_SOURCE_COMMIT/clickclack-$run_id.db"
+  backup_head="$state_root/backup-head-$run_id.json"
   manifest_key="$CLICKCLACK_BACKUP_PREFIX/manifests/$run_id.json"
   log_key="$CLICKCLACK_LOG_PREFIX/runs/$run_id/owner.log"
 
   stage=upload-backup
   aws s3 cp "$host_path" "s3://$CLICKCLACK_BACKUP_BUCKET/$backup_key" \
     --only-show-errors \
+    --metadata "sha256=$backup_sha,source-commit=$CLICKCLACK_SOURCE_COMMIT" \
     --sse aws:kms \
     --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
+  aws s3api head-object \
+    --bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --key "$backup_key" \
+    --output json >"$backup_head"
+  jq -e \
+    --arg sha256 "$backup_sha" \
+    --arg source_commit "$CLICKCLACK_SOURCE_COMMIT" \
+    --arg kms_key "$CLICKCLACK_DATA_KMS_KEY_ARN" \
+    --argjson size "$backup_size" \
+    '.Metadata.sha256 == $sha256 and
+     .Metadata["source-commit"] == $source_commit and
+     .ServerSideEncryption == "aws:kms" and
+     .SSEKMSKeyId == $kms_key and
+     .ContentLength == $size' "$backup_head" >/dev/null
   docker compose \
     --project-directory "$release/deploy/fakeco" \
     --env-file "$runtime_env" \
@@ -352,11 +425,14 @@ create_backup() {
     --content-type application/json \
     --sse aws:kms \
     --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
+  cleanup_success "$host_path"
+  stage=upload-log
   aws s3 cp "$log_file" "s3://$CLICKCLACK_LOG_BUCKET/$log_key" \
     --only-show-errors \
     --content-type text/plain \
     --sse aws:kms \
     --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
+  cleanup_run_files
   cat "$evidence_file" >&3
 }
 

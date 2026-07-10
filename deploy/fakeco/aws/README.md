@@ -270,6 +270,11 @@ Bootstrap:
 7. Uses `clickclack backup`, runs `PRAGMA integrity_check`, hashes the file,
    and uploads the encrypted database, metadata-only evidence, and bounded safe
    logs to the exact prefixes.
+8. Only after the backup and evidence are durable, removes the local backup,
+   stopped project containers, obsolete commit-scoped images/releases/image
+   records, and unused image/build cache. The active commit remains intact;
+   failures before durable retention preserve their local candidate and backup
+   for diagnosis.
 
 Evidence records commit IDs, verified image ID, run ID, seed-manifest hash,
 boolean probe results, backup object key/hash, and log object key. It contains

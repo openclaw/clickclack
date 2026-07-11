@@ -419,6 +419,37 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await expect(viewer.locator("canvas")).toHaveCount(0);
 });
 
+test("returns focus to an artifact in its originating thread", async ({ page }) => {
+  const { channel } = await seedArtifacts(page, [
+    {
+      filename: "thread-artifact.txt",
+      contentType: "text/plain",
+      body: Buffer.from("thread artifact proof"),
+    },
+  ]);
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  const messageRow = page
+    .locator(".message-row")
+    .filter({ hasText: "Viewer fixture: thread-artifact.txt" });
+  const parentURL = page.url();
+  await messageRow.getByRole("button", { name: "Open thread", exact: true }).click();
+
+  const threadPane = page.getByLabel("Thread pane");
+  await expect(threadPane).toBeVisible();
+  await expect.poll(() => page.url()).not.toBe(parentURL);
+  const threadURL = page.url();
+  await threadPane.getByRole("button", { name: "Open thread-artifact.txt" }).click();
+
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.getByText("thread artifact proof")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await expect(threadPane).toBeVisible();
+  await expect(page).toHaveURL(threadURL);
+  await expect(threadPane.getByRole("button", { name: "Open thread-artifact.txt" })).toBeFocused();
+});
+
 test("near-limit code remains interruptible and falls back to escaped source", async ({ page }) => {
   const nearLimitSource = `<script>window.__artifactCodeRan = true</script>\n${"const value = 1;\n".repeat(120_000)}`;
   const { channel } = await seedArtifacts(page, [

@@ -220,6 +220,7 @@
           data: bytes,
           maxImageSize: PDF_CANVAS_PIXEL_LIMIT,
           canvasMaxAreaInBytes: PDF_CANVAS_PIXEL_LIMIT * 4,
+          stopAtErrors: true,
         }) as PDFDocumentLoadingTask;
         cleanupPDF = () => {
           void loadingTask.destroy();
@@ -288,6 +289,10 @@
         const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
         const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
         assertSafePDFCanvas(backingWidth, backingHeight);
+        const operatorList = await page.getOperatorList();
+        if (operatorList.fnArray.length === 0) {
+          throw new Error("PDF page content could not be rendered completely within safety limits.");
+        }
         const context = canvasEl.getContext("2d");
         if (!context) throw new Error("PDF canvas is unavailable.");
         canvasEl.width = backingWidth;
@@ -299,6 +304,7 @@
         await renderTask.promise;
       } catch (error) {
         if (!cancelled && !(error instanceof Error && error.name === "RenderingCancelledException")) {
+          cleanupPDF?.();
           status = "error";
           errorMessage =
             error instanceof Error ? error.message : "Could not render this PDF page.";

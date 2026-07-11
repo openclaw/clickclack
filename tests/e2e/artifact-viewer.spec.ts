@@ -285,8 +285,6 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
 });
 
 test("shows local fallbacks for oversized and malformed artifacts", async ({ page }) => {
-  const consoleMessages: string[] = [];
-  page.on("console", (message) => consoleMessages.push(message.text()));
   const fixtures: Fixture[] = [
     {
       filename: "oversized.txt",
@@ -341,15 +339,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await page.waitForTimeout(250);
 
   await page.getByRole("button", { name: "Open oversized-image.pdf" }).click();
-  await expect(viewer.getByText("Page 1 of 1")).toBeVisible();
-  await expect(viewer.locator("canvas")).toBeVisible();
-  await expect
-    .poll(() =>
-      consoleMessages.some((message) =>
-        message.includes("Image exceeded maximum allowed size and was removed."),
-      ),
-    )
-    .toBe(true);
+  await expect(viewer.getByRole("alert")).toContainText(
+    "could not be rendered completely within safety limits",
+  );
+  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await expect(viewer.locator("canvas")).toHaveCount(0);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 

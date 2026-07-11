@@ -24,7 +24,7 @@
   } from "../../lib/pdf";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
-  import pdfWorkerURL from "../../workers/pdf.worker?worker&url";
+  import pdfWorkerURL from "pdfjs-dist/build/pdf.worker.mjs?url";
 
   type Props = {
     upload: Upload;
@@ -228,35 +228,45 @@
           if (
             typeof message === "object" &&
             message !== null &&
-            "type" in message &&
-            message.type === "clickclack:pdf-image-limit"
+            "reason" in message &&
+            typeof message.reason === "object" &&
+            message.reason !== null &&
+            "message" in message.reason &&
+            message.reason.message === "Image exceeded maximum allowed size and was removed."
           ) {
             pdfImageLimitExceeded = true;
+            cleanupPDF?.();
+            status = "error";
+            errorMessage =
+              "PDF page content could not be rendered completely within safety limits.";
           }
         };
         workerPort.addEventListener("message", onWorkerMessage);
-        const loadingTask = pdfjs.getDocument({
-          data: bytes,
-          maxImageSize: PDF_CANVAS_PIXEL_LIMIT,
-          canvasMaxAreaInBytes: PDF_CANVAS_PIXEL_LIMIT * 4,
-          worker: pdfWorker,
-        }) as PDFDocumentLoadingTask;
+        let loadingTask: PDFDocumentLoadingTask | null = null;
         let pdfCleaned = false;
         cleanupPDF = () => {
           if (pdfCleaned) return;
           pdfCleaned = true;
           workerPort.removeEventListener("message", onWorkerMessage);
-          void loadingTask.destroy();
+          if (loadingTask) void loadingTask.destroy();
           pdfWorker.destroy();
           pdfDocument = null;
         };
+        const task = pdfjs.getDocument({
+          data: bytes,
+          maxImageSize: PDF_CANVAS_PIXEL_LIMIT,
+          canvasMaxAreaInBytes: PDF_CANVAS_PIXEL_LIMIT * 4,
+          stopAtErrors: true,
+          worker: pdfWorker,
+        }) as PDFDocumentLoadingTask;
+        loadingTask = task;
         let loadTimer = 0;
         try {
           pdfDocument = await Promise.race([
-            loadingTask.promise,
+            task.promise,
             new Promise<never>((_, reject) => {
               loadTimer = window.setTimeout(() => {
-                void loadingTask.destroy();
+                void task.destroy();
                 reject(new Error("PDF preview took too long and was stopped."));
               }, PDF_LOAD_TIMEOUT_MS);
             }),

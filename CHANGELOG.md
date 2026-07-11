@@ -4,6 +4,7 @@
 
 - Unified the web app on one warm "paper & ember" design language: a new espresso dark theme replaces the cool slate look, identity marks share a theme-tied brand gradient, off-palette purple/indigo/blue hardcodes (including workspace-settings buttons and quote blocks) now follow the coral accent, settings surfaces inherit the app font, and scrollbars are visible on the light theme.
 - Proxied WebSocket upgrades in the Vite dev server so the local app connects to realtime instead of looping on "Reconnecting…".
+- Added a bounded read-only artifact pane for code, text, Markdown, PDF, and sandboxed HTML attachments, while keeping DOCX download-only and preserving thread routes when the pane closes. Thanks @jjjhenriksen.
 - Added an opt-in realtime tail cursor so fresh clients can skip retained history without racing new events, and applied read-receipt visibility before event pagination. Thanks @shakkernerd.
 - Preserved validated request correlation IDs as optional metadata on durable message and thread-reply events across replay and realtime delivery, and added canary run/case evidence IDs without changing message storage or gateway traffic.
 - Added an isolated FakeCo small-VM deployment path with idempotent synthetic chat seed data, OpenClaw and ClawRouter SecretRef configuration, correlated health/readiness and metadata-only telemetry, a quoted-reply end-to-end canary, tests, and teardown guidance.

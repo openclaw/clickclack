@@ -7,21 +7,6 @@ import {
 } from "../../apps/web/src/lib/pdf";
 import type { Upload } from "../../apps/web/src/lib/types";
 
-const DOCX_FIXTURE = Buffer.from(
-  "UEsDBBQAAAAIAKJI61zMVIwQ4AAAAJwBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2Qy07DMBBFf8XyFsUTukAIJekCyhJYlA+w7Eli4Zc8bil/z6QtXaDC0r6PM7rd+hC82GMhl2Ivb1UrBUaTrItTL9+3z829XA/d9isjCbZG6uVca34AIDNj0KRSxsjKmErQlZ9lgqzNh54QVm17BybFirE2demQQ/eEo975KjYH/j5hC3qS4vFkXFi91Dl7Z3RlHfbR/qI0Z4Li5NFDs8t0wwYJVwmL8jfgnHvlHYqzKN50qS86sAs+U7Fgk9kFTqr/a67cmcbRGbzkl7ZckkEiHjh4dVGCdvHnfjjOPXwDUEsDBBQAAAAIAKJI61w2V97cogAAABgBAAALAAAAX3JlbHMvLnJlbHONzzsOwjAMBuCrRN6pCwNCqGkXhNQVlQNEiZtGNA8l4XV7MjBQxMBo+/dnuekedmY3isl4x2Fd1cDISa+M0xzOw3G1g65tTjSLXBJpMiGxsuIShynnsEdMciIrUuUDuTIZfbQilzJqDEJehCbc1PUW46cBS5P1ikPs1RrY8Az0j+3H0Ug6eHm15PKPE1+JIouoKXO4+6hQvdtVYQHbBhcvti9QSwMEFAAAAAgAokjrXI3J6pj/AAAA2AEAABEAAAB3b3JkL2RvY3VtZW50LnhtbHWRT0/DMAzFv0qUO03hgFDVdkJFXJm2IXHNEneLlj+V463025O2rEgwLn6y8t7PkV2uPp1lF8Bogq/4fZZzBl4Fbfyh4u+717snziJJr6UNHio+QOSruuwLHdTZgSeWAD4WfcWPRF0hRFRHcDJmoQOf3tqATlJq8SD6gLrDoCDGxHdWPOT5o3DSeD4i90EPo3ZTWeMkWxossL64SFvxnSELXNSlWAxTofoZybRSEUv80LLr70YjTXacQwv/O7cBrwFBsxaDYy9vzQcznjXWqFNjpTplNwm0t5PMEPUbuiVJ53gjKa7uv5kNSD38HxHzNLHMjqBojfMq5sWJn6PUX1BLAQIUAxQAAAAIAKJI61zMVIwQ4AAAAJwBAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAgAokjrXDZX3tyiAAAAGAEAAAsAAAAAAAAAAAAAAIABEQEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAgAokjrXI3J6pj/AAAA2AEAABEAAAAAAAAAAAAAAIAB3AEAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAADAAMAuQAAAAoDAAAAAA==",
-  "base64",
-);
-
-function highExpansionDocx(): Buffer {
-  const fixture = Buffer.from(DOCX_FIXTURE);
-  for (let offset = 0; offset <= fixture.length - 46; offset += 1) {
-    if (fixture.readUInt32LE(offset) !== 0x02014b50) continue;
-    fixture.writeUInt32LE(64 * 1024 * 1024, offset + 24);
-    break;
-  }
-  return fixture;
-}
-
 type Fixture = { filename: string; contentType: string; body: Buffer };
 
 function uploadShape(filename: string, contentType: string): Upload {
@@ -95,6 +80,7 @@ async function seedArtifacts(page: Page, fixtures: Fixture[]) {
   });
   const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
   const messages: Record<string, string> = {};
+  const uploads: Record<string, string> = {};
 
   for (const fixture of fixtures) {
     const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
@@ -114,9 +100,10 @@ async function seedArtifacts(page: Page, fixtures: Fixture[]) {
     });
     expect(attachResponse.ok()).toBe(true);
     messages[fixture.filename] = message.id;
+    uploads[fixture.filename] = upload.id;
   }
 
-  return { channel, messages };
+  return { channel, messages, uploads };
 }
 
 test("classifies artifacts by filename and original MIME metadata", () => {
@@ -139,7 +126,7 @@ test("bounds PDF canvas dimensions and total backing pixels", () => {
   );
 });
 
-test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane", async ({
+test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only", async ({
   page,
 }) => {
   const pageErrors: string[] = [];
@@ -158,20 +145,20 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
       filename: "viewer-proof.md",
       contentType: "text/markdown",
       body: Buffer.from(
-        "# Markdown artifact\n\n**Safe preview**\n\n<script>window.parent.__artifactScriptRan = true</script>",
+        "# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<script>window.parent.__artifactScriptRan = true</script>",
       ),
     },
     { filename: "viewer-proof.pdf", contentType: "application/pdf", body: minimalPDF() },
     {
       filename: "viewer-proof.docx",
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      body: DOCX_FIXTURE,
+      body: Buffer.from("DOCX bytes are never parsed in the browser"),
     },
     {
       filename: "viewer-proof.html",
       contentType: "text/html",
       body: Buffer.from(
-        '<!doctype html><html><head><style>@import "https://artifact-proof.invalid/import.css"; h1{color:teal;background:url(https://artifact-proof.invalid/background.png)}</style></head><body><h1>Sandboxed web artifact</h1><a href="https://artifact-proof.invalid/navigate">external link</a><img src="https://artifact-proof.invalid/leak.png"><form action="https://artifact-proof.invalid/submit"><button>submit</button></form><iframe src="https://artifact-proof.invalid/frame"></iframe><script>window.parent.__artifactScriptRan = true</script></body></html>',
+        '<!doctype html><html><head><meta http-equiv="refresh" content="0;url=https://artifact-proof.invalid/refresh"><style>@import "https://artifact-proof.invalid/import.css"; h1{color:teal;background:url(https://artifact-proof.invalid/background.png)}</style></head><body><h1>Sandboxed web artifact</h1><a href="https://artifact-proof.invalid/navigate">external link</a><img src="https://artifact-proof.invalid/leak.png"><form action="https://artifact-proof.invalid/submit"><button>submit</button></form><iframe src="https://artifact-proof.invalid/frame"></iframe><script>window.parent.__artifactScriptRan = true</script></body></html>',
       ),
     },
   ];
@@ -192,6 +179,9 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
   await page.getByRole("button", { name: "Open viewer-proof.md" }).click();
   await expect(viewer.getByRole("heading", { name: "Markdown artifact" })).toBeVisible();
   await expect(viewer.locator("script")).toHaveCount(0);
+  await expect(viewer.getByText("external")).not.toHaveAttribute("href");
+  await expect(viewer.locator('img[alt="leak"]')).not.toHaveAttribute("src");
+  await expect.poll(() => externalRequests).toBe(0);
   await viewer.getByRole("button", { name: "Source" }).click();
   await expect(viewer.locator("pre")).toContainText("# Markdown artifact");
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
@@ -202,20 +192,18 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
   await expect(viewer.locator("canvas")).toBeVisible();
   await viewer.getByRole("button", { name: "Next" }).click();
   await expect(viewer.getByText("Page 2 of 2")).toBeVisible();
+  const widthBeforeZoom = await viewer.locator("canvas").evaluate((canvas) => canvas.style.width);
   await viewer.getByRole("button", { name: "Zoom in" }).click();
   await expect(viewer.getByText("120%")).toBeVisible();
+  await expect
+    .poll(() => viewer.locator("canvas").evaluate((canvas) => canvas.style.width))
+    .not.toBe(widthBeforeZoom);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 
-  await page.getByRole("button", { name: "Open viewer-proof.docx" }).click();
-  await page.waitForTimeout(100);
+  await expect(page.getByRole("link", { name: "Download viewer-proof.docx" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open viewer-proof.docx" })).toHaveCount(0);
   expect(pageErrors).toEqual([]);
-  await expect(viewer).toBeVisible();
-  await expect(viewer.getByText("Artifact proof document")).toBeVisible();
-  await expect(viewer.getByText("Rendered from DOCX in ClickClack.")).toBeVisible();
-  await expect(viewer.getByText("Ready")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
-  await page.waitForTimeout(250);
 
   await page.getByRole("button", { name: "Open viewer-proof.html" }).click();
   const iframe = viewer.locator("iframe");
@@ -223,6 +211,7 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
   await expect(frame.getByRole("heading", { name: "Sandboxed web artifact" })).toBeVisible();
   await expect(iframe).toHaveAttribute("sandbox", "");
   await expect(frame.locator("script, form, iframe")).toHaveCount(0);
+  await expect(frame.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
   await expect(frame.getByText("external link")).not.toHaveAttribute("href");
   await expect(frame.locator("img")).not.toHaveAttribute("src");
   await expect(frame.locator("style")).not.toContainText("artifact-proof.invalid");
@@ -279,9 +268,14 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       body: Buffer.from("not a DOCX package"),
     },
     {
-      filename: "high-expansion.docx",
+      filename: "oversized.docx",
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      body: highExpansionDocx(),
+      body: Buffer.alloc(16 * 1024 * 1024 + 1, 0x61),
+    },
+    {
+      filename: "malformed.pdf",
+      contentType: "application/pdf",
+      body: Buffer.from("not a PDF document"),
     },
     {
       filename: "oversized-page.pdf",
@@ -300,17 +294,14 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 
-  await page.getByRole("button", { name: "Open malformed.docx" }).click();
+  await expect(page.getByRole("link", { name: "Download malformed.docx" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download oversized.docx" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Open .*\.docx/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open malformed.pdf" }).click();
   await expect(viewer.getByRole("alert")).toContainText("Preview unavailable");
   await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
-  await page.waitForTimeout(250);
-
-  await page.getByRole("button", { name: "Open high-expansion.docx" }).click();
-  await expect(viewer.getByRole("alert")).toContainText("too complex to preview safely");
-  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
-  await expect(page.getByRole("button", { name: "Open high-expansion.docx" })).toBeFocused();
   await page.waitForTimeout(250);
 
   await page.getByRole("button", { name: "Open oversized-page.pdf" }).click();
@@ -374,6 +365,32 @@ test("near-limit code remains interruptible and falls back to escaped source", a
   await expect(page.getByRole("button", { name: "Open near-limit.ts" })).toBeFocused();
 });
 
+test("enforces the actual streamed byte limit instead of trusting upload metadata", async ({
+  page,
+}) => {
+  const { channel, uploads } = await seedArtifacts(page, [
+    {
+      filename: "metadata-lie.txt",
+      contentType: "text/plain",
+      body: Buffer.from("small stored fixture"),
+    },
+  ]);
+  await page.route(`**/api/uploads/${uploads["metadata-lie.txt"]}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/plain",
+      body: Buffer.alloc(2 * 1024 * 1024 + 1, 0x61),
+    });
+  });
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await page.getByRole("button", { name: "Open metadata-lie.txt" }).click();
+
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.getByRole("alert")).toContainText("2.0 MB safety limit");
+  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+});
+
 test("adds an attachment from message.updated without reloading", async ({ page }) => {
   const { channel } = await seedArtifacts(page, []);
   const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
@@ -401,4 +418,32 @@ test("adds an attachment from message.updated without reloading", async ({ page 
   });
 
   await expect(page.getByRole("button", { name: "Open realtime-proof.md" })).toBeVisible();
+});
+
+test("returns to the routed thread after closing an artifact", async ({ page }) => {
+  const { channel, messages } = await seedArtifacts(page, [
+    {
+      filename: "thread-proof.md",
+      contentType: "text/markdown",
+      body: Buffer.from("# Thread artifact"),
+    },
+  ]);
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+
+  const message = page.locator(`[data-message-id="${messages["thread-proof.md"]}"]`);
+  const parentPath = new URL(page.url()).pathname;
+  await message.getByRole("button", { name: "Open thread", exact: true }).click();
+  const thread = page.getByRole("complementary", { name: "Thread pane" });
+  await expect(thread).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).not.toBe(parentPath);
+  const threadPath = new URL(page.url()).pathname;
+
+  await thread.getByRole("button", { name: "Open thread-proof.md" }).click();
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.getByRole("heading", { name: "Thread artifact" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await expect(thread).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe(threadPath);
 });

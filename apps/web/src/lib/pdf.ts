@@ -1,5 +1,7 @@
 export const PDF_CANVAS_DIMENSION_LIMIT = 8_192;
 export const PDF_CANVAS_PIXEL_LIMIT = 16 * 1024 * 1024;
+export const PDF_LOAD_TIMEOUT_MS = 10_000;
+export const PDF_RENDER_TIMEOUT_MS = 10_000;
 
 export const PDF_CANVAS_LIMIT_MESSAGE =
   "This PDF page is too large to preview safely. Download the original to open it locally.";

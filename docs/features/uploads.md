@@ -44,8 +44,8 @@ The web client renders common previewable types in compact attachment cards:
 - `image/*` inline, preserving recorded dimensions when available.
 - `video/*` as inline native players with controls.
 - `audio/*` as inline native audio controls.
-- `application/pdf` as a first-page thumbnail card with the filename, size,
-  and authenticated download link.
+- `application/pdf` as a document card with the filename, size, authenticated
+  download link, and an explicit open action.
 - `text/plain` as a lightweight text-file card.
 
 Other content types appear as authenticated download cards that link to
@@ -56,34 +56,34 @@ content-security policy on upload responses.
 
 ### Artifact viewer
 
-Attached code, text, Markdown, PDF, DOCX, and HTML files open in a read-only
-artifact pane without leaving the conversation. The pane replaces the thread
-or profile pane on desktop and fills the viewport on mobile. Images retain the
-existing lightbox; audio and video retain their inline controls.
+Attached code, text, Markdown, PDF, and HTML files open in a read-only artifact
+pane without leaving the conversation. DOCX stays download-only because ZIP
+metadata cannot hard-bound decompression before a browser conversion library
+allocates the expanded document. The pane temporarily covers the thread or
+profile pane on desktop and fills the viewport on mobile; closing it restores
+the underlying pane and route. Images retain the existing lightbox; audio and
+video retain their inline controls.
 
 Classification uses the upload's recorded filename and original content type,
-not the response `Content-Type`. This lets the client recognize DOCX and HTML
-while the server continues to serve those types as hardened downloads.
+not the response `Content-Type`. This lets the client recognize HTML while the
+server continues to serve it as a hardened download.
 
 - Code and text render as escaped source. Known code languages up to 256 KiB
   are highlighted in a terminable worker with a two-second timeout and a 2 MiB
   output cap; larger source remains escaped plain text. Markdown offers
   sanitized preview and source modes.
-- PDFs render one page at a time with page and zoom controls. Before allocating
-  either a thumbnail or viewer canvas, ClickClack caps each DPR-scaled backing
-  dimension at 8,192 pixels and the total backing store at 16 megapixels.
-  Pages outside those limits fall back to the authenticated download.
-- DOCX files are converted to semantic HTML in a terminable browser worker and
-  sanitized. Before conversion, ClickClack rejects ZIP64 packages, archives
-  with more than 2,048 entries, more than 32 MiB of declared expanded content,
-  or a compression ratio above 100:1. Conversion stops after 10 seconds and
-  converted HTML is capped at 4 MiB. The preview does not promise pixel-perfect
-  Word layout.
+- PDFs load only after the user opens the document, render one page at a time,
+  and provide page and zoom controls. Actual response bytes, load time, render
+  time, each DPR-scaled backing dimension, and total backing pixels are capped.
+  Files or pages outside those limits fall back to the authenticated download.
+- DOCX files never enter a browser parser. Normal, malformed, compressed-bomb,
+  and oversized DOCX uploads all use the same authenticated download-only path.
 - Uploaded HTML runs in an opaque-origin sandbox with a document CSP that
   blocks scripts, forms, navigation, and network requests.
-- Text, code, Markdown, and HTML previews are limited to 2 MiB; DOCX to 16 MiB;
-  PDF to the server's 64 MiB upload cap. Larger or malformed files fall back to
-  an authenticated download.
+- Text, code, Markdown, and HTML previews are limited to 2 MiB; PDF to the
+  server's 64 MiB upload cap. The client checks streamed response bytes rather
+  than trusting metadata alone. Larger or malformed files fall back to an
+  authenticated download.
 
 Artifact viewing does not mutate upload bytes. Collaborative Markdown editing
 requires a future first-class, revisioned artifact model rather than changing

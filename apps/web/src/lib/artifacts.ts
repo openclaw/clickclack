@@ -3,7 +3,6 @@ import type { Upload } from "./types";
 export type ArtifactKind = "code" | "text" | "markdown" | "pdf" | "docx" | "html" | "unsupported";
 
 export const TEXT_ARTIFACT_LIMIT = 2 * 1024 * 1024;
-export const DOCX_ARTIFACT_LIMIT = 16 * 1024 * 1024;
 export const PDF_ARTIFACT_LIMIT = 64 * 1024 * 1024;
 
 const CODE_LANGUAGES: Record<string, string> = {
@@ -119,7 +118,6 @@ export function artifactKindLabel(kind: ArtifactKind): string {
 }
 
 export function artifactPreviewLimit(kind: ArtifactKind): number | undefined {
-  if (kind === "docx") return DOCX_ARTIFACT_LIMIT;
   if (kind === "pdf") return PDF_ARTIFACT_LIMIT;
   if (kind === "code" || kind === "text" || kind === "markdown" || kind === "html") {
     return TEXT_ARTIFACT_LIMIT;

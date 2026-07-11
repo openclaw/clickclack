@@ -1,13 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import type {
-    PDFDocumentLoadingTask,
-    PDFDocumentProxy,
-    PDFPageProxy,
-    RenderTask,
-  } from "pdfjs-dist";
   import { artifactKindLabel, classifyArtifact } from "../lib/artifacts";
-  import { assertSafePDFCanvas } from "../lib/pdf";
   import type { Upload } from "../lib/types";
 
   type Props = {
@@ -23,21 +15,22 @@
   const MIN_MEDIA_HEIGHT = 120;
 
   let videoEl: HTMLVideoElement | null = $state(null);
-  let pdfCanvasEl: HTMLCanvasElement | null = $state(null);
   let started = $state(false);
-  let pdfThumbnailReady = $state(false);
-  let pdfThumbnailFailed = $state(false);
   let loadedDurationLabel = $state("");
   let durationLabel = $derived(loadedDurationLabel || formatDuration(upload.duration_ms ?? 0));
-  let cleanupPDFThumbnail: (() => void) | null = null;
 
   let contentType = $derived((upload.content_type || "").split(";")[0].trim().toLowerCase());
   let isImage = $derived(contentType.startsWith("image/"));
   let isVideo = $derived(contentType.startsWith("video/"));
   let isAudio = $derived(contentType.startsWith("audio/"));
-  let isPDF = $derived(contentType === "application/pdf");
   let artifactKind = $derived(classifyArtifact(upload));
-  let canPreviewDocument = $derived(artifactKind !== "unsupported");
+  let canPreviewDocument = $derived(
+    artifactKind === "code" ||
+      artifactKind === "text" ||
+      artifactKind === "markdown" ||
+      artifactKind === "pdf" ||
+      artifactKind === "html",
+  );
   let documentLabel = $derived(artifactKindLabel(artifactKind));
 
   let mediaStyle = $derived.by(() => {
@@ -78,72 +71,6 @@
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  $effect(() => {
-    if (!isPDF || !pdfCanvasEl) {
-      pdfThumbnailReady = false;
-      pdfThumbnailFailed = false;
-      return;
-    }
-
-    cleanupPDFThumbnail?.();
-
-    let cancelled = false;
-    let renderTask: RenderTask | null = null;
-    let loadingTask: PDFDocumentLoadingTask | null = null;
-    let pdfDoc: PDFDocumentProxy | null = null;
-
-    pdfThumbnailReady = false;
-    pdfThumbnailFailed = false;
-
-    const render = async () => {
-      try {
-        const [pdfjs, worker] = await Promise.all([
-          import("pdfjs-dist"),
-          import("pdfjs-dist/build/pdf.worker.mjs?url"),
-        ]);
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        loadingTask = pdfjs.getDocument({ url, withCredentials: true }) as typeof loadingTask;
-        pdfDoc = await loadingTask.promise;
-        const page: PDFPageProxy = await pdfDoc.getPage(1);
-        if (cancelled) return;
-
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = 128 / baseViewport.width;
-        const viewport = page.getViewport({ scale });
-        const canvas = pdfCanvasEl;
-        const context = canvas?.getContext("2d");
-        if (!canvas || !context) throw new Error("pdf thumbnail canvas unavailable");
-
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
-        const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
-        assertSafePDFCanvas(backingWidth, backingHeight);
-        canvas.width = backingWidth;
-        canvas.height = backingHeight;
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        renderTask = page.render({ canvasContext: context, viewport });
-        await renderTask.promise;
-        if (!cancelled) pdfThumbnailReady = true;
-      } catch (error) {
-        if (!cancelled && !(error instanceof Error && error.name === "RenderingCancelledException")) {
-          pdfThumbnailFailed = true;
-        }
-      }
-    };
-
-    void render();
-    cleanupPDFThumbnail = () => {
-      cancelled = true;
-      renderTask?.cancel();
-      void pdfDoc?.destroy();
-      void loadingTask?.destroy();
-      cleanupPDFThumbnail = null;
-    };
-
-    return () => cleanupPDFThumbnail?.();
-  });
-
-  onDestroy(() => cleanupPDFThumbnail?.());
 </script>
 
 {#if isImage}
@@ -260,18 +187,9 @@
     <button
       type="button"
       class="document-attachment__thumbnail"
-      class:has-preview={pdfThumbnailReady}
-      class:thumbnail-failed={pdfThumbnailFailed}
       aria-label={`Open ${upload.filename}`}
       onclick={() => onOpenArtifact(upload)}
     >
-      {#if isPDF}
-        <canvas
-          bind:this={pdfCanvasEl}
-          class="document-attachment__preview-canvas"
-          aria-hidden="true"
-        ></canvas>
-      {/if}
       <span>{documentLabel}</span>
     </button>
     <div class="document-attachment__meta">
@@ -299,7 +217,7 @@
     </a>
   </div>
 {:else}
-  <a class="file-attachment" href={url} target="_blank" rel="noreferrer">
+  <a class="file-attachment" href={url} download={upload.filename} aria-label={`Download ${upload.filename}`}>
     <span class="file-icon" aria-hidden="true">↧</span>
     <span>
       <strong>{upload.filename}</strong>

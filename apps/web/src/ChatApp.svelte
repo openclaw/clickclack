@@ -2473,16 +2473,19 @@
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (replyContext === "thread") clearReplyTarget();
-    selectedThread = null;
-    selectedThreadState = null;
-    selectedProfile = null;
-    replies = [];
-    activeComposerContext = "message";
     artifactConversationKey = activeConversationKey;
     selectedArtifact = upload;
     void tick().then(() => {
       document.querySelector<HTMLElement>(".artifact-viewer__actions > button:last-child")?.focus();
     });
+  }
+
+  function closeArtifactViewer() {
+    const trigger = artifactTrigger;
+    selectedArtifact = null;
+    artifactConversationKey = "";
+    artifactTrigger = null;
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
@@ -2510,16 +2513,15 @@
   }
 
   function closeSidePanel() {
+    if (selectedArtifact) {
+      closeArtifactViewer();
+      return;
+    }
     const threadWasOpen = selectedThread !== null;
-    const restoreArtifactFocus = selectedArtifact !== null ? artifactTrigger : null;
     const parentTargetID = currentConversationKey();
-    if (restoreArtifactFocus?.isConnected) restoreArtifactFocus.focus({ preventScroll: true });
     if (replyContext === "thread") clearReplyTarget();
     selectedThread = null;
     selectedProfile = null;
-    selectedArtifact = null;
-    artifactConversationKey = "";
-    artifactTrigger = null;
     activeComposerContext = "message";
     replies = [];
     if (threadWasOpen && selectedWorkspaceID && parentTargetID) {
@@ -2830,7 +2832,7 @@
 
   {#if selectedArtifact}
     <aside class="artifact-viewer open" inert={mobileNavOpen} aria-label="Artifact viewer">
-      <ArtifactViewer upload={selectedArtifact} onClose={closeSidePanel} />
+      <ArtifactViewer upload={selectedArtifact} onClose={closeArtifactViewer} />
     </aside>
   {:else}
   <aside

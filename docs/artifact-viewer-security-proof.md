@@ -34,3 +34,11 @@ The capture is written to
 Its diagnostic panel is populated after the browser observes the fallback,
 confirms the download action is visible, and counts zero allocated viewer
 canvases.
+
+## DOCX parser exclusion
+
+DOCX attachments are deliberately download-only. Browser tests upload both a
+malformed package and an oversized package, verify that neither receives an
+Open action, and verify that both retain authenticated download actions. This
+keeps ZIP decompression and Word conversion outside ClickClack's browser trust
+boundary.

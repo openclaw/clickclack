@@ -15,9 +15,12 @@
     type ArtifactKind,
   } from "../../lib/artifacts";
   import { markdown } from "../../lib/format";
-  import { convertDocxInWorker } from "../../lib/docx";
   import { highlightCodeInWorker } from "../../lib/highlight";
-  import { assertSafePDFCanvas } from "../../lib/pdf";
+  import {
+    assertSafePDFCanvas,
+    PDF_LOAD_TIMEOUT_MS,
+    PDF_RENDER_TIMEOUT_MS,
+  } from "../../lib/pdf";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
 
@@ -64,8 +67,9 @@
     const base = '<base target="_self">';
     const sanitized = DOMPurify.sanitize(body, {
       WHOLE_DOCUMENT: true,
-      FORBID_TAGS: ["base", "embed", "form", "iframe", "link", "object", "script"],
-      FORBID_ATTR: ["action", "formaction", "srcset"],
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["base", "embed", "form", "iframe", "link", "meta", "object", "script"],
+      FORBID_ATTR: ["action", "formaction", "srcset", "xlink:href"],
     });
     const documentNode = new DOMParser().parseFromString(sanitized, "text/html");
     const localReference = /^(?:#|data:|blob:)/i;
@@ -92,7 +96,23 @@
     return `<!doctype html><html><head>${csp}${base}</head><body>${safeBody}</body></html>`;
   }
 
-  async function responseBytes(signal: AbortSignal): Promise<ArrayBuffer> {
+  function markdownDocument(body: string): string {
+    const documentNode = new DOMParser().parseFromString(markdown(body), "text/html");
+    const localReference = /^(?:#|data:|blob:)/i;
+    for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href]")) {
+      for (const attribute of ["src", "href"] as const) {
+        const value = element.getAttribute(attribute)?.trim();
+        if (value && !localReference.test(value)) element.removeAttribute(attribute);
+      }
+    }
+    return documentNode.body.innerHTML;
+  }
+
+  function resourceLimitMessage(limit: number): string {
+    return `Preview data exceeded the ${formatBytes(limit)} safety limit.`;
+  }
+
+  async function responseBytes(signal: AbortSignal, limit: number): Promise<Uint8Array> {
     const response = await fetch(url, { credentials: "same-origin", signal });
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
@@ -101,11 +121,44 @@
       if (response.status === 404) throw new Error("This artifact is no longer available.");
       throw new Error(`Could not load this artifact (${response.status}).`);
     }
-    return response.arrayBuffer();
+    const declaredLength = Number(response.headers.get("Content-Length"));
+    if (Number.isFinite(declaredLength) && declaredLength > limit) {
+      throw new Error(resourceLimitMessage(limit));
+    }
+    if (!response.body) {
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > limit) throw new Error(resourceLimitMessage(limit));
+      return bytes;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > limit) {
+          await reader.cancel();
+          throw new Error(resourceLimitMessage(limit));
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   }
 
-  async function loadText(signal: AbortSignal): Promise<string> {
-    return new TextDecoder("utf-8", { fatal: false }).decode(await responseBytes(signal));
+  async function loadText(signal: AbortSignal, limit: number): Promise<string> {
+    return new TextDecoder("utf-8", { fatal: false }).decode(await responseBytes(signal, limit));
   }
 
   async function loadArtifact(signal: AbortSignal) {
@@ -140,27 +193,34 @@
         ]);
         if (signal.aborted) return;
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        const loadingTask = pdfjs.getDocument({ url, withCredentials: true }) as PDFDocumentLoadingTask;
+        const bytes = await responseBytes(signal, limit!);
+        if (signal.aborted) return;
+        const loadingTask = pdfjs.getDocument({ data: bytes }) as PDFDocumentLoadingTask;
         cleanupPDF = () => {
           void loadingTask.destroy();
           pdfDocument = null;
         };
-        pdfDocument = await loadingTask.promise;
-      } else if (kind === "docx") {
-        const bytes = await responseBytes(signal);
-        if (signal.aborted) return;
-        const html = await convertDocxInWorker(bytes, signal);
-        renderedHTML = DOMPurify.sanitize(html, {
-          FORBID_TAGS: ["form", "iframe", "object", "embed", "script", "style"],
-          FORBID_ATTR: ["formaction"],
-        });
+        let loadTimer = 0;
+        try {
+          pdfDocument = await Promise.race([
+            loadingTask.promise,
+            new Promise<never>((_, reject) => {
+              loadTimer = window.setTimeout(() => {
+                void loadingTask.destroy();
+                reject(new Error("PDF preview took too long and was stopped."));
+              }, PDF_LOAD_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          clearTimeout(loadTimer);
+        }
       } else {
-        source = await loadText(signal);
+        source = await loadText(signal, limit!);
         if (signal.aborted) return;
         if (kind === "code") {
           highlightedSource = await highlightCodeInWorker(source, artifactLanguage(upload), signal);
         }
-        if (kind === "markdown") renderedHTML = markdown(source);
+        if (kind === "markdown") renderedHTML = markdownDocument(source);
         if (kind === "html") renderedHTML = htmlDocument(source);
       }
       if (!signal.aborted) status = "ready";
@@ -179,15 +239,26 @@
 
   $effect(() => {
     if (kind !== "pdf" || !pdfDocument || !canvasEl || status !== "ready") return;
+    const document = pdfDocument;
+    const pageNumber = pdfPage;
+    const scale = pdfScale;
     let cancelled = false;
     let renderTask: RenderTask | null = null;
+    let renderTimer = 0;
     pdfRendering = true;
 
     const render = async () => {
       try {
-        const page: PDFPageProxy = await pdfDocument!.getPage(pdfPage);
+        renderTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          renderTask?.cancel();
+          cleanupPDF?.();
+          status = "error";
+          errorMessage = "PDF page rendering took too long and was stopped.";
+        }, PDF_RENDER_TIMEOUT_MS);
+        const page: PDFPageProxy = await document.getPage(pageNumber);
         if (cancelled || !canvasEl) return;
-        const viewport = page.getViewport({ scale: pdfScale });
+        const viewport = page.getViewport({ scale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
         const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
@@ -208,6 +279,7 @@
             error instanceof Error ? error.message : "Could not render this PDF page.";
         }
       } finally {
+        clearTimeout(renderTimer);
         if (!cancelled) pdfRendering = false;
       }
     };
@@ -215,6 +287,7 @@
     void render();
     return () => {
       cancelled = true;
+      clearTimeout(renderTimer);
       renderTask?.cancel();
     };
   });
@@ -276,8 +349,6 @@
     <div class="artifact-viewer__pdf-stage" class:is-rendering={pdfRendering}>
       <canvas bind:this={canvasEl} aria-label={`PDF page ${pdfPage}`}></canvas>
     </div>
-  {:else if kind === "docx"}
-    <article class="artifact-viewer__document">{@html renderedHTML}</article>
   {:else if kind === "html"}
     <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" srcdoc={renderedHTML}></iframe>
   {:else if kind === "markdown" && mode === "preview"}

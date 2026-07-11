@@ -24,6 +24,7 @@
   } from "../../lib/pdf";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
+  import pdfWorkerURL from "../../workers/pdf.worker?worker&url";
 
   type Props = {
     upload: Upload;
@@ -45,6 +46,7 @@
   let pdfScale = $state(1);
   let pdfRendering = $state(false);
   let cleanupPDF: (() => void) | null = null;
+  let pdfImageLimitExceeded = false;
 
   let label = $derived(artifactKindLabel(kind));
   let url = $derived(uploadURL(upload));
@@ -191,6 +193,7 @@
     highlightedSource = "";
     pdfPage = 1;
     pdfScale = 1;
+    pdfImageLimitExceeded = false;
     mode = "preview";
     errorMessage = "";
 
@@ -208,22 +211,43 @@
     status = "loading";
     try {
       if (kind === "pdf") {
-        const [pdfjs, worker] = await Promise.all([
-          import("pdfjs-dist"),
-          import("pdfjs-dist/build/pdf.worker.mjs?url"),
-        ]);
+        const pdfjs = await import("pdfjs-dist");
         if (signal.aborted) return;
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerURL;
         const bytes = await responseBytes(signal, limit!);
         if (signal.aborted) return;
+        const pdfWorker = new pdfjs.PDFWorker();
+        await pdfWorker.promise;
+        if (signal.aborted) {
+          pdfWorker.destroy();
+          return;
+        }
+        const workerPort = pdfWorker.port;
+        const onWorkerMessage = (event: MessageEvent<unknown>) => {
+          const message = event.data;
+          if (
+            typeof message === "object" &&
+            message !== null &&
+            "type" in message &&
+            message.type === "clickclack:pdf-image-limit"
+          ) {
+            pdfImageLimitExceeded = true;
+          }
+        };
+        workerPort.addEventListener("message", onWorkerMessage);
         const loadingTask = pdfjs.getDocument({
           data: bytes,
           maxImageSize: PDF_CANVAS_PIXEL_LIMIT,
           canvasMaxAreaInBytes: PDF_CANVAS_PIXEL_LIMIT * 4,
-          stopAtErrors: true,
+          worker: pdfWorker,
         }) as PDFDocumentLoadingTask;
+        let pdfCleaned = false;
         cleanupPDF = () => {
+          if (pdfCleaned) return;
+          pdfCleaned = true;
+          workerPort.removeEventListener("message", onWorkerMessage);
           void loadingTask.destroy();
+          pdfWorker.destroy();
           pdfDocument = null;
         };
         let loadTimer = 0;
@@ -289,10 +313,6 @@
         const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
         const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
         assertSafePDFCanvas(backingWidth, backingHeight);
-        const operatorList = await page.getOperatorList();
-        if (operatorList.fnArray.length === 0) {
-          throw new Error("PDF page content could not be rendered completely within safety limits.");
-        }
         const context = canvasEl.getContext("2d");
         if (!context) throw new Error("PDF canvas is unavailable.");
         canvasEl.width = backingWidth;
@@ -302,6 +322,9 @@
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
+        if (pdfImageLimitExceeded) {
+          throw new Error("PDF page content could not be rendered completely within safety limits.");
+        }
       } catch (error) {
         if (!cancelled && !(error instanceof Error && error.name === "RenderingCancelledException")) {
           cleanupPDF?.();

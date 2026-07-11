@@ -70,6 +70,29 @@ function oversizedPagePDF(): Buffer {
   return Buffer.from(pdf);
 }
 
+function blankPagePDF(): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 180] /Contents 4 0 R >>",
+    "<< /Length 0 >>\nstream\n\nendstream",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets
+    .slice(1)
+    .map((offset) => `${offset.toString().padStart(10, "0")} 00000 n \n`)
+    .join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
 function oversizedImagePDF(): Buffer {
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
@@ -285,6 +308,8 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
 });
 
 test("shows local fallbacks for oversized and malformed artifacts", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   const fixtures: Fixture[] = [
     {
       filename: "oversized.txt",
@@ -305,6 +330,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       filename: "malformed.pdf",
       contentType: "application/pdf",
       body: Buffer.from("not a PDF document"),
+    },
+    {
+      filename: "blank-page.pdf",
+      contentType: "application/pdf",
+      body: blankPagePDF(),
     },
     {
       filename: "oversized-image.pdf",
@@ -338,12 +368,9 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 
-  await page.getByRole("button", { name: "Open oversized-image.pdf" }).click();
-  await expect(viewer.getByRole("alert")).toContainText(
-    "could not be rendered completely within safety limits",
-  );
-  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
-  await expect(viewer.locator("canvas")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open blank-page.pdf" }).click();
+  await expect(viewer.locator("canvas")).toBeVisible();
+  await expect(viewer.getByRole("alert")).toHaveCount(0);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 
@@ -379,6 +406,17 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       fullPage: true,
     });
   }
+
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await page.waitForTimeout(250);
+
+  await page.getByRole("button", { name: "Open oversized-image.pdf" }).click();
+  await expect.poll(() => pageErrors).toEqual([]);
+  await expect(viewer.getByRole("alert")).toContainText(
+    "could not be rendered completely within safety limits",
+  );
+  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await expect(viewer.locator("canvas")).toHaveCount(0);
 });
 
 test("near-limit code remains interruptible and falls back to escaped source", async ({ page }) => {

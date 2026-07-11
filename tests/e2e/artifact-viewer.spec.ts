@@ -169,7 +169,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
       filename: "viewer-proof.md",
       contentType: "text/markdown",
       body: Buffer.from(
-        '# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<img alt="srcset leak" srcset="https://artifact-proof.invalid/srcset 1x"><video poster="https://artifact-proof.invalid/poster"></video>\n\n<script>window.parent.__artifactScriptRan = true</script>',
+        '# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<img alt="srcset leak" srcset="https://artifact-proof.invalid/srcset 1x"><video poster="https://artifact-proof.invalid/poster"></video><div data-css-leak style="background:url(https://artifact-proof.invalid/style)">styled</div><style>@import "https://artifact-proof.invalid/import.css"</style>\n\n<script>window.parent.__artifactScriptRan = true</script>',
       ),
     },
     { filename: "viewer-proof.pdf", contentType: "application/pdf", body: minimalPDF() },
@@ -207,6 +207,8 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await expect(viewer.locator('img[alt="leak"]')).not.toHaveAttribute("src");
   await expect(viewer.locator('img[alt="srcset leak"]')).not.toHaveAttribute("srcset");
   await expect(viewer.locator("video")).not.toHaveAttribute("poster");
+  await expect(viewer.locator("[data-css-leak]")).not.toHaveAttribute("style");
+  await expect(viewer.locator("style")).toHaveCount(0);
   await expect.poll(() => externalRequests).toBe(0);
   await viewer.getByRole("button", { name: "Source" }).click();
   await expect(viewer.locator("pre")).toContainText("# Markdown artifact");
@@ -282,6 +284,8 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
 });
 
 test("shows local fallbacks for oversized and malformed artifacts", async ({ page }) => {
+  const consoleMessages: string[] = [];
+  page.on("console", (message) => consoleMessages.push(message.text()));
   const fixtures: Fixture[] = [
     {
       filename: "oversized.txt",
@@ -338,6 +342,13 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await page.getByRole("button", { name: "Open oversized-image.pdf" }).click();
   await expect(viewer.getByText("Page 1 of 1")).toBeVisible();
   await expect(viewer.locator("canvas")).toBeVisible();
+  await expect
+    .poll(() =>
+      consoleMessages.some((message) =>
+        message.includes("Image exceeded maximum allowed size and was removed."),
+      ),
+    )
+    .toBe(true);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 

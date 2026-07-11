@@ -100,7 +100,17 @@
   function markdownDocument(body: string): string {
     return DOMPurify.sanitize(markdown(body), {
       USE_PROFILES: { html: true },
-      FORBID_ATTR: ["action", "formaction", "href", "poster", "src", "srcset", "xlink:href"],
+      FORBID_TAGS: ["style"],
+      FORBID_ATTR: [
+        "action",
+        "formaction",
+        "href",
+        "poster",
+        "src",
+        "srcset",
+        "style",
+        "xlink:href",
+      ],
     });
   }
 

@@ -9,8 +9,9 @@ The hostile-HTML browser fixture exercises the running ClickClack upload and vie
 The Playwright test verifies in the live browser that the iframe has an empty sandbox token list, the script marker remains absent, no request reaches the sentinel host, scripts/forms/frames are absent from the preview DOM, and external URL-bearing attributes and CSS references are stripped.
 
 The Markdown fixture separately covers link, image `src`, raw-HTML `srcset`,
-media `poster`, and script attempts. Its preview strips every URL-bearing
-attribute before insertion and observes zero sentinel-host requests.
+media `poster`, inline CSS, stylesheet CSS, and script attempts. Its preview
+strips every URL-bearing attribute and all CSS before insertion, then observes
+zero sentinel-host requests.
 
 Run the diagnostic capture from the repository root:
 

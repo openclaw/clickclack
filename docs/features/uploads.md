@@ -72,7 +72,7 @@ server continues to serve it as a hardened download.
   are highlighted in a terminable worker with a two-second timeout and a 2 MiB
   output cap; larger source remains escaped plain text. Markdown offers
   sanitized preview and source modes; preview HTML carries no URL-bearing
-  attributes, so raw HTML and Markdown images cannot initiate requests.
+  attributes or CSS, so raw HTML and Markdown images cannot initiate requests.
 - PDFs load only after the user opens the document, render one page at a time,
   and provide page and zoom controls. Actual response bytes, load time, render
   time, embedded-image pixels, worker canvas bytes, each DPR-scaled backing

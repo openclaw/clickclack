@@ -1089,6 +1089,117 @@ verify_persistent_runtime_config
   });
 });
 
+test("update bootstrap retains a verified live backup before new code starts", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const bootstrap = await readFile(bootstrapPath, "utf8");
+  const functionsStart = bootstrap.indexOf("runtime_state_exists() {");
+  const functionsEnd = bootstrap.indexOf('\nif [[ "$action" == "bootstrap" ]]', functionsStart);
+  assert.notEqual(functionsStart, -1);
+  assert.notEqual(functionsEnd, -1);
+  const prepareFunctions = bootstrap.slice(functionsStart, functionsEnd).trim();
+  const requested = "a".repeat(40);
+  const running = "b".repeat(40);
+  const tracePath = path.join(temporary, "trace.log");
+  const runtimeEnv = path.join(temporary, "runtime.env");
+  const runtimeOverride = path.join(temporary, "compose.owner.yaml");
+  await writeFile(runtimeEnv, "runtime\n");
+  await writeFile(runtimeOverride, "override\n");
+  const scriptPath = path.join(temporary, "prepare-update.sh");
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+${prepareFunctions}
+trace() { printf '%s\n' "$1" >>"$TRACE_PATH"; }
+runtime_state_exists() { [[ "\${RUNTIME_STATE:-true}" == true ]]; }
+systemctl() { trace systemctl; }
+resolve_backup_runtime() {
+  trace resolve
+  runtime_source_commit="$RUNNING_COMMIT"
+  runtime_source_sha256="$RUNNING_SHA256"
+  compose_override="$backup_runtime_override"
+}
+verify_running_image() { trace verify; }
+probe_service() { trace probe; }
+create_pre_update_backup() {
+  trace backup
+  [[ "\${FAIL_BACKUP:-false}" != true ]] || return 17
+}
+rm() { trace cleanup; }
+set_runtime_paths() { trace reset; }
+stage=initialize
+runtime_env="$RUNTIME_ENV"
+runtime_override="$RUNTIME_OVERRIDE"
+backup_runtime_override="$TEST_ROOT/compose.backup.yaml"
+pre_update_backup=false
+requested_source_commit="$REQUESTED_COMMIT"
+runtime_source_commit="$requested_source_commit"
+runtime_source_sha256="$REQUESTED_SHA256"
+CLICKCLACK_SOURCE_SHA256="$REQUESTED_SHA256"
+compose_override="$runtime_override"
+prepare_pre_update_backup
+printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
+  "$runtime_source_commit" "$pre_update_backup" "$compose_override"
+`,
+    { mode: 0o755 },
+  );
+  const environment = {
+    ...process.env,
+    TEST_ROOT: temporary,
+    TRACE_PATH: tracePath,
+    RUNTIME_ENV: runtimeEnv,
+    RUNTIME_OVERRIDE: runtimeOverride,
+    REQUESTED_COMMIT: requested,
+    REQUESTED_SHA256: "c".repeat(64),
+    RUNNING_COMMIT: running,
+    RUNNING_SHA256: "d".repeat(64),
+  };
+  const runPrepare = async (overrides = {}) => {
+    await writeFile(tracePath, "");
+    const result = spawnSync("bash", [scriptPath], {
+      encoding: "utf8",
+      env: { ...environment, ...overrides },
+    });
+    const trace = (await readFile(tracePath, "utf8")).trim().split("\n").filter(Boolean);
+    return { result, trace };
+  };
+
+  const update = await runPrepare();
+  assert.equal(update.result.status, 0, update.result.stderr);
+  assert.deepEqual(update.trace, [
+    "systemctl",
+    "resolve",
+    "verify",
+    "probe",
+    "backup",
+    "cleanup",
+    "reset",
+  ]);
+  assert.match(update.result.stdout, new RegExp(`runtime=${requested}`, "u"));
+  assert.match(update.result.stdout, /pre_update=false/u);
+  assert.match(update.result.stdout, new RegExp(`compose=${runtimeOverride}`, "u"));
+
+  const firstApply = await runPrepare({ RUNTIME_STATE: "false" });
+  assert.equal(firstApply.result.status, 0, firstApply.result.stderr);
+  assert.deepEqual(firstApply.trace, []);
+
+  const sameCommit = await runPrepare({ RUNNING_COMMIT: requested });
+  assert.equal(sameCommit.result.status, 0, sameCommit.result.stderr);
+  assert.deepEqual(sameCommit.trace, [
+    "systemctl",
+    "resolve",
+    "verify",
+    "probe",
+    "backup",
+    "cleanup",
+    "reset",
+  ]);
+
+  const failedBackup = await runPrepare({ FAIL_BACKUP: "true" });
+  assert.equal(failedBackup.result.status, 17);
+  assert.deepEqual(failedBackup.trace, ["systemctl", "resolve", "verify", "probe", "backup"]);
+});
+
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
   const temporary = await temporaryDirectory(t);
   const bootstrap = await readFile(bootstrapPath, "utf8");
@@ -1238,7 +1349,7 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /--sse aws:kms/u);
   assert.match(
     bootstrap,
-    /--metadata "sha256=\$backup_sha,source-commit=\$runtime_source_commit"/u,
+    /--metadata "sha256=\$captured_backup_sha,source-commit=\$runtime_source_commit"/u,
   );
   assert.match(bootstrap, /stack_source_commit: \$stack_source_commit/u);
   assert.match(bootstrap, /resolve_backup_runtime/u);
@@ -1251,7 +1362,7 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   );
   assert.match(bootstrap, /aws s3api head-object/u);
   assert.match(bootstrap, /\.ContentLength == \$size/u);
-  assert.match(bootstrap, /cleanup_success "\$host_path"/u);
+  assert.match(bootstrap, /cleanup_success "\$captured_backup_path"/u);
   assert.match(bootstrap, /rm -f -- "\$backup_path"/u);
   assert.match(bootstrap, /reference=clickclack:fakeco-\*/u);
   assert.match(bootstrap, /docker image prune --force/u);
@@ -1259,14 +1370,41 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /\^\[0-9a-f\]\{40\}\$/u);
   assert.match(bootstrap, /\^image-\[0-9a-f\]\{40\}\\\.id\$/u);
   assert.ok(
-    bootstrap.lastIndexOf('aws s3 cp "$evidence_file"') <
-      bootstrap.lastIndexOf('cleanup_success "$host_path"'),
+    bootstrap.lastIndexOf('--body "$evidence_file"') <
+      bootstrap.lastIndexOf('cleanup_success "$captured_backup_path"'),
     "cleanup must wait for durable backup evidence",
   );
   assert.ok(
     bootstrap.lastIndexOf("aws s3api head-object") <
-      bootstrap.lastIndexOf('cleanup_success "$host_path"'),
+      bootstrap.lastIndexOf('cleanup_success "$captured_backup_path"'),
     "cleanup must wait for remote backup metadata verification",
+  );
+  const dispatchStart = bootstrap.lastIndexOf('if [[ "$action" == "bootstrap" ]]');
+  const prepareCall = bootstrap.indexOf("  prepare_pre_update_backup", dispatchStart);
+  const installCall = bootstrap.indexOf("  install_runtime", dispatchStart);
+  const configCall = bootstrap.indexOf("  write_runtime_config", dispatchStart);
+  const startCall = bootstrap.indexOf("  build_and_start", dispatchStart);
+  assert.ok(
+    dispatchStart >= 0 &&
+      prepareCall > dispatchStart &&
+      prepareCall < installCall &&
+      installCall < configCall &&
+      configCall < startCall,
+    "a verified pre-update backup must finish before runtime config or new code starts",
+  );
+  assert.match(bootstrap, /--arg action pre-update/u);
+  assert.match(bootstrap, /requested_source_commit: \$requested_source_commit/u);
+  assert.match(bootstrap, /pre-update-upload-evidence/u);
+  assert.match(bootstrap, /printf 'pre-update:%s:%s:%s'/u);
+  assert.match(bootstrap, /backup_id="\$\{run_id%-\*\}-\$backup_suffix"/u);
+  assert.match(bootstrap, /\[\[ "\$backup_id" != "\$run_id" \]\]/u);
+  assert.match(bootstrap, /readonly max_single_put_bytes=5000000000/u);
+  assert.match(bootstrap, /captured_backup_size > max_single_put_bytes/u);
+  assert.match(runbook, /backup objects up to\s+5,000,000,000 bytes/u);
+  assert.equal(
+    (bootstrap.match(/--if-none-match '\*'/gu) ?? []).length,
+    3,
+    "backup databases and both evidence objects must be create-only",
   );
   assert.doesNotMatch(bootstrap, /docker (system|volume) prune/u);
   assert.doesNotMatch(

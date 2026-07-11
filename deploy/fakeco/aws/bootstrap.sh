@@ -57,8 +57,15 @@ backup_runtime_override="$state_root/compose.backup.yaml"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${CLICKCLACK_SOURCE_COMMIT:0:12}"
 log_file="$log_root/$run_id.log"
 stage=initialize
+pre_update_backup=false
+captured_backup_path=
+captured_backup_sha=
+captured_backup_size=
+captured_backup_key=
+captured_backup_head=
 readonly aws_cli_version=2.35.20
 readonly aws_cli_archive_sha256=58799ce9276d4e8815fd19e4dc35649626c6b4fbd4d0e3df7433af9cfde41882
+readonly max_single_put_bytes=5000000000
 
 install -d -m 0750 "$owner_root" "$release_root" "$state_root" "$log_root" "$(dirname "$runtime_env")"
 touch "$log_file"
@@ -131,7 +138,7 @@ verify_persistent_runtime_config() {
   [[ -f "$runtime_env" && -f "$runtime_override" ]] || return 1
   configured_images="$(grep -c '^    image:' "$runtime_override" || true)"
   [[ "$configured_images" == "2" ]] || return 1
-  if [[ "$action" == "backup" ]]; then
+  if [[ "$action" == "backup" || "$pre_update_backup" == "true" ]]; then
     grep -Eq "^CLICKCLACK_WEB_VERSION=($requested_source_commit|$runtime_source_commit)$" "$runtime_env" || return 1
     requested_images="$(grep -Fxc "    image: \"clickclack:fakeco-$requested_source_commit\"" "$runtime_override" || true)"
     if [[ "$requested_source_commit" == "$runtime_source_commit" ]]; then
@@ -407,44 +414,142 @@ cleanup_run_files() {
   fi
 }
 
-create_backup() {
-  stage=sqlite-backup
-  local container_path mount_path host_path integrity backup_sha backup_size backup_key backup_head manifest_key log_key
-  container_path="/app/data/backups/clickclack-$run_id.db"
+capture_backup() {
+  local backup_id="$1"
+  local stage_prefix="$2"
+  local container_path mount_path integrity
+  [[ "$backup_id" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$ ]]
+  [[ -z "$stage_prefix" || "$stage_prefix" == "pre-update-" ]]
+  stage="${stage_prefix}sqlite-backup"
+  container_path="/app/data/backups/clickclack-$backup_id.db"
   compose exec -T app sh -c 'mkdir -p /app/data/backups'
   compose exec -T app clickclack backup --data /app/data --out "$container_path"
   mount_path="$(docker volume inspect clickclack-fakeco-data --format '{{.Mountpoint}}')"
-  host_path="$mount_path/backups/clickclack-$run_id.db"
-  [[ -f "$host_path" ]]
-  integrity="$(sqlite3 "$host_path" 'PRAGMA integrity_check;')"
+  captured_backup_path="$mount_path/backups/clickclack-$backup_id.db"
+  [[ -f "$captured_backup_path" ]]
+  integrity="$(sqlite3 "$captured_backup_path" 'PRAGMA integrity_check;')"
   [[ "$integrity" == "ok" ]]
-  backup_sha="$(sha256sum "$host_path" | cut -d' ' -f1)"
-  backup_size="$(stat -c '%s' "$host_path")"
-  backup_key="$CLICKCLACK_BACKUP_PREFIX/sqlite/$runtime_source_commit/clickclack-$run_id.db"
-  backup_head="$state_root/backup-head-$run_id.json"
-  manifest_key="$CLICKCLACK_BACKUP_PREFIX/manifests/$run_id.json"
-  log_key="$CLICKCLACK_LOG_PREFIX/runs/$run_id/owner.log"
+  captured_backup_sha="$(sha256sum "$captured_backup_path" | cut -d' ' -f1)"
+  captured_backup_size="$(stat -c '%s' "$captured_backup_path")"
+  [[ "$captured_backup_size" =~ ^[0-9]+$ ]]
+  if ((captured_backup_size > max_single_put_bytes)); then
+    printf 'backup size exceeds the FakeCo single-object limit (%s bytes)\n' \
+      "$max_single_put_bytes" >&2
+    return 1
+  fi
+  captured_backup_key="$CLICKCLACK_BACKUP_PREFIX/sqlite/$runtime_source_commit/clickclack-$backup_id.db"
+  captured_backup_head="$state_root/backup-head-$backup_id.json"
 
-  stage=upload-backup
-  aws s3 cp "$host_path" "s3://$CLICKCLACK_BACKUP_BUCKET/$backup_key" \
-    --only-show-errors \
-    --metadata "sha256=$backup_sha,source-commit=$runtime_source_commit" \
-    --sse aws:kms \
-    --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
+  stage="${stage_prefix}upload-backup"
+  aws s3api put-object \
+    --bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --key "$captured_backup_key" \
+    --body "$captured_backup_path" \
+    --content-type application/vnd.sqlite3 \
+    --metadata "sha256=$captured_backup_sha,source-commit=$runtime_source_commit" \
+    --server-side-encryption aws:kms \
+    --ssekms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN" \
+    --if-none-match '*' \
+    --output json >/dev/null
   aws s3api head-object \
     --bucket "$CLICKCLACK_BACKUP_BUCKET" \
-    --key "$backup_key" \
-    --output json >"$backup_head"
+    --key "$captured_backup_key" \
+    --output json >"$captured_backup_head"
   jq -e \
-    --arg sha256 "$backup_sha" \
+    --arg sha256 "$captured_backup_sha" \
     --arg source_commit "$runtime_source_commit" \
     --arg kms_key "$CLICKCLACK_DATA_KMS_KEY_ARN" \
-    --argjson size "$backup_size" \
+    --argjson size "$captured_backup_size" \
     '.Metadata.sha256 == $sha256 and
      .Metadata["source-commit"] == $source_commit and
      .ServerSideEncryption == "aws:kms" and
      .SSEKMSKeyId == $kms_key and
-     .ContentLength == $size' "$backup_head" >/dev/null
+     .ContentLength == $size' "$captured_backup_head" >/dev/null
+}
+
+create_pre_update_backup() {
+  local backup_id backup_suffix manifest_key evidence_file evidence_sha evidence_size evidence_head
+  backup_suffix="$(printf 'pre-update:%s:%s:%s' \
+    "$run_id" "$runtime_source_commit" "$CLICKCLACK_OWNER_COMMIT" | sha256sum | cut -c1-12)"
+  backup_id="${run_id%-*}-$backup_suffix"
+  [[ "$backup_id" != "$run_id" ]]
+  capture_backup "$backup_id" pre-update-
+  manifest_key="$CLICKCLACK_BACKUP_PREFIX/manifests/$backup_id.json"
+  evidence_file="$state_root/pre-update-evidence-$run_id.json"
+  evidence_head="$state_root/pre-update-evidence-head-$run_id.json"
+  jq -n \
+    --arg action pre-update \
+    --arg run_id "$backup_id" \
+    --arg source_commit "$runtime_source_commit" \
+    --arg requested_source_commit "$requested_source_commit" \
+    --arg owner_commit "$CLICKCLACK_OWNER_COMMIT" \
+    --arg image_id "$image_id" \
+    --arg backup_bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --arg backup_key "$captured_backup_key" \
+    --arg backup_sha256 "$captured_backup_sha" \
+    --argjson backup_size "$captured_backup_size" \
+    --arg manifest_bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --arg manifest_key "$manifest_key" \
+    '{
+      schema_version: 1,
+      status: "passed",
+      action: $action,
+      run_id: $run_id,
+      source_commit: $source_commit,
+      requested_source_commit: $requested_source_commit,
+      owner_commit: $owner_commit,
+      runtime_commit_verified: true,
+      image_id: $image_id,
+      health: true,
+      readiness: true,
+      metrics_metadata_only: true,
+      integrity_check: "ok",
+      backup: {
+        bucket: $backup_bucket,
+        key: $backup_key,
+        sha256: $backup_sha256,
+        size_bytes: $backup_size
+      },
+      manifest: {bucket: $manifest_bucket, key: $manifest_key}
+    }' >"$evidence_file"
+  evidence_sha="$(sha256sum "$evidence_file" | cut -d' ' -f1)"
+  evidence_size="$(stat -c '%s' "$evidence_file")"
+
+  stage=pre-update-upload-evidence
+  aws s3api put-object \
+    --bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --key "$manifest_key" \
+    --body "$evidence_file" \
+    --content-type application/json \
+    --metadata "sha256=$evidence_sha,source-commit=$runtime_source_commit,requested-source-commit=$requested_source_commit" \
+    --server-side-encryption aws:kms \
+    --ssekms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN" \
+    --if-none-match '*' \
+    --output json >/dev/null
+  aws s3api head-object \
+    --bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --key "$manifest_key" \
+    --output json >"$evidence_head"
+  jq -e \
+    --arg sha256 "$evidence_sha" \
+    --arg source_commit "$runtime_source_commit" \
+    --arg requested_source_commit "$requested_source_commit" \
+    --arg kms_key "$CLICKCLACK_DATA_KMS_KEY_ARN" \
+    --argjson size "$evidence_size" \
+    '.Metadata.sha256 == $sha256 and
+     .Metadata["source-commit"] == $source_commit and
+     .Metadata["requested-source-commit"] == $requested_source_commit and
+     .ServerSideEncryption == "aws:kms" and
+     .SSEKMSKeyId == $kms_key and
+     .ContentLength == $size' "$evidence_head" >/dev/null
+  rm -f -- "$captured_backup_path" "$captured_backup_head" "$evidence_file" "$evidence_head"
+}
+
+create_backup() {
+  local manifest_key log_key
+  capture_backup "$run_id" ""
+  manifest_key="$CLICKCLACK_BACKUP_PREFIX/manifests/$run_id.json"
+  log_key="$CLICKCLACK_LOG_PREFIX/runs/$run_id/owner.log"
   compose logs --no-color --tail 500 app >"$state_root/app-$run_id.log"
 
   evidence_file="$state_root/evidence-$run_id.json"
@@ -457,8 +562,8 @@ create_backup() {
     --arg image_id "$image_id" \
     --arg seed_sha256 "$seed_sha256" \
     --arg backup_bucket "$CLICKCLACK_BACKUP_BUCKET" \
-    --arg backup_key "$backup_key" \
-    --arg backup_sha256 "$backup_sha" \
+    --arg backup_key "$captured_backup_key" \
+    --arg backup_sha256 "$captured_backup_sha" \
     --arg manifest_bucket "$CLICKCLACK_BACKUP_BUCKET" \
     --arg manifest_key "$manifest_key" \
     --arg log_bucket "$CLICKCLACK_LOG_BUCKET" \
@@ -485,12 +590,16 @@ create_backup() {
     }' >"$evidence_file"
 
   stage=upload-evidence
-  aws s3 cp "$evidence_file" "s3://$CLICKCLACK_BACKUP_BUCKET/$manifest_key" \
-    --only-show-errors \
+  aws s3api put-object \
+    --bucket "$CLICKCLACK_BACKUP_BUCKET" \
+    --key "$manifest_key" \
+    --body "$evidence_file" \
     --content-type application/json \
-    --sse aws:kms \
-    --sse-kms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN"
-  cleanup_success "$host_path"
+    --server-side-encryption aws:kms \
+    --ssekms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN" \
+    --if-none-match '*' \
+    --output json >/dev/null
+  cleanup_success "$captured_backup_path"
   stage=upload-log
   aws s3 cp "$log_file" "s3://$CLICKCLACK_LOG_BUCKET/$log_key" \
     --only-show-errors \
@@ -501,7 +610,43 @@ create_backup() {
   cat "$evidence_file" >&3
 }
 
+runtime_state_exists() {
+  local containers
+  if [[ -e "$runtime_env" || -e "$runtime_override" || -e /var/lib/docker/volumes/clickclack-fakeco-data ]]; then
+    return 0
+  fi
+  if command -v docker >/dev/null && systemctl is-active --quiet docker; then
+    containers="$(docker ps -a \
+      --filter 'label=com.docker.compose.project=clickclack-fakeco' \
+      --filter 'label=com.docker.compose.service=app' \
+      --format '{{.ID}}')"
+    [[ -n "$containers" ]] && return 0
+  fi
+  return 1
+}
+
+prepare_pre_update_backup() {
+  stage=pre-update-detection
+  runtime_state_exists || return 0
+  [[ -f "$runtime_env" && ! -L "$runtime_env" ]]
+  [[ -f "$runtime_override" && ! -L "$runtime_override" ]]
+  systemctl is-active --quiet docker
+  pre_update_backup=true
+  resolve_backup_runtime
+  verify_running_image
+  probe_service
+  create_pre_update_backup
+  rm -f -- "$backup_runtime_override"
+  pre_update_backup=false
+  runtime_source_commit="$requested_source_commit"
+  runtime_source_sha256="$CLICKCLACK_SOURCE_SHA256"
+  compose_override="$runtime_override"
+  set_runtime_paths
+  stage=pre-update-complete
+}
+
 if [[ "$action" == "bootstrap" ]]; then
+  prepare_pre_update_backup
   install_runtime
   install_source
   write_runtime_config

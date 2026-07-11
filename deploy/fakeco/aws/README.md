@@ -250,6 +250,19 @@ workflow's expected SHA-256 before invoking `bash`, so a swapped object never
 executes. Its required bucket listing is limited by `s3:prefix` to
 `<artifact-prefix>/owner/*`; it cannot list unrelated bucket keys. The instance
 profile cannot fetch GitHub, Parameter Store, or secrets.
+
+Before an update bootstrap installs source, rewrites runtime configuration, or
+starts the requested image, it detects existing runtime state and verifies the
+one running release and image. For every verified existing runtime, including a
+same-commit retry, it probes the current service, takes an integrity-checked hot
+SQLite backup, uploads the encrypted database and metadata-only pre-update
+evidence under a distinct object ID, creates both objects only when their keys
+do not already exist, and verifies both S3 objects. A pristine first apply skips
+this step; collisions and partial or unverifiable existing state fail before new
+code can start. This small-instance owner accepts backup objects up to
+5,000,000,000 bytes; larger databases fail closed before upload or update and
+need a separately designed multipart backup path.
+
 Bootstrap:
 
 1. Installs Docker, Compose, SQLite, and probe tools from Noble, then installs

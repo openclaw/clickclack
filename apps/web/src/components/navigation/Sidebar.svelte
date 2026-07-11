@@ -102,6 +102,48 @@
     sections = loadSections(workspaceID);
   });
 
+  const CHANNEL_ORDER_STORAGE_PREFIX = "clickclack:sidebar-channel-order:v1:";
+  let channelOrder = $state<string[]>([]);
+
+  function channelOrderStorageKey(workspaceID: string, userID: string): string {
+    return `${CHANNEL_ORDER_STORAGE_PREFIX}${userID}:${workspaceID}`;
+  }
+
+  function loadChannelOrder(workspaceID: string, userID: string): string[] {
+    if (!workspaceID || !userID) return [];
+    try {
+      const parsed: unknown = JSON.parse(window.localStorage.getItem(channelOrderStorageKey(workspaceID, userID)) || "[]");
+      return Array.isArray(parsed) && parsed.every((id) => typeof id === "string") ? [...new Set(parsed)] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveChannelOrder(order: string[]) {
+    channelOrder = order;
+    if (!workspaceID || !currentUser?.id) return;
+    try {
+      window.localStorage.setItem(channelOrderStorageKey(workspaceID, currentUser.id), JSON.stringify(order));
+    } catch {
+      // Storage is an enhancement; reordering still works for this session.
+    }
+  }
+
+  let orderedChannels = $derived.by(() => {
+    const byID = new Map(channels.map((channel) => [channel.id, channel]));
+    const saved = channelOrder.flatMap((id) => {
+      const channel = byID.get(id);
+      if (!channel) return [];
+      byID.delete(id);
+      return [channel];
+    });
+    return [...saved, ...byID.values()];
+  });
+
+  $effect(() => {
+    channelOrder = loadChannelOrder(workspaceID, currentUser?.id || "");
+  });
+
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
@@ -155,13 +197,14 @@
   <div class="sidebar-scroll">
     <ChannelList
       expanded={sections.channels}
-      {channels}
+      channels={orderedChannels}
       {selectedChannelID}
       {selectedDirectID}
       {hrefForChannel}
       {onSelectChannel}
       {onCreateChannel}
       onToggle={() => toggleSection("channels")}
+      onReorder={saveChannelOrder}
     />
 
     <DirectMessageList

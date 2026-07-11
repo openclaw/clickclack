@@ -382,6 +382,98 @@
   }
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.channel-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.channel-row .nav-item {
+  flex: 1;
+  min-width: 0;
+  padding-left: 2px;
+}
+
+.channel-drag-handle {
+  flex: 0 0 24px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-2);
+  cursor: grab;
+  opacity: 0;
+}
+
+.channel-row:hover .channel-drag-handle,
+.channel-drag-handle:focus-visible {
+  opacity: 1;
+}
+
+.channel-drag-handle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.channel-drag-handle:active {
+  cursor: grabbing;
+}
+
+.channel-drag-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.channel-drag-handle svg {
+  fill: currentColor;
+}
+
+.channel-row.dragging {
+  opacity: 0.45;
+}
+
+.channel-row.drop-before::before,
+.channel-row.drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.channel-row.drop-before::before {
+  top: -1px;
+}
+
+.channel-row.drop-after::after {
+  bottom: -1px;
+}
+
+@media (hover: none) {
+  .channel-drag-handle {
+    opacity: 1;
+  }
+}
+
 .nav-item {
   display: flex;
   align-items: center;

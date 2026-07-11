@@ -240,6 +240,55 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
   expect(shell).toContain(`export CLICKCLACK_BOT_TOKEN='ccb_test'"'"'value'`);
 });
 
+test("channels can be reordered in the sidebar and persist locally", async ({ page }) => {
+  const suffix = Date.now();
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Channel order ${suffix}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+
+  const names = [`aa-order-${suffix}`, `mm-order-${suffix}`, `zz-order-${suffix}`];
+  for (const name of names) {
+    const response = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name, kind: "public" },
+    });
+    expect(response.ok()).toBe(true);
+  }
+
+  await page.goto(`/app/${workspace.route_id}`);
+  const channelList = page.locator("#sidebar-channels-list");
+  const channelNames = async () =>
+    channelList
+      .locator("a.channel .nav-label")
+      .evaluateAll((labels) => labels.map((label) => label.textContent?.trim()));
+
+  await expect.poll(channelNames).toEqual(names);
+
+  const source = page.getByRole("button", { name: `Move #${names[2]}` });
+  const target = page.getByRole("link", { name: `# ${names[0]}` }).locator("..");
+  await source.dragTo(target, { targetPosition: { x: 40, y: 1 } });
+  await expect.poll(channelNames).toEqual([names[2], names[0], names[1]]);
+
+  await page.reload();
+  await expect.poll(channelNames).toEqual([names[2], names[0], names[1]]);
+
+  await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(channelNames).toEqual([names[0], names[2], names[1]]);
+  await expect(page.getByText(`Moved #${names[2]} to position 2 of 3`)).toBeAttached();
+
+  const addedName = `bb-order-${suffix}`;
+  const addedResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: addedName, kind: "public" },
+  });
+  expect(addedResponse.ok()).toBe(true);
+  await page.reload();
+  await expect.poll(channelNames).toEqual([names[0], names[2], names[1], addedName]);
+});
+
 test("app subdomain root opens the chat app", async ({ page }) => {
   await page.goto("http://app.localhost:18082/");
   await expect(page.getByText("Connected")).toBeVisible();

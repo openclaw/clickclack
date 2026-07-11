@@ -61,10 +61,11 @@ workflow. The workflow only verifies and reuses them:
    metrics collector security group.
 
 The GitHub OIDC role needs read-only preflight calls for STS, IAM, EC2, S3,
-KMS, SSM, and CloudFormation; `iam:SimulatePrincipalPolicy` on only the two
-owner roles; `iam:PassRole` only for the exact CloudFormation service role;
-change-set and stack lifecycle access only for `clickclack-fakeco`; SSM Run
-Command only for that stack's instance; artifact
+KMS, SSM, and CloudFormation, including `ec2:DescribeNetworkInterfaces`,
+`cloudformation:GetTemplate`, and `cloudformation:DescribeStackResources`;
+`iam:SimulatePrincipalPolicy` on only the two owner roles; `iam:PassRole` only
+for the exact CloudFormation service role; change-set and stack lifecycle access
+only for `clickclack-fakeco`; SSM Run Command only for that stack's instance; artifact
 `PutObject`/`GetObject`/`HeadObject`; backup/log `HeadObject` and list access;
 EBS snapshot create/describe; and no secret-read actions. The CloudFormation
 service role needs only the EC2 security group, instance, IAM role/profile,
@@ -229,9 +230,11 @@ replacement. An update that needs instance replacement must use guarded
 run a fresh `plan` and `apply`.
 
 After CloudFormation completes, the workflow enables termination protection,
-replays the live ingress rules and rejects every CIDR, prefix list, unexpected
-port or protocol, source account, and unapproved source security group; it also
-replays the live instance profile and role policy boundary,
+requires the VPC, subnet, ingress-source groups, and egress gateway to belong to
+the dedicated account, matches the live template and logical-resource inventory
+exactly, replays the live ingress rules, and rejects every CIDR, prefix list,
+unexpected port or protocol, source account, and unapproved source security
+group; it also replays the live instance profile and role policy boundary,
 waits at most five minutes for SSM, and caps both the remote SSM script and its
 workflow poll at forty minutes. Teardown polls the retained snapshot for at
 most thirty minutes, and the complete job is capped at ninety minutes. First
@@ -363,19 +366,47 @@ owner_uid="$(stat -c %u "$mount_path/clickclack.db")"
 owner_gid="$(stat -c %g "$mount_path/clickclack.db")"
 install -d -m 0700 "$restore_dir/previous"
 for file in clickclack.db clickclack.db-wal clickclack.db-shm; do
-  test ! -e "$mount_path/$file" || mv "$mount_path/$file" "$restore_dir/previous/$file"
+  test ! -e "$mount_path/$file" || cp -a -- "$mount_path/$file" "$restore_dir/previous/$file"
 done
+wait_ready() {
+  for _ in $(seq 1 60); do
+    if curl -fsS --max-time 2 http://127.0.0.1:8080/healthz >/dev/null && \
+      curl -fsS --max-time 2 http://127.0.0.1:8080/readyz >/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+rollback_restore() {
+  local exit_code=$?
+  trap - ERR
+  "${compose[@]}" stop app >/dev/null 2>&1 || true
+  for file in clickclack.db clickclack.db-wal clickclack.db-shm; do
+    rm -f -- "$mount_path/$file"
+    test ! -e "$restore_dir/previous/$file" || \
+      cp -a -- "$restore_dir/previous/$file" "$mount_path/$file"
+  done
+  if "${compose[@]}" up -d app >/dev/null 2>&1; then
+    wait_ready || "${compose[@]}" stop app >/dev/null 2>&1 || true
+  fi
+  exit "$exit_code"
+}
+trap rollback_restore ERR
+rm -f -- "$mount_path/clickclack.db" "$mount_path/clickclack.db-wal" "$mount_path/clickclack.db-shm"
 install -o "$owner_uid" -g "$owner_gid" -m 0600 \
   "$restore_dir/clickclack.db" "$mount_path/clickclack.db"
 "${compose[@]}" up -d app
-curl -fsS http://127.0.0.1:8080/healthz
-curl -fsS http://127.0.0.1:8080/readyz
+wait_ready
+trap - ERR
 )
 ```
 
-The previous database and WAL files remain in the restore directory. Run
-workflow `verify` again, then explicitly retain or remove those files under the
-account's data-retention policy.
+The previous database and WAL files remain in the restore directory. A failed
+bounded readiness probe stops the restored app, reinstates those files, and
+attempts to restart the prior database; failure to restart leaves the app
+stopped. Run workflow `verify` again, then explicitly retain or remove those
+files under the account's data-retention policy.
 
 ## Guarded teardown
 

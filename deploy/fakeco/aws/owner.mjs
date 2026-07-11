@@ -322,14 +322,13 @@ async function verifyKMSPolicyCommand() {
 
 async function verifyStackCommand() {
   const rendered = await readRendered(requiredOption("rendered"));
-  const response = await readJSON(requiredOption("stack"));
-  const stack = verifyStack(rendered, response);
+  const stack = await verifyObservedStack(rendered);
   print({ ok: true, stackName: rendered.stackName, status: stack.StackStatus });
 }
 
 async function verifyInstanceCommand() {
   const rendered = await readRendered(requiredOption("rendered"));
-  const stack = verifyStack(rendered, await readJSON(requiredOption("stack")));
+  const stack = await verifyObservedStack(rendered);
   const instanceResponse = await readJSON(requiredOption("instance"));
   const volumeResponse = await readJSON(requiredOption("volume"));
   const securityGroupResponse = await readJSON(requiredOption("security-group"));
@@ -360,7 +359,7 @@ async function verifyBackupCommand() {
 async function retentionManifest() {
   const rendered = await readRendered(requiredOption("rendered"));
   assert(rendered.phase === "teardown", "retention manifest requires teardown phase");
-  const stack = verifyStack(rendered, await readJSON(requiredOption("stack")));
+  const stack = await verifyObservedStack(rendered);
   const instanceResponse = await readJSON(requiredOption("instance"));
   const volumeResponse = await readJSON(requiredOption("volume"));
   const securityGroupResponse = await readJSON(requiredOption("security-group"));
@@ -432,14 +431,23 @@ async function retentionManifest() {
   print({ ok: true, retained: ["root-volume", "snapshot", "sqlite-backup"] });
 }
 
-function verifyStack(rendered, response) {
+async function verifyObservedStack(rendered) {
+  return verifyStack(
+    rendered,
+    await readJSON(requiredOption("stack")),
+    await readJSON(requiredOption("template")),
+    await readJSON(requiredOption("resources")),
+  );
+}
+
+function verifyStack(rendered, response, observedTemplate, resourceResponse) {
   const stacks = response.Stacks ?? [];
   assert(stacks.length === 1, "expected exactly one observed stack");
   const stack = stacks[0];
   assert(stack.StackName === rendered.stackName, "observed stack name drifted");
   assert(
-    ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(stack.StackStatus),
-    "observed stack is not deploy-complete",
+    ["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE"].includes(stack.StackStatus),
+    "observed stack is not stable",
   );
   assert(
     stack.EnableTerminationProtection === true,
@@ -490,7 +498,47 @@ function verifyStack(rendered, response) {
       `stack output ${key} is missing`,
     );
   }
+  verifyStackInventory(rendered, observedTemplate, resourceResponse);
   return stack;
+}
+
+function verifyStackInventory(rendered, observedTemplate, response) {
+  assert(
+    canonicalJSON(observedTemplate) === canonicalJSON(template),
+    "observed stack template drifted",
+  );
+  const expectedResources = Object.entries(template.Resources).filter(([, resource]) => {
+    if (resource.Condition === undefined) return true;
+    assert(resource.Condition === "AllowMetricsSource", "template resource condition drifted");
+    return rendered.target.metricsSecurityGroupId !== "";
+  });
+  const observedResources = response.StackResources ?? [];
+  assert(
+    observedResources.length === expectedResources.length,
+    "observed stack resource set drifted",
+  );
+  const observedByLogicalID = new Map(
+    observedResources.map((resource) => [resource.LogicalResourceId, resource]),
+  );
+  assert(
+    observedByLogicalID.size === observedResources.length,
+    "observed stack resource IDs are not unique",
+  );
+  for (const [logicalID, expected] of expectedResources) {
+    const observed = observedByLogicalID.get(logicalID);
+    assert(observed?.StackName === rendered.stackName, `stack resource ${logicalID} owner drifted`);
+    assert(observed?.ResourceType === expected.Type, `stack resource ${logicalID} type drifted`);
+    assert(
+      typeof observed?.PhysicalResourceId === "string" && observed.PhysicalResourceId.length > 0,
+      `stack resource ${logicalID} physical ID is missing`,
+    );
+    assert(
+      typeof observed?.ResourceStatus === "string" &&
+        observed.ResourceStatus.endsWith("_COMPLETE") &&
+        !observed.ResourceStatus.startsWith("DELETE"),
+      `stack resource ${logicalID} is not stable`,
+    );
+  }
 }
 
 function verifyInstance(
@@ -533,9 +581,9 @@ function verifyInstance(
     instance.IamInstanceProfile?.Arn === outputs.get("InstanceProfileArn"),
     "observed instance profile drifted",
   );
-  const mapping = instance.BlockDeviceMappings?.find(
-    (entry) => entry.DeviceName === profile.instance.rootDeviceName,
-  );
+  const mappings = instance.BlockDeviceMappings ?? [];
+  assert(mappings.length === 1, "instance must have exactly one block device mapping");
+  const mapping = mappings.find((entry) => entry.DeviceName === profile.instance.rootDeviceName);
   assert(mapping?.Ebs?.VolumeId, "observed root volume mapping is missing");
   assert(
     mapping.Ebs.DeleteOnTermination === false,

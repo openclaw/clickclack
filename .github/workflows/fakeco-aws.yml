@@ -190,14 +190,20 @@ jobs:
             --policy-arn "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN" \
             --query 'Policy.Arn' --output text)" == "$FAKECO_WORKLOAD_PERMISSIONS_BOUNDARY_ARN" ]]
 
-          [[ "$(aws ec2 describe-vpcs --vpc-ids "$FAKECO_VPC_ID" \
-            --query 'Vpcs[0].State' --output text)" == "available" ]]
+          aws ec2 describe-vpcs --vpc-ids "$FAKECO_VPC_ID" \
+            --output json >"$RUNNER_TEMP/vpc.json"
+          jq -e --arg owner "$actual_account" '
+            (.Vpcs | length) == 1 and
+            .Vpcs[0].OwnerId == $owner and
+            .Vpcs[0].State == "available"
+          ' "$RUNNER_TEMP/vpc.json" >/dev/null
           [[ "$(aws ec2 describe-vpc-attribute --vpc-id "$FAKECO_VPC_ID" \
             --attribute enableDnsSupport --query 'EnableDnsSupport.Value' --output text)" == "True" ]]
           [[ "$(aws ec2 describe-vpc-attribute --vpc-id "$FAKECO_VPC_ID" \
             --attribute enableDnsHostnames --query 'EnableDnsHostnames.Value' --output text)" == "True" ]]
           aws ec2 describe-subnets --subnet-ids "$FAKECO_PRIVATE_SUBNET_ID" \
             --output json >"$RUNNER_TEMP/subnet.json"
+          [[ "$(jq -r '.Subnets[0].OwnerId' "$RUNNER_TEMP/subnet.json")" == "$actual_account" ]]
           [[ "$(jq -r '.Subnets[0].VpcId' "$RUNNER_TEMP/subnet.json")" == "$FAKECO_VPC_ID" ]]
           [[ "$(jq -r '.Subnets[0].State' "$RUNNER_TEMP/subnet.json")" == "available" ]]
           [[ "$(jq -r '.Subnets[0].MapPublicIpOnLaunch' "$RUNNER_TEMP/subnet.json")" == "false" ]]
@@ -213,8 +219,13 @@ jobs:
           fi
           for security_group in "${security_groups[@]}"; do
             [[ "$security_group" =~ ^sg-[0-9a-f]+$ ]]
-            [[ "$(aws ec2 describe-security-groups --group-ids "$security_group" \
-              --query 'SecurityGroups[0].VpcId' --output text)" == "$FAKECO_VPC_ID" ]]
+            aws ec2 describe-security-groups --group-ids "$security_group" \
+              --output json >"$RUNNER_TEMP/source-security-group.json"
+            jq -e --arg owner "$actual_account" --arg vpc "$FAKECO_VPC_ID" '
+              (.SecurityGroups | length) == 1 and
+              .SecurityGroups[0].OwnerId == $owner and
+              .SecurityGroups[0].VpcId == $vpc
+            ' "$RUNNER_TEMP/source-security-group.json" >/dev/null
           done
 
           aws ec2 describe-route-tables \
@@ -239,11 +250,31 @@ jobs:
                 --output json >"$RUNNER_TEMP/egress.json"
               [[ "$(jq -r '.NatGateways[0].State' "$RUNNER_TEMP/egress.json")" == "available" ]]
               [[ "$(jq -r '.NatGateways[0].VpcId' "$RUNNER_TEMP/egress.json")" == "$FAKECO_VPC_ID" ]]
+              mapfile -t nat_interfaces < <(
+                jq -r '.NatGateways[0].NatGatewayAddresses[].NetworkInterfaceId // empty' \
+                  "$RUNNER_TEMP/egress.json" | LC_ALL=C sort -u
+              )
+              [[ "${#nat_interfaces[@]}" -ge 1 ]]
+              for network_interface in "${nat_interfaces[@]}"; do
+                [[ "$network_interface" =~ ^eni-[0-9a-f]+$ ]]
+              done
+              aws ec2 describe-network-interfaces \
+                --network-interface-ids "${nat_interfaces[@]}" \
+                --output json >"$RUNNER_TEMP/egress-network-interfaces.json"
+              jq -e \
+                --arg owner "$actual_account" \
+                --arg vpc "$FAKECO_VPC_ID" \
+                --argjson expected "${#nat_interfaces[@]}" '
+                  (.NetworkInterfaces | length) == $expected and
+                  all(.NetworkInterfaces[]; .OwnerId == $owner and .VpcId == $vpc)
+                ' "$RUNNER_TEMP/egress-network-interfaces.json" >/dev/null
               ;;
             tgw-*)
-              [[ "$(aws ec2 describe-transit-gateways \
+              aws ec2 describe-transit-gateways \
                 --transit-gateway-ids "$FAKECO_EGRESS_RESOURCE_ID" \
-                --query 'TransitGateways[0].State' --output text)" == "available" ]]
+                --output json >"$RUNNER_TEMP/egress.json"
+              [[ "$(jq -r '.TransitGateways[0].OwnerId' "$RUNNER_TEMP/egress.json")" == "$actual_account" ]]
+              [[ "$(jq -r '.TransitGateways[0].State' "$RUNNER_TEMP/egress.json")" == "available" ]]
               ;;
           esac
 
@@ -569,6 +600,8 @@ jobs:
           set -euo pipefail
           umask 077
           stack_file="$RUNNER_TEMP/fakeco-stack.json"
+          template_file="$RUNNER_TEMP/fakeco-template.json"
+          resources_file="$RUNNER_TEMP/fakeco-stack-resources.json"
           instance_file="$RUNNER_TEMP/fakeco-instance.json"
           volume_file="$RUNNER_TEMP/fakeco-volume.json"
           security_group_file="$RUNNER_TEMP/fakeco-security-group.json"
@@ -576,9 +609,19 @@ jobs:
           aws cloudformation describe-stacks \
             --stack-name clickclack-fakeco \
             --output json >"$stack_file"
+          aws cloudformation get-template \
+            --stack-name clickclack-fakeco \
+            --template-stage Original \
+            --query TemplateBody \
+            --output json >"$template_file"
+          aws cloudformation describe-stack-resources \
+            --stack-name clickclack-fakeco \
+            --output json >"$resources_file"
           node deploy/fakeco/aws/owner.mjs verify-stack \
             --rendered "$CLICKCLACK_RENDERED" \
-            --stack "$stack_file"
+            --stack "$stack_file" \
+            --template "$template_file" \
+            --resources "$resources_file"
           instance_id="$(jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "InstanceId") | .OutputValue' "$stack_file")"
           [[ "$instance_id" =~ ^i-[0-9a-f]+$ ]]
           printf '::add-mask::%s\n' "$instance_id"
@@ -649,12 +692,16 @@ jobs:
           node deploy/fakeco/aws/owner.mjs verify-instance \
             --rendered "$CLICKCLACK_RENDERED" \
             --stack "$stack_file" \
+            --template "$template_file" \
+            --resources "$resources_file" \
             --instance "$instance_file" \
             --volume "$volume_file" \
             --security-group "$security_group_file" \
             --workload-iam "$workload_iam_file"
           {
             printf 'CLICKCLACK_STACK_FILE=%s\n' "$stack_file"
+            printf 'CLICKCLACK_TEMPLATE_FILE=%s\n' "$template_file"
+            printf 'CLICKCLACK_RESOURCES_FILE=%s\n' "$resources_file"
             printf 'CLICKCLACK_INSTANCE_FILE=%s\n' "$instance_file"
             printf 'CLICKCLACK_VOLUME_FILE=%s\n' "$volume_file"
             printf 'CLICKCLACK_SECURITY_GROUP_FILE=%s\n' "$security_group_file"
@@ -793,6 +840,38 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          aws cloudformation describe-stacks \
+            --stack-name clickclack-fakeco \
+            --output json >"$CLICKCLACK_STACK_FILE"
+          aws cloudformation get-template \
+            --stack-name clickclack-fakeco \
+            --template-stage Original \
+            --query TemplateBody \
+            --output json >"$CLICKCLACK_TEMPLATE_FILE"
+          aws cloudformation describe-stack-resources \
+            --stack-name clickclack-fakeco \
+            --output json >"$CLICKCLACK_RESOURCES_FILE"
+          aws ec2 describe-instances \
+            --instance-ids "$CLICKCLACK_INSTANCE_ID" \
+            --output json >"$CLICKCLACK_INSTANCE_FILE"
+          current_volume_id="$(jq -r '
+            .Reservations[0].Instances[0].BlockDeviceMappings[] |
+            select(.DeviceName == "/dev/sda1") |
+            .Ebs.VolumeId
+          ' "$CLICKCLACK_INSTANCE_FILE")"
+          [[ "$current_volume_id" == "$CLICKCLACK_VOLUME_ID" ]]
+          aws ec2 describe-volumes \
+            --volume-ids "$CLICKCLACK_VOLUME_ID" \
+            --output json >"$CLICKCLACK_VOLUME_FILE"
+          node deploy/fakeco/aws/owner.mjs verify-instance \
+            --rendered "$CLICKCLACK_RENDERED" \
+            --stack "$CLICKCLACK_STACK_FILE" \
+            --template "$CLICKCLACK_TEMPLATE_FILE" \
+            --resources "$CLICKCLACK_RESOURCES_FILE" \
+            --instance "$CLICKCLACK_INSTANCE_FILE" \
+            --volume "$CLICKCLACK_VOLUME_FILE" \
+            --security-group "$CLICKCLACK_SECURITY_GROUP_FILE" \
+            --workload-iam "$CLICKCLACK_WORKLOAD_IAM_FILE"
           snapshot_id="$(aws ec2 create-snapshot \
             --volume-id "$CLICKCLACK_VOLUME_ID" \
             --description 'Retained before guarded ClickClack FakeCo teardown' \
@@ -840,6 +919,8 @@ jobs:
           node deploy/fakeco/aws/owner.mjs retention-manifest \
             --rendered "$CLICKCLACK_RENDERED" \
             --stack "$CLICKCLACK_STACK_FILE" \
+            --template "$CLICKCLACK_TEMPLATE_FILE" \
+            --resources "$CLICKCLACK_RESOURCES_FILE" \
             --instance "$CLICKCLACK_INSTANCE_FILE" \
             --volume "$CLICKCLACK_VOLUME_FILE" \
             --security-group "$CLICKCLACK_SECURITY_GROUP_FILE" \

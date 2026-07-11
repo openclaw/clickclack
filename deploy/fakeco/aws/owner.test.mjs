@@ -367,6 +367,7 @@ test("stack, instance, backup, and retention replay verify the observed resource
   const evidencePath = path.join(temporary, "evidence.json");
   const snapshotPath = path.join(temporary, "snapshot.json");
   const retentionPath = path.join(temporary, "retention.json");
+  const inventoryArgs = await stackInventoryArgs(temporary, rendered);
   await writeFile(stackPath, JSON.stringify(stackResponse(rendered)));
   await writeFile(instancePath, JSON.stringify(instanceResponse()));
   await writeFile(volumePath, JSON.stringify(volumeResponse()));
@@ -376,7 +377,8 @@ test("stack, instance, backup, and retention replay verify the observed resource
   await writeFile(snapshotPath, JSON.stringify(snapshotResponse()));
 
   assert.equal(
-    runOwner(["verify-stack", "--rendered", renderedPath, "--stack", stackPath]).status,
+    runOwner(["verify-stack", "--rendered", renderedPath, "--stack", stackPath, ...inventoryArgs])
+      .status,
     0,
   );
   assert.equal(
@@ -386,6 +388,7 @@ test("stack, instance, backup, and retention replay verify the observed resource
       renderedPath,
       "--stack",
       stackPath,
+      ...inventoryArgs,
       "--instance",
       instancePath,
       "--volume",
@@ -468,6 +471,7 @@ test("stack, instance, backup, and retention replay verify the observed resource
     renderedPath,
     "--stack",
     stackPath,
+    ...inventoryArgs,
     "--instance",
     instancePath,
     "--volume",
@@ -521,12 +525,86 @@ test("observed drift is rejected without echoing private values", async (t) => {
   stack.Stacks[0].Parameters.find((entry) => entry.ParameterKey === "VpcId").ParameterValue =
     "vpc-private-drift";
   const stackPath = path.join(temporary, "stack.json");
+  const inventoryArgs = await stackInventoryArgs(temporary, rendered);
   await writeFile(stackPath, JSON.stringify(stack));
-  const result = runOwner(["verify-stack", "--rendered", renderedPath, "--stack", stackPath]);
+  const result = runOwner([
+    "verify-stack",
+    "--rendered",
+    renderedPath,
+    "--stack",
+    stackPath,
+    ...inventoryArgs,
+  ]);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /parameter VpcId drifted/u);
   assert.doesNotMatch(result.stderr, /vpc-private-drift/u);
   assert.doesNotMatch(result.stderr, /vpc-1234abcd/u);
+});
+
+test("stack replay accepts stable rollback and rejects template or resource drift", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const renderedPath = path.join(temporary, "rendered.json");
+  assert.equal(
+    runOwner(
+      [
+        "render",
+        "--phase",
+        "teardown",
+        "--commit",
+        sourceCommit,
+        "--owner-commit",
+        ownerCommit,
+        "--output",
+        renderedPath,
+      ],
+      fakecoEnvironment(),
+    ).status,
+    0,
+  );
+  const rendered = JSON.parse(await readFile(renderedPath, "utf8"));
+  const stackPath = path.join(temporary, "stack.json");
+  const templatePath = path.join(temporary, "observed-template.json");
+  const resourcesPath = path.join(temporary, "observed-resources.json");
+  const stack = stackResponse(rendered);
+  stack.Stacks[0].StackStatus = "UPDATE_ROLLBACK_COMPLETE";
+  await writeFile(stackPath, JSON.stringify(stack));
+  await writeFile(templatePath, JSON.stringify(ownerTemplate));
+  await writeFile(resourcesPath, JSON.stringify(stackResourcesResponse(rendered)));
+  const args = [
+    "verify-stack",
+    "--rendered",
+    renderedPath,
+    "--stack",
+    stackPath,
+    "--template",
+    templatePath,
+    "--resources",
+    resourcesPath,
+  ];
+  assert.equal(runOwner(args).status, 0, "stable rollback-complete stack must be recoverable");
+
+  await writeFile(
+    templatePath,
+    JSON.stringify({ ...ownerTemplate, Description: "out-of-band template" }),
+  );
+  const templateDrift = runOwner(args);
+  assert.notEqual(templateDrift.status, 0);
+  assert.match(templateDrift.stderr, /stack template drifted/u);
+
+  await writeFile(templatePath, JSON.stringify(ownerTemplate));
+  const resources = stackResourcesResponse(rendered);
+  resources.StackResources.push({
+    StackName: "clickclack-fakeco",
+    LogicalResourceId: "UnexpectedVolume",
+    PhysicalResourceId: "vol-private-extra",
+    ResourceType: "AWS::EC2::Volume",
+    ResourceStatus: "CREATE_COMPLETE",
+  });
+  await writeFile(resourcesPath, JSON.stringify(resources));
+  const resourceDrift = runOwner(args);
+  assert.notEqual(resourceDrift.status, 0);
+  assert.match(resourceDrift.stderr, /stack resource set drifted/u);
+  assert.doesNotMatch(resourceDrift.stderr, /vol-private-extra/u);
 });
 
 test("live security group drift is rejected", async (t) => {
@@ -555,6 +633,7 @@ test("live security group drift is rejected", async (t) => {
   const volumePath = path.join(temporary, "volume.json");
   const securityGroupPath = path.join(temporary, "security-group.json");
   const workloadIAMPath = path.join(temporary, "workload-iam.json");
+  const inventoryArgs = await stackInventoryArgs(temporary, rendered);
   await writeFile(stackPath, JSON.stringify(stackResponse(rendered)));
   await writeFile(instancePath, JSON.stringify(instanceResponse()));
   await writeFile(volumePath, JSON.stringify(volumeResponse()));
@@ -614,6 +693,7 @@ test("live security group drift is rejected", async (t) => {
       renderedPath,
       "--stack",
       stackPath,
+      ...inventoryArgs,
       "--instance",
       instancePath,
       "--volume",
@@ -654,11 +734,23 @@ test("live workload IAM drift is rejected", async (t) => {
   const volumePath = path.join(temporary, "volume.json");
   const securityGroupPath = path.join(temporary, "security-group.json");
   const workloadIAMPath = path.join(temporary, "workload-iam.json");
+  const inventoryArgs = await stackInventoryArgs(temporary, rendered);
   await writeFile(stackPath, JSON.stringify(stackResponse(rendered)));
   await writeFile(volumePath, JSON.stringify(volumeResponse()));
   await writeFile(securityGroupPath, JSON.stringify(securityGroupResponse(rendered)));
 
   const cases = [
+    [
+      "additional block device",
+      (instance) => {
+        instance.Reservations[0].Instances[0].BlockDeviceMappings.push({
+          DeviceName: "/dev/sdf",
+          Ebs: { VolumeId: "vol-private-extra", DeleteOnTermination: true },
+        });
+      },
+      () => {},
+      /exactly one block device mapping/u,
+    ],
     [
       "instance association",
       (instance) => {
@@ -722,6 +814,7 @@ test("live workload IAM drift is rejected", async (t) => {
       renderedPath,
       "--stack",
       stackPath,
+      ...inventoryArgs,
       "--instance",
       instancePath,
       "--volume",
@@ -774,6 +867,18 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   assert.match(workflow, /sha256sum "\$verified_object"/u);
   assert.match(workflow, /sha256sum --check --status && env/u);
   assert.match(workflow, /describe-security-groups/u);
+  assert.match(workflow, /\.Vpcs\[0\]\.OwnerId == \$owner/u);
+  assert.match(workflow, /\.Subnets\[0\]\.OwnerId/u);
+  assert.match(workflow, /\.SecurityGroups\[0\]\.OwnerId == \$owner/u);
+  assert.match(workflow, /\.NatGatewayAddresses\[\]\.NetworkInterfaceId/u);
+  assert.match(workflow, /LC_ALL=C sort -u/u);
+  assert.match(workflow, /describe-network-interfaces/u);
+  assert.match(workflow, /all\(\.NetworkInterfaces\[\]; \.OwnerId == \$owner/u);
+  assert.match(workflow, /\.TransitGateways\[0\]\.OwnerId/u);
+  assert.match(workflow, /cloudformation get-template/u);
+  assert.match(workflow, /cloudformation describe-stack-resources/u);
+  assert.match(workflow, /--template "\$template_file"/u);
+  assert.match(workflow, /--resources "\$resources_file"/u);
   assert.match(workflow, /--security-group "\$security_group_file"/u);
   assert.match(workflow, /get-instance-profile/u);
   assert.match(workflow, /list-attached-role-policies/u);
@@ -788,6 +893,11 @@ test("manual workflow is protected, change-set-first, bounded, and deletion-safe
   assert.ok(
     workflow.indexOf("create-snapshot") < workflow.lastIndexOf("delete-stack"),
     "snapshot must complete before stack deletion",
+  );
+  assert.ok(
+    workflow.lastIndexOf("cloudformation describe-stack-resources") <
+      workflow.indexOf("create-snapshot"),
+    "the complete stack inventory must be refreshed before retention begins",
   );
   assert.match(workflow, /seq 1 180/u);
   assert.match(workflow, /snapshot_state/u);
@@ -1175,6 +1285,11 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(runbook, /-f "\$runtime_override"/u);
   assert.match(runbook, /s3:\/\/\$backup_bucket\/\$backup_key/u);
   assert.match(runbook, /"\$backup_sha256" "\$restore_dir\/clickclack\.db"/u);
+  assert.match(runbook, /wait_ready\(\)/u);
+  assert.match(runbook, /for _ in \$\(seq 1 60\)/u);
+  assert.match(runbook, /trap rollback_restore ERR/u);
+  assert.match(runbook, /cp -a -- "\$restore_dir\/previous\/\$file"/u);
+  assert.match(runbook, /wait_ready \|\| "\$\{compose\[@\]\}" stop app/u);
 });
 
 function fakecoEnvironment() {
@@ -1244,6 +1359,31 @@ function stackResponse(rendered) {
         ],
       },
     ],
+  };
+}
+
+async function stackInventoryArgs(temporary, rendered) {
+  const observedTemplatePath = path.join(temporary, "observed-template.json");
+  const resourcesPath = path.join(temporary, "observed-resources.json");
+  await writeFile(observedTemplatePath, JSON.stringify(ownerTemplate));
+  await writeFile(resourcesPath, JSON.stringify(stackResourcesResponse(rendered)));
+  return ["--template", observedTemplatePath, "--resources", resourcesPath];
+}
+
+function stackResourcesResponse(rendered) {
+  const resources = Object.entries(ownerTemplate.Resources).filter(([, resource]) => {
+    return (
+      resource.Condition !== "AllowMetricsSource" || rendered.target.metricsSecurityGroupId !== ""
+    );
+  });
+  return {
+    StackResources: resources.map(([logicalID, resource], index) => ({
+      StackName: "clickclack-fakeco",
+      LogicalResourceId: logicalID,
+      PhysicalResourceId: `physical-${index}`,
+      ResourceType: resource.Type,
+      ResourceStatus: "CREATE_COMPLETE",
+    })),
   };
 }
 

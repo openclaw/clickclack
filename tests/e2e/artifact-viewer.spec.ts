@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
+import {
+  assertSafePDFCanvas,
+  PDF_CANVAS_DIMENSION_LIMIT,
+  PDF_CANVAS_PIXEL_LIMIT,
+} from "../../apps/web/src/lib/pdf";
 import type { Upload } from "../../apps/web/src/lib/types";
 
 const DOCX_FIXTURE = Buffer.from(
@@ -40,6 +45,29 @@ function minimalPDF(): Buffer {
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 180] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
     "<< /Length 57 >>\nstream\nBT /F1 18 Tf 36 100 Td (Artifact PDF page two) Tj ET\nendstream",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets
+    .slice(1)
+    .map((offset) => `${offset.toString().padStart(10, "0")} 00000 n \n`)
+    .join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
+function oversizedPagePDF(): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20000 20000] /Contents 4 0 R >>",
+    "<< /Length 0 >>\nstream\n\nendstream",
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
@@ -99,6 +127,16 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   expect(classifyArtifact(uploadShape("brief.docx", "application/octet-stream"))).toBe("docx");
   expect(classifyArtifact(uploadShape("notes.log", "application/octet-stream"))).toBe("text");
   expect(classifyArtifact(uploadShape("archive.zip", "application/zip"))).toBe("unsupported");
+});
+
+test("bounds PDF canvas dimensions and total backing pixels", () => {
+  expect(() => assertSafePDFCanvas(4_096, 4_096)).not.toThrow();
+  expect(() => assertSafePDFCanvas(PDF_CANVAS_DIMENSION_LIMIT + 1, 1)).toThrow(
+    "too large to preview safely",
+  );
+  expect(() => assertSafePDFCanvas(PDF_CANVAS_PIXEL_LIMIT / 4_096 + 1, 4_096)).toThrow(
+    "too large to preview safely",
+  );
 });
 
 test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane", async ({
@@ -245,6 +283,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       body: highExpansionDocx(),
     },
+    {
+      filename: "oversized-page.pdf",
+      contentType: "application/pdf",
+      body: oversizedPagePDF(),
+    },
   ];
   const { channel } = await seedArtifacts(page, fixtures);
   await page.goto("/app");
@@ -268,6 +311,40 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await expect(page.getByRole("button", { name: "Open high-expansion.docx" })).toBeFocused();
+  await page.waitForTimeout(250);
+
+  await page.getByRole("button", { name: "Open oversized-page.pdf" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too large to preview safely");
+  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await expect(viewer.locator("canvas")).toHaveCount(0);
+
+  if (process.env.CAPTURE_PDF_LIMIT_PROOF === "1") {
+    const canvasCount = await viewer.locator("canvas").count();
+    await page.evaluate(
+      ({ canvases, dimensionLimit, pixelLimit }) => {
+        const diagnostics = document.createElement("aside");
+        diagnostics.setAttribute("data-artifact-proof", "");
+        diagnostics.style.cssText =
+          "position:fixed;left:24px;bottom:24px;z-index:9999;width:450px;padding:20px;border:1px solid #35516f;border-radius:12px;background:#101820;color:#eef6ff;font:14px/1.5 ui-monospace,monospace;box-shadow:0 18px 50px #0008";
+        diagnostics.innerHTML = `<strong style="display:block;margin-bottom:10px;color:#7ee787">Playwright live PDF diagnostics: PASS</strong>
+          <div>crafted page geometry: 20,000 × 20,000 pt</div>
+          <div>backing dimension limit: ${dimensionLimit.toLocaleString()} px</div>
+          <div>backing pixel budget: ${(pixelLimit / 1024 / 1024).toFixed(0)} MP</div>
+          <div>viewer canvases allocated: ${canvases}</div>
+          <div>safe download fallback: visible</div>`;
+        document.body.append(diagnostics);
+      },
+      {
+        canvases: canvasCount,
+        dimensionLimit: PDF_CANVAS_DIMENSION_LIMIT,
+        pixelLimit: PDF_CANVAS_PIXEL_LIMIT,
+      },
+    );
+    await page.screenshot({
+      path: "docs/proof/artifact-viewer-pdf-canvas-limit.png",
+      fullPage: true,
+    });
+  }
 });
 
 test("near-limit code remains interruptible and falls back to escaped source", async ({ page }) => {

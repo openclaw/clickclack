@@ -65,9 +65,14 @@ Classification uses the upload's recorded filename and original content type,
 not the response `Content-Type`. This lets the client recognize DOCX and HTML
 while the server continues to serve those types as hardened downloads.
 
-- Code and text render as escaped source. Markdown offers sanitized preview and
-  source modes.
-- PDFs render one page at a time with page and zoom controls.
+- Code and text render as escaped source. Known code languages up to 256 KiB
+  are highlighted in a terminable worker with a two-second timeout and a 2 MiB
+  output cap; larger source remains escaped plain text. Markdown offers
+  sanitized preview and source modes.
+- PDFs render one page at a time with page and zoom controls. Before allocating
+  either a thumbnail or viewer canvas, ClickClack caps each DPR-scaled backing
+  dimension at 8,192 pixels and the total backing store at 16 megapixels.
+  Pages outside those limits fall back to the authenticated download.
 - DOCX files are converted to semantic HTML in a terminable browser worker and
   sanitized. Before conversion, ClickClack rejects ZIP64 packages, archives
   with more than 2,048 entries, more than 32 MiB of declared expanded content,

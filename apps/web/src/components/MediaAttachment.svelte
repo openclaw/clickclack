@@ -7,6 +7,7 @@
     RenderTask,
   } from "pdfjs-dist";
   import { artifactKindLabel, classifyArtifact } from "../lib/artifacts";
+  import { assertSafePDFCanvas } from "../lib/pdf";
   import type { Upload } from "../lib/types";
 
   type Props = {
@@ -114,8 +115,11 @@
         if (!canvas || !context) throw new Error("pdf thumbnail canvas unavailable");
 
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = Math.max(1, Math.floor(viewport.width * dpr));
-        canvas.height = Math.max(1, Math.floor(viewport.height * dpr));
+        const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
+        const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
+        assertSafePDFCanvas(backingWidth, backingHeight);
+        canvas.width = backingWidth;
+        canvas.height = backingHeight;
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;

@@ -17,6 +17,7 @@
   import { markdown } from "../../lib/format";
   import { convertDocxInWorker } from "../../lib/docx";
   import { highlightCodeInWorker } from "../../lib/highlight";
+  import { assertSafePDFCanvas } from "../../lib/pdf";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
 
@@ -188,10 +189,13 @@
         if (cancelled || !canvasEl) return;
         const viewport = page.getViewport({ scale: pdfScale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
+        const backingHeight = Math.max(1, Math.floor(viewport.height * dpr));
+        assertSafePDFCanvas(backingWidth, backingHeight);
         const context = canvasEl.getContext("2d");
         if (!context) throw new Error("PDF canvas is unavailable.");
-        canvasEl.width = Math.max(1, Math.floor(viewport.width * dpr));
-        canvasEl.height = Math.max(1, Math.floor(viewport.height * dpr));
+        canvasEl.width = backingWidth;
+        canvasEl.height = backingHeight;
         canvasEl.style.width = `${viewport.width}px`;
         canvasEl.style.height = `${viewport.height}px`;
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -200,7 +204,8 @@
       } catch (error) {
         if (!cancelled && !(error instanceof Error && error.name === "RenderingCancelledException")) {
           status = "error";
-          errorMessage = "Could not render this PDF page.";
+          errorMessage =
+            error instanceof Error ? error.message : "Could not render this PDF page.";
         }
       } finally {
         if (!cancelled) pdfRendering = false;

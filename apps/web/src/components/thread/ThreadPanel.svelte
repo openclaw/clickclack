@@ -4,7 +4,7 @@
   import { handleLabel } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
-  import type { Message, ThreadState, User } from "../../lib/types";
+  import type { Message, ThreadState, Upload, User } from "../../lib/types";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "../messages/QuoteBlock.svelte";
@@ -28,6 +28,7 @@
     onInlineImagePointerUp: (event: PointerEvent) => void;
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string) => void;
+    onOpenArtifact: (upload: Upload) => void;
   };
 
   let {
@@ -49,6 +50,7 @@
     onInlineImagePointerUp,
     onJumpToQuote,
     onOpenImage,
+    onOpenArtifact,
   }: Props = $props();
 </script>
 
@@ -99,6 +101,7 @@
               upload={attachment}
               url={uploadURL(attachment)}
               onOpenImage={onOpenImage}
+              onOpenArtifact={onOpenArtifact}
             />
           {/each}
         </div>
@@ -138,6 +141,7 @@
                   upload={attachment}
                   url={uploadURL(attachment)}
                   onOpenImage={onOpenImage}
+                  onOpenArtifact={onOpenArtifact}
                 />
               {/each}
             </div>

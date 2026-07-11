@@ -1651,6 +1651,7 @@
   font-weight: 800;
   letter-spacing: 0;
   text-decoration: none;
+  cursor: pointer;
   overflow: hidden;
   box-shadow: 0 8px 18px -16px rgba(0, 0, 0, 0.6);
 }
@@ -1716,6 +1717,10 @@
 }
 
 .document-attachment__title {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   min-width: 0;
   color: var(--text-strong);
   font-size: 13px;
@@ -1724,6 +1729,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
+  cursor: pointer;
 }
 
 .document-attachment__title:hover {

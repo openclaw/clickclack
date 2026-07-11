@@ -26,7 +26,7 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
   import { dmTitle } from "../../lib/chat/people";
-  import type { Channel, DirectConversation, Message } from "../../lib/types";
+  import type { Channel, DirectConversation, Message, Upload } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
   import MessageGroup from "./MessageGroup.svelte";
 
@@ -62,6 +62,7 @@
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string) => void;
+    onOpenArtifact: (upload: Upload) => void;
     onLoadOlder?: () => void;
     onLoadNewer?: (source?: "scroll" | "wheel") => void;
     onJumpToUnread?: () => void;
@@ -98,6 +99,7 @@
     onOpenThread,
     onJumpToQuote,
     onOpenImage,
+    onOpenArtifact,
     onLoadOlder,
     onLoadNewer,
     onJumpToUnread,
@@ -819,6 +821,7 @@
               {onOpenThread}
               {onJumpToQuote}
               {onOpenImage}
+              {onOpenArtifact}
               {onRetry}
               {onDiscard}
             />

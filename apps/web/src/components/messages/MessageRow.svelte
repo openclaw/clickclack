@@ -3,7 +3,7 @@
   import { enhanceMarkdownGifs } from "../../lib/actions/markdownGifs";
   import { time, markdown } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
-  import type { Message } from "../../lib/types";
+  import type { Message, Upload } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
@@ -20,6 +20,7 @@
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string) => void;
+    onOpenArtifact: (upload: Upload) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
   };
@@ -36,6 +37,7 @@
     onOpenThread,
     onJumpToQuote,
     onOpenImage,
+    onOpenArtifact,
     onRetry,
     onDiscard,
   }: Props = $props();
@@ -115,6 +117,7 @@
             upload={attachment}
             url={uploadURL(attachment)}
             onOpenImage={onOpenImage}
+            onOpenArtifact={onOpenArtifact}
           />
         {/each}
       </div>

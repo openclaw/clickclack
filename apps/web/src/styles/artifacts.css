@@ -1,0 +1,348 @@
+/* ---------- ARTIFACT VIEWER ---------- */
+
+.artifact-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(28px);
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.artifact-viewer.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.artifact-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+}
+
+.artifact-viewer__identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 5px 10px;
+  min-width: 0;
+}
+
+.artifact-viewer__identity span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.artifact-viewer__identity strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-viewer__identity small {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.artifact-viewer__actions,
+.artifact-viewer__segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.artifact-viewer__actions > a,
+.artifact-viewer__actions > button,
+.artifact-viewer__segmented button,
+.artifact-viewer__pdf-toolbar button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.artifact-viewer__actions > button {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.artifact-viewer__actions > a:hover,
+.artifact-viewer__actions > button:hover,
+.artifact-viewer__segmented button:hover,
+.artifact-viewer__pdf-toolbar button:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.artifact-viewer__actions :focus-visible,
+.artifact-viewer__pdf-toolbar button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.artifact-viewer__segmented {
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.artifact-viewer__segmented button {
+  height: 28px;
+  min-width: 58px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.artifact-viewer__segmented button.active {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text-strong);
+}
+
+.artifact-viewer__body {
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.artifact-viewer__state {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 100%;
+  padding: 32px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.artifact-viewer__state strong {
+  color: var(--text-strong);
+  font-size: 15px;
+}
+
+.artifact-viewer__state p {
+  max-width: 34ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.artifact-viewer__state a {
+  min-height: 36px;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.artifact-viewer__state--error svg {
+  color: var(--danger);
+}
+
+.artifact-viewer__spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: artifact-spin 700ms linear infinite;
+}
+
+@keyframes artifact-spin {
+  to { transform: rotate(360deg); }
+}
+
+.artifact-viewer__source {
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+  margin: 0;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 90%, #090b10);
+  color: var(--text);
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.artifact-viewer__source code {
+  font: inherit;
+}
+
+.artifact-viewer__document {
+  width: min(100%, 760px);
+  min-height: calc(100% - 32px);
+  margin: 16px auto;
+  padding: clamp(24px, 5vw, 56px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.artifact-viewer__document > :first-child { margin-top: 0; }
+.artifact-viewer__document > :last-child { margin-bottom: 0; }
+.artifact-viewer__document h1,
+.artifact-viewer__document h2,
+.artifact-viewer__document h3 { color: var(--text-strong); line-height: 1.25; }
+.artifact-viewer__document h1 { font-size: 28px; }
+.artifact-viewer__document h2 { margin-top: 1.75em; font-size: 21px; }
+.artifact-viewer__document h3 { margin-top: 1.5em; font-size: 17px; }
+.artifact-viewer__document pre { overflow: auto; padding: 14px; border-radius: var(--radius); background: var(--panel-2); }
+.artifact-viewer__document code { font-family: "Geist Mono Variable", ui-monospace, monospace; }
+.artifact-viewer__document table { width: 100%; border-collapse: collapse; }
+.artifact-viewer__document th,
+.artifact-viewer__document td { padding: 8px 10px; border: 1px solid var(--line-strong); text-align: left; }
+.artifact-viewer__document img { max-width: 100%; height: auto; }
+.artifact-viewer__document a { color: var(--accent); }
+
+.artifact-viewer__web {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+
+.artifact-viewer__body.is-pdf {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.artifact-viewer__pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.artifact-viewer__pdf-toolbar button {
+  min-width: 30px;
+  height: 30px;
+  font-size: 11px;
+}
+
+.artifact-viewer__pdf-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.artifact-viewer__toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.artifact-viewer__pdf-stage {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  text-align: center;
+}
+
+.artifact-viewer__pdf-stage canvas {
+  display: inline-block;
+  max-width: none;
+  background: white;
+  box-shadow: 0 16px 48px -24px rgba(0, 0, 0, 0.65);
+  transition: opacity 120ms ease;
+}
+
+.artifact-viewer__pdf-stage.is-rendering canvas { opacity: 0.55; }
+
+.hljs-comment,
+.hljs-quote { color: var(--muted); font-style: italic; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link { color: var(--accent); }
+.hljs-string,
+.hljs-title,
+.hljs-name,
+.hljs-type,
+.hljs-attribute,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition { color: var(--success); }
+.hljs-number,
+.hljs-meta,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params { color: var(--activity-accent); }
+.hljs-deletion { color: var(--danger); }
+
+@media (max-width: 820px) {
+  .artifact-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    min-height: 100dvh;
+    border-left: 0;
+  }
+
+  .artifact-viewer__header {
+    min-height: calc(64px + var(--safe-area-top));
+    padding-top: calc(10px + var(--safe-area-top));
+    padding-right: calc(12px + var(--safe-area-right));
+    padding-left: calc(16px + var(--safe-area-left));
+  }
+
+  .artifact-viewer__identity small { display: none; }
+  .artifact-viewer__document { min-height: 100%; margin: 0; border: 0; border-radius: 0; }
+  .artifact-viewer__web { min-height: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-viewer { transition: none; }
+  .artifact-viewer__spinner { animation-duration: 1.4s; }
+}

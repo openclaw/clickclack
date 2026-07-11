@@ -15,6 +15,8 @@
     "@fontsource-variable/geist-mono": "^5.2.8",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "dompurify": "^3.4.11",
+    "highlight.js": "^11.11.1",
+    "mammoth": "^1.12.0",
     "marked": "^18.0.5",
     "pdfjs-dist": "^6.1.200",
     "svelte": "^5.56.4",

@@ -2,7 +2,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { handleLabel } from "../../lib/chat/people";
   import { time } from "../../lib/format";
-  import type { Message } from "../../lib/types";
+  import type { Message, Upload } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
   import MessageRow from "./MessageRow.svelte";
 
@@ -16,6 +16,7 @@
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string) => void;
+    onOpenArtifact: (upload: Upload) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
   };
@@ -30,6 +31,7 @@
     onOpenThread,
     onJumpToQuote,
     onOpenImage,
+    onOpenArtifact,
     onRetry,
     onDiscard,
   }: Props = $props();
@@ -77,6 +79,7 @@
         {onOpenThread}
         {onJumpToQuote}
         {onOpenImage}
+        {onOpenArtifact}
         {onRetry}
         {onDiscard}
       />

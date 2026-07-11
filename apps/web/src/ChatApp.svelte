@@ -20,6 +20,7 @@
   import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
+  import ArtifactViewer from "./components/artifacts/ArtifactViewer.svelte";
   import ImageViewer from "./components/media/ImageViewer.svelte";
   import MessageList, {
     type MessageListHandle,
@@ -73,6 +74,9 @@
   let slashCommands: SlashCommand[] = [];
   let mentionPeople: User[] = [];
   let selectedImage: { url: string; title: string } | null = null;
+  let selectedArtifact: Upload | null = null;
+  let artifactConversationKey = "";
+  let artifactTrigger: HTMLElement | null = null;
   let messageBody = "";
   let replyBody = "";
   let workspaceName = "";
@@ -204,7 +208,12 @@
   $: agentResponding = agentProgressTurns.some((turn) =>
     turn.lines.some((line) => !line.finalized),
   );
-  $: sidePanelOpen = selectedThread !== null || selectedProfile !== null;
+  $: sidePanelOpen = selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
+  $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
+    selectedArtifact = null;
+    artifactConversationKey = "";
+    artifactTrigger = null;
+  }
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
@@ -1792,6 +1801,8 @@
   }
 
   async function refreshThread(messageID: string, optimisticRoot?: Message) {
+    selectedArtifact = null;
+    artifactConversationKey = "";
     selectedProfile = null;
     if (optimisticRoot) selectedThread = optimisticRoot;
     activeComposerContext = "thread";
@@ -2419,6 +2430,8 @@
 
   function openUserProfile(profile?: User | null) {
     if (!profile) return;
+    selectedArtifact = null;
+    artifactConversationKey = "";
     selectedThread = null;
     selectedProfile = profile;
     if (
@@ -2457,6 +2470,21 @@
     selectedImage = { url, title };
   }
 
+  function openArtifactViewer(upload: Upload) {
+    artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (replyContext === "thread") clearReplyTarget();
+    selectedThread = null;
+    selectedThreadState = null;
+    selectedProfile = null;
+    replies = [];
+    activeComposerContext = "message";
+    artifactConversationKey = activeConversationKey;
+    selectedArtifact = upload;
+    void tick().then(() => {
+      document.querySelector<HTMLElement>(".artifact-viewer__actions > button:last-child")?.focus();
+    });
+  }
+
   function handleInlineImagePointerUp(event: PointerEvent) {
     const target = event.target;
     if (!(target instanceof HTMLImageElement)) return;
@@ -2483,10 +2511,15 @@
 
   function closeSidePanel() {
     const threadWasOpen = selectedThread !== null;
+    const restoreArtifactFocus = selectedArtifact !== null ? artifactTrigger : null;
     const parentTargetID = currentConversationKey();
+    if (restoreArtifactFocus?.isConnected) restoreArtifactFocus.focus({ preventScroll: true });
     if (replyContext === "thread") clearReplyTarget();
     selectedThread = null;
     selectedProfile = null;
+    selectedArtifact = null;
+    artifactConversationKey = "";
+    artifactTrigger = null;
     activeComposerContext = "message";
     replies = [];
     if (threadWasOpen && selectedWorkspaceID && parentTargetID) {
@@ -2506,6 +2539,10 @@
       } else if (mobileNavOpen) {
         event.preventDefault();
         closeMobileNav();
+        return;
+      } else if (selectedArtifact) {
+        event.preventDefault();
+        closeSidePanel();
         return;
       } else if (replyTarget) {
         event.preventDefault();
@@ -2605,6 +2642,7 @@
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
   class:thread-open={sidePanelOpen}
+  class:artifact-open={selectedArtifact !== null}
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
@@ -2734,6 +2772,7 @@
       onOpenThread={openThread}
       onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
       onOpenImage={openImageViewer}
+      onOpenArtifact={openArtifactViewer}
       onLoadOlder={requestOlderMessages}
       onLoadNewer={(source) => requestNewerMessages(source === "wheel")}
       onJumpToUnread={() => void jumpToUnreadBoundary()}
@@ -2789,6 +2828,11 @@
     </div>
   </main>
 
+  {#if selectedArtifact}
+    <aside class="artifact-viewer open" inert={mobileNavOpen} aria-label="Artifact viewer">
+      <ArtifactViewer upload={selectedArtifact} onClose={closeSidePanel} />
+    </aside>
+  {:else}
   <aside
     class="thread"
     class:open={sidePanelOpen}
@@ -2815,6 +2859,7 @@
         onInlineImagePointerUp={handleInlineImagePointerUp}
         onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
         onOpenImage={openImageViewer}
+        onOpenArtifact={openArtifactViewer}
       />
     {:else if selectedProfile}
       <ProfilePane
@@ -2836,6 +2881,7 @@
       <ThreadEmptyState />
     {/if}
   </aside>
+  {/if}
 </div>
 {#if settingsModalOpen && user}
   <SettingsModal

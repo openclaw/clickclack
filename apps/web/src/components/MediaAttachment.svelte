@@ -6,15 +6,17 @@
     PDFPageProxy,
     RenderTask,
   } from "pdfjs-dist";
+  import { artifactKindLabel, classifyArtifact } from "../lib/artifacts";
   import type { Upload } from "../lib/types";
 
   type Props = {
     upload: Upload;
     url: string;
     onOpenImage?: (url: string, title: string) => void;
+    onOpenArtifact?: (upload: Upload) => void;
   };
 
-  let { upload, url, onOpenImage = () => {} }: Props = $props();
+  let { upload, url, onOpenImage = () => {}, onOpenArtifact = () => {} }: Props = $props();
 
   const MAX_MEDIA_HEIGHT = 360;
   const MIN_MEDIA_HEIGHT = 120;
@@ -33,9 +35,9 @@
   let isVideo = $derived(contentType.startsWith("video/"));
   let isAudio = $derived(contentType.startsWith("audio/"));
   let isPDF = $derived(contentType === "application/pdf");
-  let isText = $derived(contentType === "text/plain");
-  let canPreviewDocument = $derived(isPDF || isText);
-  let documentLabel = $derived(isPDF ? "PDF" : "Text");
+  let artifactKind = $derived(classifyArtifact(upload));
+  let canPreviewDocument = $derived(artifactKind !== "unsupported");
+  let documentLabel = $derived(artifactKindLabel(artifactKind));
 
   let mediaStyle = $derived.by(() => {
     const w = upload.width ?? 0;
@@ -251,14 +253,13 @@
   </div>
 {:else if canPreviewDocument}
   <div class="document-attachment">
-    <a
+    <button
+      type="button"
       class="document-attachment__thumbnail"
       class:has-preview={pdfThumbnailReady}
       class:thumbnail-failed={pdfThumbnailFailed}
-      href={url}
-      target="_blank"
-      rel="noreferrer"
       aria-label={`Open ${upload.filename}`}
+      onclick={() => onOpenArtifact(upload)}
     >
       {#if isPDF}
         <canvas
@@ -268,11 +269,11 @@
         ></canvas>
       {/if}
       <span>{documentLabel}</span>
-    </a>
+    </button>
     <div class="document-attachment__meta">
-      <a class="document-attachment__title" href={url} target="_blank" rel="noreferrer">
+      <button type="button" class="document-attachment__title" onclick={() => onOpenArtifact(upload)}>
         {upload.filename}
-      </a>
+      </button>
       <small>{formatBytes(upload.byte_size)}</small>
     </div>
     <a

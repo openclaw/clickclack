@@ -54,6 +54,32 @@ for the safe preview set (`image`, `video`, `audio`, `text/plain`, and
 `application/pdf`) and keeps `X-Content-Type-Options: nosniff` plus a sandbox
 content-security policy on upload responses.
 
+### Artifact viewer
+
+Attached code, text, Markdown, PDF, DOCX, and HTML files open in a read-only
+artifact pane without leaving the conversation. The pane replaces the thread
+or profile pane on desktop and fills the viewport on mobile. Images retain the
+existing lightbox; audio and video retain their inline controls.
+
+Classification uses the upload's recorded filename and original content type,
+not the response `Content-Type`. This lets the client recognize DOCX and HTML
+while the server continues to serve those types as hardened downloads.
+
+- Code and text render as escaped source. Markdown offers sanitized preview and
+  source modes.
+- PDFs render one page at a time with page and zoom controls.
+- DOCX files are converted to semantic HTML in the browser and sanitized. The
+  preview does not promise pixel-perfect Word layout.
+- Uploaded HTML runs in an opaque-origin sandbox with a document CSP that
+  blocks scripts, forms, navigation, and network requests.
+- Text, code, Markdown, and HTML previews are limited to 2 MiB; DOCX to 16 MiB;
+  PDF to the server's 64 MiB upload cap. Larger or malformed files fall back to
+  an authenticated download.
+
+Artifact viewing does not mutate upload bytes. Collaborative Markdown editing
+requires a future first-class, revisioned artifact model rather than changing
+an immutable message attachment in place.
+
 ## Storage layout
 
 Local disk:

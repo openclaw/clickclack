@@ -15,6 +15,7 @@
     type ArtifactKind,
   } from "../../lib/artifacts";
   import { markdown } from "../../lib/format";
+  import { convertDocxInWorker } from "../../lib/docx";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
 
@@ -155,13 +156,10 @@
         };
         pdfDocument = await loadingTask.promise;
       } else if (kind === "docx") {
-        const [{ default: mammoth }, bytes] = await Promise.all([import("mammoth"), responseBytes(signal)]);
+        const bytes = await responseBytes(signal);
         if (signal.aborted) return;
-        const result = await mammoth.convertToHtml(
-          { arrayBuffer: bytes },
-          { convertImage: mammoth.images.dataUri, externalFileAccess: false },
-        );
-        renderedHTML = DOMPurify.sanitize(result.value, {
+        const html = await convertDocxInWorker(bytes, signal);
+        renderedHTML = DOMPurify.sanitize(html, {
           FORBID_TAGS: ["form", "iframe", "object", "embed", "script", "style"],
           FORBID_ATTR: ["formaction"],
         });

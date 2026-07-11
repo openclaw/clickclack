@@ -68,8 +68,12 @@ while the server continues to serve those types as hardened downloads.
 - Code and text render as escaped source. Markdown offers sanitized preview and
   source modes.
 - PDFs render one page at a time with page and zoom controls.
-- DOCX files are converted to semantic HTML in the browser and sanitized. The
-  preview does not promise pixel-perfect Word layout.
+- DOCX files are converted to semantic HTML in a terminable browser worker and
+  sanitized. Before conversion, ClickClack rejects ZIP64 packages, archives
+  with more than 2,048 entries, more than 32 MiB of declared expanded content,
+  or a compression ratio above 100:1. Conversion stops after 10 seconds and
+  converted HTML is capped at 4 MiB. The preview does not promise pixel-perfect
+  Word layout.
 - Uploaded HTML runs in an opaque-origin sandbox with a document CSP that
   blocks scripts, forms, navigation, and network requests.
 - Text, code, Markdown, and HTML previews are limited to 2 MiB; DOCX to 16 MiB;

@@ -7,6 +7,16 @@ const DOCX_FIXTURE = Buffer.from(
   "base64",
 );
 
+function highExpansionDocx(): Buffer {
+  const fixture = Buffer.from(DOCX_FIXTURE);
+  for (let offset = 0; offset <= fixture.length - 46; offset += 1) {
+    if (fixture.readUInt32LE(offset) !== 0x02014b50) continue;
+    fixture.writeUInt32LE(64 * 1024 * 1024, offset + 24);
+    break;
+  }
+  return fixture;
+}
+
 type Fixture = { filename: string; contentType: string; body: Buffer };
 
 function uploadShape(filename: string, contentType: string): Upload {
@@ -202,6 +212,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       body: Buffer.from("not a DOCX package"),
     },
+    {
+      filename: "high-expansion.docx",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      body: highExpansionDocx(),
+    },
   ];
   const { channel } = await seedArtifacts(page, fixtures);
   await page.goto("/app");
@@ -217,6 +232,14 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await page.getByRole("button", { name: "Open malformed.docx" }).click();
   await expect(viewer.getByRole("alert")).toContainText("Preview unavailable");
   await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await page.waitForTimeout(250);
+
+  await page.getByRole("button", { name: "Open high-expansion.docx" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too complex to preview safely");
+  await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await expect(page.getByRole("button", { name: "Open high-expansion.docx" })).toBeFocused();
 });
 
 test("adds an attachment from message.updated without reloading", async ({ page }) => {

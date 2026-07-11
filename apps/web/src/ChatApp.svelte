@@ -2761,6 +2761,7 @@
   />
 
   <Sidebar
+    workspaceID={selectedWorkspaceID}
     workspaceName={selectedWorkspace?.name}
     workspaceIconURL={selectedWorkspace?.icon_url}
     {status}

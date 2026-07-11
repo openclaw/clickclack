@@ -6,6 +6,7 @@
   import DirectMessageList from "./DirectMessageList.svelte";
 
   type Props = {
+    workspaceID: string;
     workspaceName?: string;
     workspaceIconURL?: string;
     status: string;
@@ -35,6 +36,7 @@
   };
 
   let {
+    workspaceID,
     workspaceName,
     workspaceIconURL,
     status,
@@ -62,6 +64,43 @@
     onOpenSettings,
     onOpenWorkspaceSettings,
   }: Props = $props();
+
+  type SectionState = { channels: boolean; directMessages: boolean; people: boolean };
+  const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
+  const DEFAULT_SECTION_STATE: SectionState = { channels: true, directMessages: true, people: true };
+  let sections = $state<SectionState>({ ...DEFAULT_SECTION_STATE });
+
+  function isSectionState(value: unknown): value is SectionState {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate.channels === "boolean" && typeof candidate.directMessages === "boolean" && typeof candidate.people === "boolean";
+  }
+
+  function loadSections(id: string): SectionState {
+    if (!id) return { ...DEFAULT_SECTION_STATE };
+    try {
+      const raw = window.localStorage.getItem(`${SECTION_STORAGE_PREFIX}${id}`);
+      if (!raw) return { ...DEFAULT_SECTION_STATE };
+      const parsed: unknown = JSON.parse(raw);
+      return isSectionState(parsed) ? parsed : { ...DEFAULT_SECTION_STATE };
+    } catch {
+      return { ...DEFAULT_SECTION_STATE };
+    }
+  }
+
+  function toggleSection(section: keyof SectionState) {
+    sections = { ...sections, [section]: !sections[section] };
+    if (!workspaceID) return;
+    try {
+      window.localStorage.setItem(`${SECTION_STORAGE_PREFIX}${workspaceID}`, JSON.stringify(sections));
+    } catch {
+      // Storage is an enhancement; disclosures still work when it is unavailable.
+    }
+  }
+
+  $effect(() => {
+    sections = loadSections(workspaceID);
+  });
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
@@ -115,15 +154,18 @@
 
   <div class="sidebar-scroll">
     <ChannelList
+      expanded={sections.channels}
       {channels}
       {selectedChannelID}
       {selectedDirectID}
       {hrefForChannel}
       {onSelectChannel}
       {onCreateChannel}
+      onToggle={() => toggleSection("channels")}
     />
 
     <DirectMessageList
+      expanded={sections.directMessages}
       conversations={directConversations}
       currentUserID={currentUser?.id}
       {selectedDirectID}
@@ -133,14 +175,17 @@
       {onHideDirect}
       {hiddenDirectTitle}
       {onUndoHideDirect}
+      onToggle={() => toggleSection("directMessages")}
     />
 
-    <section class="nav-section">
+    <section class="nav-section" class:collapsed={!sections.people}>
       <div class="section-title">
-        <span class="caret" aria-hidden="true">▾</span>
-        <span class="label">People</span>
+        <button type="button" class="section-toggle" aria-expanded={sections.people} aria-controls="sidebar-people-list" onclick={() => toggleSection("people")}>
+          <span class="caret" aria-hidden="true">▾</span>
+          <span class="label">People</span>
+        </button>
       </div>
-      <div class="nav-list">
+      <div class="nav-list" id="sidebar-people-list" hidden={!sections.people}>
         {#each recentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id)}
           <a

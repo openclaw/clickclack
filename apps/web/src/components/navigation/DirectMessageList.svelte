@@ -4,6 +4,7 @@
   import type { DirectConversation } from "../../lib/types";
 
   type Props = {
+    expanded: boolean;
     conversations: DirectConversation[];
     currentUserID?: string;
     selectedDirectID: string;
@@ -13,9 +14,11 @@
     onHideDirect: (conversationID: string) => void;
     hiddenDirectTitle?: string;
     onUndoHideDirect: () => void;
+    onToggle: () => void;
   };
 
   let {
+    expanded,
     conversations,
     currentUserID,
     selectedDirectID,
@@ -25,9 +28,11 @@
     onHideDirect,
     hiddenDirectTitle,
     onUndoHideDirect,
+    onToggle,
   }: Props = $props();
 
   let openActionsID = $state("");
+  let unreadTotal = $derived(conversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0));
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
@@ -42,10 +47,15 @@
   }
 </script>
 
-<section class="nav-section">
+<section class="nav-section" class:collapsed={!expanded}>
   <div class="section-title">
-    <span class="caret" aria-hidden="true">▾</span>
-    <span class="label">Direct messages</span>
+    <button type="button" class="section-toggle" aria-expanded={expanded} aria-controls="sidebar-direct-messages-list" onclick={onToggle}>
+      <span class="caret" aria-hidden="true">▾</span>
+      <span class="label">Direct messages</span>
+    </button>
+    {#if !expanded && unreadTotal > 0}
+      <span class="section-unread-badge" aria-label={`${unreadTotal} unread`}>{unreadTotal > 99 ? "99+" : unreadTotal}</span>
+    {/if}
     <button
       type="button"
       class="add-button"
@@ -54,7 +64,7 @@
       onclick={onCreateDirect}
     >＋</button>
   </div>
-  <div class="nav-list">
+  <div class="nav-list" id="sidebar-direct-messages-list" hidden={!expanded}>
     {#each conversations as conversation (conversation.id)}
       {@const dmUser = dmAvatarUser(conversation, currentUserID)}
       {@const unread = conversation.unread_count || 0}

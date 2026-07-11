@@ -2,32 +2,43 @@
   import type { Channel } from "../../lib/types";
 
   type Props = {
+    expanded: boolean;
     channels: Channel[];
     selectedChannelID: string;
     selectedDirectID: string;
     hrefForChannel: (channelID: string) => string;
     onSelectChannel: (channelID: string) => void;
     onCreateChannel: () => void;
+    onToggle: () => void;
   };
 
   let {
+    expanded,
     channels,
     selectedChannelID,
     selectedDirectID,
     hrefForChannel,
     onSelectChannel,
     onCreateChannel,
+    onToggle,
   }: Props = $props();
+
+  let unreadTotal = $derived(channels.reduce((total, channel) => total + (channel.unread_count || 0), 0));
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
 </script>
 
-<section class="nav-section">
+<section class="nav-section" class:collapsed={!expanded}>
   <div class="section-title">
-    <span class="caret" aria-hidden="true">▾</span>
-    <span class="label">Channels</span>
+    <button type="button" class="section-toggle" aria-expanded={expanded} aria-controls="sidebar-channels-list" onclick={onToggle}>
+      <span class="caret" aria-hidden="true">▾</span>
+      <span class="label">Channels</span>
+    </button>
+    {#if !expanded && unreadTotal > 0}
+      <span class="section-unread-badge" aria-label={`${unreadTotal} unread`}>{unreadTotal > 99 ? "99+" : unreadTotal}</span>
+    {/if}
     <button
       type="button"
       class="add-button"
@@ -36,7 +47,7 @@
       onclick={onCreateChannel}
     >＋</button>
   </div>
-  <div class="nav-list">
+  <div class="nav-list" id="sidebar-channels-list" hidden={!expanded}>
     {#each channels as channel (channel.id)}
       {@const unread = channel.unread_count || 0}
       <a

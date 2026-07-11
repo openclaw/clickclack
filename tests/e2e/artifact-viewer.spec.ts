@@ -133,7 +133,7 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
       filename: "viewer-proof.html",
       contentType: "text/html",
       body: Buffer.from(
-        '<!doctype html><html><head><style>h1{color:teal}</style></head><body><h1>Sandboxed web artifact</h1><img src="https://artifact-proof.invalid/leak.png"><script>window.parent.__artifactScriptRan = true</script></body></html>',
+        '<!doctype html><html><head><style>@import "https://artifact-proof.invalid/import.css"; h1{color:teal;background:url(https://artifact-proof.invalid/background.png)}</style></head><body><h1>Sandboxed web artifact</h1><a href="https://artifact-proof.invalid/navigate">external link</a><img src="https://artifact-proof.invalid/leak.png"><form action="https://artifact-proof.invalid/submit"><button>submit</button></form><iframe src="https://artifact-proof.invalid/frame"></iframe><script>window.parent.__artifactScriptRan = true</script></body></html>',
       ),
     },
   ];
@@ -180,14 +180,42 @@ test("opens safe code, markdown, PDF, DOCX, and HTML previews in the side pane",
   await page.waitForTimeout(250);
 
   await page.getByRole("button", { name: "Open viewer-proof.html" }).click();
-  const frame = viewer.locator("iframe").contentFrame();
+  const iframe = viewer.locator("iframe");
+  const frame = iframe.contentFrame();
   await expect(frame.getByRole("heading", { name: "Sandboxed web artifact" })).toBeVisible();
+  await expect(iframe).toHaveAttribute("sandbox", "");
+  await expect(frame.locator("script, form, iframe")).toHaveCount(0);
+  await expect(frame.getByText("external link")).not.toHaveAttribute("href");
+  await expect(frame.locator("img")).not.toHaveAttribute("src");
+  await expect(frame.locator("style")).not.toContainText("artifact-proof.invalid");
   await expect.poll(() => externalRequests).toBe(0);
-  expect(
+  const scriptMarker = await page.evaluate(
+    () => (window as Window & { __artifactScriptRan?: boolean }).__artifactScriptRan,
+  );
+  expect(scriptMarker).toBeUndefined();
+
+  if (process.env.CAPTURE_ARTIFACT_PROOF === "1") {
     await page.evaluate(
-      () => (window as Window & { __artifactScriptRan?: boolean }).__artifactScriptRan,
-    ),
-  ).toBeUndefined();
+      ({ requests, scriptRan }) => {
+        const diagnostics = document.createElement("aside");
+        diagnostics.setAttribute("data-artifact-proof", "");
+        diagnostics.style.cssText =
+          "position:fixed;left:24px;bottom:24px;z-index:9999;width:430px;padding:20px;border:1px solid #35516f;border-radius:12px;background:#101820;color:#eef6ff;font:14px/1.5 ui-monospace,monospace;box-shadow:0 18px 50px #0008";
+        diagnostics.innerHTML = `<strong style="display:block;margin-bottom:10px;color:#7ee787">Playwright live browser diagnostics: PASS</strong>
+          <div>iframe sandbox tokens: none</div>
+          <div>script execution marker: ${scriptRan ? "SET (FAIL)" : "absent"}</div>
+          <div>requests to artifact-proof.invalid: ${requests}</div>
+          <div>scripts/forms/frames in preview: 0 / 0 / 0</div>
+          <div>external href/src/CSS references: stripped</div>`;
+        document.body.append(diagnostics);
+      },
+      { requests: externalRequests, scriptRan: scriptMarker === true },
+    );
+    await page.screenshot({
+      path: "docs/proof/artifact-viewer-html-isolation.png",
+      fullPage: true,
+    });
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   const bounds = await viewer.evaluate((element) => {
@@ -240,6 +268,33 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await expect(page.getByRole("button", { name: "Open high-expansion.docx" })).toBeFocused();
+});
+
+test("near-limit code remains interruptible and falls back to escaped source", async ({ page }) => {
+  const nearLimitSource = `<script>window.__artifactCodeRan = true</script>\n${"const value = 1;\n".repeat(120_000)}`;
+  const { channel } = await seedArtifacts(page, [
+    {
+      filename: "near-limit.ts",
+      contentType: "text/typescript",
+      body: Buffer.from(nearLimitSource.slice(0, 2 * 1024 * 1024)),
+    },
+  ]);
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+
+  await page.getByRole("button", { name: "Open near-limit.ts" }).click();
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.locator("pre")).toContainText("window.__artifactCodeRan", { timeout: 5_000 });
+  await expect(viewer.locator(".hljs-keyword")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { __artifactCodeRan?: boolean }).__artifactCodeRan,
+    ),
+  ).toBeUndefined();
+
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0, { timeout: 1_000 });
+  await expect(page.getByRole("button", { name: "Open near-limit.ts" })).toBeFocused();
 });
 
 test("adds an attachment from message.updated without reloading", async ({ page }) => {

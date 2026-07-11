@@ -16,6 +16,7 @@
   } from "../../lib/artifacts";
   import { markdown } from "../../lib/format";
   import { convertDocxInWorker } from "../../lib/docx";
+  import { highlightCodeInWorker } from "../../lib/highlight";
   import type { Upload } from "../../lib/types";
   import { formatBytes, uploadURL } from "../../lib/uploads";
 
@@ -106,17 +107,6 @@
     return new TextDecoder("utf-8", { fatal: false }).decode(await responseBytes(signal));
   }
 
-  async function highlightCode(text: string): Promise<string> {
-    const { default: highlighter } = await import("highlight.js");
-    const language = artifactLanguage(upload);
-    if (language && highlighter.getLanguage(language)) {
-      return highlighter.highlight(text, { language, ignoreIllegals: true }).value;
-    }
-    const plain = document.createElement("span");
-    plain.textContent = text;
-    return plain.innerHTML;
-  }
-
   async function loadArtifact(signal: AbortSignal) {
     cleanupPDF?.();
     cleanupPDF = null;
@@ -166,7 +156,9 @@
       } else {
         source = await loadText(signal);
         if (signal.aborted) return;
-        if (kind === "code") highlightedSource = await highlightCode(source);
+        if (kind === "code") {
+          highlightedSource = await highlightCodeInWorker(source, artifactLanguage(upload), signal);
+        }
         if (kind === "markdown") renderedHTML = markdown(source);
         if (kind === "html") renderedHTML = htmlDocument(source);
       }

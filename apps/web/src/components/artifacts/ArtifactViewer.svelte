@@ -99,18 +99,33 @@
 
   function markdownDocument(body: string): string {
     return DOMPurify.sanitize(markdown(body), {
-      USE_PROFILES: { html: true },
-      FORBID_TAGS: ["style"],
-      FORBID_ATTR: [
-        "action",
-        "formaction",
-        "href",
-        "poster",
-        "src",
-        "srcset",
-        "style",
-        "xlink:href",
+      ALLOWED_TAGS: [
+        "blockquote",
+        "br",
+        "code",
+        "del",
+        "em",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "li",
+        "ol",
+        "p",
+        "pre",
+        "strong",
+        "table",
+        "tbody",
+        "td",
+        "th",
+        "thead",
+        "tr",
+        "ul",
       ],
+      ALLOWED_ATTR: [],
     });
   }
 

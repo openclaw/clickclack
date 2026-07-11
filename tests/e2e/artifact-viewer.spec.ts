@@ -169,7 +169,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
       filename: "viewer-proof.md",
       contentType: "text/markdown",
       body: Buffer.from(
-        '# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<img alt="srcset leak" srcset="https://artifact-proof.invalid/srcset 1x"><video poster="https://artifact-proof.invalid/poster"></video><div data-css-leak style="background:url(https://artifact-proof.invalid/style)">styled</div><style>@import "https://artifact-proof.invalid/import.css"</style>\n\n<script>window.parent.__artifactScriptRan = true</script>',
+        '# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<img alt="srcset leak" srcset="https://artifact-proof.invalid/srcset 1x"><video poster="https://artifact-proof.invalid/poster"></video><div data-css-leak style="background:url(https://artifact-proof.invalid/style)">styled</div><style>@import "https://artifact-proof.invalid/import.css"</style><table background="https://artifact-proof.invalid/background-attribute"><tr><td>legacy background</td></tr></table>\n\n<script>window.parent.__artifactScriptRan = true</script>',
       ),
     },
     { filename: "viewer-proof.pdf", contentType: "application/pdf", body: minimalPDF() },
@@ -201,14 +201,15 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await page.waitForTimeout(250);
 
   await page.getByRole("button", { name: "Open viewer-proof.md" }).click();
-  await expect(viewer.getByRole("heading", { name: "Markdown artifact" })).toBeVisible();
-  await expect(viewer.locator("script")).toHaveCount(0);
-  await expect(viewer.getByText("external")).not.toHaveAttribute("href");
-  await expect(viewer.locator('img[alt="leak"]')).not.toHaveAttribute("src");
-  await expect(viewer.locator('img[alt="srcset leak"]')).not.toHaveAttribute("srcset");
-  await expect(viewer.locator("video")).not.toHaveAttribute("poster");
-  await expect(viewer.locator("[data-css-leak]")).not.toHaveAttribute("style");
-  await expect(viewer.locator("style")).toHaveCount(0);
+  const markdownPreview = viewer.locator(".artifact-viewer__markdown");
+  await expect(markdownPreview.getByRole("heading", { name: "Markdown artifact" })).toBeVisible();
+  await expect(markdownPreview.locator("script")).toHaveCount(0);
+  await expect(markdownPreview.getByText("external")).toBeVisible();
+  await expect(markdownPreview.locator("a, img, video, div, style")).toHaveCount(0);
+  await expect(markdownPreview.getByText("legacy background")).toBeVisible();
+  await expect(
+    markdownPreview.locator("[background], [href], [poster], [src], [srcset], [style]"),
+  ).toHaveCount(0);
   await expect.poll(() => externalRequests).toBe(0);
   await viewer.getByRole("button", { name: "Source" }).click();
   await expect(viewer.locator("pre")).toContainText("# Markdown artifact");

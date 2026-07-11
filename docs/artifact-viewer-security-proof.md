@@ -8,6 +8,10 @@ The hostile-HTML browser fixture exercises the running ClickClack upload and vie
 
 The Playwright test verifies in the live browser that the iframe has an empty sandbox token list, the script marker remains absent, no request reaches the sentinel host, scripts/forms/frames are absent from the preview DOM, and external URL-bearing attributes and CSS references are stripped.
 
+The Markdown fixture separately covers link, image `src`, raw-HTML `srcset`,
+media `poster`, and script attempts. Its preview strips every URL-bearing
+attribute before insertion and observes zero sentinel-host requests.
+
 Run the diagnostic capture from the repository root:
 
 ```sh
@@ -22,6 +26,10 @@ The oversized-page fixture is a small valid PDF with a 20,000 × 20,000-point
 page. The running viewer rejects its DPR-scaled backing dimensions before
 assigning either canvas axis, removes the canvas presentation, and shows the
 authenticated download fallback.
+
+An additional small-page fixture declares a 25-megapixel embedded raster. The
+PDF.js document options reject image allocations above the same 16-megapixel
+budget even when the final page canvas itself is small.
 
 Run the PDF diagnostic capture from the repository root:
 

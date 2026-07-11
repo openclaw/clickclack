@@ -2482,10 +2482,20 @@
 
   function closeArtifactViewer() {
     const trigger = artifactTrigger;
+    const uploadID = selectedArtifact?.id || "";
     selectedArtifact = null;
     artifactConversationKey = "";
     artifactTrigger = null;
-    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    void tick().then(() => {
+      if (trigger?.isConnected) {
+        trigger.focus({ preventScroll: true });
+        return;
+      }
+      const scope = selectedThread ? document.querySelector<HTMLElement>(".thread") : document;
+      scope
+        ?.querySelector<HTMLElement>(`[data-artifact-upload-id="${CSS.escape(uploadID)}"]`)
+        ?.focus({ preventScroll: true });
+    });
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {

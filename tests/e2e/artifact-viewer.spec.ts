@@ -70,6 +70,30 @@ function oversizedPagePDF(): Buffer {
   return Buffer.from(pdf);
 }
 
+function oversizedImagePDF(): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 180] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>",
+    "<< /Length 29 >>\nstream\nq 100 0 0 100 0 0 cm /Im0 Do Q\nendstream",
+    "<< /Type /XObject /Subtype /Image /Width 5000 /Height 5000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 1 >>\nstream\n0\nendstream",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets
+    .slice(1)
+    .map((offset) => `${offset.toString().padStart(10, "0")} 00000 n \n`)
+    .join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
 async function seedArtifacts(page: Page, fixtures: Fixture[]) {
   const workspaceResponse = await page.request.get("/api/workspaces");
   const { workspaces } = (await workspaceResponse.json()) as { workspaces: { id: string }[] };
@@ -145,7 +169,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
       filename: "viewer-proof.md",
       contentType: "text/markdown",
       body: Buffer.from(
-        "# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<script>window.parent.__artifactScriptRan = true</script>",
+        '# Markdown artifact\n\n**Safe preview**\n\n[external](https://artifact-proof.invalid/markdown-nav)\n\n![leak](https://artifact-proof.invalid/markdown-image)\n\n<img alt="srcset leak" srcset="https://artifact-proof.invalid/srcset 1x"><video poster="https://artifact-proof.invalid/poster"></video>\n\n<script>window.parent.__artifactScriptRan = true</script>',
       ),
     },
     { filename: "viewer-proof.pdf", contentType: "application/pdf", body: minimalPDF() },
@@ -181,6 +205,8 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await expect(viewer.locator("script")).toHaveCount(0);
   await expect(viewer.getByText("external")).not.toHaveAttribute("href");
   await expect(viewer.locator('img[alt="leak"]')).not.toHaveAttribute("src");
+  await expect(viewer.locator('img[alt="srcset leak"]')).not.toHaveAttribute("srcset");
+  await expect(viewer.locator("video")).not.toHaveAttribute("poster");
   await expect.poll(() => externalRequests).toBe(0);
   await viewer.getByRole("button", { name: "Source" }).click();
   await expect(viewer.locator("pre")).toContainText("# Markdown artifact");
@@ -278,6 +304,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       body: Buffer.from("not a PDF document"),
     },
     {
+      filename: "oversized-image.pdf",
+      contentType: "application/pdf",
+      body: oversizedImagePDF(),
+    },
+    {
       filename: "oversized-page.pdf",
       contentType: "application/pdf",
       body: oversizedPagePDF(),
@@ -301,6 +332,12 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await page.getByRole("button", { name: "Open malformed.pdf" }).click();
   await expect(viewer.getByRole("alert")).toContainText("Preview unavailable");
   await expect(viewer.getByRole("link", { name: "Download original" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await page.waitForTimeout(250);
+
+  await page.getByRole("button", { name: "Open oversized-image.pdf" }).click();
+  await expect(viewer.getByText("Page 1 of 1")).toBeVisible();
+  await expect(viewer.locator("canvas")).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
   await page.waitForTimeout(250);
 
@@ -446,4 +483,5 @@ test("returns to the routed thread after closing an artifact", async ({ page }) 
 
   await expect(thread).toBeVisible();
   expect(new URL(page.url()).pathname).toBe(threadPath);
+  await expect(thread.getByRole("button", { name: "Open thread-proof.md" })).toBeFocused();
 });

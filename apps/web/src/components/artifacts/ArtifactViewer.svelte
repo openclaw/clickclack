@@ -18,6 +18,7 @@
   import { highlightCodeInWorker } from "../../lib/highlight";
   import {
     assertSafePDFCanvas,
+    PDF_CANVAS_PIXEL_LIMIT,
     PDF_LOAD_TIMEOUT_MS,
     PDF_RENDER_TIMEOUT_MS,
   } from "../../lib/pdf";
@@ -97,15 +98,10 @@
   }
 
   function markdownDocument(body: string): string {
-    const documentNode = new DOMParser().parseFromString(markdown(body), "text/html");
-    const localReference = /^(?:#|data:|blob:)/i;
-    for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href]")) {
-      for (const attribute of ["src", "href"] as const) {
-        const value = element.getAttribute(attribute)?.trim();
-        if (value && !localReference.test(value)) element.removeAttribute(attribute);
-      }
-    }
-    return documentNode.body.innerHTML;
+    return DOMPurify.sanitize(markdown(body), {
+      USE_PROFILES: { html: true },
+      FORBID_ATTR: ["action", "formaction", "href", "poster", "src", "srcset", "xlink:href"],
+    });
   }
 
   function resourceLimitMessage(limit: number): string {
@@ -195,7 +191,11 @@
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
         const bytes = await responseBytes(signal, limit!);
         if (signal.aborted) return;
-        const loadingTask = pdfjs.getDocument({ data: bytes }) as PDFDocumentLoadingTask;
+        const loadingTask = pdfjs.getDocument({
+          data: bytes,
+          maxImageSize: PDF_CANVAS_PIXEL_LIMIT,
+          canvasMaxAreaInBytes: PDF_CANVAS_PIXEL_LIMIT * 4,
+        }) as PDFDocumentLoadingTask;
         cleanupPDF = () => {
           void loadingTask.destroy();
           pdfDocument = null;

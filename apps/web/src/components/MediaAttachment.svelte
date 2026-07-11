@@ -187,13 +187,19 @@
     <button
       type="button"
       class="document-attachment__thumbnail"
+      data-artifact-upload-id={upload.id}
       aria-label={`Open ${upload.filename}`}
       onclick={() => onOpenArtifact(upload)}
     >
       <span>{documentLabel}</span>
     </button>
     <div class="document-attachment__meta">
-      <button type="button" class="document-attachment__title" onclick={() => onOpenArtifact(upload)}>
+      <button
+        type="button"
+        class="document-attachment__title"
+        data-artifact-upload-id={upload.id}
+        onclick={() => onOpenArtifact(upload)}
+      >
         {upload.filename}
       </button>
       <small>{formatBytes(upload.byte_size)}</small>

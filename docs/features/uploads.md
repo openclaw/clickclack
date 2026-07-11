@@ -71,11 +71,13 @@ server continues to serve it as a hardened download.
 - Code and text render as escaped source. Known code languages up to 256 KiB
   are highlighted in a terminable worker with a two-second timeout and a 2 MiB
   output cap; larger source remains escaped plain text. Markdown offers
-  sanitized preview and source modes.
+  sanitized preview and source modes; preview HTML carries no URL-bearing
+  attributes, so raw HTML and Markdown images cannot initiate requests.
 - PDFs load only after the user opens the document, render one page at a time,
   and provide page and zoom controls. Actual response bytes, load time, render
-  time, each DPR-scaled backing dimension, and total backing pixels are capped.
-  Files or pages outside those limits fall back to the authenticated download.
+  time, embedded-image pixels, worker canvas bytes, each DPR-scaled backing
+  dimension, and total backing pixels are capped. Files or pages outside those
+  limits fall back to the authenticated download.
 - DOCX files never enter a browser parser. Normal, malformed, compressed-bomb,
   and oversized DOCX uploads all use the same authenticated download-only path.
 - Uploaded HTML runs in an opaque-origin sandbox with a document CSP that

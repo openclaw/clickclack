@@ -75,11 +75,12 @@
       FORBID_ATTR: ["action", "formaction", "srcset", "xlink:href"],
     });
     const documentNode = new DOMParser().parseFromString(sanitized, "text/html");
-    const localReference = /^(?:#|data:|blob:)/i;
+    const localResourceReference = /^(?:#|data:|blob:)/i;
     for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
       for (const attribute of ["src", "href", "poster"] as const) {
         const value = element.getAttribute(attribute)?.trim();
-        if (value && !localReference.test(value)) element.removeAttribute(attribute);
+        const allowed = attribute === "href" ? value?.startsWith("#") : value && localResourceReference.test(value);
+        if (value && !allowed) element.removeAttribute(attribute);
       }
     }
     const stripExternalCSS = (value: string) =>

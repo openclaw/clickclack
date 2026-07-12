@@ -205,7 +205,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
       filename: "viewer-proof.html",
       contentType: "text/html",
       body: Buffer.from(
-        '<!doctype html><html><head><meta http-equiv="refresh" content="0;url=https://artifact-proof.invalid/refresh"><style>@import "https://artifact-proof.invalid/import.css"; h1{color:teal;background:url(https://artifact-proof.invalid/background.png)}</style></head><body><h1>Sandboxed web artifact</h1><a href="https://artifact-proof.invalid/navigate">external link</a><img src="https://artifact-proof.invalid/leak.png"><form action="https://artifact-proof.invalid/submit"><button>submit</button></form><iframe src="https://artifact-proof.invalid/frame"></iframe><script>window.parent.__artifactScriptRan = true</script></body></html>',
+        '<!doctype html><html><head><meta http-equiv="refresh" content="0;url=https://artifact-proof.invalid/refresh"><style>@import "https://artifact-proof.invalid/import.css"; h1{color:teal;background:url(https://artifact-proof.invalid/background.png)}</style></head><body><h1>Sandboxed web artifact</h1><a href="https://artifact-proof.invalid/navigate">external link</a><a data-data-navigation href="data:text/html,%3Cimg%20src%3D%22https%3A%2F%2Fartifact-proof.invalid%2Fdata-navigation.png%22%3E">data navigation</a><img src="https://artifact-proof.invalid/leak.png"><form action="https://artifact-proof.invalid/submit"><button>submit</button></form><iframe src="https://artifact-proof.invalid/frame"></iframe><script>window.parent.__artifactScriptRan = true</script></body></html>',
       ),
     },
   ];
@@ -265,6 +265,8 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await expect(frame.locator("script, form, iframe")).toHaveCount(0);
   await expect(frame.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
   await expect(frame.getByText("external link")).not.toHaveAttribute("href");
+  await expect(frame.getByText("data navigation")).not.toHaveAttribute("href");
+  await frame.getByText("data navigation").click();
   await expect(frame.locator("img")).not.toHaveAttribute("src");
   await expect(frame.locator("style")).not.toContainText("artifact-proof.invalid");
   await expect.poll(() => externalRequests).toBe(0);

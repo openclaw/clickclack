@@ -75,3 +75,33 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
     .poll(() => visibleChannelNames(page))
     .toEqual([names[2], names[0], names[1], addedName]);
 });
+
+test("channel ordering is isolated by workspace", async ({ page }) => {
+  const first = await createWorkspaceWithChannels(page, "First channel order");
+  const second = await createWorkspaceWithChannels(page, "Second channel order");
+  const meResponse = await page.request.get("/api/me");
+  expect(meResponse.ok()).toBe(true);
+  const { user } = (await meResponse.json()) as { user: { id: string } };
+
+  await page.goto(`/app/${first.workspace.route_id}`);
+  await page.getByRole("button", { name: `Move #${first.names[0]}` }).click();
+  await page
+    .getByRole("menu", { name: `Move #${first.names[0]}` })
+    .getByRole("menuitem", { name: "Move down" })
+    .click();
+  await expect
+    .poll(() => visibleChannelNames(page))
+    .toEqual([first.names[1], first.names[0], first.names[2]]);
+
+  await page.goto(`/app/${second.workspace.route_id}`);
+  await expect.poll(() => visibleChannelNames(page)).toEqual(second.names);
+  const secondStorageKey = `clickclack:sidebar-channel-order:v1:${user.id}:${second.workspace.id}`;
+  await expect
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), secondStorageKey))
+    .toBeNull();
+
+  await page.goto(`/app/${first.workspace.route_id}`);
+  await expect
+    .poll(() => visibleChannelNames(page))
+    .toEqual([first.names[1], first.names[0], first.names[2]]);
+});

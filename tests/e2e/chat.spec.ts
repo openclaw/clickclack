@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { execFile, execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -446,6 +447,7 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
   });
 
   await page.goto("/app");
+  await expect(page.getByText("Connected", { exact: true }).first()).toBeVisible();
   await page
     .getByRole("button", { name: /Account settings for Local Captain/ })
     .click({ button: "right" });
@@ -1213,7 +1215,7 @@ test("browser notifications announce incoming messages outside the active conver
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
   const workspaceId = workspaces.workspaces[0].id;
-  const channelName = `notify-${Date.now()}`;
+  const channelName = `notify-${randomUUID()}`;
   const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
     data: { name: channelName, kind: "public" },
   });
@@ -1234,6 +1236,7 @@ test("browser notifications announce incoming messages outside the active conver
 
   await page.goto("/app");
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(page.getByText("Connected", { exact: true }).first()).toBeVisible();
   const remoteResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
     headers: { "X-ClickClack-User": senderID },
     data: { body: "ping from another channel" },
@@ -1242,14 +1245,16 @@ test("browser notifications announce incoming messages outside the active conver
 
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        (
-          window as unknown as {
-            __clickclackNotifications: { title: string; options?: NotificationOptions }[];
-          }
-        ).__clickclackNotifications.find((notification) =>
-          notification.title.includes("ClickClack in #notify-"),
-        ),
+      page.evaluate(
+        (name) =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string; options?: NotificationOptions }[];
+            }
+          ).__clickclackNotifications.find(
+            (notification) => notification.title === `ClickClack in #${name}`,
+          ),
+        channel.channel.name,
       ),
     )
     .toEqual(
@@ -1261,19 +1266,17 @@ test("browser notifications announce incoming messages outside the active conver
       }),
     );
 
-  await page.evaluate(() => {
+  await page.evaluate((name) => {
     const notification = (
       window as unknown as {
         __clickclackNotifications: { title: string; onclick?: (() => void) | null }[];
       }
-    ).__clickclackNotifications.find((candidate) =>
-      candidate.title.includes("ClickClack in #notify-"),
-    );
+    ).__clickclackNotifications.find((candidate) => candidate.title === `ClickClack in #${name}`);
     if (!notification) {
       throw new Error("Expected a channel notification");
     }
     notification.onclick?.();
-  });
+  }, channel.channel.name);
 
   await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
 });

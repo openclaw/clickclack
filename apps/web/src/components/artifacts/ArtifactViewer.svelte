@@ -7,6 +7,7 @@
     PDFPageProxy,
     PDFWorker,
     RenderTask,
+    TextContent,
   } from "pdfjs-dist";
   import {
     artifactKindLabel,
@@ -53,6 +54,8 @@
   const STRUCTURED_TOKEN_LIMIT = 10_000;
   const STRUCTURED_SOURCE_LIMIT = 64 * 1024;
   const RENDERED_HTML_LIMIT = 4 * 1024 * 1024;
+  const PDF_TEXT_CHARACTER_LIMIT = 64 * 1024;
+  const PDF_TEXT_ITEM_LIMIT = 5_000;
 
   class StructuredPreviewLimitError extends Error {}
 
@@ -365,6 +368,7 @@
     const scale = pdfScale;
     let cancelled = false;
     let renderTask: RenderTask | null = null;
+    let textReader: ReadableStreamDefaultReader<TextContent> | null = null;
     let renderTimer = 0;
     pdfRendering = true;
     pdfText = "";
@@ -374,24 +378,43 @@
         renderTimer = window.setTimeout(() => {
           if (cancelled) return;
           renderTask?.cancel();
+          void textReader?.cancel();
           cleanupPDF?.();
           status = "error";
           errorMessage = "PDF page rendering took too long and was stopped.";
         }, PDF_RENDER_TIMEOUT_MS);
         const page: PDFPageProxy = await document.getPage(pageNumber);
         if (cancelled || !canvasEl) return;
-        const textContent = await page.getTextContent();
-        if (cancelled) return;
         let extractedText = "";
-        for (const item of textContent.items) {
-          if (!("str" in item) || !item.str) continue;
-          const next = `${extractedText}${extractedText ? " " : ""}${item.str}`;
-          if (next.length > 64 * 1024) {
-            extractedText = `${next.slice(0, 64 * 1024)}…`;
-            break;
+        let textItems = 0;
+        textReader = page.streamTextContent().getReader();
+        try {
+          while (!cancelled) {
+            const { done, value } = await textReader.read();
+            if (done) break;
+            for (const item of value.items) {
+              textItems += 1;
+              if (textItems > PDF_TEXT_ITEM_LIMIT) {
+                await textReader.cancel();
+                extractedText = `${extractedText}…`;
+                break;
+              }
+              if (!("str" in item) || !item.str) continue;
+              const next = `${extractedText}${extractedText ? " " : ""}${item.str}`;
+              if (next.length > PDF_TEXT_CHARACTER_LIMIT) {
+                await textReader.cancel();
+                extractedText = `${next.slice(0, PDF_TEXT_CHARACTER_LIMIT)}…`;
+                break;
+              }
+              extractedText = next;
+            }
+            if (textItems > PDF_TEXT_ITEM_LIMIT || extractedText.endsWith("…")) break;
           }
-          extractedText = next;
+        } finally {
+          textReader.releaseLock();
+          textReader = null;
         }
+        if (cancelled) return;
         pdfText = extractedText || "This page has no extractable text.";
         const viewport = page.getViewport({ scale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -428,6 +451,7 @@
       cancelled = true;
       clearTimeout(renderTimer);
       renderTask?.cancel();
+      void textReader?.cancel();
     };
   });
 

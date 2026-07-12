@@ -568,16 +568,29 @@ func (s *Server) CleanupPendingUploadObjects(ctx context.Context, limit int) err
 	if limit <= 0 {
 		limit = uploadCleanupSweepLimit
 	}
+	attempted := make(map[string]struct{})
+	var cleanupErrors []error
 	for {
 		cleanups, err := s.store.ListPendingUploadCleanups(ctx, limit)
 		if err != nil {
 			return err
 		}
 		if len(cleanups) == 0 {
-			return nil
+			return errors.Join(cleanupErrors...)
 		}
-		if err := s.cleanupUploadObjects(ctx, cleanups); err != nil {
-			return err
+		pending := cleanups[:0]
+		for _, cleanup := range cleanups {
+			if _, seen := attempted[cleanup.ID]; seen {
+				continue
+			}
+			attempted[cleanup.ID] = struct{}{}
+			pending = append(pending, cleanup)
+		}
+		if len(pending) == 0 {
+			return errors.Join(cleanupErrors...)
+		}
+		if err := s.cleanupUploadObjects(ctx, pending); err != nil {
+			cleanupErrors = append(cleanupErrors, err)
 		}
 	}
 }
@@ -593,16 +606,18 @@ func (s *Server) cleanupUploadObjects(ctx context.Context, cleanups []store.Pend
 		}
 		return err
 	}
+	var cleanupErrors []error
 	for _, cleanup := range cleanups {
 		if err := s.uploadStorage.Delete(ctx, cleanup.StoragePath); err != nil {
 			_ = s.store.RecordPendingUploadCleanupFailure(ctx, cleanup.ID, err.Error())
-			return err
+			cleanupErrors = append(cleanupErrors, err)
+			continue
 		}
 		if err := s.store.DeletePendingUploadCleanup(ctx, cleanup.ID); err != nil {
-			return err
+			cleanupErrors = append(cleanupErrors, err)
 		}
 	}
-	return nil
+	return errors.Join(cleanupErrors...)
 }
 
 func (s *Server) listWorkspaceMemberPage(w http.ResponseWriter, r *http.Request) {

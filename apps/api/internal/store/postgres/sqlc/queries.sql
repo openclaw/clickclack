@@ -239,6 +239,9 @@ JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE w.id = sqlc.arg(workspace_id)
   AND wm.user_id = sqlc.arg(user_id);
 
+-- name: LockWorkspaceForUpdate :exec
+SELECT id FROM workspaces WHERE id = sqlc.arg(workspace_id) FOR UPDATE;
+
 -- name: UpdateWorkspace :exec
 UPDATE workspaces
 SET name = sqlc.arg(name),

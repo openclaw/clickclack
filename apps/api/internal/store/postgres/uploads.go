@@ -267,19 +267,19 @@ func (s *Store) GetUpload(ctx context.Context, uploadID, userID string) (store.U
 	if err := s.requireMembership(ctx, upload.WorkspaceID, userID); err != nil {
 		return store.Upload{}, err
 	}
+	iconVisible, err := workspaceIconUploadVisibleTx(ctx, s.db, upload.WorkspaceID, uploadID)
+	if err != nil {
+		return store.Upload{}, err
+	}
+	if iconVisible {
+		return upload, nil
+	}
 	hasLiveAttachments, err := uploadHasLiveAttachmentsTx(ctx, s.db, uploadID)
 	if err != nil {
 		return store.Upload{}, err
 	}
 	if !hasLiveAttachments {
 		if upload.OwnerID == userID {
-			return upload, nil
-		}
-		iconVisible, err := workspaceIconUploadVisibleTx(ctx, s.db, upload.WorkspaceID, uploadID)
-		if err != nil {
-			return store.Upload{}, err
-		}
-		if iconVisible {
 			return upload, nil
 		}
 		return store.Upload{}, errors.New("upload is not visible")

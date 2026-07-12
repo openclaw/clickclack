@@ -32,7 +32,7 @@ func (s *Store) UpdateWorkspace(ctx context.Context, input store.UpdateWorkspace
 	if err != nil {
 		return store.Workspace{}, store.Event{}, err
 	}
-	if err := validateWorkspaceIconURLTx(ctx, tx, input.WorkspaceID, iconURL); err != nil {
+	if err := validateWorkspaceIconURLTx(ctx, tx, input.WorkspaceID, input.ActorUserID, iconURL); err != nil {
 		return store.Workspace{}, store.Event{}, err
 	}
 	if err := qtx.UpdateWorkspace(ctx, storedb.UpdateWorkspaceParams{Name: name, Slug: workspaceSlug, IconUrl: iconURL, ID: input.WorkspaceID}); err != nil {

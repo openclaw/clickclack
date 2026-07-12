@@ -259,6 +259,45 @@ test("workspace ownership candidates include members after the first 200", async
   expect(requestedCursors).toEqual(["", "page-two"]);
 });
 
+test("uploading a workspace icon preserves pending profile edits", async ({ page }) => {
+  const stamp = Date.now();
+  const response = await page.request.post("/api/workspaces", {
+    data: {
+      name: `Icon Settings ${stamp}`,
+      slug: `icon-settings-${stamp}`,
+    },
+  });
+  expect(response.ok()).toBe(true);
+  const { workspace } = (await response.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const nextName = `Edited Icon Settings ${stamp}`;
+  const nextSlug = `edited-icon-settings-${stamp}`;
+
+  await page.goto(`/app/${workspace.route_id}/settings/overview`);
+  await page.getByLabel("Workspace name").fill(nextName);
+  await page.getByLabel("Workspace slug").fill(nextSlug);
+  await page.getByLabel("Workspace icon file").setInputFiles({
+    name: "icon.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+
+  await expect(page.getByText("Workspace icon updated.")).toBeVisible();
+  await expect(page.getByLabel("Workspace name")).toHaveValue(nextName);
+  await expect(page.getByLabel("Workspace slug")).toHaveValue(nextSlug);
+  const persisted = await page.request.get(`/api/workspaces/${workspace.id}`);
+  expect(persisted.ok()).toBe(true);
+  const body = (await persisted.json()) as {
+    workspace: { name: string; slug: string; icon_url: string };
+  };
+  expect(body.workspace).toMatchObject({ name: nextName, slug: nextSlug });
+  expect(body.workspace.icon_url).toMatch(/^\/api\/uploads\/upl_/);
+});
+
 test("creating the first workspace enters the routed app state", async ({ page }) => {
   const requestedPaths: string[] = [];
   let workspaceCreated = false;

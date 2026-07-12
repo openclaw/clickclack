@@ -686,6 +686,18 @@ func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {
 	}
 
 	storage.failDeletes = false
+	storage.failPaths = map[string]bool{storagePaths[0]: true}
+	if err := srv.CleanupPendingUploadObjects(ctx, 0); !errors.Is(err, storage.err) {
+		t.Fatalf("expected poison object error, got %v", err)
+	}
+	pending, err = st.ListPendingUploadCleanups(ctx, uploadCount+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].StoragePath != storagePaths[0] {
+		t.Fatalf("expected only poison object to remain after full sweep, got %#v", pending)
+	}
+	storage.failPaths = nil
 	if err := srv.CleanupPendingUploadObjects(ctx, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -2850,6 +2862,7 @@ func (s *quotaObservingUploadStore) ServeHTTP(http.ResponseWriter, *http.Request
 type faultInjectedUploadStore struct {
 	store       uploadstore.Store
 	failDeletes bool
+	failPaths   map[string]bool
 	err         error
 }
 
@@ -2858,7 +2871,7 @@ func (s *faultInjectedUploadStore) Save(ctx context.Context, body io.Reader, opt
 }
 
 func (s *faultInjectedUploadStore) Delete(ctx context.Context, path string) error {
-	if s.failDeletes {
+	if s.failDeletes || s.failPaths[path] {
 		return s.err
 	}
 	return s.store.Delete(ctx, path)

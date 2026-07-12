@@ -2921,6 +2921,15 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID string) ([]ListWork
 	return items, nil
 }
 
+const lockWorkspaceForUpdate = `-- name: LockWorkspaceForUpdate :exec
+SELECT id FROM workspaces WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockWorkspaceForUpdate(ctx context.Context, workspaceID string) error {
+	_, err := q.db.ExecContext(ctx, lockWorkspaceForUpdate, workspaceID)
+	return err
+}
+
 const markMagicLinkUsed = `-- name: MarkMagicLinkUsed :execrows
 UPDATE auth_magic_links
 SET used_at = $1

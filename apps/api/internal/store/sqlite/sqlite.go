@@ -970,7 +970,7 @@ func normalizeWorkspaceSettings(current store.Workspace, input store.UpdateWorks
 	return name, workspaceSlug, iconURL, nil
 }
 
-func validateWorkspaceIconURLTx(ctx context.Context, tx *sql.Tx, workspaceID, iconURL string) error {
+func validateWorkspaceIconURLTx(ctx context.Context, tx *sql.Tx, workspaceID, actorUserID, iconURL string) error {
 	if iconURL == "" {
 		return nil
 	}
@@ -979,8 +979,9 @@ func validateWorkspaceIconURLTx(ctx context.Context, tx *sql.Tx, workspaceID, ic
 		return errors.New("workspace icon must be an uploaded image")
 	}
 	var uploadWorkspaceID string
+	var uploadOwnerID string
 	var contentType string
-	if err := tx.QueryRowContext(ctx, `SELECT workspace_id, content_type FROM uploads WHERE id = ?`, uploadID).Scan(&uploadWorkspaceID, &contentType); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_id, owner_id, content_type FROM uploads WHERE id = ?`, uploadID).Scan(&uploadWorkspaceID, &uploadOwnerID, &contentType); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("workspace icon upload was not found")
 		}
@@ -991,6 +992,22 @@ func validateWorkspaceIconURLTx(ctx context.Context, tx *sql.Tx, workspaceID, ic
 	}
 	if !strings.HasPrefix(contentType, "image/") {
 		return errors.New("workspace icon must be an image")
+	}
+	if uploadOwnerID != actorUserID {
+		alreadyPublished, err := workspaceIconUploadVisibleTx(ctx, tx, workspaceID, uploadID)
+		if err != nil {
+			return err
+		}
+		if alreadyPublished {
+			return nil
+		}
+		visible, err := uploadVisibleToUserTx(ctx, tx, uploadID, actorUserID)
+		if err != nil {
+			return err
+		}
+		if !visible {
+			return errors.New("workspace icon upload is not visible to the actor")
+		}
 	}
 	return nil
 }

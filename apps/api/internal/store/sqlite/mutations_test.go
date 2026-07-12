@@ -180,6 +180,20 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := workspaces[0]
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-icon@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	third, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Third", Email: "third-icon@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, third.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
 	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other", Slug: "other-icons"}, owner.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -217,11 +231,23 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	privateMemberUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     member.ID,
+		Filename:    "member-private.png",
+		ContentType: "image/png",
+		ByteSize:    5,
+		StoragePath: "memory://member-private.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for name, iconURL := range map[string]string{
 		"missing upload":         "/api/uploads/upl_missing",
 		"non-image upload":       "/api/uploads/" + textUpload.ID,
 		"other workspace upload": "/api/uploads/" + otherUpload.ID,
+		"other member private":   "/api/uploads/" + privateMemberUpload.ID,
 	} {
 		iconURL := iconURL
 		t.Run(name, func(t *testing.T) {
@@ -238,6 +264,31 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	}
 	if updated.IconURL != iconURL || event.Type != "workspace.updated" {
 		t.Fatalf("unexpected workspace icon update: %#v %#v", updated, event)
+	}
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{member.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: owner.ID, Body: "private icon attachment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AttachUpload(ctx, store.AttachUploadInput{MessageID: message.ID, UploadID: imageUpload.ID, UserID: owner.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetUpload(ctx, imageUpload.ID, third.ID); err != nil {
+		t.Fatalf("expected published icon to be visible despite private attachment: %v", err)
+	}
+	if _, _, err := st.TransferWorkspaceOwnership(ctx, store.TransferWorkspaceOwnershipInput{
+		WorkspaceID: workspace.ID, ActorUserID: owner.ID, NewOwnerUserID: member.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updatedName := "Renamed by new owner"
+	if _, _, err := st.UpdateWorkspace(ctx, store.UpdateWorkspaceInput{
+		WorkspaceID: workspace.ID, ActorUserID: member.ID, Name: &updatedName,
+	}); err != nil {
+		t.Fatalf("expected new owner to preserve the previously published icon: %v", err)
 	}
 }
 

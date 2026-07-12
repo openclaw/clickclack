@@ -17,6 +17,9 @@ func (s *Store) UpdateWorkspace(ctx context.Context, input store.UpdateWorkspace
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	if err := qtx.LockWorkspaceForUpdate(ctx, input.WorkspaceID); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
 	currentRow, err := qtx.GetWorkspace(ctx, storedb.GetWorkspaceParams{WorkspaceID: input.WorkspaceID, UserID: input.ActorUserID})
 	if err != nil {
 		return store.Workspace{}, store.Event{}, err
@@ -32,7 +35,7 @@ func (s *Store) UpdateWorkspace(ctx context.Context, input store.UpdateWorkspace
 	if err != nil {
 		return store.Workspace{}, store.Event{}, err
 	}
-	if err := validateWorkspaceIconURLTx(ctx, tx, input.WorkspaceID, iconURL); err != nil {
+	if err := validateWorkspaceIconURLTx(ctx, tx, input.WorkspaceID, input.ActorUserID, iconURL); err != nil {
 		return store.Workspace{}, store.Event{}, err
 	}
 	if err := qtx.UpdateWorkspace(ctx, storedb.UpdateWorkspaceParams{Name: name, Slug: workspaceSlug, IconUrl: iconURL, ID: input.WorkspaceID}); err != nil {
@@ -110,10 +113,13 @@ func (s *Store) DeleteWorkspace(ctx context.Context, workspaceID, actorUserID st
 		return nil, err
 	}
 	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	if err := qtx.LockWorkspaceForUpdate(ctx, workspaceID); err != nil {
+		return nil, err
+	}
 	if err := requireWorkspaceOwnerTx(ctx, tx, workspaceID, actorUserID); err != nil {
 		return nil, err
 	}
-	qtx := s.q.WithTx(tx)
 	storagePaths, err := qtx.ListWorkspaceUploadStoragePaths(ctx, workspaceID)
 	if err != nil {
 		return nil, err

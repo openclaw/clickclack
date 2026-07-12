@@ -111,7 +111,11 @@
       form.set("workspace_id", workspace.id);
       form.set("file", file);
       const uploaded = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
-      await updateWorkspace({ icon_url: `/api/uploads/${uploaded.upload.id}` });
+      await updateWorkspace({
+        name: name.trim(),
+        slug: slug.trim(),
+        icon_url: `/api/uploads/${uploaded.upload.id}`,
+      });
       status = "Workspace icon updated.";
     } catch (err) {
       error = errorMessage(err);
@@ -211,7 +215,7 @@
       <div class="ws-row__label">Workspace name</div>
       <div class="ws-row__hint">The name members and bots see.</div>
     </div>
-    <input class="ws-input" type="text" bind:value={name} disabled={!isManager || saving} />
+    <input aria-label="Workspace name" class="ws-input" type="text" bind:value={name} disabled={!isManager || saving} />
   </div>
 
   <div class="ws-row">
@@ -221,7 +225,7 @@
         clickclack.app/<b>{workspace?.slug ?? "-"}</b>
       </div>
     </div>
-    <input class="ws-input" type="text" bind:value={slug} disabled={!isManager || saving} />
+    <input aria-label="Workspace slug" class="ws-input" type="text" bind:value={slug} disabled={!isManager || saving} />
   </div>
 
   <div class="ws-row">
@@ -234,6 +238,7 @@
         bind:this={iconInput}
         class="ws-file"
         type="file"
+        aria-label="Workspace icon file"
         accept="image/png,image/jpeg,image/gif,image/webp"
         onchange={handleIconChange}
       />

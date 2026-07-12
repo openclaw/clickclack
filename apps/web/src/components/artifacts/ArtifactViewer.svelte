@@ -74,11 +74,6 @@
 
   function htmlDocument(body: string): string {
     assertStructuredComplexity(body);
-    const policy = [
-      "default-src 'none'",
-      "form-action 'none'",
-      "base-uri 'none'",
-    ].join("; ");
     const template = document.createElement("template");
     template.innerHTML = body;
     const sanitizedContent = DOMPurify.sanitize(template.content, {
@@ -104,15 +99,9 @@
         if (value && !allowed) element.removeAttribute(attribute);
       }
     }
-    const documentNode = document.implementation.createHTMLDocument("");
-    const csp = documentNode.createElement("meta");
-    csp.httpEquiv = "Content-Security-Policy";
-    csp.content = policy;
-    const base = documentNode.createElement("base");
-    base.target = "_self";
-    documentNode.head.prepend(csp, base);
-    documentNode.body.replaceChildren(sanitizedContent);
-    const safeBody = documentNode.documentElement.outerHTML;
+    const container = document.createElement("div");
+    container.append(sanitizedContent);
+    const safeBody = container.innerHTML;
     assertRenderedComplexity(safeBody);
     return `<!doctype html>${safeBody}`;
   }
@@ -532,14 +521,21 @@
       <span>{Math.round(pdfScale * 100)}%</span>
       <button type="button" aria-label="Zoom in" disabled={pdfScale >= 2 || pdfRendering} onclick={() => (pdfScale = Math.min(2, pdfScale + 0.2))}>+</button>
     </div>
-    <div class="artifact-viewer__pdf-stage" class:is-rendering={pdfRendering}>
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (zoomed PDF stage must be keyboard-scrollable) -->
+    <div
+      class="artifact-viewer__pdf-stage"
+      class:is-rendering={pdfRendering}
+      role="region"
+      tabindex="0"
+      aria-label={`PDF page ${pdfPage} visual preview`}
+    >
       <canvas bind:this={canvasEl} aria-hidden="true"></canvas>
       <section class="artifact-viewer__pdf-text" aria-label={`PDF page ${pdfPage} text`}>
         {pdfText}
       </section>
     </div>
   {:else if kind === "html" && mode === "preview" && renderedHTML}
-    <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" tabindex="-1" srcdoc={renderedHTML}></iframe>
+    <article class="artifact-viewer__document artifact-viewer__html">{@html renderedHTML}</article>
   {:else if kind === "markdown" && mode === "preview"}
     <article class="artifact-viewer__document artifact-viewer__markdown">{@html renderedHTML}</article>
   {:else if kind === "code"}

@@ -81,8 +81,9 @@ server continues to serve it as a hardened download.
   limits fall back to the authenticated download.
 - DOCX files never enter a browser parser. Normal, malformed, compressed-bomb,
   and oversized DOCX uploads all use the same authenticated download-only path.
-- Uploaded HTML runs in an opaque-origin sandbox with a document CSP that
-  blocks scripts, forms, navigation, and network requests.
+- Uploaded HTML is parsed only in an inert template; scripts, forms, frames,
+  styles, and fetchable URLs are stripped before the safe fragment enters the
+  keyboard-scrollable preview DOM. The original remains available in Source.
 - Text, code, Markdown, and HTML previews are limited to 2 MiB; PDF to the
   server's 64 MiB upload cap. The client checks streamed response bytes rather
   than trusting metadata alone. Larger or malformed files fall back to an

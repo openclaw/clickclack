@@ -271,17 +271,15 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   expect(pageErrors).toEqual([]);
 
   await page.getByRole("button", { name: "Open viewer-proof.html" }).click();
-  const iframe = viewer.locator("iframe");
-  const frame = iframe.contentFrame();
-  await expect(frame.getByRole("heading", { name: "Sandboxed web artifact" })).toBeVisible();
-  await expect(iframe).toHaveAttribute("sandbox", "");
-  await expect(frame.locator("script, form, iframe")).toHaveCount(0);
-  await expect(frame.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
-  await expect(frame.getByText("external link")).not.toHaveAttribute("href");
-  await expect(frame.getByText("data navigation")).not.toHaveAttribute("href");
-  await frame.getByText("data navigation").click();
-  await expect(frame.locator("[src]")).toHaveCount(0);
-  await expect(frame.locator("style, [style]")).toHaveCount(0);
+  const htmlPreview = viewer.locator(".artifact-viewer__html");
+  await expect(htmlPreview.getByRole("heading", { name: "Sandboxed web artifact" })).toBeVisible();
+  await expect(htmlPreview.locator("script, form, iframe")).toHaveCount(0);
+  await expect(htmlPreview.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
+  await expect(htmlPreview.getByText("external link")).not.toHaveAttribute("href");
+  await expect(htmlPreview.getByText("data navigation")).not.toHaveAttribute("href");
+  await htmlPreview.getByText("data navigation").click();
+  await expect(htmlPreview.locator("[src]")).toHaveCount(0);
+  await expect(htmlPreview.locator("style, [style]")).toHaveCount(0);
   await expect.poll(() => externalRequests).toBe(0);
   const scriptMarker = await page.evaluate(
     () => (window as Window & { __artifactScriptRan?: boolean }).__artifactScriptRan,
@@ -299,7 +297,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
         diagnostics.style.cssText =
           "position:fixed;left:24px;bottom:24px;z-index:9999;width:430px;padding:20px;border:1px solid #35516f;border-radius:12px;background:#101820;color:#eef6ff;font:14px/1.5 ui-monospace,monospace;box-shadow:0 18px 50px #0008";
         diagnostics.innerHTML = `<strong style="display:block;margin-bottom:10px;color:#7ee787">Playwright live browser diagnostics: PASS</strong>
-          <div>iframe sandbox tokens: none</div>
+          <div>preview isolation: inert-template sanitized fragment</div>
           <div>script execution marker: ${scriptRan ? "SET (FAIL)" : "absent"}</div>
           <div>requests to artifact-proof.invalid: ${requests}</div>
           <div>scripts/forms/frames in preview: 0 / 0 / 0</div>
@@ -322,7 +320,6 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await closeButton.focus();
   await page.keyboard.press("Tab");
   await expect(mobileViewer.getByLabel("Artifact content")).toBeFocused();
-  await expect(mobileViewer.locator("iframe")).toHaveAttribute("tabindex", "-1");
   const bounds = await mobileViewer.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };

@@ -282,12 +282,17 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
 
   await page.getByRole("button", { name: "Channels", exact: true }).click();
-  await expect(page.locator("#sidebar-channels-list")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Channels", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect.poll(() => channelNames(page)).toEqual([names[0]]);
   await page.reload();
   await expect(page.getByRole("button", { name: "Channels", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
   );
+  await expect.poll(() => channelNames(page)).toEqual([names[0]]);
   await page.getByRole("button", { name: "Channels", exact: true }).click();
   await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
 

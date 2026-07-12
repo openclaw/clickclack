@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added personal channel ordering with desktop drag-and-drop, keyboard and touch controls, per-user/workspace browser persistence, and same-profile tab synchronization. Thanks @jjjhenriksen.
+- Added personal channel ordering with desktop drag-and-drop, keyboard and touch move-menu controls, per-user/workspace browser persistence, same-profile tab synchronization, and preserved active/unread priority rows while sections are collapsed. Thanks @jjjhenriksen.
 - Added independently collapsible Channels, Direct messages, and People sidebar sections that retain active and unread rows while collapsed, with accessible controls and per-workspace browser persistence. Thanks @jjjhenriksen.
 - Unified the web app on one warm "paper & ember" design language: a new espresso dark theme replaces the cool slate look, identity marks share a theme-tied brand gradient, off-palette purple/indigo/blue hardcodes (including workspace-settings buttons and quote blocks) now follow the coral accent, settings surfaces inherit the app font, and scrollbars are visible on the light theme.
 - Added manager workspace profile and icon controls plus owner-only ownership transfer and permanent deletion with durable upload cleanup. Thanks @Solvely-Colin.

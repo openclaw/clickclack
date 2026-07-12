@@ -2529,7 +2529,7 @@
     if (!selectedArtifact || !mobileNavViewport || event.key !== "Tab" || !artifactViewerElement) return;
     const focusable = Array.from(
       artifactViewerElement.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
     ).filter((element) => !element.inert && element.getClientRects().length > 0);
     if (focusable.length === 0) {

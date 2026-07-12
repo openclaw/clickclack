@@ -308,7 +308,10 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   const closeButton = mobileViewer.getByRole("button", { name: "Close artifact viewer" });
   await closeButton.focus();
   await page.keyboard.press("Tab");
-  await expect(mobileViewer.locator("iframe")).toBeFocused();
+  await expect(
+    mobileViewer.getByRole("link", { name: "Download viewer-proof.html" }),
+  ).toBeFocused();
+  await expect(mobileViewer.locator("iframe")).toHaveAttribute("tabindex", "-1");
   const bounds = await mobileViewer.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };

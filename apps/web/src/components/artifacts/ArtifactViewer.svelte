@@ -76,8 +76,10 @@
       "form-action 'none'",
       "base-uri 'none'",
     ].join("; ");
-    const sanitized = DOMPurify.sanitize(body, {
-      WHOLE_DOCUMENT: true,
+    const template = document.createElement("template");
+    template.innerHTML = body;
+    const sanitizedContent = DOMPurify.sanitize(template.content, {
+      RETURN_DOM_FRAGMENT: true,
       USE_PROFILES: { html: true },
       FORBID_TAGS: [
         "base",
@@ -92,20 +94,21 @@
       ],
       FORBID_ATTR: ["action", "formaction", "srcset", "style", "xlink:href"],
     });
-    const documentNode = new DOMParser().parseFromString(sanitized, "text/html");
-    const csp = documentNode.createElement("meta");
-    csp.httpEquiv = "Content-Security-Policy";
-    csp.content = policy;
-    const base = documentNode.createElement("base");
-    base.target = "_self";
-    documentNode.head.prepend(csp, base);
-    for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
+    for (const element of sanitizedContent.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
       for (const attribute of ["src", "href", "poster"] as const) {
         const value = element.getAttribute(attribute)?.trim();
         const allowed = value?.startsWith("#");
         if (value && !allowed) element.removeAttribute(attribute);
       }
     }
+    const documentNode = document.implementation.createHTMLDocument("");
+    const csp = documentNode.createElement("meta");
+    csp.httpEquiv = "Content-Security-Policy";
+    csp.content = policy;
+    const base = documentNode.createElement("base");
+    base.target = "_self";
+    documentNode.head.prepend(csp, base);
+    documentNode.body.replaceChildren(sanitizedContent);
     const safeBody = documentNode.documentElement.outerHTML;
     assertRenderedComplexity(safeBody);
     return `<!doctype html>${safeBody}`;
@@ -516,7 +519,7 @@
       </section>
     </div>
   {:else if kind === "html" && renderedHTML}
-    <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" srcdoc={renderedHTML}></iframe>
+    <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" tabindex="-1" srcdoc={renderedHTML}></iframe>
   {:else if kind === "markdown" && mode === "preview"}
     <article class="artifact-viewer__document artifact-viewer__markdown">{@html renderedHTML}</article>
   {:else if kind === "code"}

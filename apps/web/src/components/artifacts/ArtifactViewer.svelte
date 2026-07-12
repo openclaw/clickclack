@@ -92,11 +92,9 @@
       ],
       FORBID_ATTR: ["action", "formaction", "srcset", "style", "xlink:href"],
     });
-    for (const element of sanitizedContent.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
-      for (const attribute of ["src", "href", "poster"] as const) {
-        const value = element.getAttribute(attribute)?.trim();
-        const allowed = value?.startsWith("#");
-        if (value && !allowed) element.removeAttribute(attribute);
+    for (const element of sanitizedContent.querySelectorAll<HTMLElement>("*")) {
+      for (const attribute of Array.from(element.attributes)) {
+        element.removeAttribute(attribute.name);
       }
     }
     const container = document.createElement("div");

@@ -566,7 +566,7 @@ func (q *Queries) FirstUser(ctx context.Context) (FirstUserRow, error) {
 }
 
 const firstWorkspace = `-- name: FirstWorkspace :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 ORDER BY created_at
 LIMIT 1
@@ -577,6 +577,7 @@ type FirstWorkspaceRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -588,6 +589,7 @@ func (q *Queries) FirstWorkspace(ctx context.Context) (FirstWorkspaceRow, error)
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -1215,7 +1217,7 @@ func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetU
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE w.id = $1
@@ -1232,6 +1234,7 @@ type GetWorkspaceRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 	Role      string `json:"role"`
 }
@@ -1244,6 +1247,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, arg GetWorkspaceParams) (Get
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 		&i.Role,
 	)
@@ -1251,7 +1255,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, arg GetWorkspaceParams) (Get
 }
 
 const getWorkspaceByRouteID = `-- name: GetWorkspaceByRouteID :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 WHERE route_id = $1
 `
@@ -1261,6 +1265,7 @@ type GetWorkspaceByRouteIDRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -1272,6 +1277,7 @@ func (q *Queries) GetWorkspaceByRouteID(ctx context.Context, routeID sql.NullStr
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -2738,7 +2744,7 @@ func (q *Queries) ListWorkspacePushNotificationRecipients(ctx context.Context, a
 }
 
 const listWorkspaces = `-- name: ListWorkspaces :many
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = $1
@@ -2750,6 +2756,7 @@ type ListWorkspacesRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 	Role      string `json:"role"`
 }
@@ -2768,6 +2775,7 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID string) ([]ListWork
 			&i.RouteID,
 			&i.Name,
 			&i.Slug,
+			&i.IconUrl,
 			&i.CreatedAt,
 			&i.Role,
 		); err != nil {

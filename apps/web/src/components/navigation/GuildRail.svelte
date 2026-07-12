@@ -51,7 +51,11 @@
             onSelectWorkspace(workspace.id);
           }}
         >
-          <span>{workspaceInitial(workspace.name)}</span>
+          {#if workspace.icon_url}
+            <img class="guild__image" src={workspace.icon_url} alt="" />
+          {:else}
+            <span>{workspaceInitial(workspace.name)}</span>
+          {/if}
         </a>
       </div>
     {/each}

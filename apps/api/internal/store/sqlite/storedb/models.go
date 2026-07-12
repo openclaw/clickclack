@@ -312,6 +312,7 @@ type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
 	Slug      string         `json:"slug"`
+	IconUrl   string         `json:"icon_url"`
 	CreatedAt string         `json:"created_at"`
 	RouteID   sql.NullString `json:"route_id"`
 }

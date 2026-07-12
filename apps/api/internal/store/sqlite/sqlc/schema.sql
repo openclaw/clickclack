@@ -24,6 +24,7 @@ CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
+  icon_url TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   route_id TEXT
 );

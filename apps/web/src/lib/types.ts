@@ -19,6 +19,7 @@ export type Workspace = {
   route_id: string;
   name: string;
   slug: string;
+  icon_url: string;
   created_at: string;
   role?: "owner" | "moderator" | "member" | "guest" | "bot";
 };

@@ -25,6 +25,7 @@ func (s *Store) ResolveRouteTarget(ctx context.Context, userID, workspaceRouteID
 		RouteID:   workspaceRow.RouteID,
 		Name:      workspaceRow.Name,
 		Slug:      workspaceRow.Slug,
+		IconURL:   workspaceRow.IconUrl,
 		CreatedAt: workspaceRow.CreatedAt,
 	}
 	if err := s.requireMembership(ctx, workspace.ID, userID); err != nil {

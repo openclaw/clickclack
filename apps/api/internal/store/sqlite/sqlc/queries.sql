@@ -209,18 +209,18 @@ VALUES (
 );
 
 -- name: FirstWorkspace :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 ORDER BY created_at
 LIMIT 1;
 
 -- name: GetWorkspaceByRouteID :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 WHERE route_id = sqlc.arg(route_id);
 
 -- name: ListWorkspaces :many
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = sqlc.arg(user_id)
@@ -231,11 +231,22 @@ INSERT INTO workspaces (id, route_id, name, slug, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(name), sqlc.arg(slug), sqlc.arg(created_at));
 
 -- name: GetWorkspace :one
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE w.id = sqlc.arg(workspace_id)
   AND wm.user_id = sqlc.arg(user_id);
+
+-- name: UpdateWorkspace :exec
+UPDATE workspaces
+SET name = sqlc.arg(name),
+    slug = sqlc.arg(slug),
+    icon_url = sqlc.arg(icon_url)
+WHERE id = sqlc.arg(id);
+
+-- name: DeleteWorkspace :execrows
+DELETE FROM workspaces
+WHERE id = sqlc.arg(id);
 
 -- name: InsertDefaultChannel :exec
 INSERT INTO channels (id, route_id, workspace_id, name, kind, created_at)
@@ -280,6 +291,13 @@ FROM workspace_members
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND user_id = sqlc.arg(user_id)
   AND role IN ('owner', 'moderator');
+
+-- name: RequireWorkspaceOwner :one
+SELECT role
+FROM workspace_members
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND user_id = sqlc.arg(user_id)
+  AND role = 'owner';
 
 -- name: UserHasNonGuestMembership :one
 SELECT workspace_id

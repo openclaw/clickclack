@@ -290,8 +290,8 @@ func (s *Store) EnsureDefaultGuestWorkspaceMember(ctx context.Context, userID, r
 
 func sqliteWorkspaceBySlugTx(ctx context.Context, tx *sql.Tx, slug string) (store.Workspace, error) {
 	var workspace store.Workspace
-	err := tx.QueryRowContext(ctx, `SELECT id, COALESCE(route_id, ''), name, slug, created_at FROM workspaces WHERE slug = ?`, slug).Scan(
-		&workspace.ID, &workspace.RouteID, &workspace.Name, &workspace.Slug, &workspace.CreatedAt,
+	err := tx.QueryRowContext(ctx, `SELECT id, COALESCE(route_id, ''), name, slug, icon_url, created_at FROM workspaces WHERE slug = ?`, slug).Scan(
+		&workspace.ID, &workspace.RouteID, &workspace.Name, &workspace.Slug, &workspace.IconURL, &workspace.CreatedAt,
 	)
 	return workspace, err
 }

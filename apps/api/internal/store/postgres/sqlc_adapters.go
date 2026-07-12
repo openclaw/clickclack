@@ -107,6 +107,7 @@ func storeWorkspaceFromListWorkspaces(row storedb.ListWorkspacesRow) store.Works
 		RouteID:   row.RouteID,
 		Name:      row.Name,
 		Slug:      row.Slug,
+		IconURL:   row.IconUrl,
 		CreatedAt: row.CreatedAt,
 		Role:      row.Role,
 	}
@@ -118,6 +119,7 @@ func storeWorkspaceFromGetWorkspace(row storedb.GetWorkspaceRow) store.Workspace
 		RouteID:   row.RouteID,
 		Name:      row.Name,
 		Slug:      row.Slug,
+		IconURL:   row.IconUrl,
 		CreatedAt: row.CreatedAt,
 		Role:      row.Role,
 	}

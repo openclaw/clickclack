@@ -115,15 +115,18 @@
     role="list"
     hidden={!expanded && visibleChannels.length === 0}
   >
-    <span id="channel-order-instructions" class="sr-only">
-      Drag with a pointer, or use Arrow Up and Arrow Down while focused.
-    </span>
+    {#if expanded}
+      <span id="channel-order-instructions" class="sr-only">
+        Drag with a pointer, or use Arrow Up and Arrow Down while focused.
+      </span>
+    {/if}
     {#each visibleChannels as channel (channel.id)}
       {@const index = channels.findIndex((candidate) => candidate.id === channel.id)}
       {@const unread = channel.unread_count || 0}
       <div
         class="channel-row"
         role="listitem"
+        class:reorderable={expanded}
         class:dragging={draggedChannelID === channel.id}
         class:drop-before={dropTargetID === channel.id && dropBefore}
         class:drop-after={dropTargetID === channel.id && !dropBefore}
@@ -134,42 +137,44 @@
           clearDrag();
         }}
       >
-        <button
-          type="button"
-          class="channel-drag-handle"
-          draggable="true"
-          aria-label={`Move #${channel.name}`}
-          aria-describedby="channel-order-instructions"
-          title="Drag to reorder; use arrow keys to move"
-          ondragstart={(event) => handleDragStart(event, channel.id)}
-          ondragend={clearDrag}
-          onkeydown={(event) => {
-            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-              event.preventDefault();
-              moveBy(channel.id, event.key === "ArrowUp" ? -1 : 1);
-            }
-          }}
-        >
-          <svg viewBox="0 0 12 16" width="12" height="16" aria-hidden="true">
-            <circle cx="3" cy="4" r="1" /><circle cx="9" cy="4" r="1" />
-            <circle cx="3" cy="8" r="1" /><circle cx="9" cy="8" r="1" />
-            <circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" />
-          </svg>
-        </button>
-        <div class="channel-touch-controls">
+        {#if expanded}
           <button
             type="button"
-            aria-label={`Move #${channel.name} up`}
-            disabled={index === 0}
-            onclick={() => moveBy(channel.id, -1)}
-          >↑</button>
-          <button
-            type="button"
-            aria-label={`Move #${channel.name} down`}
-            disabled={index === channels.length - 1}
-            onclick={() => moveBy(channel.id, 1)}
-          >↓</button>
-        </div>
+            class="channel-drag-handle"
+            draggable="true"
+            aria-label={`Move #${channel.name}`}
+            aria-describedby="channel-order-instructions"
+            title="Drag to reorder; use arrow keys to move"
+            ondragstart={(event) => handleDragStart(event, channel.id)}
+            ondragend={clearDrag}
+            onkeydown={(event) => {
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                moveBy(channel.id, event.key === "ArrowUp" ? -1 : 1);
+              }
+            }}
+          >
+            <svg viewBox="0 0 12 16" width="12" height="16" aria-hidden="true">
+              <circle cx="3" cy="4" r="1" /><circle cx="9" cy="4" r="1" />
+              <circle cx="3" cy="8" r="1" /><circle cx="9" cy="8" r="1" />
+              <circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" />
+            </svg>
+          </button>
+          <div class="channel-touch-controls">
+            <button
+              type="button"
+              aria-label={`Move #${channel.name} up`}
+              disabled={index === 0}
+              onclick={() => moveBy(channel.id, -1)}
+            >↑</button>
+            <button
+              type="button"
+              aria-label={`Move #${channel.name} down`}
+              disabled={index === channels.length - 1}
+              onclick={() => moveBy(channel.id, 1)}
+            >↓</button>
+          </div>
+        {/if}
         <a
           href={hrefForChannel(channel.id)}
           class="nav-item channel"

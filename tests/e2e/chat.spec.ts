@@ -287,6 +287,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     "false",
   );
   await expect.poll(() => channelNames(page)).toEqual([names[0]]);
+  await expect(page.getByRole("button", { name: `Move #${names[0]}` })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("button", { name: "Channels", exact: true })).toHaveAttribute(
     "aria-expanded",

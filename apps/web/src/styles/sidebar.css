@@ -401,9 +401,12 @@
   border-radius: var(--radius-sm);
 }
 
-.channel-row.reorderable .nav-item {
+.channel-row .nav-item {
   flex: 1;
   min-width: 0;
+}
+
+.channel-row.reorderable .nav-item {
   padding-left: 2px;
 }
 

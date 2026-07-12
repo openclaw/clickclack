@@ -159,6 +159,16 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   expect(classifyArtifact(uploadShape("page.html", "application/octet-stream"))).toBe("html");
   expect(classifyArtifact(uploadShape("report.pdf", "application/octet-stream"))).toBe("pdf");
   expect(classifyArtifact(uploadShape("brief.docx", "application/octet-stream"))).toBe("docx");
+  expect(classifyArtifact(uploadShape("spoofed.docx", "text/html"))).toBe("docx");
+  expect(classifyArtifact(uploadShape("spoofed.docx", "application/pdf"))).toBe("docx");
+  expect(
+    classifyArtifact(
+      uploadShape(
+        "spoofed.html",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ),
+    ),
+  ).toBe("docx");
   expect(classifyArtifact(uploadShape("notes.log", "application/octet-stream"))).toBe("text");
   expect(classifyArtifact(uploadShape("archive.zip", "application/zip"))).toBe("unsupported");
 });

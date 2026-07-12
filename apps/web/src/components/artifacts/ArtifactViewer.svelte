@@ -371,6 +371,7 @@
     const scale = pdfScale;
     let cancelled = false;
     let renderTask: RenderTask | null = null;
+    let page: PDFPageProxy | null = null;
     let textReader: ReadableStreamDefaultReader<TextContent> | null = null;
     let renderTimer = 0;
     pdfRendering = true;
@@ -386,7 +387,7 @@
           status = "error";
           errorMessage = "PDF page rendering took too long and was stopped.";
         }, PDF_RENDER_TIMEOUT_MS);
-        const page: PDFPageProxy = await document.getPage(pageNumber);
+        page = await document.getPage(pageNumber);
         if (cancelled || !canvasEl) return;
         let extractedText = "";
         let textItems = 0;
@@ -445,6 +446,8 @@
         }
       } finally {
         clearTimeout(renderTimer);
+        page?.cleanup();
+        page = null;
         if (!cancelled) pdfRendering = false;
       }
     };

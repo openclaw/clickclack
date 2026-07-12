@@ -69,16 +69,16 @@ export function classifyArtifact(upload: Upload): ArtifactKind {
   const extension = artifactExtension(upload.filename);
   const contentType = artifactContentType(upload);
 
-  if (extension === "md" || extension === "markdown" || contentType === "text/markdown")
-    return "markdown";
-  if (extension === "html" || extension === "htm" || contentType === "text/html") return "html";
-  if (extension === "pdf" || contentType === "application/pdf") return "pdf";
   if (
     extension === "docx" ||
     contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     return "docx";
   }
+  if (extension === "md" || extension === "markdown" || contentType === "text/markdown")
+    return "markdown";
+  if (extension === "html" || extension === "htm" || contentType === "text/html") return "html";
+  if (extension === "pdf" || contentType === "application/pdf") return "pdf";
   if (CODE_LANGUAGES[extension] || CODE_CONTENT_TYPES.has(contentType)) return "code";
   if (extension === "txt" || extension === "log" || contentType === "text/plain") return "text";
   if (contentType.startsWith("text/")) return "text";

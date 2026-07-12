@@ -138,6 +138,7 @@
     if (!expanded) {
       moveMenuChannelID = "";
       clearDrag();
+      dragGestureActive = false;
     }
   });
 </script>
@@ -167,9 +168,8 @@
         Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu.
       </span>
     {/if}
-    {#each visibleChannels as channel (channel.id)}
+    {#each visibleChannels as channel, channelIndex (channel.id)}
       {@const unread = channel.unread_count || 0}
-      {@const channelIndex = channels.findIndex((candidate) => candidate.id === channel.id)}
       <div
         class="channel-row"
         role="listitem"

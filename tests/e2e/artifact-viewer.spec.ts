@@ -242,6 +242,9 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await page.getByRole("button", { name: "Open viewer-proof.pdf" }).click();
   await expect(viewer.getByText("Page 1 of 2")).toBeVisible();
   await expect(viewer.locator("canvas")).toBeVisible();
+  await expect(viewer.getByRole("region", { name: "PDF page 1 text" })).toContainText(
+    "Artifact PDF proof",
+  );
   await viewer.getByRole("button", { name: "Next" }).click();
   await expect(viewer.getByText("Page 2 of 2")).toBeVisible();
   const widthBeforeZoom = await viewer.locator("canvas").evaluate((canvas) => canvas.style.width);
@@ -267,7 +270,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   await expect(frame.getByText("external link")).not.toHaveAttribute("href");
   await expect(frame.getByText("data navigation")).not.toHaveAttribute("href");
   await frame.getByText("data navigation").click();
-  await expect(frame.locator("img")).not.toHaveAttribute("src");
+  await expect(frame.locator("[src]")).toHaveCount(0);
   await expect(frame.locator("style")).not.toContainText("artifact-proof.invalid");
   await expect.poll(() => externalRequests).toBe(0);
   const scriptMarker = await page.evaluate(
@@ -305,9 +308,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   const closeButton = mobileViewer.getByRole("button", { name: "Close artifact viewer" });
   await closeButton.focus();
   await page.keyboard.press("Tab");
-  await expect(
-    mobileViewer.getByRole("link", { name: "Download viewer-proof.html" }),
-  ).toBeFocused();
+  await expect(mobileViewer.locator("iframe")).toBeFocused();
   const bounds = await mobileViewer.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };

@@ -5,6 +5,7 @@
     PDFDocumentLoadingTask,
     PDFDocumentProxy,
     PDFPageProxy,
+    PDFWorker,
     RenderTask,
   } from "pdfjs-dist";
   import {
@@ -45,6 +46,7 @@
   let pdfPage = $state(1);
   let pdfScale = $state(1);
   let pdfRendering = $state(false);
+  let pdfText = $state("");
   let cleanupPDF: (() => void) | null = null;
   let pdfImageLimitExceeded = false;
 
@@ -66,10 +68,8 @@
     assertStructuredComplexity(body);
     const policy = [
       "default-src 'none'",
-      "img-src data: blob:",
       "font-src data:",
       "style-src 'unsafe-inline'",
-      "media-src data: blob:",
       "form-action 'none'",
       "base-uri 'none'",
     ].join("; ");
@@ -82,11 +82,10 @@
       FORBID_ATTR: ["action", "formaction", "srcset", "xlink:href"],
     });
     const documentNode = new DOMParser().parseFromString(sanitized, "text/html");
-    const localResourceReference = /^(?:#|data:|blob:)/i;
     for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
       for (const attribute of ["src", "href", "poster"] as const) {
         const value = element.getAttribute(attribute)?.trim();
-        const allowed = attribute === "href" ? value?.startsWith("#") : value && localResourceReference.test(value);
+        const allowed = value?.startsWith("#");
         if (value && !allowed) element.removeAttribute(attribute);
       }
     }
@@ -232,6 +231,7 @@
     highlightedSource = "";
     pdfPage = 1;
     pdfScale = 1;
+    pdfText = "";
     pdfImageLimitExceeded = false;
     mode = "preview";
     errorMessage = "";
@@ -253,12 +253,33 @@
         const pdfjs = await import("pdfjs-dist");
         if (signal.aborted) return;
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerURL;
-        const bytes = await responseBytes(signal, limit!);
-        if (signal.aborted) return;
-        const pdfWorker = new pdfjs.PDFWorker();
-        await pdfWorker.promise;
-        if (signal.aborted) {
-          pdfWorker.destroy();
+        const pdfController = new AbortController();
+        const abortPDF = () => pdfController.abort();
+        signal.addEventListener("abort", abortPDF, { once: true });
+        let pdfWorker: PDFWorker | null = null;
+        let loadTimer = 0;
+        const loadTimeout = new Promise<never>((_, reject) => {
+          loadTimer = window.setTimeout(() => {
+            pdfController.abort();
+            pdfWorker?.destroy();
+            reject(new Error("PDF preview took too long and was stopped."));
+          }, PDF_LOAD_TIMEOUT_MS);
+        });
+        let bytes: Uint8Array;
+        try {
+          bytes = await Promise.race([responseBytes(pdfController.signal, limit!), loadTimeout]);
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+          pdfWorker = new pdfjs.PDFWorker();
+          await Promise.race([pdfWorker.promise, loadTimeout]);
+        } catch (error) {
+          clearTimeout(loadTimer);
+          signal.removeEventListener("abort", abortPDF);
+          throw error;
+        }
+        if (signal.aborted || !pdfWorker) {
+          clearTimeout(loadTimer);
+          signal.removeEventListener("abort", abortPDF);
+          pdfWorker?.destroy();
           return;
         }
         const workerPort = pdfWorker.port;
@@ -299,19 +320,11 @@
           worker: pdfWorker,
         }) as PDFDocumentLoadingTask;
         loadingTask = task;
-        let loadTimer = 0;
         try {
-          pdfDocument = await Promise.race([
-            task.promise,
-            new Promise<never>((_, reject) => {
-              loadTimer = window.setTimeout(() => {
-                void task.destroy();
-                reject(new Error("PDF preview took too long and was stopped."));
-              }, PDF_LOAD_TIMEOUT_MS);
-            }),
-          ]);
+          pdfDocument = await Promise.race([task.promise, loadTimeout]);
         } finally {
           clearTimeout(loadTimer);
+          signal.removeEventListener("abort", abortPDF);
         }
       } else {
         source = await loadText(signal, limit!);
@@ -353,6 +366,7 @@
     let renderTask: RenderTask | null = null;
     let renderTimer = 0;
     pdfRendering = true;
+    pdfText = "";
 
     const render = async () => {
       try {
@@ -365,6 +379,19 @@
         }, PDF_RENDER_TIMEOUT_MS);
         const page: PDFPageProxy = await document.getPage(pageNumber);
         if (cancelled || !canvasEl) return;
+        const textContent = await page.getTextContent();
+        if (cancelled) return;
+        let extractedText = "";
+        for (const item of textContent.items) {
+          if (!("str" in item) || !item.str) continue;
+          const next = `${extractedText}${extractedText ? " " : ""}${item.str}`;
+          if (next.length > 64 * 1024) {
+            extractedText = `${next.slice(0, 64 * 1024)}…`;
+            break;
+          }
+          extractedText = next;
+        }
+        pdfText = extractedText || "This page has no extractable text.";
         const viewport = page.getViewport({ scale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const backingWidth = Math.max(1, Math.floor(viewport.width * dpr));
@@ -458,7 +485,10 @@
       <button type="button" aria-label="Zoom in" disabled={pdfScale >= 2 || pdfRendering} onclick={() => (pdfScale = Math.min(2, pdfScale + 0.2))}>+</button>
     </div>
     <div class="artifact-viewer__pdf-stage" class:is-rendering={pdfRendering}>
-      <canvas bind:this={canvasEl} aria-label={`PDF page ${pdfPage}`}></canvas>
+      <canvas bind:this={canvasEl} aria-hidden="true"></canvas>
+      <section class="artifact-viewer__pdf-text" aria-label={`PDF page ${pdfPage} text`}>
+        {pdfText}
+      </section>
     </div>
   {:else if kind === "html" && renderedHTML}
     <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" srcdoc={renderedHTML}></iframe>

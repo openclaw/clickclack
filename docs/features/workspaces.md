@@ -16,6 +16,9 @@ role of `owner`, `moderator`, `member`, `guest`, or `bot`.
 GET  /api/workspaces                          # workspaces the caller belongs to
 POST /api/workspaces                          # create + add caller as owner
 GET  /api/workspaces/{workspace_id}           # one workspace, must be a member
+PATCH /api/workspaces/{workspace_id}           # manager: update name, slug, or icon
+DELETE /api/workspaces/{workspace_id}          # owner: permanently delete workspace
+POST /api/workspaces/{workspace_id}/transfer-ownership # owner: transfer to human member
 GET  /api/workspaces/{workspace_id}/members   # paginated public member directory
 ```
 
@@ -25,6 +28,16 @@ form of `name` and must be unique.
 The owner who creates the workspace is auto-added with role `owner`. Adding
 other members today goes through auth/bootstrap flows or admin commands; the
 HTTP API exposes moderation for existing members, not arbitrary invites.
+
+Owners and moderators can update the workspace name, slug, and icon. An icon
+must reference an upload from the same workspace. Owners can transfer ownership
+to a human member or moderator; the former owner becomes a moderator.
+
+Workspace deletion is owner-only and permanent. The metadata transaction first
+records every upload object in a durable cleanup queue, then deletes the
+workspace and its dependent rows. A successful response means metadata deletion
+committed. Object deletion is attempted immediately and any failure remains
+queued for retry on the next server start.
 
 `GET /api/workspaces/{workspace_id}/members` is a read-only directory for any
 workspace member. It accepts `limit` (default 100, max 200), opaque `cursor`,

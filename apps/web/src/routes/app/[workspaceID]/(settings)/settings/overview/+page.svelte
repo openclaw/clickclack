@@ -122,8 +122,23 @@
 
   async function loadTransferMembers(workspaceID: string) {
     try {
-      const page = await listWorkspaceMembersPage({ workspaceID, limit: 200 });
-      transferMembers = page.members.filter(
+      const members: WorkspaceMember[] = [];
+      let cursor: string | undefined;
+      const seenCursors = new Set<string>();
+      do {
+        const page = await listWorkspaceMembersPage({ workspaceID, limit: 200, cursor });
+        members.push(...page.members);
+        cursor = page.has_more ? page.next_cursor : undefined;
+        if (page.has_more && !cursor) {
+          throw new Error("Member directory returned an incomplete page");
+        }
+        if (cursor && seenCursors.has(cursor)) {
+          throw new Error("Member directory repeated a pagination cursor");
+        }
+        if (cursor) seenCursors.add(cursor);
+      } while (cursor);
+      if (workspace?.id !== workspaceID) return;
+      transferMembers = members.filter(
         (member) =>
           member.user.kind === "human" &&
           member.role !== "owner" &&
@@ -251,7 +266,12 @@
           </div>
         </div>
         <div class="ws-row__control">
-          <select class="ws-select" bind:value={transferUserID} disabled={transferring || transferMembers.length === 0}>
+          <select
+            class="ws-select"
+            aria-label="New workspace owner"
+            bind:value={transferUserID}
+            disabled={transferring || transferMembers.length === 0}
+          >
             {#each transferMembers as member (member.user.id)}
               <option value={member.user.id}>{member.user.display_name || member.user.handle || member.user.id}</option>
             {/each}

@@ -135,7 +135,9 @@ export type Workspace = {
   route_id: string;
   name: string;
   slug: string;
+  icon_url: string;
   created_at: string;
+  role?: "owner" | "moderator" | "member" | "guest" | "bot";
 };
 
 export type Channel = {
@@ -346,6 +348,33 @@ export class ClickClackClient {
         body: JSON.stringify(input),
       });
       return data.workspace;
+    },
+    get: async (workspaceId: string): Promise<Workspace> => {
+      const data = await this.request<{ workspace: Workspace }>(`/api/workspaces/${workspaceId}`);
+      return data.workspace;
+    },
+    update: async (
+      workspaceId: string,
+      input: { name?: string; slug?: string; icon_url?: string },
+    ): Promise<Workspace> => {
+      const data = await this.request<{ workspace: Workspace }>(`/api/workspaces/${workspaceId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+      return data.workspace;
+    },
+    transferOwnership: async (workspaceId: string, userId: string): Promise<Workspace> => {
+      const data = await this.request<{ workspace: Workspace }>(
+        `/api/workspaces/${workspaceId}/transfer-ownership`,
+        {
+          method: "POST",
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      return data.workspace;
+    },
+    delete: async (workspaceId: string): Promise<void> => {
+      await this.request(`/api/workspaces/${workspaceId}`, { method: "DELETE" });
     },
   };
 

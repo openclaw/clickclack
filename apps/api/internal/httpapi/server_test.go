@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
 )
@@ -352,6 +354,7 @@ func TestWorkspaceAdminHTTPUploadLifecycle(t *testing.T) {
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
 	t.Cleanup(server.Close)
 
+	expectStatus(t, http.MethodPatch, server.URL+"/api/workspaces/"+workspace.ID, strings.NewReader(`{}`), http.StatusBadRequest)
 	expectStatusAsUser(t, member.ID, http.MethodPatch, server.URL+"/api/workspaces/"+workspace.ID, strings.NewReader(`{"name":"Member Edit"}`), http.StatusForbidden)
 	expectStatusWithBearer(t, botToken.Token, http.MethodPatch, server.URL+"/api/workspaces/"+workspace.ID, strings.NewReader(`{"name":"Bot Edit"}`), http.StatusForbidden)
 
@@ -479,6 +482,133 @@ func TestWorkspaceDeleteUploadCleanupRetriesAfterStorageFailure(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("expected retry cleanup state to be cleared, got %#v", pending)
 	}
+}
+
+func TestPostgresWorkspaceAdminLifecycleAndCleanupRecovery(t *testing.T) {
+	ctx := context.Background()
+	st, scopedDSN := newIsolatedPostgresHTTPTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Postgres Owner", "postgres-owner-admin@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Postgres Member", Email: "postgres-member-admin@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	dataDir := t.TempDir()
+	storage := &faultInjectedUploadStore{
+		store: uploadstore.NewLocal(filepath.Join(dataDir, "uploads")),
+		err:   errors.New("temporary object store outage"),
+	}
+	srv := New(st, realtime.NewHub(), Options{UploadStorage: storage})
+	server := httptest.NewServer(srv.Handler())
+
+	upload := uploadFileAsUserWithContentType(t, owner.ID, server.URL+"/api/uploads", workspace.ID, "postgres-cleanup.txt", "text/plain", "postgres cleanup body")
+	storedUpload, err := st.GetUpload(ctx, upload.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := patchJSON[struct {
+		Workspace store.Workspace `json:"workspace"`
+	}](t, server.URL+"/api/workspaces/"+workspace.ID, map[string]string{"name": "Postgres Admin Harbor"})
+	if updated.Workspace.Name != "Postgres Admin Harbor" {
+		t.Fatalf("unexpected Postgres workspace update: %#v", updated.Workspace)
+	}
+	transfer := postJSON[struct {
+		Workspace store.Workspace `json:"workspace"`
+	}](t, server.URL+"/api/workspaces/"+workspace.ID+"/transfer-ownership", map[string]string{"user_id": member.ID})
+	if transfer.Workspace.Role != store.WorkspaceRoleModerator {
+		t.Fatalf("expected former owner response role to become moderator, got %#v", transfer.Workspace)
+	}
+
+	storage.failDeletes = true
+	expectStatusAsUser(t, member.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID, nil, http.StatusNoContent)
+	if _, err := st.GetWorkspace(ctx, workspace.ID, member.ID); err == nil {
+		t.Fatal("expected Postgres workspace metadata to be permanently deleted")
+	}
+	pending, err := st.ListPendingUploadCleanups(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].StoragePath != storedUpload.StoragePath || pending[0].Attempts != 1 {
+		t.Fatalf("expected persisted Postgres cleanup failure, got %#v", pending)
+	}
+	server.Close()
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := postgresstore.Open(scopedDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	if err := reopened.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	storage.failDeletes = false
+	recovery := New(reopened, realtime.NewHub(), Options{UploadStorage: storage})
+	if err := recovery.CleanupPendingUploadObjects(ctx, 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storedUpload.StoragePath); !os.IsNotExist(err) {
+		t.Fatalf("expected recovered Postgres cleanup to delete object, got %v", err)
+	}
+	pending, err = reopened.ListPendingUploadCleanups(ctx, 10)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("expected recovered Postgres cleanup queue to drain, got %#v err=%v", pending, err)
+	}
+}
+
+func newIsolatedPostgresHTTPTestStore(t *testing.T) (*postgresstore.Store, string) {
+	t.Helper()
+	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set CLICKCLACK_POSTGRES_TEST_DSN to run Postgres integration smoke")
+	}
+	adminDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adminDB.Ping(); err != nil {
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	schema := fmt.Sprintf("httpapi_workspace_admin_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE SCHEMA ` + schema); err != nil {
+		_ = adminDB.Close()
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	scopedDSN := parsed.String()
+	st, err := postgresstore.Open(scopedDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = st.Close()
+		_, _ = adminDB.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+		_ = adminDB.Close()
+	})
+	return st, scopedDSN
 }
 
 func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {

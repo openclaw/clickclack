@@ -225,6 +225,22 @@ export interface paths {
     get: operations["getWorkspace"];
     put?: never;
     post?: never;
+    delete: operations["deleteWorkspace"];
+    options?: never;
+    head?: never;
+    patch: operations["updateWorkspace"];
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/transfer-ownership": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["transferWorkspaceOwnership"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1225,12 +1241,21 @@ export interface components {
       /** Format: date-time */
       last_read_at: string;
     };
+    UpdateWorkspaceRequest: {
+      name?: string;
+      slug?: string;
+      icon_url?: string;
+    };
+    TransferWorkspaceOwnershipRequest: {
+      user_id: string;
+    };
     Workspace: {
       id: string;
       /** @description Immutable public route ID used in app URLs. */
       route_id: string;
       name: string;
       slug: string;
+      icon_url: string;
       /** Format: date-time */
       created_at: string;
       /** @enum {string} */
@@ -1847,6 +1872,109 @@ export interface operations {
     responses: {
       /** @description Workspace */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            workspace: components["schemas"]["Workspace"];
+          };
+        };
+      };
+    };
+  };
+  deleteWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Workspace metadata deleted; queued upload-object cleanup may continue asynchronously */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Workspace owner permission required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updateWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateWorkspaceRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated workspace profile */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            workspace: components["schemas"]["Workspace"];
+            event?: Record<string, never>;
+          };
+        };
+      };
+      /** @description Workspace manager permission required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  transferWorkspaceOwnership: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TransferWorkspaceOwnershipRequest"];
+      };
+    };
+    responses: {
+      /** @description Workspace ownership transferred */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            workspace: components["schemas"]["Workspace"];
+            event?: Record<string, never>;
+          };
+        };
+      };
+      /** @description Workspace owner permission required */
+      403: {
         headers: {
           [name: string]: unknown;
         };

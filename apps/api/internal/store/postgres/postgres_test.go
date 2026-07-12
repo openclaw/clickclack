@@ -118,6 +118,9 @@ func TestWorkspaceIconMigrationUpgradesExistingData(t *testing.T) {
 	if workspace.IconURL != "" {
 		t.Fatalf("expected migrated workspace icon_url to default empty, got %#v", workspace)
 	}
+	if pending, err := st.ListPendingUploadCleanups(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("expected upgraded cleanup queue to be available and empty, got %#v err=%v", pending, err)
+	}
 }
 
 func TestPostgresStoreSmoke(t *testing.T) {

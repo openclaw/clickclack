@@ -65,7 +65,7 @@ See [features/auth.md](features/auth.md).
 | Group         | Methods |
 |---------------|---------|
 | `me()`, `updateMe()` | get or edit the current user's profile |
-| `workspaces`  | `list`, `create` |
+| `workspaces`  | `list`, `create`, `get`, `update`, `transferOwnership`, `delete` |
 | `topics`      | `list`, `create` |
 | `bots`        | `listMine`, `list`, `create`, `removeMembership`, `listWorkspaceTokens`, `createWorkspaceToken`, `listTokens`, `createToken`, `revokeToken` |
 | `apps`        | `list`, `install`, `revoke` |

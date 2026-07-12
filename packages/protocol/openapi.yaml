@@ -251,6 +251,74 @@ paths:
       responses:
         "200":
           description: Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace]
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+    patch:
+      operationId: updateWorkspace
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceRequest"
+      responses:
+        "200":
+          description: Updated workspace profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace]
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+                  event:
+                    type: object
+        "403":
+          description: Workspace manager permission required
+    delete:
+      operationId: deleteWorkspace
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      responses:
+        "204":
+          description: Workspace metadata deleted; queued upload-object cleanup may continue asynchronously
+        "403":
+          description: Workspace owner permission required
+  /api/workspaces/{workspace_id}/transfer-ownership:
+    post:
+      operationId: transferWorkspaceOwnership
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferWorkspaceOwnershipRequest"
+      responses:
+        "200":
+          description: Workspace ownership transferred
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace]
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+                  event:
+                    type: object
+        "403":
+          description: Workspace owner permission required
   /api/workspaces/{workspace_id}/members:
     get:
       operationId: listWorkspaceMembers
@@ -1698,9 +1766,25 @@ components:
         last_read_at:
           type: string
           format: date-time
+    UpdateWorkspaceRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        icon_url:
+          type: string
+    TransferWorkspaceOwnershipRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
     Workspace:
       type: object
-      required: [id, route_id, name, slug, created_at]
+      required: [id, route_id, name, slug, icon_url, created_at]
       properties:
         id:
           type: string
@@ -1710,6 +1794,8 @@ components:
         name:
           type: string
         slug:
+          type: string
+        icon_url:
           type: string
         created_at:
           type: string

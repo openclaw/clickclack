@@ -478,6 +478,10 @@ func (s *Server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if body.Name == nil && body.Slug == nil && body.IconURL == nil {
+		writeError(w, http.StatusBadRequest, errors.New("workspace update requires at least one field"))
+		return
+	}
 	workspace, event, err := s.store.UpdateWorkspace(r.Context(), store.UpdateWorkspaceInput{
 		WorkspaceID: workspaceID,
 		ActorUserID: act.user.ID,

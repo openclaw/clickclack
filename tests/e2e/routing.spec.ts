@@ -210,6 +210,55 @@ test("workspace settings discard bot state when navigating between workspaces", 
   await expect(page.getByText(botA, { exact: true })).toHaveCount(0);
 });
 
+test("workspace ownership candidates include members after the first 200", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const { workspaces } = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces[0];
+  const requestedCursors: string[] = [];
+  const member = (index: number, displayName = `Member ${index}`) => ({
+    workspace_id: workspace.id,
+    user: {
+      id: `usr_transfer_${index}`,
+      kind: "human",
+      display_name: displayName,
+      handle: `transfer-${index}`,
+      avatar_url: "",
+      created_at: "2026-07-12T00:00:00Z",
+    },
+    role: "member",
+    joined_at: "2026-07-12T00:00:00Z",
+  });
+
+  await page.route(`**/api/workspaces/${workspace.id}/members?**`, async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor") ?? "";
+    requestedCursors.push(cursor);
+    if (!cursor) {
+      await route.fulfill({
+        json: {
+          members: Array.from({ length: 200 }, (_, index) => member(index)),
+          next_cursor: "page-two",
+          has_more: true,
+          total_count: 201,
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        members: [member(200, "Beyond Two Hundred")],
+        has_more: false,
+      },
+    });
+  });
+
+  await page.goto(`/app/${workspace.route_id}/settings/overview`);
+  const selector = page.getByRole("combobox", { name: "New workspace owner" });
+  await expect(selector.getByRole("option", { name: "Beyond Two Hundred" })).toHaveCount(1);
+  expect(requestedCursors).toEqual(["", "page-two"]);
+});
+
 test("creating the first workspace enters the routed app state", async ({ page }) => {
   const requestedPaths: string[] = [];
   let workspaceCreated = false;

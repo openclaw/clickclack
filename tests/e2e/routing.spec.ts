@@ -298,6 +298,44 @@ test("uploading a workspace icon preserves pending profile edits", async ({ page
   expect(body.workspace.icon_url).toMatch(/^\/api\/uploads\/upl_/);
 });
 
+test("uploading a workspace icon does not overwrite concurrent profile edits", async ({ page }) => {
+  const stamp = Date.now();
+  const response = await page.request.post("/api/workspaces", {
+    data: {
+      name: `Concurrent Icon ${stamp}`,
+      slug: `concurrent-icon-${stamp}`,
+    },
+  });
+  expect(response.ok()).toBe(true);
+  const { workspace } = (await response.json()) as {
+    workspace: { id: string; route_id: string; slug: string };
+  };
+  const concurrentName = `Concurrent Winner ${stamp}`;
+
+  await page.goto(`/app/${workspace.route_id}/settings/overview`);
+  const concurrentUpdate = await page.request.patch(`/api/workspaces/${workspace.id}`, {
+    data: { name: concurrentName },
+  });
+  expect(concurrentUpdate.ok()).toBe(true);
+  await page.getByLabel("Workspace icon file").setInputFiles({
+    name: "icon.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+
+  await expect(page.getByText("Workspace icon updated.")).toBeVisible();
+  const persisted = await page.request.get(`/api/workspaces/${workspace.id}`);
+  expect(persisted.ok()).toBe(true);
+  const body = (await persisted.json()) as {
+    workspace: { name: string; slug: string; icon_url: string };
+  };
+  expect(body.workspace).toMatchObject({ name: concurrentName, slug: workspace.slug });
+  expect(body.workspace.icon_url).toMatch(/^\/api\/uploads\/upl_/);
+});
+
 test("creating the first workspace enters the routed app state", async ({ page }) => {
   const requestedPaths: string[] = [];
   let workspaceCreated = false;

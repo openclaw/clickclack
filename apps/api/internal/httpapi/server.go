@@ -570,8 +570,9 @@ func (s *Server) CleanupPendingUploadObjects(ctx context.Context, limit int) err
 	}
 	attempted := make(map[string]struct{})
 	var cleanupErrors []error
+	queryLimit := limit
 	for {
-		cleanups, err := s.store.ListPendingUploadCleanups(ctx, limit)
+		cleanups, err := s.store.ListPendingUploadCleanups(ctx, queryLimit)
 		if err != nil {
 			return err
 		}
@@ -587,7 +588,11 @@ func (s *Server) CleanupPendingUploadObjects(ctx context.Context, limit int) err
 			pending = append(pending, cleanup)
 		}
 		if len(pending) == 0 {
-			return errors.Join(cleanupErrors...)
+			if len(cleanups) < queryLimit {
+				return errors.Join(cleanupErrors...)
+			}
+			queryLimit += limit
+			continue
 		}
 		if err := s.cleanupUploadObjects(ctx, pending); err != nil {
 			cleanupErrors = append(cleanupErrors, err)

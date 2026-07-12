@@ -686,16 +686,19 @@ func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {
 	}
 
 	storage.failDeletes = false
-	storage.failPaths = map[string]bool{storagePaths[0]: true}
+	storage.failPaths = make(map[string]bool, uploadCleanupSweepLimit)
+	for _, storagePath := range storagePaths[:uploadCleanupSweepLimit] {
+		storage.failPaths[storagePath] = true
+	}
 	if err := srv.CleanupPendingUploadObjects(ctx, 0); !errors.Is(err, storage.err) {
-		t.Fatalf("expected poison object error, got %v", err)
+		t.Fatalf("expected poison page error, got %v", err)
 	}
 	pending, err = st.ListPendingUploadCleanups(ctx, uploadCount+1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 1 || pending[0].StoragePath != storagePaths[0] {
-		t.Fatalf("expected only poison object to remain after full sweep, got %#v", pending)
+	if len(pending) != uploadCleanupSweepLimit {
+		t.Fatalf("expected only the poison page to remain after full sweep, got %d rows", len(pending))
 	}
 	storage.failPaths = nil
 	if err := srv.CleanupPendingUploadObjects(ctx, 0); err != nil {

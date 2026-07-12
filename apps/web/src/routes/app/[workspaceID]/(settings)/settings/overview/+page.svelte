@@ -111,11 +111,12 @@
       form.set("workspace_id", workspace.id);
       form.set("file", file);
       const uploaded = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
-      await updateWorkspace({
-        name: name.trim(),
-        slug: slug.trim(),
+      const update: Partial<Pick<Workspace, "name" | "slug" | "icon_url">> = {
         icon_url: `/api/uploads/${uploaded.upload.id}`,
-      });
+      };
+      if (name.trim() !== workspace.name) update.name = name.trim();
+      if (slug.trim() !== workspace.slug) update.slug = slug.trim();
+      await updateWorkspace(update);
       status = "Workspace icon updated.";
     } catch (err) {
       error = errorMessage(err);

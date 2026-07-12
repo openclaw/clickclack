@@ -287,6 +287,9 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
     () => (window as Window & { __artifactScriptRan?: boolean }).__artifactScriptRan,
   );
   expect(scriptMarker).toBeUndefined();
+  await viewer.getByRole("button", { name: "Source" }).click();
+  await expect(viewer.locator("pre")).toContainText("Sandboxed web artifact");
+  await viewer.getByRole("button", { name: "Preview" }).click();
 
   if (process.env.CAPTURE_ARTIFACT_PROOF === "1") {
     await page.evaluate(
@@ -318,9 +321,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   const closeButton = mobileViewer.getByRole("button", { name: "Close artifact viewer" });
   await closeButton.focus();
   await page.keyboard.press("Tab");
-  await expect(
-    mobileViewer.getByRole("link", { name: "Download viewer-proof.html" }),
-  ).toBeFocused();
+  await expect(mobileViewer.getByLabel("Artifact content")).toBeFocused();
   await expect(mobileViewer.locator("iframe")).toHaveAttribute("tabindex", "-1");
   const bounds = await mobileViewer.evaluate((element) => {
     const rect = element.getBoundingClientRect();

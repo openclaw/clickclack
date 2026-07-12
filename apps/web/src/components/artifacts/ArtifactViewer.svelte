@@ -62,8 +62,10 @@
 
   let label = $derived(artifactKindLabel(kind));
   let url = $derived(uploadURL(upload));
-  let canToggleMarkdown = $derived(
-    kind === "markdown" && status === "ready" && structuredPreviewAvailable,
+  let canToggleSource = $derived(
+    (kind === "markdown" || kind === "html") &&
+      status === "ready" &&
+      structuredPreviewAvailable,
   );
 
   function previewTooLargeMessage(limit: number): string {
@@ -346,7 +348,10 @@
             renderedHTML = markdownDocument(source);
             structuredPreviewAvailable = true;
           }
-          if (kind === "html") renderedHTML = htmlDocument(source);
+          if (kind === "html") {
+            renderedHTML = htmlDocument(source);
+            structuredPreviewAvailable = true;
+          }
         } catch (error) {
           if (!(error instanceof StructuredPreviewLimitError)) throw error;
           renderedHTML = "";
@@ -476,8 +481,8 @@
     <small>{formatBytes(upload.byte_size)}</small>
   </div>
   <div class="artifact-viewer__actions">
-    {#if canToggleMarkdown}
-      <div class="artifact-viewer__segmented" aria-label="Markdown view">
+    {#if canToggleSource}
+      <div class="artifact-viewer__segmented" aria-label={`${label} view`}>
         <button type="button" class:active={mode === "preview"} aria-pressed={mode === "preview"} onclick={() => (mode = "preview")}>Preview</button>
         <button type="button" class:active={mode === "source"} aria-pressed={mode === "source"} onclick={() => (mode = "source")}>Source</button>
       </div>
@@ -489,7 +494,14 @@
   </div>
 </header>
 
-<div class="artifact-viewer__body" class:is-pdf={kind === "pdf"}>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex (scrollable dialog content must be keyboard-focusable) -->
+<div
+  class="artifact-viewer__body"
+  class:is-pdf={kind === "pdf"}
+  role="region"
+  tabindex="0"
+  aria-label="Artifact content"
+>
   {#if status === "loading"}
     <div class="artifact-viewer__state" role="status">
       <span class="artifact-viewer__spinner" aria-hidden="true"></span>
@@ -526,7 +538,7 @@
         {pdfText}
       </section>
     </div>
-  {:else if kind === "html" && renderedHTML}
+  {:else if kind === "html" && mode === "preview" && renderedHTML}
     <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" tabindex="-1" srcdoc={renderedHTML}></iframe>
   {:else if kind === "markdown" && mode === "preview"}
     <article class="artifact-viewer__document artifact-viewer__markdown">{@html renderedHTML}</article>

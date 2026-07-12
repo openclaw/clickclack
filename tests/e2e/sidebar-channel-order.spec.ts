@@ -53,6 +53,11 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
   await page.getByRole("button", { name: `Move #${names[0]}` }).click();
   const moveMenu = page.getByRole("menu", { name: `Move #${names[0]}` });
   await expect(moveMenu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(moveMenu).toBeHidden();
+  await expect(page.getByRole("button", { name: `Move #${names[0]}` })).toBeFocused();
+
+  await page.getByRole("button", { name: `Move #${names[0]}` }).click();
   await moveMenu.getByRole("menuitem", { name: "Move down" }).click();
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[2], names[0], names[1]]);
 

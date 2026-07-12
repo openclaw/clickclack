@@ -2598,6 +2598,12 @@
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
     if (event.key === "Escape") {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-handles-escape]")
+      ) {
+        return;
+      }
       if (isModalOpen()) {
         closeModal();
       } else if (mobileNavOpen) {

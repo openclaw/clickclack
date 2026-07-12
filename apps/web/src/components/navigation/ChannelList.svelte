@@ -227,6 +227,7 @@
               role="menu"
               tabindex="-1"
               aria-label={`Move #${channel.name}`}
+              data-handles-escape
               bind:this={moveMenuElement}
               onkeydown={(event) => {
                 if (event.key === "Escape") {

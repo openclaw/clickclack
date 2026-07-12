@@ -374,7 +374,11 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   const mobilePage = await mobileContext.newPage();
   await mobilePage.goto(`/app/${workspace.route_id}`);
   await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
-  await mobilePage.getByRole("button", { name: `Move #${names[1]} up` }).click();
+  await mobilePage.getByRole("button", { name: `Move #${names[1]}` }).click();
+  await mobilePage
+    .getByRole("menu", { name: `Move #${names[1]}` })
+    .getByRole("menuitem", { name: "Move up" })
+    .click();
   await expect
     .poll(() => channelNames(mobilePage))
     .toEqual([names[0], names[1], addedName, names[2]]);

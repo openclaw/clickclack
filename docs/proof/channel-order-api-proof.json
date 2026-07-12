@@ -1,0 +1,80 @@
+{
+  "captured_at": "2026-07-11T23:30:35Z",
+  "commit": "3b2adc32bdc1e4fc1c2db1e1febd19fd06cea3db",
+  "workspace": {
+    "id": "wsp_01kx9r82r5az82qzd5kvszwhz8",
+    "slug": "channel-order-video-proof"
+  },
+  "api_channel_order": [
+    {
+      "id": "chn_01kx9r82rbh64wggmq1y635q9v",
+      "name": "aa-video-proof"
+    },
+    {
+      "id": "chn_01kx9r82re82ghmt68kjbhs73f",
+      "name": "mm-video-proof"
+    },
+    {
+      "id": "chn_01kx9r82rhgxtqjwp6w0ryarj3",
+      "name": "zz-video-proof"
+    }
+  ],
+  "ui_proof": {
+    "after_drag": [
+      "zz-video-proof",
+      "aa-video-proof",
+      "mm-video-proof"
+    ],
+    "after_reload": [
+      "zz-video-proof",
+      "aa-video-proof",
+      "mm-video-proof"
+    ],
+    "after_keyboard_move": [
+      "aa-video-proof",
+      "zz-video-proof",
+      "mm-video-proof"
+    ]
+  },
+  "unsupported_position_patch": {
+    "request": {
+      "method": "PATCH",
+      "path": "/api/channels/chn_01kx9r82rbh64wggmq1y635q9v",
+      "body": {
+        "position": 1
+      }
+    },
+    "status": 200,
+    "correlation_id": "corr_7ece85f4150c4d9a7d310a01269ccc2",
+    "returned_channel": {
+      "id": "chn_01kx9r82rbh64wggmq1y635q9v",
+      "name": "aa-video-proof",
+      "kind": "public",
+      "position_present": false
+    },
+    "result": "Unknown position input was ignored; no programmatic order was stored."
+  },
+  "openclaw_round_trip": {
+    "openclaw_version": "2026.7.2 (57af2bb)",
+    "request_message_id": "msg_01kx9r0d1yxvb8ywf9qmrtmn5z",
+    "correlation": "channel-order-3b2adc3",
+    "expected_body": "fakeco-canary-ok channel-order-3b2adc3",
+    "replies": [
+      {
+        "bot": "Dragon Lady",
+        "message_id": "msg_01kx9r0f8962nyc316m0djdsz8",
+        "body": "fakeco-canary-ok channel-order-3b2adc3"
+      },
+      {
+        "bot": "Nighthawk",
+        "message_id": "msg_01kx9r0ff3k1vbgp1b73sh63kn",
+        "body": "fakeco-canary-ok channel-order-3b2adc3"
+      },
+      {
+        "bot": "Mustang",
+        "message_id": "msg_01kx9r0fn3afca2qhetayd0vev",
+        "body": "fakeco-canary-ok channel-order-3b2adc3"
+      }
+    ]
+  }
+}

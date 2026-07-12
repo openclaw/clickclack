@@ -1,15 +1,27 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 
 test("sidebar sections collapse independently and persist per workspace", async ({ page }) => {
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const { workspaces } = (await workspacesResponse.json()) as {
-    workspaces: { id: string; route_id: string }[];
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Sidebar Workspace ${suffix}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
   };
-  const workspace = workspaces[0];
-  const suffix = Date.now();
+  const activeChannelResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/channels`,
+    { data: { name: `active-${suffix}`, kind: "public" } },
+  );
+  expect(activeChannelResponse.ok()).toBe(true);
+  const { channel: activeChannel } = (await activeChannelResponse.json()) as {
+    channel: { route_id: string };
+  };
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: `sidebar-proof-${suffix}`, kind: "public" },
   });
+  expect(channelResponse.ok()).toBe(true);
   const { channel } = (await channelResponse.json()) as {
     channel: { id: string; route_id: string; name: string };
   };
@@ -21,6 +33,7 @@ test("sidebar sections collapse independently and persist per workspace", async 
       scopes: ["bot:write"],
     },
   });
+  expect(botResponse.ok()).toBe(true);
   const { bot_token: botToken } = (await botResponse.json()) as {
     bot_token: { token: string };
   };
@@ -32,10 +45,13 @@ test("sidebar sections collapse independently and persist per workspace", async 
     expect(response.ok()).toBe(true);
   }
 
-  await page.goto(`/app/${workspace.route_id}`);
+  await page.goto(`/app/${workspace.route_id}/${activeChannel.route_id}`);
   const channels = page.getByRole("button", { name: "Channels", exact: true });
   const directMessages = page.getByRole("button", { name: "Direct messages", exact: true });
   const people = page.getByRole("button", { name: "People", exact: true });
+  await expect(channels).toHaveAttribute("aria-controls", "sidebar-channels-list");
+  await expect(directMessages).toHaveAttribute("aria-controls", "sidebar-direct-messages-list");
+  await expect(people).toHaveAttribute("aria-controls", "sidebar-people-list");
 
   for (const toggle of [channels, directMessages, people]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -67,8 +83,9 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(channels).toHaveAttribute("aria-expanded", "false");
 
   const secondResponse = await page.request.post("/api/workspaces", {
-    data: { name: `Sidebar Workspace ${suffix}` },
+    data: { name: `Second Sidebar Workspace ${suffix}` },
   });
+  expect(secondResponse.ok()).toBe(true);
   const { workspace: second } = (await secondResponse.json()) as {
     workspace: { route_id: string };
   };
@@ -88,6 +105,27 @@ test("sidebar sections collapse independently and persist per workspace", async 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Toggle navigation" }).click();
-  await channels.click();
+  await channels.focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("#sidebar-channels-list")).toBeHidden();
+
+  await page.addInitScript(() => {
+    const blockedKeyPrefix = "clickclack:sidebar-sections:v1:";
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return setItem.call(this, key, value);
+    };
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(channels).toHaveAttribute("aria-expanded", "true");
+  await channels.focus();
+  await page.keyboard.press("Enter");
+  await expect(channels).toHaveAttribute("aria-expanded", "false");
 });

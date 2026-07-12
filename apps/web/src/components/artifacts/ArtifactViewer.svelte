@@ -58,7 +58,9 @@
 
   let label = $derived(artifactKindLabel(kind));
   let url = $derived(uploadURL(upload));
-  let canToggleMarkdown = $derived(kind === "markdown" && status === "ready");
+  let canToggleMarkdown = $derived(
+    kind === "markdown" && status === "ready" && renderedHTML !== "",
+  );
 
   function previewTooLargeMessage(limit: number): string {
     return `This ${label.toLowerCase()} is ${formatBytes(upload.byte_size)}. Preview is limited to ${formatBytes(limit)}.`;
@@ -68,20 +70,32 @@
     assertStructuredComplexity(body);
     const policy = [
       "default-src 'none'",
-      "font-src data:",
-      "style-src 'unsafe-inline'",
       "form-action 'none'",
       "base-uri 'none'",
     ].join("; ");
-    const csp = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
-    const base = '<base target="_self">';
     const sanitized = DOMPurify.sanitize(body, {
       WHOLE_DOCUMENT: true,
       USE_PROFILES: { html: true },
-      FORBID_TAGS: ["base", "embed", "form", "iframe", "link", "meta", "object", "script"],
-      FORBID_ATTR: ["action", "formaction", "srcset", "xlink:href"],
+      FORBID_TAGS: [
+        "base",
+        "embed",
+        "form",
+        "iframe",
+        "link",
+        "meta",
+        "object",
+        "script",
+        "style",
+      ],
+      FORBID_ATTR: ["action", "formaction", "srcset", "style", "xlink:href"],
     });
     const documentNode = new DOMParser().parseFromString(sanitized, "text/html");
+    const csp = documentNode.createElement("meta");
+    csp.httpEquiv = "Content-Security-Policy";
+    csp.content = policy;
+    const base = documentNode.createElement("base");
+    base.target = "_self";
+    documentNode.head.prepend(csp, base);
     for (const element of documentNode.querySelectorAll<HTMLElement>("[src], [href], [poster]")) {
       for (const attribute of ["src", "href", "poster"] as const) {
         const value = element.getAttribute(attribute)?.trim();
@@ -89,22 +103,9 @@
         if (value && !allowed) element.removeAttribute(attribute);
       }
     }
-    const stripExternalCSS = (value: string) =>
-      value
-        .replace(/@import\s+(?:url\()?[^;]+;?/gi, "")
-        .replace(/url\((?!\s*['"]?(?:data:|blob:))[^)]+\)/gi, "none");
-    for (const element of documentNode.querySelectorAll<HTMLElement>("[style]")) {
-      element.setAttribute("style", stripExternalCSS(element.getAttribute("style") || ""));
-    }
-    for (const style of documentNode.querySelectorAll("style")) {
-      style.textContent = stripExternalCSS(style.textContent || "");
-    }
     const safeBody = documentNode.documentElement.outerHTML;
     assertRenderedComplexity(safeBody);
-    if (/<head[\s>]/i.test(safeBody)) {
-      return `<!doctype html>${safeBody.replace(/<head([^>]*)>/i, `<head$1>${csp}${base}`)}`;
-    }
-    return `<!doctype html><html><head>${csp}${base}</head><body>${safeBody}</body></html>`;
+    return `<!doctype html>${safeBody}`;
   }
 
   function markdownDocument(body: string): string {

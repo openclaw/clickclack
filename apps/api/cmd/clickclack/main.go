@@ -140,6 +140,11 @@ func serve(args []string) error {
 		Version:        version,
 		Commit:         commit,
 	})
+	if uploads != nil {
+		if err := server.CleanupPendingUploadObjects(ctx, 0); err != nil {
+			log.Printf("pending upload cleanup retry failed: %v", err)
+		}
+	}
 	return httpapi.ListenAndServe(ctx, cfg.Addr, server.Handler())
 }
 

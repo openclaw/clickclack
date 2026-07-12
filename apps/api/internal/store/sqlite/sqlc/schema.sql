@@ -24,6 +24,7 @@ CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
+  icon_url TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   route_id TEXT
 );
@@ -218,6 +219,19 @@ CREATE TABLE upload_quota_reservations (
 
 CREATE INDEX idx_upload_quota_reservations_workspace_owner
   ON upload_quota_reservations(workspace_id, owner_id, expires_at);
+
+CREATE TABLE pending_upload_cleanups (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  storage_path TEXT NOT NULL UNIQUE,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_pending_upload_cleanups_updated
+  ON pending_upload_cleanups(updated_at, id);
 
 CREATE TABLE message_attachments (
   message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,

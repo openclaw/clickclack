@@ -8,7 +8,7 @@
     type WorkspaceMember,
     type WorkspaceMemberRole,
     type WorkspaceMemberRoleCounts,
-  } from "../../../../../lib/workspace-members";
+  } from "$lib/workspace-members";
 
   let { data } = $props();
 

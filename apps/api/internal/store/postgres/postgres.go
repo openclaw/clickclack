@@ -932,6 +932,77 @@ func requireWorkspaceManagerTx(ctx context.Context, tx *sql.Tx, workspaceID, use
 	return err
 }
 
+func requireWorkspaceOwnerTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
+	_, err := storedb.New(tx).RequireWorkspaceOwner(ctx, storedb.RequireWorkspaceOwnerParams{WorkspaceID: workspaceID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrWorkspaceOwnerRequired
+	}
+	return err
+}
+
+func normalizeWorkspaceSettings(current store.Workspace, input store.UpdateWorkspaceInput) (string, string, string, error) {
+	name := current.Name
+	if input.Name != nil {
+		name = strings.TrimSpace(*input.Name)
+		if name == "" {
+			return "", "", "", errors.New("workspace name is required")
+		}
+		if len(name) > 80 {
+			return "", "", "", errors.New("workspace name is too long")
+		}
+	}
+	workspaceSlug := current.Slug
+	if input.Slug != nil {
+		workspaceSlug = slug(*input.Slug)
+		if workspaceSlug == "" {
+			return "", "", "", errors.New("workspace slug is required")
+		}
+		if isReservedWorkspaceSlug(workspaceSlug) {
+			return "", "", "", errors.New("workspace slug is reserved")
+		}
+	}
+	iconURL := current.IconURL
+	if input.IconURL != nil {
+		iconURL = strings.TrimSpace(*input.IconURL)
+		if iconURL != "" && !strings.HasPrefix(iconURL, "/api/uploads/") {
+			return "", "", "", errors.New("workspace icon must be an uploaded file")
+		}
+	}
+	return name, workspaceSlug, iconURL, nil
+}
+
+func validateWorkspaceIconURLTx(ctx context.Context, tx *sql.Tx, workspaceID, iconURL string) error {
+	if iconURL == "" {
+		return nil
+	}
+	uploadID, ok := strings.CutPrefix(iconURL, "/api/uploads/")
+	if !ok || strings.TrimSpace(uploadID) == "" || strings.Contains(uploadID, "/") {
+		return errors.New("workspace icon must be an uploaded image")
+	}
+	var uploadWorkspaceID string
+	var contentType string
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_id, content_type FROM uploads WHERE id = $1`, uploadID).Scan(&uploadWorkspaceID, &contentType); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("workspace icon upload was not found")
+		}
+		return err
+	}
+	if uploadWorkspaceID != workspaceID {
+		return errors.New("workspace icon upload belongs to another workspace")
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return errors.New("workspace icon must be an image")
+	}
+	return nil
+}
+
+func workspaceMutationError(err error) error {
+	if strings.Contains(err.Error(), "workspaces_slug_key") || strings.Contains(err.Error(), "workspaces_slug") || strings.Contains(err.Error(), "duplicate key") {
+		return errors.New("workspace slug is already taken")
+	}
+	return err
+}
+
 func requireChannelAdminTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	_, err := storedb.New(tx).RequireChannelAdmin(ctx, storedb.RequireChannelAdminParams{WorkspaceID: workspaceID, UserID: userID})
 	return err

@@ -1,8 +1,8 @@
 export const prerender = false;
 export const ssr = false;
 
-import { api, APIError } from "../../../../lib/api";
-import type { Workspace } from "../../../../lib/types";
+import { api, APIError } from "$lib/api";
+import type { Workspace } from "$lib/types";
 
 export async function load({ params }: { params: { workspaceID: string } }) {
   const workspaceID = params.workspaceID;

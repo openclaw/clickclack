@@ -307,6 +307,272 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	}
 }
 
+func TestWorkspaceAdminHTTPUploadLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner-admin@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-admin@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	bot, botToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: owner.ID,
+		DisplayName: "Admin Bot",
+		Scopes:      []string{"profile:read"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bot.Kind != "bot" {
+		t.Fatalf("expected bot kind, got %#v", bot)
+	}
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	expectStatusAsUser(t, member.ID, http.MethodPatch, server.URL+"/api/workspaces/"+workspace.ID, strings.NewReader(`{"name":"Member Edit"}`), http.StatusForbidden)
+	expectStatusWithBearer(t, botToken.Token, http.MethodPatch, server.URL+"/api/workspaces/"+workspace.ID, strings.NewReader(`{"name":"Bot Edit"}`), http.StatusForbidden)
+
+	iconUpload := uploadFileAsUserWithContentType(t, owner.ID, server.URL+"/api/uploads", workspace.ID, "icon.png", "image/png", "fake png")
+	iconURL := "/api/uploads/" + iconUpload.ID
+	update := patchJSON[struct {
+		Workspace store.Workspace `json:"workspace"`
+		Event     store.Event     `json:"event"`
+	}](t, server.URL+"/api/workspaces/"+workspace.ID, map[string]string{
+		"name":     "Admin Harbor",
+		"slug":     "admin-harbor",
+		"icon_url": iconURL,
+	})
+	if update.Workspace.Name != "Admin Harbor" || update.Workspace.Slug != "admin-harbor" || update.Workspace.IconURL != iconURL || update.Event.Type != "workspace.updated" {
+		t.Fatalf("unexpected workspace update: %#v", update)
+	}
+
+	if body := getBodyAsUser(t, member.ID, server.URL+"/api/uploads/"+iconUpload.ID); body != "fake png" {
+		t.Fatalf("expected second member to read workspace icon, got %q", body)
+	}
+
+	storedUpload, err := st.GetUpload(ctx, iconUpload.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storedUpload.StoragePath); err != nil {
+		t.Fatalf("expected local upload object before delete: %v", err)
+	}
+
+	auditLog := getJSON[struct {
+		AuditLogEntries []store.AuditLogEntry `json:"audit_log_entries"`
+	}](t, server.URL+"/api/workspaces/"+workspace.ID+"/audit-log")
+	foundIconAudit := false
+	for _, entry := range auditLog.AuditLogEntries {
+		if entry.Action == "workspace.updated" && entry.Metadata["icon_url"] == iconURL {
+			foundIconAudit = true
+			break
+		}
+	}
+	if !foundIconAudit {
+		t.Fatalf("expected icon_url in workspace.updated audit metadata, got %#v", auditLog.AuditLogEntries)
+	}
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/transfer-ownership", strings.NewReader(`{"user_id":"`+owner.ID+`"}`), http.StatusForbidden)
+	transfer := postJSON[struct {
+		Workspace store.Workspace `json:"workspace"`
+		Event     store.Event     `json:"event"`
+	}](t, server.URL+"/api/workspaces/"+workspace.ID+"/transfer-ownership", map[string]string{"user_id": member.ID})
+	if transfer.Event.Type != "workspace.ownership_transferred" {
+		t.Fatalf("unexpected transfer event: %#v", transfer)
+	}
+
+	expectStatus(t, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID, nil, http.StatusForbidden)
+	expectStatusAsUser(t, member.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID, nil, http.StatusNoContent)
+	if _, err := os.Stat(storedUpload.StoragePath); !os.IsNotExist(err) {
+		t.Fatalf("expected local upload object cleanup, got %v", err)
+	}
+}
+
+func TestWorkspaceDeleteUploadCleanupRetriesAfterStorageFailure(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner-cleanup@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	storage := &faultInjectedUploadStore{
+		store: uploadstore.NewLocal(filepath.Join(dataDir, "uploads")),
+		err:   errors.New("temporary object store outage"),
+	}
+	srv := New(st, realtime.NewHub(), Options{UploadStorage: storage})
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	upload := uploadFile(t, server.URL+"/api/uploads", workspace.ID, "retry.txt", "retry body")
+	storedUpload, err := st.GetUpload(ctx, upload.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storedUpload.StoragePath); err != nil {
+		t.Fatalf("expected local upload object before delete: %v", err)
+	}
+
+	storage.failDeletes = true
+	expectStatus(t, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID, nil, http.StatusNoContent)
+	if _, err := st.GetWorkspace(ctx, workspace.ID, owner.ID); err == nil {
+		t.Fatal("expected workspace metadata to be deleted despite storage cleanup failure")
+	}
+	if _, err := os.Stat(storedUpload.StoragePath); err != nil {
+		t.Fatalf("expected failed storage cleanup to leave object for retry: %v", err)
+	}
+	pending, err := st.ListPendingUploadCleanups(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].StoragePath != storedUpload.StoragePath || pending[0].Attempts != 1 || !strings.Contains(pending[0].LastError, "temporary object store outage") {
+		t.Fatalf("expected retained failed cleanup state, got %#v", pending)
+	}
+
+	storage.failDeletes = false
+	if err := srv.CleanupPendingUploadObjects(ctx, 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storedUpload.StoragePath); !os.IsNotExist(err) {
+		t.Fatalf("expected retry cleanup to delete object, got %v", err)
+	}
+	pending, err = st.ListPendingUploadCleanups(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("expected retry cleanup state to be cleared, got %#v", pending)
+	}
+}
+
+func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner-cleanup-batch@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-cleanup-batch@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	localStorage := uploadstore.NewLocal(filepath.Join(dataDir, "uploads"))
+	storage := &faultInjectedUploadStore{
+		store: localStorage,
+		err:   errors.New("temporary object store outage"),
+	}
+	srv := New(st, realtime.NewHub(), Options{UploadStorage: storage})
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	const uploadCount = uploadCleanupSweepLimit + 5
+	storagePaths := make([]string, 0, uploadCount)
+	for i := 0; i < uploadCount; i++ {
+		ownerID := owner.ID
+		if i%2 == 1 {
+			ownerID = member.ID
+		}
+		saved, err := localStorage.Save(ctx, strings.NewReader("batch cleanup body"), uploadstore.SaveOptions{ContentType: "text/plain"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		storagePaths = append(storagePaths, saved.Path)
+		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+			WorkspaceID: workspace.ID,
+			OwnerID:     ownerID,
+			Filename:    fmt.Sprintf("batch-%03d.txt", i),
+			ContentType: "text/plain",
+			ByteSize:    saved.ByteSize,
+			StoragePath: saved.Path,
+			Width:       0,
+			Height:      0,
+			DurationMS:  0,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	storage.failDeletes = true
+	expectStatus(t, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID, nil, http.StatusNoContent)
+	pending, err := st.ListPendingUploadCleanups(ctx, uploadCount+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != uploadCount {
+		t.Fatalf("expected %d pending cleanup rows, got %d", uploadCount, len(pending))
+	}
+
+	storage.failDeletes = false
+	if err := srv.CleanupPendingUploadObjects(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = st.ListPendingUploadCleanups(ctx, uploadCount+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("expected all pending cleanup rows to drain, got %d", len(pending))
+	}
+	for _, storagePath := range storagePaths {
+		if _, err := os.Stat(storagePath); !os.IsNotExist(err) {
+			t.Fatalf("expected cleanup retry to delete %q, got %v", storagePath, err)
+		}
+	}
+}
+
 func TestCreateWorkspaceAllowedForUsersWithoutMemberships(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1747,12 +2013,26 @@ func uploadFile(t *testing.T, endpoint, workspaceID, filename, content string) s
 
 func uploadFileAsUser(t *testing.T, userID, endpoint, workspaceID, filename, content string) store.Upload {
 	t.Helper()
+	return uploadFileAsUserWithContentType(t, userID, endpoint, workspaceID, filename, "", content)
+}
+
+func uploadFileAsUserWithContentType(t *testing.T, userID, endpoint, workspaceID, filename, contentType, content string) store.Upload {
+	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if err := writer.WriteField("workspace_id", workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	part, err := writer.CreateFormFile("file", filename)
+	var part io.Writer
+	var err error
+	if contentType == "" {
+		part, err = writer.CreateFormFile("file", filename)
+	} else {
+		header := textproto.MIMEHeader{}
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+		header.Set("Content-Type", contentType)
+		part, err = writer.CreatePart(header)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1845,6 +2125,28 @@ func getBody(t *testing.T, endpoint string) string {
 	}
 	if resp.StatusCode >= 300 {
 		t.Fatalf("GET %s: %s %s", endpoint, resp.Status, string(body))
+	}
+	return string(body)
+}
+
+func getBodyAsUser(t *testing.T, userID, endpoint string) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-ClickClack-User", userID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode >= 300 {
+		t.Fatalf("GET %s as %s: %s %s", endpoint, userID, resp.Status, string(body))
 	}
 	return string(body)
 }
@@ -2413,6 +2715,27 @@ func (s *quotaObservingUploadStore) Delete(context.Context, string) error {
 
 func (s *quotaObservingUploadStore) ServeHTTP(http.ResponseWriter, *http.Request, uploadstore.Object) error {
 	return uploadstore.ErrNotFound
+}
+
+type faultInjectedUploadStore struct {
+	store       uploadstore.Store
+	failDeletes bool
+	err         error
+}
+
+func (s *faultInjectedUploadStore) Save(ctx context.Context, body io.Reader, options uploadstore.SaveOptions) (uploadstore.SavedObject, error) {
+	return s.store.Save(ctx, body, options)
+}
+
+func (s *faultInjectedUploadStore) Delete(ctx context.Context, path string) error {
+	if s.failDeletes {
+		return s.err
+	}
+	return s.store.Delete(ctx, path)
+}
+
+func (s *faultInjectedUploadStore) ServeHTTP(w http.ResponseWriter, r *http.Request, object uploadstore.Object) error {
+	return s.store.ServeHTTP(w, r, object)
 }
 
 func TestUploadRejectsInvalidMultipartShapes(t *testing.T) {

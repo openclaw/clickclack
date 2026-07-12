@@ -5,8 +5,8 @@
     WORKSPACE_SETTINGS_SECTIONS,
     workspaceSettingsPath,
     type WorkspaceSettingsSection,
-  } from "../../../../lib/settings";
-  import { isWorkspaceManager } from "../../../../lib/permissions";
+  } from "$lib/settings";
+  import { isWorkspaceManager } from "$lib/permissions";
 
   let { data, children } = $props();
 

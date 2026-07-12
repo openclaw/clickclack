@@ -275,6 +275,13 @@ func (s *Store) GetUpload(ctx context.Context, uploadID, userID string) (store.U
 		if upload.OwnerID == userID {
 			return upload, nil
 		}
+		iconVisible, err := workspaceIconUploadVisibleTx(ctx, s.db, upload.WorkspaceID, uploadID)
+		if err != nil {
+			return store.Upload{}, err
+		}
+		if iconVisible {
+			return upload, nil
+		}
 		return store.Upload{}, errors.New("upload is not visible")
 	}
 	visible, err := uploadVisibleToUserTx(ctx, s.db, uploadID, userID)
@@ -397,6 +404,19 @@ func uploadVisibleToUserTx(ctx context.Context, q uploadVisibilityQueryer, uploa
 		LIMIT 1`,
 		userID, userID, uploadID, store.WorkspaceRoleGuest, store.WorkspaceRoleGuest,
 	).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func workspaceIconUploadVisibleTx(ctx context.Context, q uploadVisibilityQueryer, workspaceID, uploadID string) (bool, error) {
+	var one int
+	err := q.QueryRowContext(ctx, `
+		SELECT 1
+		FROM workspaces
+		WHERE id = $1 AND icon_url = $2
+		LIMIT 1`, workspaceID, "/api/uploads/"+uploadID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

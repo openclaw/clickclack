@@ -10,11 +10,11 @@
     type BotToken,
     type BotWithTokens,
     type CreateBotResponse,
-  } from "../../../../../lib/bots";
-  import { isWorkspaceManager } from "../../../../../lib/permissions";
-  import BotCreateForm from "../../../../../components/settings/bots/BotCreateForm.svelte";
-  import BotTokenForm from "../../../../../components/settings/bots/BotTokenForm.svelte";
-  import TokenRevealPanel from "../../../../../components/settings/bots/TokenRevealPanel.svelte";
+  } from "$lib/bots";
+  import { isWorkspaceManager } from "$lib/permissions";
+  import BotCreateForm from "../../../../../../components/settings/bots/BotCreateForm.svelte";
+  import BotTokenForm from "../../../../../../components/settings/bots/BotTokenForm.svelte";
+  import TokenRevealPanel from "../../../../../../components/settings/bots/TokenRevealPanel.svelte";
   import { untrack } from "svelte";
 
   let { data } = $props();

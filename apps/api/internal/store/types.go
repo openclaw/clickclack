@@ -86,6 +86,10 @@ func NormalizeMessageKind(kind string) (string, error) {
 // owner or moderator.
 var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
 
+// ErrWorkspaceOwnerRequired is returned when a workspace operation requires the
+// current owner, not just a moderator.
+var ErrWorkspaceOwnerRequired = errors.New("workspace owner permission required")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
@@ -145,6 +149,7 @@ type Workspace struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconURL   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 	Role      string `json:"role,omitempty"`
 }
@@ -486,6 +491,20 @@ type CreateWorkspaceInput struct {
 	Slug string
 }
 
+type UpdateWorkspaceInput struct {
+	WorkspaceID string
+	ActorUserID string
+	Name        *string
+	Slug        *string
+	IconURL     *string
+}
+
+type TransferWorkspaceOwnershipInput struct {
+	WorkspaceID    string
+	ActorUserID    string
+	NewOwnerUserID string
+}
+
 type CreateChannelInput struct {
 	WorkspaceID string
 	Name        string
@@ -551,6 +570,16 @@ type Upload struct {
 	DurationMS  int    `json:"duration_ms"`
 	StoragePath string `json:"-"`
 	CreatedAt   string `json:"created_at"`
+}
+
+type PendingUploadCleanup struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	StoragePath string `json:"storage_path"`
+	Attempts    int64  `json:"attempts"`
+	LastError   string `json:"last_error"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type CreateUploadInput struct {
@@ -771,6 +800,12 @@ type Store interface {
 	ListWorkspaces(ctx context.Context, userID string) ([]Workspace, error)
 	CreateWorkspace(ctx context.Context, input CreateWorkspaceInput, ownerID string) (Workspace, error)
 	GetWorkspace(ctx context.Context, workspaceID, userID string) (Workspace, error)
+	UpdateWorkspace(ctx context.Context, input UpdateWorkspaceInput) (Workspace, Event, error)
+	TransferWorkspaceOwnership(ctx context.Context, input TransferWorkspaceOwnershipInput) (Workspace, Event, error)
+	DeleteWorkspace(ctx context.Context, workspaceID, actorUserID string) ([]PendingUploadCleanup, error)
+	ListPendingUploadCleanups(ctx context.Context, limit int) ([]PendingUploadCleanup, error)
+	DeletePendingUploadCleanup(ctx context.Context, cleanupID string) error
+	RecordPendingUploadCleanupFailure(ctx context.Context, cleanupID, message string) error
 	CanPublishEphemeral(ctx context.Context, workspaceID, channelID, directConversationID, userID string) error
 	ResolveRouteTarget(ctx context.Context, userID, workspaceRouteID, targetRouteID string) (RouteTarget, error)
 	ResolveLegacyRouteTarget(ctx context.Context, userID, workspaceID, targetID string) (RouteTarget, error)

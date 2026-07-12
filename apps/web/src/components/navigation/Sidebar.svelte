@@ -7,6 +7,7 @@
 
   type Props = {
     workspaceName?: string;
+    workspaceIconURL?: string;
     status: string;
     connected: boolean;
     sidebarCollapsed: boolean;
@@ -35,6 +36,7 @@
 
   let {
     workspaceName,
+    workspaceIconURL,
     status,
     connected,
     sidebarCollapsed,
@@ -68,6 +70,9 @@
 
 <aside class="sidebar" aria-label="Channels and DMs">
   <header class="workspace-header">
+    {#if workspaceIconURL}
+      <img class="workspace-header-icon" src={workspaceIconURL} alt="" />
+    {/if}
     <div class="workspace-name">
       <strong>{workspaceName || "Pick a workspace"}</strong>
       <span class="presence" class:online={connected}>{connected ? "Connected" : status}</span>

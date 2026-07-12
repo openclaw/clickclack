@@ -337,6 +337,16 @@ func (q *Queries) DeleteMessageBody(ctx context.Context, arg DeleteMessageBodyPa
 	return result.RowsAffected()
 }
 
+const deletePendingUploadCleanup = `-- name: DeletePendingUploadCleanup :exec
+DELETE FROM pending_upload_cleanups
+WHERE id = $1
+`
+
+func (q *Queries) DeletePendingUploadCleanup(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deletePendingUploadCleanup, id)
+	return err
+}
+
 const deleteUploadQuotaReservation = `-- name: DeleteUploadQuotaReservation :execrows
 DELETE FROM upload_quota_reservations
 WHERE id = $1 AND owner_id = $2
@@ -349,6 +359,19 @@ type DeleteUploadQuotaReservationParams struct {
 
 func (q *Queries) DeleteUploadQuotaReservation(ctx context.Context, arg DeleteUploadQuotaReservationParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteUploadQuotaReservation, arg.ID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteWorkspace = `-- name: DeleteWorkspace :execrows
+DELETE FROM workspaces
+WHERE id = $1
+`
+
+func (q *Queries) DeleteWorkspace(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteWorkspace, id)
 	if err != nil {
 		return 0, err
 	}
@@ -566,7 +589,7 @@ func (q *Queries) FirstUser(ctx context.Context) (FirstUserRow, error) {
 }
 
 const firstWorkspace = `-- name: FirstWorkspace :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 ORDER BY created_at
 LIMIT 1
@@ -577,6 +600,7 @@ type FirstWorkspaceRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -588,6 +612,7 @@ func (q *Queries) FirstWorkspace(ctx context.Context) (FirstWorkspaceRow, error)
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -1215,7 +1240,7 @@ func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetU
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE w.id = $1
@@ -1232,6 +1257,7 @@ type GetWorkspaceRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 	Role      string `json:"role"`
 }
@@ -1244,6 +1270,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, arg GetWorkspaceParams) (Get
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 		&i.Role,
 	)
@@ -1251,7 +1278,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, arg GetWorkspaceParams) (Get
 }
 
 const getWorkspaceByRouteID = `-- name: GetWorkspaceByRouteID :one
-SELECT id, COALESCE(route_id, '') AS route_id, name, slug, created_at
+SELECT id, COALESCE(route_id, '') AS route_id, name, slug, icon_url, created_at
 FROM workspaces
 WHERE route_id = $1
 `
@@ -1261,6 +1288,7 @@ type GetWorkspaceByRouteIDRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -1272,6 +1300,7 @@ func (q *Queries) GetWorkspaceByRouteID(ctx context.Context, routeID sql.NullStr
 		&i.RouteID,
 		&i.Name,
 		&i.Slug,
+		&i.IconUrl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -1715,6 +1744,44 @@ func (q *Queries) InsertMagicLink(ctx context.Context, arg InsertMagicLinkParams
 		arg.ExpiresAt,
 	)
 	return err
+}
+
+const insertPendingUploadCleanup = `-- name: InsertPendingUploadCleanup :one
+INSERT INTO pending_upload_cleanups (id, workspace_id, storage_path, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT(storage_path) DO UPDATE
+SET workspace_id = excluded.workspace_id,
+    updated_at = excluded.updated_at
+RETURNING id, workspace_id, storage_path, attempts, last_error, created_at, updated_at
+`
+
+type InsertPendingUploadCleanupParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	StoragePath string `json:"storage_path"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+func (q *Queries) InsertPendingUploadCleanup(ctx context.Context, arg InsertPendingUploadCleanupParams) (PendingUploadCleanup, error) {
+	row := q.db.QueryRowContext(ctx, insertPendingUploadCleanup,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.StoragePath,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i PendingUploadCleanup
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.StoragePath,
+		&i.Attempts,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const insertSession = `-- name: InsertSession :exec
@@ -2388,6 +2455,44 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 	return items, nil
 }
 
+const listPendingUploadCleanups = `-- name: ListPendingUploadCleanups :many
+SELECT id, workspace_id, storage_path, attempts, last_error, created_at, updated_at
+FROM pending_upload_cleanups
+ORDER BY updated_at, id
+LIMIT $1
+`
+
+func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int32) ([]PendingUploadCleanup, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingUploadCleanups, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PendingUploadCleanup
+	for rows.Next() {
+		var i PendingUploadCleanup
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.StoragePath,
+			&i.Attempts,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listThreadStates = `-- name: ListThreadStates :many
 SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
 FROM thread_state
@@ -2737,8 +2842,38 @@ func (q *Queries) ListWorkspacePushNotificationRecipients(ctx context.Context, a
 	return items, nil
 }
 
+const listWorkspaceUploadStoragePaths = `-- name: ListWorkspaceUploadStoragePaths :many
+SELECT storage_path
+FROM uploads
+WHERE workspace_id = $1
+  AND storage_path <> ''
+`
+
+func (q *Queries) ListWorkspaceUploadStoragePaths(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceUploadStoragePaths, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var storage_path string
+		if err := rows.Scan(&storage_path); err != nil {
+			return nil, err
+		}
+		items = append(items, storage_path)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaces = `-- name: ListWorkspaces :many
-SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.created_at, wm.role
+SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = $1
@@ -2750,6 +2885,7 @@ type ListWorkspacesRow struct {
 	RouteID   string `json:"route_id"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
+	IconUrl   string `json:"icon_url"`
 	CreatedAt string `json:"created_at"`
 	Role      string `json:"role"`
 }
@@ -2768,6 +2904,7 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID string) ([]ListWork
 			&i.RouteID,
 			&i.Name,
 			&i.Slug,
+			&i.IconUrl,
 			&i.CreatedAt,
 			&i.Role,
 		); err != nil {
@@ -2955,6 +3092,25 @@ func (q *Queries) ReadDirectRead(ctx context.Context, arg ReadDirectReadParams) 
 	return i, err
 }
 
+const recordPendingUploadCleanupFailure = `-- name: RecordPendingUploadCleanupFailure :exec
+UPDATE pending_upload_cleanups
+SET attempts = attempts + 1,
+    last_error = $1,
+    updated_at = $2
+WHERE id = $3
+`
+
+type RecordPendingUploadCleanupFailureParams struct {
+	LastError string `json:"last_error"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) RecordPendingUploadCleanupFailure(ctx context.Context, arg RecordPendingUploadCleanupFailureParams) error {
+	_, err := q.db.ExecContext(ctx, recordPendingUploadCleanupFailure, arg.LastError, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const removeReaction = `-- name: RemoveReaction :execrows
 DELETE FROM reactions
 WHERE message_id = $1
@@ -3070,6 +3226,26 @@ type RequireWorkspaceManagerParams struct {
 
 func (q *Queries) RequireWorkspaceManager(ctx context.Context, arg RequireWorkspaceManagerParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, requireWorkspaceManager, arg.WorkspaceID, arg.UserID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
+}
+
+const requireWorkspaceOwner = `-- name: RequireWorkspaceOwner :one
+SELECT role
+FROM workspace_members
+WHERE workspace_id = $1
+  AND user_id = $2
+  AND role = 'owner'
+`
+
+type RequireWorkspaceOwnerParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+}
+
+func (q *Queries) RequireWorkspaceOwner(ctx context.Context, arg RequireWorkspaceOwnerParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, requireWorkspaceOwner, arg.WorkspaceID, arg.UserID)
 	var role string
 	err := row.Scan(&role)
 	return role, err
@@ -3222,6 +3398,31 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		arg.DisplayName,
 		arg.Handle,
 		arg.AvatarUrl,
+		arg.ID,
+	)
+	return err
+}
+
+const updateWorkspace = `-- name: UpdateWorkspace :exec
+UPDATE workspaces
+SET name = $1,
+    slug = $2,
+    icon_url = $3
+WHERE id = $4
+`
+
+type UpdateWorkspaceParams struct {
+	Name    string `json:"name"`
+	Slug    string `json:"slug"`
+	IconUrl string `json:"icon_url"`
+	ID      string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspace,
+		arg.Name,
+		arg.Slug,
+		arg.IconUrl,
 		arg.ID,
 	)
 	return err

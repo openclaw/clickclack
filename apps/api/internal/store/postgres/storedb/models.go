@@ -206,6 +206,16 @@ type MessageAttachment struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type PendingUploadCleanup struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	StoragePath string `json:"storage_path"`
+	Attempts    int64  `json:"attempts"`
+	LastError   string `json:"last_error"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type Reaction struct {
 	MessageID string `json:"message_id"`
 	UserID    string `json:"user_id"`
@@ -312,6 +322,7 @@ type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
 	Slug      string         `json:"slug"`
+	IconUrl   string         `json:"icon_url"`
 	CreatedAt string         `json:"created_at"`
 	RouteID   sql.NullString `json:"route_id"`
 }

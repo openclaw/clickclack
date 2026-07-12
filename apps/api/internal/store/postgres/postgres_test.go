@@ -88,6 +88,38 @@ func TestWorkspaceMemberPageMigrationUpgradesExistingData(t *testing.T) {
 	}
 }
 
+func TestWorkspaceIconMigrationUpgradesExistingData(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	applyPostgresMigrationsBefore(t, ctx, st, "0014_workspace_icon_url.sql")
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, handle, created_at)
+		VALUES ('usr_icon_owner', 'Icon Owner', 'icon-owner', $1)`, now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspaces (id, route_id, name, slug, created_at)
+		VALUES ('wsp_icon_upgrade', 'THQICONUPGRADE01', 'Icon Upgrade', 'icon-upgrade', $1)`, now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES ('wsp_icon_upgrade', 'usr_icon_owner', 'owner', $1)`, now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.GetWorkspace(ctx, "wsp_icon_upgrade", "usr_icon_owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workspace.IconURL != "" {
+		t.Fatalf("expected migrated workspace icon_url to default empty, got %#v", workspace)
+	}
+}
+
 func TestPostgresStoreSmoke(t *testing.T) {
 	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
 	if dsn == "" {

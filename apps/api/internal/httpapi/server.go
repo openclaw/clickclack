@@ -43,6 +43,7 @@ const (
 	readHeaderTimeout             = 5 * time.Second
 	httpRequestTimeout            = 30 * time.Second
 	idleTimeout                   = 120 * time.Second
+	uploadCleanupSweepLimit       = 100
 )
 
 type actor struct {
@@ -119,6 +120,9 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces", s.createWorkspace)
 		r.Get("/routes/{workspace_route_id}/{target_route_id}", s.resolveRoute)
 		r.Get("/workspaces/{workspace_id}", s.getWorkspace)
+		r.Patch("/workspaces/{workspace_id}", s.updateWorkspace)
+		r.Post("/workspaces/{workspace_id}/transfer-ownership", s.transferWorkspaceOwnership)
+		r.Delete("/workspaces/{workspace_id}", s.deleteWorkspace)
 		r.Get("/workspaces/{workspace_id}/members", s.listWorkspaceMemberPage)
 		r.Get("/workspaces/{workspace_id}/moderation/members", s.listWorkspaceMembers)
 		r.Patch("/workspaces/{workspace_id}/moderation/members/{user_id}", s.updateWorkspaceMemberModeration)
@@ -444,6 +448,157 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	workspace, err := s.store.GetWorkspace(r.Context(), workspaceID, act.user.ID)
 	writeResult(w, map[string]any{"workspace": workspace}, err)
+}
+
+func (s *Server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot update workspaces"))
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireScope("workspaces:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	var body struct {
+		Name    *string `json:"name"`
+		Slug    *string `json:"slug"`
+		IconURL *string `json:"icon_url"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	workspace, event, err := s.store.UpdateWorkspace(r.Context(), store.UpdateWorkspaceInput{
+		WorkspaceID: workspaceID,
+		ActorUserID: act.user.ID,
+		Name:        body.Name,
+		Slug:        body.Slug,
+		IconURL:     body.IconURL,
+	})
+	if err == nil && event.ID != "" {
+		s.publishEvent(r.Context(), event)
+		s.recordAudit(r.Context(), workspaceID, act.user.ID, "workspace.updated", "workspace", workspaceID, map[string]any{"name": workspace.Name, "slug": workspace.Slug, "icon_url": workspace.IconURL})
+	}
+	writeResult(w, map[string]any{"workspace": workspace, "event": event}, err)
+}
+
+func (s *Server) transferWorkspaceOwnership(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot transfer workspace ownership"))
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireScope("workspaces:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	var body struct {
+		UserID string `json:"user_id"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	workspace, event, err := s.store.TransferWorkspaceOwnership(r.Context(), store.TransferWorkspaceOwnershipInput{
+		WorkspaceID:    workspaceID,
+		ActorUserID:    act.user.ID,
+		NewOwnerUserID: body.UserID,
+	})
+	if err == nil && event.ID != "" {
+		s.publishEvent(r.Context(), event)
+		s.recordAudit(r.Context(), workspaceID, act.user.ID, "workspace.ownership_transferred", "workspace", workspaceID, map[string]any{"new_owner_user_id": body.UserID})
+	}
+	writeResult(w, map[string]any{"workspace": workspace, "event": event}, err)
+}
+
+func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot delete workspaces"))
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireScope("workspaces:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	cleanups, err := s.store.DeleteWorkspace(r.Context(), workspaceID, act.user.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := s.cleanupUploadObjects(r.Context(), cleanups); err != nil {
+		log.Printf("workspace %s deleted with pending upload cleanup retry: %v", workspaceID, err)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) CleanupPendingUploadObjects(ctx context.Context, limit int) error {
+	if limit <= 0 {
+		limit = uploadCleanupSweepLimit
+	}
+	for {
+		cleanups, err := s.store.ListPendingUploadCleanups(ctx, limit)
+		if err != nil {
+			return err
+		}
+		if len(cleanups) == 0 {
+			return nil
+		}
+		if err := s.cleanupUploadObjects(ctx, cleanups); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *Server) cleanupUploadObjects(ctx context.Context, cleanups []store.PendingUploadCleanup) error {
+	if len(cleanups) == 0 {
+		return nil
+	}
+	if s.uploadStorage == nil {
+		err := errors.New("upload storage is not configured")
+		for _, cleanup := range cleanups {
+			_ = s.store.RecordPendingUploadCleanupFailure(ctx, cleanup.ID, err.Error())
+		}
+		return err
+	}
+	for _, cleanup := range cleanups {
+		if err := s.uploadStorage.Delete(ctx, cleanup.StoragePath); err != nil {
+			_ = s.store.RecordPendingUploadCleanupFailure(ctx, cleanup.ID, err.Error())
+			return err
+		}
+		if err := s.store.DeletePendingUploadCleanup(ctx, cleanup.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) listWorkspaceMemberPage(w http.ResponseWriter, r *http.Request) {
@@ -1247,6 +1402,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrModerationRestricted):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):
+		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrWorkspaceOwnerRequired):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrBotOwnerRequired):
 		writeError(w, http.StatusForbidden, err)

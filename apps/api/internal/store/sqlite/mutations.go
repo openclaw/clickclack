@@ -10,6 +10,181 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
 
+func (s *Store) UpdateWorkspace(ctx context.Context, input store.UpdateWorkspaceInput) (store.Workspace, store.Event, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	currentRow, err := qtx.GetWorkspace(ctx, storedb.GetWorkspaceParams{WorkspaceID: input.WorkspaceID, UserID: input.ActorUserID})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	current := storeWorkspaceFromGetWorkspace(currentRow)
+	if err := requireNoModerationBlockTx(ctx, tx, input.WorkspaceID, input.ActorUserID); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	if err := requireWorkspaceManagerTx(ctx, tx, input.WorkspaceID, input.ActorUserID); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	name, workspaceSlug, iconURL, err := normalizeWorkspaceSettings(current, input)
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	if err := validateWorkspaceIconURLTx(ctx, tx, input.WorkspaceID, iconURL); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	if err := qtx.UpdateWorkspace(ctx, storedb.UpdateWorkspaceParams{Name: name, Slug: workspaceSlug, IconUrl: iconURL, ID: input.WorkspaceID}); err != nil {
+		return store.Workspace{}, store.Event{}, workspaceMutationError(err)
+	}
+	event, err := insertEvent(ctx, tx, input.WorkspaceID, "", "workspace.updated", nil, map[string]string{"workspace_id": input.WorkspaceID})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	updatedRow, err := qtx.GetWorkspace(ctx, storedb.GetWorkspaceParams{WorkspaceID: input.WorkspaceID, UserID: input.ActorUserID})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	return storeWorkspaceFromGetWorkspace(updatedRow), event, tx.Commit()
+}
+
+func (s *Store) TransferWorkspaceOwnership(ctx context.Context, input store.TransferWorkspaceOwnershipInput) (store.Workspace, store.Event, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	defer tx.Rollback()
+	targetID := strings.TrimSpace(input.NewOwnerUserID)
+	if targetID == "" || targetID == input.ActorUserID {
+		return store.Workspace{}, store.Event{}, errors.New("new owner must be another workspace member")
+	}
+	qtx := s.q.WithTx(tx)
+	roles, err := qtx.MembershipRolesForUpdate(ctx, storedb.MembershipRolesForUpdateParams{
+		WorkspaceID:  input.WorkspaceID,
+		ActorUserID:  input.ActorUserID,
+		TargetUserID: targetID,
+	})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	actorRole := ""
+	targetRole := ""
+	for _, role := range roles {
+		if role.UserID == input.ActorUserID {
+			actorRole = role.Role
+		}
+		if role.UserID == targetID {
+			targetRole = role.Role
+		}
+	}
+	if actorRole != store.WorkspaceRoleOwner {
+		return store.Workspace{}, store.Event{}, store.ErrWorkspaceOwnerRequired
+	}
+	if targetRole == "" {
+		return store.Workspace{}, store.Event{}, errors.New("new owner must be a workspace member")
+	}
+	if targetRole == store.WorkspaceRoleBot || targetRole == store.WorkspaceRoleGuest {
+		return store.Workspace{}, store.Event{}, errors.New("new owner must be a human member or moderator")
+	}
+	if err := qtx.UpdateWorkspaceMemberRole(ctx, storedb.UpdateWorkspaceMemberRoleParams{WorkspaceID: input.WorkspaceID, UserID: input.ActorUserID, Role: store.WorkspaceRoleModerator}); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	if err := qtx.UpdateWorkspaceMemberRole(ctx, storedb.UpdateWorkspaceMemberRoleParams{WorkspaceID: input.WorkspaceID, UserID: targetID, Role: store.WorkspaceRoleOwner}); err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	event, err := insertEvent(ctx, tx, input.WorkspaceID, "", "workspace.ownership_transferred", nil, map[string]string{"workspace_id": input.WorkspaceID, "new_owner_user_id": targetID})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	workspaceRow, err := qtx.GetWorkspace(ctx, storedb.GetWorkspaceParams{WorkspaceID: input.WorkspaceID, UserID: input.ActorUserID})
+	if err != nil {
+		return store.Workspace{}, store.Event{}, err
+	}
+	return storeWorkspaceFromGetWorkspace(workspaceRow), event, tx.Commit()
+}
+
+func (s *Store) DeleteWorkspace(ctx context.Context, workspaceID, actorUserID string) ([]store.PendingUploadCleanup, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := requireWorkspaceOwnerTx(ctx, tx, workspaceID, actorUserID); err != nil {
+		return nil, err
+	}
+	qtx := s.q.WithTx(tx)
+	storagePaths, err := qtx.ListWorkspaceUploadStoragePaths(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	cleanups := make([]store.PendingUploadCleanup, 0, len(storagePaths))
+	cleanupTime := now()
+	for _, storagePath := range storagePaths {
+		cleanup, err := qtx.InsertPendingUploadCleanup(ctx, storedb.InsertPendingUploadCleanupParams{
+			ID:          newID("ucl"),
+			WorkspaceID: workspaceID,
+			StoragePath: storagePath,
+			CreatedAt:   cleanupTime,
+			UpdatedAt:   cleanupTime,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cleanups = append(cleanups, pendingUploadCleanupFromRow(cleanup))
+	}
+	affected, err := qtx.DeleteWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, sql.ErrNoRows
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return cleanups, nil
+}
+
+func (s *Store) ListPendingUploadCleanups(ctx context.Context, limit int) ([]store.PendingUploadCleanup, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.q.ListPendingUploadCleanups(ctx, int64(limit))
+	if err != nil {
+		return nil, err
+	}
+	cleanups := make([]store.PendingUploadCleanup, 0, len(rows))
+	for _, row := range rows {
+		cleanups = append(cleanups, pendingUploadCleanupFromRow(row))
+	}
+	return cleanups, nil
+}
+
+func (s *Store) DeletePendingUploadCleanup(ctx context.Context, cleanupID string) error {
+	return s.q.DeletePendingUploadCleanup(ctx, cleanupID)
+}
+
+func (s *Store) RecordPendingUploadCleanupFailure(ctx context.Context, cleanupID, message string) error {
+	return s.q.RecordPendingUploadCleanupFailure(ctx, storedb.RecordPendingUploadCleanupFailureParams{
+		ID:        cleanupID,
+		LastError: message,
+		UpdatedAt: now(),
+	})
+}
+
+func pendingUploadCleanupFromRow(row storedb.PendingUploadCleanup) store.PendingUploadCleanup {
+	return store.PendingUploadCleanup{
+		ID:          row.ID,
+		WorkspaceID: row.WorkspaceID,
+		StoragePath: row.StoragePath,
+		Attempts:    row.Attempts,
+		LastError:   row.LastError,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}
+}
+
 func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInput) (store.Channel, store.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -7,8 +7,8 @@ import {
   MEMBERS_PAGE_LIMIT,
   type WorkspaceMember,
   type WorkspaceMemberRoleCounts,
-} from "../../../../../lib/workspace-members";
-import type { Workspace } from "../../../../../lib/types";
+} from "$lib/workspace-members";
+import type { Workspace } from "$lib/types";
 
 export async function load({
   params,

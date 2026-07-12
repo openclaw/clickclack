@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/generated && cp src/generated/openapi.d.ts dist/generated/openapi.d.ts",
+    "build": "tsc -p tsconfig.json && node scripts/copy-generated-types.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

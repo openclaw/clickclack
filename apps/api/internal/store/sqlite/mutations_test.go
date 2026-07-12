@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -163,6 +164,117 @@ func TestGuestChannelNameIsReserved(t *testing.T) {
 	archived := true
 	if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: guestID, UserID: owner.ID, Archived: &archived}); err != nil {
 		t.Fatalf("expected non-rename guest channel update to remain allowed: %v", err)
+	}
+}
+
+func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner-icon@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other", Slug: "other-icons"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	textUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Filename:    "note.txt",
+		ContentType: "text/plain",
+		ByteSize:    5,
+		StoragePath: "memory://note.txt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: otherWorkspace.ID,
+		OwnerID:     owner.ID,
+		Filename:    "other.png",
+		ContentType: "image/png",
+		ByteSize:    5,
+		StoragePath: "memory://other.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Filename:    "icon.png",
+		ContentType: "image/png",
+		ByteSize:    5,
+		StoragePath: "memory://icon.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, iconURL := range map[string]string{
+		"missing upload":         "/api/uploads/upl_missing",
+		"non-image upload":       "/api/uploads/" + textUpload.ID,
+		"other workspace upload": "/api/uploads/" + otherUpload.ID,
+	} {
+		iconURL := iconURL
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := st.UpdateWorkspace(ctx, store.UpdateWorkspaceInput{WorkspaceID: workspace.ID, ActorUserID: owner.ID, IconURL: &iconURL}); err == nil {
+				t.Fatal("expected icon validation error")
+			}
+		})
+	}
+
+	iconURL := "/api/uploads/" + imageUpload.ID
+	updated, event, err := st.UpdateWorkspace(ctx, store.UpdateWorkspaceInput{WorkspaceID: workspace.ID, ActorUserID: owner.ID, IconURL: &iconURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.IconURL != iconURL || event.Type != "workspace.updated" {
+		t.Fatalf("unexpected workspace icon update: %#v %#v", updated, event)
+	}
+}
+
+func TestWorkspaceIconMigrationUpgradesExistingData(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	applySQLiteMigrationsBefore(t, ctx, st, "0021_workspace_icon_url.sql")
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, handle, created_at)
+		VALUES ('usr_icon_owner', 'Icon Owner', 'icon-owner', ?)`, now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspaces (id, route_id, name, slug, created_at)
+		VALUES ('wsp_icon_upgrade', 'THQICONUPGRADE01', 'Icon Upgrade', 'icon-upgrade', ?)`, now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES ('wsp_icon_upgrade', 'usr_icon_owner', 'owner', ?)`, now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.GetWorkspace(ctx, "wsp_icon_upgrade", "usr_icon_owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workspace.IconURL != "" {
+		t.Fatalf("expected migrated workspace icon_url to default empty, got %#v", workspace)
 	}
 }
 

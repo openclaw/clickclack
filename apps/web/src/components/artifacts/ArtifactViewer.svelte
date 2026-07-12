@@ -49,6 +49,7 @@
   let pdfImageLimitExceeded = false;
 
   const STRUCTURED_TOKEN_LIMIT = 10_000;
+  const STRUCTURED_SOURCE_LIMIT = 64 * 1024;
   const RENDERED_HTML_LIMIT = 4 * 1024 * 1024;
 
   class StructuredPreviewLimitError extends Error {}
@@ -143,9 +144,12 @@
   }
 
   function assertStructuredComplexity(value: string) {
+    if (value.length > STRUCTURED_SOURCE_LIMIT) {
+      throw new StructuredPreviewLimitError("Structured preview exceeded the safe source limit.");
+    }
     let tokens = 0;
     for (const character of value) {
-      if (character === "<" || character === "[" || character === "*" || character === "_" || character === "`") {
+      if ("<[]>*_`-+.!#>|~".includes(character)) {
         tokens += 1;
         if (tokens > STRUCTURED_TOKEN_LIMIT) {
           throw new StructuredPreviewLimitError("Structured preview exceeded the safe complexity limit.");
@@ -327,6 +331,8 @@
       if (!signal.aborted) status = "ready";
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === "AbortError")) return;
+      cleanupPDF?.();
+      cleanupPDF = null;
       status = "error";
       errorMessage = error instanceof Error ? error.message : "Could not preview this artifact.";
     }
@@ -420,7 +426,7 @@
   </div>
 </header>
 
-<div class="artifact-viewer__body" class:is-pdf={kind === "pdf"} aria-live="polite">
+<div class="artifact-viewer__body" class:is-pdf={kind === "pdf"}>
   {#if status === "loading"}
     <div class="artifact-viewer__state" role="status">
       <span class="artifact-viewer__spinner" aria-hidden="true"></span>

@@ -328,11 +328,14 @@ test("falls back to source before structured previews can exhaust the DOM", asyn
     {
       filename: "complex.md",
       contentType: "text/markdown",
-      body: Buffer.from(`${"*x* ".repeat(10_100)}`),
+      body: Buffer.from(`${"- x\n".repeat(10_100)}`),
     },
   ]);
   await page.goto("/app");
-  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  const channelHref = await page
+    .getByRole("link", { name: `# ${channel.name}` })
+    .getAttribute("href");
+  await page.goto(channelHref!);
 
   await page.getByRole("button", { name: "Open complex.html" }).click();
   let viewer = page.getByRole("complementary", { name: "Artifact viewer" });
@@ -343,7 +346,29 @@ test("falls back to source before structured previews can exhaust the DOM", asyn
   await page.getByRole("button", { name: "Open complex.md" }).click();
   viewer = page.getByRole("complementary", { name: "Artifact viewer" });
   await expect(viewer.locator(".artifact-viewer__markdown")).toHaveCount(0);
-  await expect(viewer.locator("pre")).toContainText("*x*");
+  await expect(viewer.locator("pre")).toContainText("- x");
+});
+
+test("makes a viewer opened at the mobile breakpoint modal immediately", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { channel } = await seedArtifacts(page, [
+    {
+      filename: "mobile.md",
+      contentType: "text/markdown",
+      body: Buffer.from("# Mobile modal"),
+    },
+  ]);
+  await page.goto("/app");
+  const channelHref = await page
+    .getByRole("link", { name: `# ${channel.name}` })
+    .getAttribute("href");
+  await page.goto(channelHref!);
+  await page.getByRole("button", { name: "Open mobile.md" }).click();
+
+  const viewer = page.getByRole("dialog", { name: "Artifact viewer" });
+  await expect(viewer).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator(".timeline")).toHaveAttribute("inert", "");
+  await expect(page.locator(".shell > :not(.artifact-viewer)[inert]")).not.toHaveCount(0);
 });
 
 test("shows local fallbacks for oversized and malformed artifacts", async ({ page }) => {

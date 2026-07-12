@@ -217,7 +217,10 @@
     artifactConversationKey = "";
     artifactTrigger = null;
   }
-  $: syncArtifactModalInert(mobileNavViewport && selectedArtifact !== null);
+  $: syncArtifactModalInert(
+    mobileNavViewport && selectedArtifact !== null,
+    artifactViewerElement,
+  );
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
@@ -339,7 +342,7 @@
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
     if (activityClockSweeper) window.clearInterval(activityClockSweeper);
     if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
-    syncArtifactModalInert(false);
+    syncArtifactModalInert(false, null);
   });
 
   async function boot() {
@@ -2502,12 +2505,12 @@
     });
   }
 
-  function syncArtifactModalInert(active: boolean) {
+  function syncArtifactModalInert(active: boolean, viewer: HTMLElement | null) {
     for (const element of artifactModalInertElements) element.inert = false;
     artifactModalInertElements.clear();
-    if (!active || !shellElement || !artifactViewerElement) return;
+    if (!active || !shellElement || !viewer) return;
     for (const child of shellElement.children) {
-      if (!(child instanceof HTMLElement) || child === artifactViewerElement || child.inert) continue;
+      if (!(child instanceof HTMLElement) || child === viewer || child.inert) continue;
       child.inert = true;
       artifactModalInertElements.add(child);
     }

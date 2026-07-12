@@ -42,6 +42,7 @@
   let errorMessage = $state("");
   let source = $state("");
   let renderedHTML = $state("");
+  let structuredPreviewAvailable = $state(false);
   let highlightedSource = $state("");
   let pdfDocument: PDFDocumentProxy | null = $state(null);
   let pdfPage = $state(1);
@@ -62,7 +63,7 @@
   let label = $derived(artifactKindLabel(kind));
   let url = $derived(uploadURL(upload));
   let canToggleMarkdown = $derived(
-    kind === "markdown" && status === "ready" && renderedHTML !== "",
+    kind === "markdown" && status === "ready" && structuredPreviewAvailable,
   );
 
   function previewTooLargeMessage(limit: number): string {
@@ -235,6 +236,7 @@
     pdfDocument = null;
     source = "";
     renderedHTML = "";
+    structuredPreviewAvailable = false;
     highlightedSource = "";
     pdfPage = 1;
     pdfScale = 1;
@@ -340,7 +342,10 @@
           highlightedSource = await highlightCodeInWorker(source, artifactLanguage(upload), signal);
         }
         try {
-          if (kind === "markdown") renderedHTML = markdownDocument(source);
+          if (kind === "markdown") {
+            renderedHTML = markdownDocument(source);
+            structuredPreviewAvailable = true;
+          }
           if (kind === "html") renderedHTML = htmlDocument(source);
         } catch (error) {
           if (!(error instanceof StructuredPreviewLimitError)) throw error;

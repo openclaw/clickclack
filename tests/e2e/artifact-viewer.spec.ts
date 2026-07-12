@@ -344,6 +344,11 @@ test("falls back to source before structured previews can exhaust the DOM", asyn
       contentType: "text/markdown",
       body: Buffer.from(`${"- x\n".repeat(10_100)}`),
     },
+    {
+      filename: "sanitized-empty.md",
+      contentType: "text/markdown",
+      body: Buffer.from("<script>unsafe but inspectable source</script>"),
+    },
   ]);
   await page.goto("/app");
   const channelHref = await page
@@ -362,6 +367,13 @@ test("falls back to source before structured previews can exhaust the DOM", asyn
   await expect(viewer.locator(".artifact-viewer__markdown")).toHaveCount(0);
   await expect(viewer.locator("pre")).toContainText("- x");
   await expect(viewer.getByRole("button", { name: "Preview" })).toHaveCount(0);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open sanitized-empty.md" }).click();
+  viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.getByRole("button", { name: "Source" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Source" }).click();
+  await expect(viewer.locator("pre")).toContainText("unsafe but inspectable source");
 });
 
 test("makes a viewer opened at the mobile breakpoint modal immediately", async ({ page }) => {

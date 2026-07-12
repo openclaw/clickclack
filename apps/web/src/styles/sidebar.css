@@ -443,6 +443,34 @@
   fill: currentColor;
 }
 
+.channel-touch-controls {
+  display: none;
+}
+
+.channel-touch-controls button {
+  width: 24px;
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-2);
+}
+
+.channel-touch-controls button:disabled {
+  opacity: 0.35;
+}
+
+.channel-touch-controls button:not(:disabled):hover,
+.channel-touch-controls button:not(:disabled):focus-visible {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.channel-touch-controls button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .channel-row.dragging {
   opacity: 0.45;
 }
@@ -470,7 +498,11 @@
 
 @media (hover: none) {
   .channel-drag-handle {
-    opacity: 1;
+    display: none;
+  }
+
+  .channel-touch-controls {
+    display: flex;
   }
 }
 

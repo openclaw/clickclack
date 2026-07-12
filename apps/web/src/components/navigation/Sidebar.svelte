@@ -103,17 +103,33 @@
   });
 
   const CHANNEL_ORDER_STORAGE_PREFIX = "clickclack:sidebar-channel-order:v1:";
+  const MAX_CHANNEL_ORDER_STORAGE_LENGTH = 1_000_000;
+  const MAX_CHANNEL_ORDER_IDS = 10_000;
+  const MAX_CHANNEL_ID_LENGTH = 128;
   let channelOrder = $state<string[]>([]);
 
   function channelOrderStorageKey(workspaceID: string, userID: string): string {
     return `${CHANNEL_ORDER_STORAGE_PREFIX}${userID}:${workspaceID}`;
   }
 
+  function parseChannelOrder(raw: string | null): string[] {
+    if (!raw || raw.length > MAX_CHANNEL_ORDER_STORAGE_LENGTH) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) &&
+        parsed.length <= MAX_CHANNEL_ORDER_IDS &&
+        parsed.every((id) => typeof id === "string" && id.length <= MAX_CHANNEL_ID_LENGTH)
+        ? [...new Set(parsed)]
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
   function loadChannelOrder(workspaceID: string, userID: string): string[] {
     if (!workspaceID || !userID) return [];
     try {
-      const parsed: unknown = JSON.parse(window.localStorage.getItem(channelOrderStorageKey(workspaceID, userID)) || "[]");
-      return Array.isArray(parsed) && parsed.every((id) => typeof id === "string") ? [...new Set(parsed)] : [];
+      return parseChannelOrder(window.localStorage.getItem(channelOrderStorageKey(workspaceID, userID)));
     } catch {
       return [];
     }
@@ -123,10 +139,22 @@
     channelOrder = order;
     if (!workspaceID || !currentUser?.id) return;
     try {
-      window.localStorage.setItem(channelOrderStorageKey(workspaceID, currentUser.id), JSON.stringify(order));
+      const key = channelOrderStorageKey(workspaceID, currentUser.id);
+      const serialized = JSON.stringify(order);
+      if (serialized.length > MAX_CHANNEL_ORDER_STORAGE_LENGTH) {
+        window.localStorage.removeItem(key);
+        return;
+      }
+      window.localStorage.setItem(key, serialized);
     } catch {
       // Storage is an enhancement; reordering still works for this session.
     }
+  }
+
+  function handleStorage(event: StorageEvent) {
+    if (!workspaceID || !currentUser?.id) return;
+    if (event.key !== channelOrderStorageKey(workspaceID, currentUser.id)) return;
+    channelOrder = parseChannelOrder(event.newValue);
   }
 
   let orderedChannels = $derived.by(() => {
@@ -148,6 +176,8 @@
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
 </script>
+
+<svelte:window onstorage={handleStorage} />
 
 <aside class="sidebar" aria-label="Channels and DMs">
   <header class="workspace-header">

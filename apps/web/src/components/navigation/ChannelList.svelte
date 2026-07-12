@@ -40,6 +40,13 @@
   let dropBefore = $state(true);
   let moveAnnouncement = $state("");
 
+  function announceMove(message: string) {
+    moveAnnouncement = "";
+    queueMicrotask(() => {
+      moveAnnouncement = message;
+    });
+  }
+
   function moveChannel(channelID: string, targetID: string, before: boolean) {
     if (!channelID || !targetID || channelID === targetID) return;
     const order = channels.map((channel) => channel.id);
@@ -51,7 +58,9 @@
     order.splice(target + (before ? 0 : 1), 0, channelID);
     onReorder(order);
     const moved = channels.find((channel) => channel.id === channelID);
-    moveAnnouncement = moved ? `Moved #${moved.name} to position ${order.indexOf(channelID) + 1} of ${order.length}` : "";
+    if (moved) {
+      announceMove(`Moved #${moved.name} to position ${order.indexOf(channelID) + 1} of ${order.length}`);
+    }
   }
 
   function moveBy(channelID: string, offset: number) {
@@ -106,7 +115,11 @@
     role="list"
     hidden={!expanded && visibleChannels.length === 0}
   >
+    <span id="channel-order-instructions" class="sr-only">
+      Drag with a pointer, or use Arrow Up and Arrow Down while focused.
+    </span>
     {#each visibleChannels as channel (channel.id)}
+      {@const index = channels.findIndex((candidate) => candidate.id === channel.id)}
       {@const unread = channel.unread_count || 0}
       <div
         class="channel-row"
@@ -126,6 +139,7 @@
           class="channel-drag-handle"
           draggable="true"
           aria-label={`Move #${channel.name}`}
+          aria-describedby="channel-order-instructions"
           title="Drag to reorder; use arrow keys to move"
           ondragstart={(event) => handleDragStart(event, channel.id)}
           ondragend={clearDrag}
@@ -142,6 +156,20 @@
             <circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" />
           </svg>
         </button>
+        <div class="channel-touch-controls">
+          <button
+            type="button"
+            aria-label={`Move #${channel.name} up`}
+            disabled={index === 0}
+            onclick={() => moveBy(channel.id, -1)}
+          >↑</button>
+          <button
+            type="button"
+            aria-label={`Move #${channel.name} down`}
+            disabled={index === channels.length - 1}
+            onclick={() => moveBy(channel.id, 1)}
+          >↓</button>
+        </div>
         <a
           href={hrefForChannel(channel.id)}
           class="nav-item channel"

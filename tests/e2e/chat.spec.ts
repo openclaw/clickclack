@@ -240,8 +240,8 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
   expect(shell).toContain(`export CLICKCLACK_BOT_TOKEN='ccb_test'"'"'value'`);
 });
 
-test("channels can be reordered in the sidebar and persist locally", async ({ page }) => {
-  const suffix = Date.now();
+test("channels can be reordered accessibly and persist locally", async ({ page, browser }) => {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `Channel order ${suffix}` },
   });
@@ -259,25 +259,42 @@ test("channels can be reordered in the sidebar and persist locally", async ({ pa
   }
 
   await page.goto(`/app/${workspace.route_id}`);
-  const channelList = page.locator("#sidebar-channels-list");
-  const channelNames = async () =>
-    channelList
+  const channelNames = (targetPage: Page) =>
+    targetPage
+      .locator("#sidebar-channels-list")
       .locator("a.channel .nav-label")
       .evaluateAll((labels) => labels.map((label) => label.textContent?.trim()));
 
-  await expect.poll(channelNames).toEqual(names);
+  await expect.poll(() => channelNames(page)).toEqual(names);
+
+  const peer = await page.context().newPage();
+  await peer.goto(`/app/${workspace.route_id}`);
+  await expect.poll(() => channelNames(peer)).toEqual(names);
 
   const source = page.getByRole("button", { name: `Move #${names[2]}` });
+  await expect(source).toHaveAttribute("aria-describedby", "channel-order-instructions");
   const target = page.getByRole("link", { name: `# ${names[0]}` }).locator("..");
   await source.dragTo(target, { targetPosition: { x: 40, y: 1 } });
-  await expect.poll(channelNames).toEqual([names[2], names[0], names[1]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
+  await expect.poll(() => channelNames(peer)).toEqual([names[2], names[0], names[1]]);
 
   await page.reload();
-  await expect.poll(channelNames).toEqual([names[2], names[0], names[1]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
+
+  await page.getByRole("button", { name: "Channels", exact: true }).click();
+  await expect(page.locator("#sidebar-channels-list")).toBeHidden();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Channels", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "Channels", exact: true }).click();
+  await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
 
   await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
   await page.keyboard.press("ArrowDown");
-  await expect.poll(channelNames).toEqual([names[0], names[2], names[1]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1]]);
+  await expect.poll(() => channelNames(peer)).toEqual([names[0], names[2], names[1]]);
   await expect(page.getByText(`Moved #${names[2]} to position 2 of 3`)).toBeAttached();
 
   const addedName = `bb-order-${suffix}`;
@@ -286,7 +303,80 @@ test("channels can be reordered in the sidebar and persist locally", async ({ pa
   });
   expect(addedResponse.ok()).toBe(true);
   await page.reload();
-  await expect.poll(channelNames).toEqual([names[0], names[2], names[1], addedName]);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
+
+  const secondWorkspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Other channel order ${suffix}` },
+  });
+  expect(secondWorkspaceResponse.ok()).toBe(true);
+  const { workspace: secondWorkspace } = (await secondWorkspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  for (const name of [`aa-other-${suffix}`, `zz-other-${suffix}`]) {
+    const response = await page.request.post(`/api/workspaces/${secondWorkspace.id}/channels`, {
+      data: { name, kind: "public" },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  await page.goto(`/app/${secondWorkspace.route_id}`);
+  await expect.poll(() => channelNames(page)).toEqual([`aa-other-${suffix}`, `zz-other-${suffix}`]);
+  await page.goto(`/app/${workspace.route_id}`);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
+
+  const storageKey = await page.evaluate(() =>
+    Object.keys(localStorage).find((key) => key.startsWith("clickclack:sidebar-channel-order:v1:")),
+  );
+  expect(storageKey).toBeTruthy();
+  await page.evaluate((key) => localStorage.setItem(key, "not-json"), storageKey!);
+  await page.reload();
+  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
+
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: storageKey!,
+    value: "x".repeat(1_000_001),
+  });
+  await page.reload();
+  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
+
+  await page.addInitScript(() => {
+    const prefix = "clickclack:sidebar-channel-order:v1:";
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith(prefix)) throw new Error("blocked storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith(prefix)) throw new Error("blocked storage");
+      return setItem.call(this, key, value);
+    };
+  });
+  await page.reload();
+  await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[2], names[1]]);
+
+  await peer.close();
+
+  const mobileContext = await browser.newContext({
+    baseURL: serverURL,
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  const mobilePage = await mobileContext.newPage();
+  await mobilePage.goto(`/app/${workspace.route_id}`);
+  await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
+  await mobilePage.getByRole("button", { name: `Move #${names[1]} up` }).click();
+  await expect
+    .poll(() => channelNames(mobilePage))
+    .toEqual([names[0], names[1], addedName, names[2]]);
+  await mobilePage.reload();
+  await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect
+    .poll(() => channelNames(mobilePage))
+    .toEqual([names[0], names[1], addedName, names[2]]);
+  await mobileContext.close();
 });
 
 test("app subdomain root opens the chat app", async ({ page }) => {

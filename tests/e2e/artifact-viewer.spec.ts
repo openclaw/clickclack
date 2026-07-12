@@ -299,7 +299,16 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const bounds = await viewer.evaluate((element) => {
+  const mobileViewer = page.getByRole("dialog", { name: "Artifact viewer" });
+  await expect(mobileViewer).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator(".timeline")).toHaveAttribute("inert", "");
+  const closeButton = mobileViewer.getByRole("button", { name: "Close artifact viewer" });
+  await closeButton.focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    mobileViewer.getByRole("link", { name: "Download viewer-proof.html" }),
+  ).toBeFocused();
+  const bounds = await mobileViewer.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   });
@@ -307,6 +316,34 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   expect(bounds.top).toBe(0);
   expect(bounds.width).toBe(390);
   expect(bounds.height).toBe(844);
+});
+
+test("falls back to source before structured previews can exhaust the DOM", async ({ page }) => {
+  const { channel } = await seedArtifacts(page, [
+    {
+      filename: "complex.html",
+      contentType: "text/html",
+      body: Buffer.from(`<main>${"<i>x</i>".repeat(10_100)}</main>`),
+    },
+    {
+      filename: "complex.md",
+      contentType: "text/markdown",
+      body: Buffer.from(`${"*x* ".repeat(10_100)}`),
+    },
+  ]);
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+
+  await page.getByRole("button", { name: "Open complex.html" }).click();
+  let viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.locator("iframe")).toHaveCount(0);
+  await expect(viewer.locator("pre")).toContainText("<main>");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open complex.md" }).click();
+  viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.locator(".artifact-viewer__markdown")).toHaveCount(0);
+  await expect(viewer.locator("pre")).toContainText("*x*");
 });
 
 test("shows local fallbacks for oversized and malformed artifacts", async ({ page }) => {
@@ -522,12 +559,16 @@ test("returns to the routed thread after closing an artifact", async ({ page }) 
   await expect.poll(() => new URL(page.url()).pathname).not.toBe(parentPath);
   const threadPath = new URL(page.url()).pathname;
 
+  await thread.getByRole("button", { name: "Reply" }).first().click();
+  await expect(thread.getByText(/Replying to/)).toBeVisible();
+
   await thread.getByRole("button", { name: "Open thread-proof.md" }).click();
   const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
   await expect(viewer.getByRole("heading", { name: "Thread artifact" })).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await expect(thread).toBeVisible();
+  await expect(thread.getByText(/Replying to/)).toBeVisible();
   expect(new URL(page.url()).pathname).toBe(threadPath);
   await expect(thread.getByRole("button", { name: "Open thread-proof.md" })).toBeFocused();
 });

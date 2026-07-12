@@ -77,6 +77,9 @@
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
   let artifactTrigger: HTMLElement | null = null;
+  let artifactViewerElement: HTMLElement | null = null;
+  let shellElement: HTMLElement | null = null;
+  let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
   let replyBody = "";
   let workspaceName = "";
@@ -214,6 +217,7 @@
     artifactConversationKey = "";
     artifactTrigger = null;
   }
+  $: syncArtifactModalInert(mobileNavViewport && selectedArtifact !== null);
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
@@ -335,6 +339,7 @@
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
     if (activityClockSweeper) window.clearInterval(activityClockSweeper);
     if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
+    syncArtifactModalInert(false);
   });
 
   async function boot() {
@@ -2472,7 +2477,6 @@
 
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (replyContext === "thread") clearReplyTarget();
     artifactConversationKey = activeConversationKey;
     selectedArtifact = upload;
     void tick().then(() => {
@@ -2496,6 +2500,40 @@
         ?.querySelector<HTMLElement>(`[data-artifact-upload-id="${CSS.escape(uploadID)}"]`)
         ?.focus({ preventScroll: true });
     });
+  }
+
+  function syncArtifactModalInert(active: boolean) {
+    for (const element of artifactModalInertElements) element.inert = false;
+    artifactModalInertElements.clear();
+    if (!active || !shellElement || !artifactViewerElement) return;
+    for (const child of shellElement.children) {
+      if (!(child instanceof HTMLElement) || child === artifactViewerElement || child.inert) continue;
+      child.inert = true;
+      artifactModalInertElements.add(child);
+    }
+  }
+
+  function containArtifactModalFocus(event: KeyboardEvent) {
+    if (!selectedArtifact || !mobileNavViewport || event.key !== "Tab" || !artifactViewerElement) return;
+    const focusable = Array.from(
+      artifactViewerElement.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => !element.inert && element.getClientRects().length > 0);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      artifactViewerElement.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !artifactViewerElement.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !artifactViewerElement.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
@@ -2545,6 +2583,8 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
+    containArtifactModalFocus(event);
+    if (event.defaultPrevented) return;
     if (event.key === "Escape") {
       if (isModalOpen()) {
         closeModal();
@@ -2649,6 +2689,7 @@
   </main>
 {:else}
 <div
+  bind:this={shellElement}
   class="shell"
   class:desktop-shell={integratedTitleBar}
   class:nav-open={mobileNavOpen}
@@ -2841,7 +2882,15 @@
   </main>
 
   {#if selectedArtifact}
-    <aside class="artifact-viewer open" inert={mobileNavOpen} aria-label="Artifact viewer">
+    <aside
+      bind:this={artifactViewerElement}
+      class="artifact-viewer open"
+      inert={mobileNavOpen}
+      role={mobileNavViewport ? "dialog" : "complementary"}
+      aria-modal={mobileNavViewport ? "true" : undefined}
+      aria-label="Artifact viewer"
+      tabindex="-1"
+    >
       <ArtifactViewer upload={selectedArtifact} onClose={closeArtifactViewer} />
     </aside>
   {:else}

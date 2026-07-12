@@ -48,6 +48,11 @@
   let cleanupPDF: (() => void) | null = null;
   let pdfImageLimitExceeded = false;
 
+  const STRUCTURED_TOKEN_LIMIT = 10_000;
+  const RENDERED_HTML_LIMIT = 4 * 1024 * 1024;
+
+  class StructuredPreviewLimitError extends Error {}
+
   let label = $derived(artifactKindLabel(kind));
   let url = $derived(uploadURL(upload));
   let canToggleMarkdown = $derived(kind === "markdown" && status === "ready");
@@ -57,6 +62,7 @@
   }
 
   function htmlDocument(body: string): string {
+    assertStructuredComplexity(body);
     const policy = [
       "default-src 'none'",
       "img-src data: blob:",
@@ -94,6 +100,7 @@
       style.textContent = stripExternalCSS(style.textContent || "");
     }
     const safeBody = documentNode.documentElement.outerHTML;
+    assertRenderedComplexity(safeBody);
     if (/<head[\s>]/i.test(safeBody)) {
       return `<!doctype html>${safeBody.replace(/<head([^>]*)>/i, `<head$1>${csp}${base}`)}`;
     }
@@ -101,7 +108,10 @@
   }
 
   function markdownDocument(body: string): string {
-    return DOMPurify.sanitize(markdown(body), {
+    assertStructuredComplexity(body);
+    const rendered = markdown(body);
+    assertRenderedComplexity(rendered);
+    return DOMPurify.sanitize(rendered, {
       ALLOWED_TAGS: [
         "blockquote",
         "br",
@@ -130,6 +140,30 @@
       ],
       ALLOWED_ATTR: [],
     });
+  }
+
+  function assertStructuredComplexity(value: string) {
+    let tokens = 0;
+    for (const character of value) {
+      if (character === "<" || character === "[" || character === "*" || character === "_" || character === "`") {
+        tokens += 1;
+        if (tokens > STRUCTURED_TOKEN_LIMIT) {
+          throw new StructuredPreviewLimitError("Structured preview exceeded the safe complexity limit.");
+        }
+      }
+    }
+  }
+
+  function assertRenderedComplexity(value: string) {
+    if (value.length > RENDERED_HTML_LIMIT) {
+      throw new StructuredPreviewLimitError("Rendered preview exceeded the safe output limit.");
+    }
+    let elements = 0;
+    for (const character of value) {
+      if (character === "<" && ++elements > STRUCTURED_TOKEN_LIMIT * 2) {
+        throw new StructuredPreviewLimitError("Rendered preview exceeded the safe element limit.");
+      }
+    }
   }
 
   function resourceLimitMessage(limit: number): string {
@@ -281,8 +315,14 @@
         if (kind === "code") {
           highlightedSource = await highlightCodeInWorker(source, artifactLanguage(upload), signal);
         }
-        if (kind === "markdown") renderedHTML = markdownDocument(source);
-        if (kind === "html") renderedHTML = htmlDocument(source);
+        try {
+          if (kind === "markdown") renderedHTML = markdownDocument(source);
+          if (kind === "html") renderedHTML = htmlDocument(source);
+        } catch (error) {
+          if (!(error instanceof StructuredPreviewLimitError)) throw error;
+          renderedHTML = "";
+          mode = "source";
+        }
       }
       if (!signal.aborted) status = "ready";
     } catch (error) {
@@ -414,7 +454,7 @@
     <div class="artifact-viewer__pdf-stage" class:is-rendering={pdfRendering}>
       <canvas bind:this={canvasEl} aria-label={`PDF page ${pdfPage}`}></canvas>
     </div>
-  {:else if kind === "html"}
+  {:else if kind === "html" && renderedHTML}
     <iframe class="artifact-viewer__web" title={`Preview of ${upload.filename}`} sandbox="" srcdoc={renderedHTML}></iframe>
   {:else if kind === "markdown" && mode === "preview"}
     <article class="artifact-viewer__document artifact-viewer__markdown">{@html renderedHTML}</article>

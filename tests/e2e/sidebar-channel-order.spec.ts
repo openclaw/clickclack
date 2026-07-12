@@ -105,3 +105,46 @@ test("channel ordering is isolated by workspace", async ({ page }) => {
     .poll(() => visibleChannelNames(page))
     .toEqual([first.names[1], first.names[0], first.names[2]]);
 });
+
+test("invalid saved channel ordering falls back to server order", async ({ page }) => {
+  const { workspace, names } = await createWorkspaceWithChannels(page, "Invalid channel order");
+  const meResponse = await page.request.get("/api/me");
+  expect(meResponse.ok()).toBe(true);
+  const { user } = (await meResponse.json()) as { user: { id: string } };
+  const storageKey = `clickclack:sidebar-channel-order:v1:${user.id}:${workspace.id}`;
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, "not-json");
+  }, storageKey);
+
+  await page.goto(`/app/${workspace.route_id}`);
+  await expect.poll(() => visibleChannelNames(page)).toEqual(names);
+});
+
+test("unavailable channel order storage keeps session reordering functional", async ({ page }) => {
+  const { workspace, names } = await createWorkspaceWithChannels(page, "Blocked channel order");
+  await page.addInitScript(() => {
+    const blockedKeyPrefix = "clickclack:sidebar-channel-order:v1:";
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith(blockedKeyPrefix)) throw new Error("blocked storage");
+      return setItem.call(this, key, value);
+    };
+  });
+
+  await page.goto(`/app/${workspace.route_id}`);
+  await expect.poll(() => visibleChannelNames(page)).toEqual(names);
+  await page.getByRole("button", { name: `Move #${names[0]}` }).click();
+  await page
+    .getByRole("menu", { name: `Move #${names[0]}` })
+    .getByRole("menuitem", { name: "Move down" })
+    .click();
+  await expect.poll(() => visibleChannelNames(page)).toEqual([names[1], names[0], names[2]]);
+
+  await page.reload();
+  await expect.poll(() => visibleChannelNames(page)).toEqual(names);
+});

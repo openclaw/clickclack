@@ -25,6 +25,13 @@
     onReorder,
   }: Props = $props();
 
+  let draggedChannelID = $state("");
+  let dropTargetID = $state("");
+  let dropBefore = $state(true);
+  let dragGestureActive = $state(false);
+  let moveMenuChannelID = $state("");
+  let moveAnnouncement = $state("");
+
   let visibleChannels = $derived(
     expanded
       ? channels
@@ -32,13 +39,8 @@
           (channel) =>
             (channel.id === selectedChannelID && !selectedDirectID) ||
             (channel.unread_count || 0) > 0,
-        ),
+    ),
   );
-
-  let draggedChannelID = $state("");
-  let dropTargetID = $state("");
-  let dropBefore = $state(true);
-  let moveAnnouncement = $state("");
 
   function announceMove(message: string) {
     moveAnnouncement = "";
@@ -59,7 +61,9 @@
     onReorder(order);
     const moved = channels.find((channel) => channel.id === channelID);
     if (moved) {
-      announceMove(`Moved #${moved.name} to position ${order.indexOf(channelID) + 1} of ${order.length}`);
+      announceMove(
+        `Moved #${moved.name} to position ${order.indexOf(channelID) + 1} of ${order.length}`,
+      );
     }
   }
 
@@ -71,6 +75,8 @@
   }
 
   function handleDragStart(event: DragEvent, channelID: string) {
+    dragGestureActive = true;
+    moveMenuChannelID = "";
     draggedChannelID = channelID;
     event.dataTransfer?.setData("text/plain", channelID);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
@@ -90,9 +96,33 @@
     dropTargetID = "";
   }
 
+  function finishDrag() {
+    clearDrag();
+    window.setTimeout(() => {
+      dragGestureActive = false;
+    }, 0);
+  }
+
+  function toggleMoveMenu(channelID: string) {
+    if (dragGestureActive) return;
+    moveMenuChannelID = moveMenuChannelID === channelID ? "" : channelID;
+  }
+
+  function moveFromMenu(channelID: string, offset: number) {
+    moveBy(channelID, offset);
+    moveMenuChannelID = "";
+  }
+
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
+
+  $effect(() => {
+    if (!expanded) {
+      moveMenuChannelID = "";
+      clearDrag();
+    }
+  });
 </script>
 
 <section class="nav-section" class:collapsed={!expanded}>
@@ -117,12 +147,12 @@
   >
     {#if expanded}
       <span id="channel-order-instructions" class="sr-only">
-        Drag with a pointer, or use Arrow Up and Arrow Down while focused.
+        Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu.
       </span>
     {/if}
     {#each visibleChannels as channel (channel.id)}
-      {@const index = channels.findIndex((candidate) => candidate.id === channel.id)}
       {@const unread = channel.unread_count || 0}
+      {@const channelIndex = channels.findIndex((candidate) => candidate.id === channel.id)}
       <div
         class="channel-row"
         role="listitem"
@@ -130,11 +160,19 @@
         class:dragging={draggedChannelID === channel.id}
         class:drop-before={dropTargetID === channel.id && dropBefore}
         class:drop-after={dropTargetID === channel.id && !dropBefore}
-        ondragover={(event) => handleDragOver(event, channel.id)}
+        ondragover={(event) => {
+          if (expanded) handleDragOver(event, channel.id);
+        }}
         ondrop={(event) => {
           event.preventDefault();
+          if (!expanded) return;
           moveChannel(draggedChannelID, channel.id, dropBefore);
-          clearDrag();
+          finishDrag();
+        }}
+        onfocusout={(event) => {
+          if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+            moveMenuChannelID = "";
+          }
         }}
       >
         {#if expanded}
@@ -144,13 +182,19 @@
             draggable="true"
             aria-label={`Move #${channel.name}`}
             aria-describedby="channel-order-instructions"
-            title="Drag to reorder; use arrow keys to move"
+            title="Move channel"
+            aria-haspopup="menu"
+            aria-expanded={moveMenuChannelID === channel.id}
+            onclick={() => toggleMoveMenu(channel.id)}
             ondragstart={(event) => handleDragStart(event, channel.id)}
-            ondragend={clearDrag}
+            ondragend={finishDrag}
             onkeydown={(event) => {
               if (event.key === "ArrowUp" || event.key === "ArrowDown") {
                 event.preventDefault();
+                moveMenuChannelID = "";
                 moveBy(channel.id, event.key === "ArrowUp" ? -1 : 1);
+              } else if (event.key === "Escape") {
+                moveMenuChannelID = "";
               }
             }}
           >
@@ -160,20 +204,29 @@
               <circle cx="3" cy="12" r="1" /><circle cx="9" cy="12" r="1" />
             </svg>
           </button>
-          <div class="channel-touch-controls">
-            <button
-              type="button"
-              aria-label={`Move #${channel.name} up`}
-              disabled={index === 0}
-              onclick={() => moveBy(channel.id, -1)}
-            >↑</button>
-            <button
-              type="button"
-              aria-label={`Move #${channel.name} down`}
-              disabled={index === channels.length - 1}
-              onclick={() => moveBy(channel.id, 1)}
-            >↓</button>
-          </div>
+          {#if moveMenuChannelID === channel.id}
+            <div
+              class="channel-move-menu"
+              role="menu"
+              aria-label={`Move #${channel.name}`}
+              onkeydown={(event) => {
+                if (event.key === "Escape") moveMenuChannelID = "";
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                disabled={channelIndex <= 0}
+                onclick={() => moveFromMenu(channel.id, -1)}
+              >Move up</button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={channelIndex < 0 || channelIndex >= channels.length - 1}
+                onclick={() => moveFromMenu(channel.id, 1)}
+              >Move down</button>
+            </div>
+          {/if}
         {/if}
         <a
           href={hrefForChannel(channel.id)}

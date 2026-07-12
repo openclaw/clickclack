@@ -446,32 +446,38 @@
   fill: currentColor;
 }
 
-.channel-touch-controls {
-  display: none;
-}
-
-.channel-touch-controls button {
-  width: 24px;
-  min-height: 30px;
-  border: 0;
+.channel-move-menu {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 2px);
+  left: 0;
+  display: grid;
+  min-width: 112px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.channel-move-menu button {
+  border: 0;
+  border-radius: 4px;
   background: transparent;
-  color: var(--muted-2);
-}
-
-.channel-touch-controls button:disabled {
-  opacity: 0.35;
-}
-
-.channel-touch-controls button:not(:disabled):hover,
-.channel-touch-controls button:not(:disabled):focus-visible {
   color: var(--text);
-  background: var(--hover);
+  padding: 6px 8px;
+  text-align: left;
 }
 
-.channel-touch-controls button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.channel-move-menu button:hover:not(:disabled),
+.channel-move-menu button:focus-visible {
+  background: var(--hover-strong);
+  outline: none;
+}
+
+.channel-move-menu button:disabled {
+  color: var(--muted-2);
+  cursor: default;
 }
 
 .channel-row.dragging {
@@ -501,11 +507,7 @@
 
 @media (hover: none) {
   .channel-drag-handle {
-    display: none;
-  }
-
-  .channel-touch-controls {
-    display: flex;
+    opacity: 1;
   }
 }
 

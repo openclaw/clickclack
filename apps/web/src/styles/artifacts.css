@@ -89,6 +89,17 @@
   text-decoration: none;
 }
 
+.artifact-viewer__office-toolbar button,
+.artifact-viewer__sheet-tabs button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .artifact-viewer__actions > button {
   font-size: 20px;
   line-height: 1;
@@ -242,6 +253,51 @@
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
+
+.artifact-viewer__body.is-office {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.artifact-viewer__office-toolbar,
+.artifact-viewer__sheet-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.artifact-viewer__office-toolbar button:disabled { cursor: not-allowed; opacity: 0.4; }
+.artifact-viewer__office-toolbar button:hover:not(:disabled),
+.artifact-viewer__sheet-tabs button:hover,
+.artifact-viewer__sheet-tabs button.active { border-color: var(--line); background: var(--hover-strong); color: var(--text-strong); }
+.artifact-viewer__office-toolbar button:focus-visible,
+.artifact-viewer__sheet-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.artifact-viewer__spreadsheet { min-height: 0; overflow: auto; background: var(--panel); }
+.artifact-viewer__spreadsheet table { min-width: 100%; border-spacing: 0; border-collapse: separate; color: var(--text); font-size: 12px; }
+.artifact-viewer__spreadsheet th,
+.artifact-viewer__spreadsheet td { min-width: 112px; height: 30px; padding: 5px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel); text-align: left; white-space: nowrap; }
+.artifact-viewer__spreadsheet thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-2); color: var(--muted); text-align: center; }
+.artifact-viewer__spreadsheet .row-heading { position: sticky; left: 0; z-index: 1; min-width: 44px; width: 44px; background: var(--panel-2); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.artifact-viewer__spreadsheet thead .row-heading { z-index: 3; }
+.artifact-viewer__grid-note { position: sticky; left: 0; width: max-content; max-width: min(480px, calc(100vw - 48px)); margin: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-2); color: var(--muted); font-size: 12px; line-height: 1.45; white-space: normal; }
+.artifact-viewer__sheet-tabs { justify-content: flex-start; overflow-x: auto; border-top: 1px solid var(--line); border-bottom: 0; }
+.artifact-viewer__sheet-tabs button { flex: none; }
+
+.artifact-viewer__slide-stage { min-height: 0; overflow: auto; display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; }
+.artifact-viewer__slide { display: flex; aspect-ratio: 16 / 9; width: min(100%, 860px); padding: clamp(28px, 6vw, 72px); flex-direction: column; justify-content: center; overflow: hidden; background: #fff; color: #172033; box-shadow: 0 16px 48px -24px rgba(0, 0, 0, 0.65); }
+.artifact-viewer__slide h2 { margin: 0 0 0.7em; font-size: clamp(24px, 4vw, 46px); line-height: 1.15; letter-spacing: -0.02em; }
+.artifact-viewer__slide p { margin: 0.35em 0; font-size: clamp(15px, 2vw, 24px); line-height: 1.4; }
+.artifact-viewer__office-note { margin: 0; color: var(--muted); font-size: 12px; }
 
 .artifact-viewer__pdf-toolbar {
   display: flex;

@@ -19,6 +19,12 @@
   import { markdown } from "../../lib/format";
   import { highlightCodeInWorker } from "../../lib/highlight";
   import {
+    parsePresentation,
+    parseSpreadsheet,
+    type PresentationPreview,
+    type SpreadsheetPreview,
+  } from "../../lib/office";
+  import {
     assertSafePDFCanvas,
     PDF_CANVAS_PIXEL_LIMIT,
     PDF_LOAD_TIMEOUT_MS,
@@ -51,6 +57,10 @@
   let pdfText = $state("");
   let cleanupPDF: (() => void) | null = null;
   let pdfImageLimitExceeded = false;
+  let spreadsheet: SpreadsheetPreview | null = $state(null);
+  let activeSheet = $state(0);
+  let presentation: PresentationPreview | null = $state(null);
+  let activeSlide = $state(0);
 
   const STRUCTURED_TOKEN_LIMIT = 10_000;
   const STRUCTURED_SOURCE_LIMIT = 64 * 1024;
@@ -231,6 +241,10 @@
     pdfScale = 1;
     pdfText = "";
     pdfImageLimitExceeded = false;
+    spreadsheet = null;
+    activeSheet = 0;
+    presentation = null;
+    activeSlide = 0;
     mode = "preview";
     errorMessage = "";
 
@@ -323,6 +337,18 @@
         } finally {
           clearTimeout(loadTimer);
           signal.removeEventListener("abort", abortPDF);
+        }
+      } else if (kind === "spreadsheet" || kind === "presentation") {
+        const bytes = await responseBytes(signal, limit!);
+        if (signal.aborted) return;
+        if (kind === "spreadsheet") {
+          const preview = await parseSpreadsheet(bytes, signal);
+          if (signal.aborted) return;
+          spreadsheet = preview;
+        } else {
+          const preview = await parsePresentation(bytes, signal);
+          if (signal.aborted) return;
+          presentation = preview;
         }
       } else {
         source = await loadText(signal, limit!);
@@ -459,6 +485,53 @@
   });
 
   onDestroy(() => cleanupPDF?.());
+
+  function columnNumber(reference: string): number {
+    const letters = reference.match(/^[A-Z]+/i)?.[0]?.toUpperCase() || "A";
+    let value = 0;
+    for (const letter of letters) value = value * 26 + letter.charCodeAt(0) - 64;
+    return value;
+  }
+
+  function rowNumber(reference: string): number {
+    return Number(reference.match(/\d+$/)?.[0] || 1);
+  }
+
+  function columnName(value: number): string {
+    let name = "";
+    for (let current = value; current > 0; current = Math.floor((current - 1) / 26)) {
+      name = String.fromCharCode(65 + ((current - 1) % 26)) + name;
+    }
+    return name;
+  }
+
+  let spreadsheetGrid = $derived.by(() => {
+    const sheet = spreadsheet?.sheets[activeSheet];
+    if (!sheet)
+      return {
+        columns: [] as string[],
+        rows: [] as { number: number; values: string[] }[],
+        clipped: false,
+      };
+    const actualMaxColumn = Math.max(
+      1,
+      ...sheet.cells.map((cell) => columnNumber(cell.reference)),
+    );
+    const actualMaxRow = Math.max(1, ...sheet.cells.map((cell) => rowNumber(cell.reference)));
+    const maxColumn = Math.min(100, actualMaxColumn);
+    const maxRow = Math.min(1_000, Math.floor(10_000 / maxColumn), actualMaxRow);
+    const values = new Map(sheet.cells.map((cell) => [cell.reference.toUpperCase(), cell.value]));
+    const columns = Array.from({ length: maxColumn }, (_, index) => columnName(index + 1));
+    const rows = Array.from({ length: maxRow }, (_, index) => ({
+      number: index + 1,
+      values: columns.map((column) => values.get(`${column}${index + 1}`) || ""),
+    }));
+    return {
+      columns,
+      rows,
+      clipped: actualMaxColumn > maxColumn || actualMaxRow > maxRow,
+    };
+  });
 </script>
 
 <header class="artifact-viewer__header">
@@ -485,6 +558,7 @@
 <div
   class="artifact-viewer__body"
   class:is-pdf={kind === "pdf"}
+  class:is-office={kind === "spreadsheet" || kind === "presentation"}
   role="region"
   tabindex="0"
   aria-label="Artifact content"
@@ -531,6 +605,38 @@
       <section class="artifact-viewer__pdf-text" aria-label={`PDF page ${pdfPage} text`}>
         {pdfText}
       </section>
+    </div>
+  {:else if kind === "spreadsheet" && spreadsheet}
+    <div class="artifact-viewer__office-toolbar" aria-label="Workbook controls">
+      <span>{spreadsheet.sheets.length} {spreadsheet.sheets.length === 1 ? "sheet" : "sheets"}</span>
+    </div>
+    <div class="artifact-viewer__spreadsheet" role="region" aria-label={`${spreadsheet.sheets[activeSheet].name} worksheet`} tabindex="0">
+      <table>
+        <thead><tr><th class="row-heading" aria-label="Row numbers"></th>{#each spreadsheetGrid.columns as column}<th scope="col">{column}</th>{/each}</tr></thead>
+        <tbody>{#each spreadsheetGrid.rows as row}<tr><th class="row-heading" scope="row">{row.number}</th>{#each row.values as value}<td>{value}</td>{/each}</tr>{/each}</tbody>
+      </table>
+      {#if spreadsheetGrid.clipped || spreadsheet.sheets[activeSheet].truncated}
+        <p class="artifact-viewer__grid-note">Preview is limited to 10,000 cells, the first 1,000 rows, and the first 100 columns. Download the original to inspect omitted cells.</p>
+      {/if}
+    </div>
+    <div class="artifact-viewer__sheet-tabs" role="tablist" aria-label="Worksheets">
+      {#each spreadsheet.sheets as sheet, index}
+        <button type="button" role="tab" aria-selected={activeSheet === index} class:active={activeSheet === index} onclick={() => (activeSheet = index)}>{sheet.name}</button>
+      {/each}
+    </div>
+  {:else if kind === "presentation" && presentation}
+    <div class="artifact-viewer__office-toolbar" aria-label="Slide controls">
+      <button type="button" disabled={activeSlide === 0} onclick={() => (activeSlide -= 1)}>Previous</button>
+      <span>Slide {activeSlide + 1} of {presentation.slides.length}</span>
+      <button type="button" disabled={activeSlide >= presentation.slides.length - 1} onclick={() => (activeSlide += 1)}>Next</button>
+    </div>
+    <div class="artifact-viewer__slide-stage">
+      <article class="artifact-viewer__slide" aria-label={`Slide ${activeSlide + 1}: ${presentation.slides[activeSlide].title}`}>
+        {#each presentation.slides[activeSlide].paragraphs as paragraph, index}
+          {#if index === 0}<h2>{paragraph}</h2>{:else}<p>{paragraph}</p>{/if}
+        {/each}
+      </article>
+      {#if presentation.truncated}<p class="artifact-viewer__office-note">Only the first 200 slides are available in preview.</p>{/if}
     </div>
   {:else if kind === "html" && mode === "preview" && renderedHTML}
     <article class="artifact-viewer__document artifact-viewer__html">{@html renderedHTML}</article>

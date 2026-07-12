@@ -29,6 +29,8 @@
       artifactKind === "text" ||
       artifactKind === "markdown" ||
       artifactKind === "pdf" ||
+      artifactKind === "spreadsheet" ||
+      artifactKind === "presentation" ||
       artifactKind === "html",
   );
   let documentLabel = $derived(artifactKindLabel(artifactKind));

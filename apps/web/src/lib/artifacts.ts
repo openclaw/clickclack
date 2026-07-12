@@ -1,9 +1,19 @@
 import type { Upload } from "./types";
 
-export type ArtifactKind = "code" | "text" | "markdown" | "pdf" | "docx" | "html" | "unsupported";
+export type ArtifactKind =
+  | "code"
+  | "text"
+  | "markdown"
+  | "pdf"
+  | "docx"
+  | "spreadsheet"
+  | "presentation"
+  | "html"
+  | "unsupported";
 
 export const TEXT_ARTIFACT_LIMIT = 2 * 1024 * 1024;
 export const PDF_ARTIFACT_LIMIT = 64 * 1024 * 1024;
+export const OFFICE_ARTIFACT_LIMIT = 24 * 1024 * 1024;
 
 const CODE_LANGUAGES: Record<string, string> = {
   bash: "bash",
@@ -75,6 +85,18 @@ export function classifyArtifact(upload: Upload): ArtifactKind {
   ) {
     return "docx";
   }
+  if (
+    ["xlsx", "xlsm", "xltx", "xltm"].includes(extension) ||
+    contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    contentType === "application/vnd.ms-excel.sheet.macroenabled.12"
+  )
+    return "spreadsheet";
+  if (
+    ["pptx", "pptm", "potx", "potm", "ppsx", "ppsm"].includes(extension) ||
+    contentType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    contentType === "application/vnd.ms-powerpoint.presentation.macroenabled.12"
+  )
+    return "presentation";
   if (extension === "md" || extension === "markdown" || contentType === "text/markdown")
     return "markdown";
   if (extension === "html" || extension === "htm" || contentType === "text/html") return "html";
@@ -110,6 +132,10 @@ export function artifactKindLabel(kind: ArtifactKind): string {
       return "PDF";
     case "docx":
       return "Word document";
+    case "spreadsheet":
+      return "Spreadsheet";
+    case "presentation":
+      return "Slide deck";
     case "html":
       return "Web page";
     default:
@@ -119,6 +145,7 @@ export function artifactKindLabel(kind: ArtifactKind): string {
 
 export function artifactPreviewLimit(kind: ArtifactKind): number | undefined {
   if (kind === "pdf") return PDF_ARTIFACT_LIMIT;
+  if (kind === "spreadsheet" || kind === "presentation") return OFFICE_ARTIFACT_LIMIT;
   if (kind === "code" || kind === "text" || kind === "markdown" || kind === "html") {
     return TEXT_ARTIFACT_LIMIT;
   }

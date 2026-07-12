@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { deflateRawSync } from "node:zlib";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
+import { parseSpreadsheet } from "../../apps/web/src/lib/office";
 import {
   assertSafePDFCanvas,
   PDF_CANVAS_DIMENSION_LIMIT,
@@ -8,6 +10,175 @@ import {
 import type { Upload } from "../../apps/web/src/lib/types";
 
 type Fixture = { filename: string; contentType: string; body: Buffer };
+
+function storedZip(files: Record<string, string | Buffer>): Buffer {
+  const local: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const [name, contents] of Object.entries(files)) {
+    const filename = Buffer.from(name);
+    const body = Buffer.from(contents);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt32LE(body.length, 18);
+    localHeader.writeUInt32LE(body.length, 22);
+    localHeader.writeUInt16LE(filename.length, 26);
+    local.push(localHeader, filename, body);
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt32LE(body.length, 20);
+    centralHeader.writeUInt32LE(body.length, 24);
+    centralHeader.writeUInt16LE(filename.length, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+    central.push(centralHeader, filename);
+    offset += localHeader.length + filename.length + body.length;
+  }
+  const centralSize = central.reduce((total, part) => total + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, ...central, end]);
+}
+
+function workbookFixture(): Buffer {
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Forecast" r:id="rId1"/><sheet name="Assumptions" r:id="rId2"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst><si><t>Quarter</t></si><si><t>Revenue</t></si><si><t>Q1</t></si><si><t>Growth rate</t></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row><c r="A2" t="s"><v>2</v></c><c r="B2"><v>125000</v></c></row></sheetData></worksheet>`,
+    "xl/worksheets/sheet2.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>3</v></c><c r="B1"><v>0.18</v></c></row></sheetData></worksheet>`,
+  });
+}
+
+function presentationFixture(): Buffer {
+  return storedZip({
+    "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/><sldId r:id="rId2"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/><Relationship Id="rId2" Target="slides/slide2.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Launch plan</t></r></p><p><r><t>Three milestones for a calm rollout</t></r></p></txBody></sp></sld>`,
+    "ppt/slides/slide2.xml": `<sld><sp><txBody><p><r><t>Next steps</t></r></p><p><r><t>Invite the pilot team</t></r></p></txBody></sp></sld>`,
+  });
+}
+
+function absoluteRelationshipWorkbook(): Buffer {
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Root relative" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="/xl/worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Resolved from package root</t></is></c></row></sheetData></worksheet>`,
+  });
+}
+
+function worksheetFloodWorkbook(): Buffer {
+  const sheets = Array.from(
+    { length: 101 },
+    (_, index) => `<sheet name="Sheet ${index + 1}" r:id="rId1"/>`,
+  ).join("");
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets}</sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData/></worksheet>`,
+  });
+}
+
+function xmlElementFloodWorkbook(): Buffer {
+  const elements = "<x/>".repeat(25_001);
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Structural flood" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData>${elements}</sheetData></worksheet>`,
+  });
+}
+
+function omittedReferencesWorkbook(): Buffer {
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Derived coordinates" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row r="3"><c t="inlineStr"><is><t>Derived A3</t></is></c><c t="inlineStr"><is><t>Derived B3</t></is></c></row></sheetData></worksheet>`,
+  });
+}
+
+function sharedStringFloodWorkbook(): Buffer {
+  const strings = "<si><t>x</t></si>".repeat(10_001);
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Flood" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst>${strings}</sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>`,
+  });
+}
+
+function paragraphFloodPresentation(): Buffer {
+  const paragraphs = "<p><r><t>x</t></r></p>".repeat(2_001);
+  return storedZip({
+    "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld><sp><txBody>${paragraphs}</txBody></sp></sld>`,
+  });
+}
+
+function workbookWithCellsPerSheet(count: number): Buffer {
+  const cells = (column: string) =>
+    Array.from(
+      { length: count },
+      (_, index) => `<c r="${column}${index + 1}"><v>${index}</v></c>`,
+    ).join("");
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="First" r:id="rId1"/><sheet name="Second" r:id="rId2"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData>${cells("A")}</sheetData></worksheet>`,
+    "xl/worksheets/sheet2.xml": `<worksheet><sheetData>${cells("B")}</sheetData></worksheet>`,
+  });
+}
+
+function presentationWithUnusedLargeMedia(): Buffer {
+  return storedZip({
+    "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Text-only preview survives media</t></r></p></txBody></sp></sld>`,
+    "ppt/media/unused-video.bin": Buffer.alloc(4 * 1024 * 1024 + 1, 0x61),
+  });
+}
+
+function sparseWorkbookFixture(): Buffer {
+  return storedZip({
+    "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sparse" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><c r="A1" t="inlineStr"><is><t>Origin</t></is></c><c r="CV1000"><v>999</v></c></sheetData></worksheet>`,
+  });
+}
+
+function lyingWorkbookEntry(compression: 0 | 8): Buffer {
+  const filename = Buffer.from("xl/workbook.xml");
+  const expanded = Buffer.alloc(2 * 1024 * 1024, 0x61);
+  const body = compression === 8 ? deflateRawSync(expanded) : expanded;
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(compression, 8);
+  local.writeUInt32LE(body.length, 18);
+  local.writeUInt32LE(1, 22);
+  local.writeUInt16LE(filename.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(compression, 10);
+  central.writeUInt32LE(body.length, 20);
+  central.writeUInt32LE(1, 24);
+  central.writeUInt16LE(filename.length, 28);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(central.length + filename.length, 12);
+  end.writeUInt32LE(local.length + filename.length + body.length, 16);
+  return Buffer.concat([local, filename, body, central, filename, end]);
+}
 
 function uploadShape(filename: string, contentType: string): Upload {
   return {
@@ -158,6 +329,12 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   expect(classifyArtifact(uploadShape("worker.ts", "text/plain"))).toBe("code");
   expect(classifyArtifact(uploadShape("page.html", "application/octet-stream"))).toBe("html");
   expect(classifyArtifact(uploadShape("report.pdf", "application/octet-stream"))).toBe("pdf");
+  expect(classifyArtifact(uploadShape("forecast.xlsx", "application/octet-stream"))).toBe(
+    "spreadsheet",
+  );
+  expect(classifyArtifact(uploadShape("launch.pptx", "application/octet-stream"))).toBe(
+    "presentation",
+  );
   expect(classifyArtifact(uploadShape("brief.docx", "application/octet-stream"))).toBe("docx");
   expect(classifyArtifact(uploadShape("spoofed.docx", "text/html"))).toBe("docx");
   expect(classifyArtifact(uploadShape("spoofed.docx", "application/pdf"))).toBe("docx");
@@ -171,6 +348,143 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   ).toBe("docx");
   expect(classifyArtifact(uploadShape("notes.log", "application/octet-stream"))).toBe("text");
   expect(classifyArtifact(uploadShape("archive.zip", "application/zip"))).toBe("unsupported");
+});
+
+test("stops Office entries when output exceeds the declared size", async () => {
+  for (const compression of [0, 8] as const) {
+    await expect(
+      parseSpreadsheet(
+        new Uint8Array(lyingWorkbookEntry(compression)),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("exceeded its declared safe size");
+  }
+});
+
+test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
+  const { channel } = await seedArtifacts(page, [
+    {
+      filename: "forecast.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: workbookFixture(),
+    },
+    {
+      filename: "launch.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: presentationFixture(),
+    },
+    {
+      filename: "sparse.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: sparseWorkbookFixture(),
+    },
+    {
+      filename: "absolute.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: absoluteRelationshipWorkbook(),
+    },
+    {
+      filename: "many-sheets.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: worksheetFloodWorkbook(),
+    },
+    {
+      filename: "xml-element-flood.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: xmlElementFloodWorkbook(),
+    },
+    {
+      filename: "cell-budget.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: workbookWithCellsPerSheet(6_000),
+    },
+    {
+      filename: "omitted-references.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: omittedReferencesWorkbook(),
+    },
+    {
+      filename: "shared-string-flood.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: sharedStringFloodWorkbook(),
+    },
+    {
+      filename: "paragraph-flood.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: paragraphFloodPresentation(),
+    },
+    {
+      filename: "media-heavy.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: presentationWithUnusedLargeMedia(),
+    },
+  ]);
+  await page.goto("/app");
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+
+  await page.getByRole("button", { name: "Open forecast.xlsx" }).click();
+  await expect(viewer.getByRole("region", { name: "Forecast worksheet" })).toContainText("125000");
+  if (process.env.CAPTURE_OFFICE_PROOF) {
+    await viewer.screenshot({ path: "docs/proof/artifact-viewer-spreadsheet.png" });
+  }
+  await viewer.getByRole("tab", { name: "Assumptions" }).click();
+  await expect(viewer.getByRole("region", { name: "Assumptions worksheet" })).toContainText("0.18");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open absolute.xlsx" }).click();
+  await expect(viewer.getByText("Resolved from package root")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open many-sheets.xlsx" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too many worksheets");
+  if (process.env.CAPTURE_OFFICE_PROOF) {
+    await page.screenshot({
+      path: "docs/proof/artifact-viewer-office-limit-fallback.png",
+      fullPage: true,
+    });
+  }
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open xml-element-flood.xlsx" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too many XML elements");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open cell-budget.xlsx" }).click();
+  await viewer.getByRole("tab", { name: "Second" }).click();
+  await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open omitted-references.xlsx" }).click();
+  await expect(viewer.locator("tbody tr").nth(2)).toContainText("Derived A3");
+  await expect(viewer.locator("tbody tr").nth(2)).toContainText("Derived B3");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open shared-string-flood.xlsx" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too many shared strings");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open paragraph-flood.pptx" }).click();
+  await expect(viewer.getByRole("alert")).toContainText("too many paragraphs");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open media-heavy.pptx" }).click();
+  await expect(viewer.getByText("Text-only preview survives media")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open sparse.xlsx" }).click();
+  await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
+  await expect(viewer.locator("tbody td")).toHaveCount(10_000);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open launch.pptx" }).click();
+  await expect(viewer.getByLabel("Slide 1: Launch plan")).toContainText("Three milestones");
+  if (process.env.CAPTURE_OFFICE_PROOF) {
+    await viewer.screenshot({ path: "docs/proof/artifact-viewer-slide-deck.png" });
+  }
+  await viewer.getByRole("button", { name: "Next" }).click();
+  await expect(viewer.getByLabel("Slide 2: Next steps")).toContainText("Invite the pilot team");
+  await expect(viewer.getByRole("link", { name: "Download launch.pptx" })).toBeVisible();
 });
 
 test("bounds PDF canvas dimensions and total backing pixels", () => {

@@ -56,8 +56,8 @@ content-security policy on upload responses.
 
 ### Artifact viewer
 
-Attached code, text, Markdown, PDF, and HTML files open in a read-only artifact
-pane without leaving the conversation. DOCX stays download-only because ZIP
+Attached code, text, Markdown, PDF, Open XML spreadsheets and slide decks, and
+HTML files open in a read-only artifact pane without leaving the conversation. DOCX stays download-only because ZIP
 metadata cannot hard-bound decompression before a browser conversion library
 allocates the expanded document. The pane temporarily covers the thread or
 profile pane on desktop and fills the viewport on mobile; closing it restores
@@ -79,12 +79,18 @@ server continues to serve it as a hardened download.
   time, embedded-image pixels, worker canvas bytes, each DPR-scaled backing
   dimension, and total backing pixels are capped. Files or pages outside those
   limits fall back to the authenticated download.
+- XLSX-family workbooks render bounded cell values in a scrollable grid with
+  worksheet tabs. PPTX-family decks render bounded slide text with previous and
+  next controls. Formulas are shown through their cached values; macros are
+  never executed. Both formats cap compressed bytes, archive entries, expanded
+  bytes, cells, slides, and slide text before rendering.
 - DOCX files never enter a browser parser. Normal, malformed, compressed-bomb,
   and oversized DOCX uploads all use the same authenticated download-only path.
 - Uploaded HTML is parsed only in an inert template; scripts, forms, frames,
   styles, and fetchable URLs are stripped before the safe fragment enters the
   keyboard-scrollable preview DOM. The original remains available in Source.
-- Text, code, Markdown, and HTML previews are limited to 2 MiB; PDF to the
+- Text, code, Markdown, and HTML previews are limited to 2 MiB; Office Open XML
+  previews to 24 MiB compressed and 12 MiB expanded; PDF to the
   server's 64 MiB upload cap. The client checks streamed response bytes rather
   than trusting metadata alone. Larger or malformed files fall back to an
   authenticated download.

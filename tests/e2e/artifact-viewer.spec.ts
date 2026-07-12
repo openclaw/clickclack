@@ -401,6 +401,11 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
       body: Buffer.from("not a DOCX package"),
     },
     {
+      filename: "spoofed-media.docx",
+      contentType: "image/svg+xml",
+      body: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><text>not media</text></svg>'),
+    },
+    {
       filename: "oversized.docx",
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       body: Buffer.alloc(16 * 1024 * 1024 + 1, 0x61),
@@ -438,6 +443,8 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   await page.waitForTimeout(250);
 
   await expect(page.getByRole("link", { name: "Download malformed.docx" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download spoofed-media.docx" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "spoofed-media.docx" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Download oversized.docx" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Open .*\.docx/ })).toHaveCount(0);
 

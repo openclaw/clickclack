@@ -20,10 +20,10 @@
   let durationLabel = $derived(loadedDurationLabel || formatDuration(upload.duration_ms ?? 0));
 
   let contentType = $derived((upload.content_type || "").split(";")[0].trim().toLowerCase());
-  let isImage = $derived(contentType.startsWith("image/"));
-  let isVideo = $derived(contentType.startsWith("video/"));
-  let isAudio = $derived(contentType.startsWith("audio/"));
   let artifactKind = $derived(classifyArtifact(upload));
+  let isImage = $derived(artifactKind === "unsupported" && contentType.startsWith("image/"));
+  let isVideo = $derived(artifactKind === "unsupported" && contentType.startsWith("video/"));
+  let isAudio = $derived(artifactKind === "unsupported" && contentType.startsWith("audio/"));
   let canPreviewDocument = $derived(
     artifactKind === "code" ||
       artifactKind === "text" ||

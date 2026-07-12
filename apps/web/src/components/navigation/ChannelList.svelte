@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { Channel } from "../../lib/types";
 
   type Props = {
@@ -30,6 +31,8 @@
   let dropBefore = $state(true);
   let dragGestureActive = $state(false);
   let moveMenuChannelID = $state("");
+  let moveMenuElement = $state<HTMLDivElement>();
+  let moveMenuTrigger: HTMLButtonElement | undefined;
   let moveAnnouncement = $state("");
 
   let visibleChannels = $derived(
@@ -103,14 +106,28 @@
     }, 0);
   }
 
-  function toggleMoveMenu(channelID: string) {
+  async function toggleMoveMenu(channelID: string, trigger: HTMLButtonElement) {
     if (dragGestureActive) return;
-    moveMenuChannelID = moveMenuChannelID === channelID ? "" : channelID;
+    if (moveMenuChannelID === channelID) {
+      moveMenuChannelID = "";
+      return;
+    }
+    moveMenuTrigger = trigger;
+    moveMenuChannelID = channelID;
+    await tick();
+    moveMenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }
+
+  async function closeMoveMenu(restoreFocus = false) {
+    moveMenuChannelID = "";
+    if (!restoreFocus) return;
+    await tick();
+    moveMenuTrigger?.focus();
   }
 
   function moveFromMenu(channelID: string, offset: number) {
     moveBy(channelID, offset);
-    moveMenuChannelID = "";
+    void closeMoveMenu(true);
   }
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
@@ -185,7 +202,7 @@
             title="Move channel"
             aria-haspopup="menu"
             aria-expanded={moveMenuChannelID === channel.id}
-            onclick={() => toggleMoveMenu(channel.id)}
+            onclick={(event) => void toggleMoveMenu(channel.id, event.currentTarget)}
             ondragstart={(event) => handleDragStart(event, channel.id)}
             ondragend={finishDrag}
             onkeydown={(event) => {
@@ -208,9 +225,14 @@
             <div
               class="channel-move-menu"
               role="menu"
+              tabindex="-1"
               aria-label={`Move #${channel.name}`}
+              bind:this={moveMenuElement}
               onkeydown={(event) => {
-                if (event.key === "Escape") moveMenuChannelID = "";
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  void closeMoveMenu(true);
+                }
               }}
             >
               <button

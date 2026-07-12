@@ -77,6 +77,7 @@
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
   let artifactTrigger: HTMLElement | null = null;
+  let artifactThreadScrollTop: number | null = null;
   let artifactViewerElement: HTMLElement | null = null;
   let shellElement: HTMLElement | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
@@ -2480,6 +2481,9 @@
 
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    artifactThreadScrollTop = selectedThread
+      ? (document.querySelector<HTMLElement>(".thread-scroll")?.scrollTop ?? null)
+      : null;
     artifactConversationKey = activeConversationKey;
     selectedArtifact = upload;
     void tick().then(() => {
@@ -2494,6 +2498,11 @@
     artifactConversationKey = "";
     artifactTrigger = null;
     void tick().then(() => {
+      if (artifactThreadScrollTop !== null) {
+        const threadScroll = document.querySelector<HTMLElement>(".thread-scroll");
+        if (threadScroll) threadScroll.scrollTop = artifactThreadScrollTop;
+      }
+      artifactThreadScrollTop = null;
       if (trigger?.isConnected) {
         trigger.focus({ preventScroll: true });
         return;
@@ -2896,11 +2905,13 @@
     >
       <ArtifactViewer upload={selectedArtifact} onClose={closeArtifactViewer} />
     </aside>
-  {:else}
+  {/if}
   <aside
     class="thread"
     class:open={sidePanelOpen}
-    inert={mobileNavOpen}
+    class:covered={selectedArtifact !== null}
+    inert={mobileNavOpen || selectedArtifact !== null}
+    aria-hidden={selectedArtifact ? "true" : undefined}
     aria-label={selectedProfile ? "Profile pane" : "Thread pane"}
   >
     {#if selectedThread}
@@ -2945,7 +2956,6 @@
       <ThreadEmptyState />
     {/if}
   </aside>
-  {/if}
 </div>
 {#if settingsModalOpen && user}
   <SettingsModal

@@ -588,14 +588,26 @@ test("returns to the routed thread after closing an artifact", async ({ page }) 
 
   await thread.getByRole("button", { name: "Reply" }).first().click();
   await expect(thread.getByText(/Replying to/)).toBeVisible();
+  const threadScroll = thread.locator(".thread-scroll");
+  await threadScroll.evaluate((element) => {
+    element.setAttribute("data-mount-proof", "preserved");
+    const spacer = document.createElement("div");
+    spacer.style.cssText = "height:2000px;min-height:2000px;flex:none";
+    element.prepend(spacer);
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await threadScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   await thread.getByRole("button", { name: "Open thread-proof.md" }).click();
   const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
   await expect(viewer.getByRole("heading", { name: "Thread artifact" })).toBeVisible();
+  await expect(page.locator(".thread")).toHaveAttribute("aria-hidden", "true");
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await expect(thread).toBeVisible();
   await expect(thread.getByText(/Replying to/)).toBeVisible();
+  await expect(threadScroll).toHaveAttribute("data-mount-proof", "preserved");
+  expect(await threadScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   expect(new URL(page.url()).pathname).toBe(threadPath);
   await expect(thread.getByRole("button", { name: "Open thread-proof.md" })).toBeFocused();
 });

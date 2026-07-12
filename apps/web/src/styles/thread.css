@@ -21,6 +21,11 @@
   pointer-events: auto;
 }
 
+.thread.covered {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .thread > header {
   display: flex;
   align-items: center;

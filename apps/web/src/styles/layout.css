@@ -147,6 +147,11 @@
   grid-template-columns: 72px 0 minmax(0, 1fr) minmax(460px, 42vw);
 }
 
+.shell > .thread,
+.shell > .artifact-viewer {
+  grid-column: 4;
+}
+
 .shell.desktop-shell {
   grid-template-rows: 52px minmax(0, 1fr);
 }

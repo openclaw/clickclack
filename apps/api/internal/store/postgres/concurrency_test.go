@@ -126,6 +126,198 @@ func TestPostgresModerationWaitsForInFlightWriteAuthorization(t *testing.T) {
 	}
 }
 
+func TestPostgresBotRemovalWaitsForInFlightWriteAuthorization(t *testing.T) {
+	ctx := context.Background()
+	st, fixture := newPostgresConcurrencyFixture(t, ctx)
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: fixture.workspace.ID,
+		DisplayName: "Concurrency Bot",
+		CreatedBy:   fixture.owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, gatePID := beginPostgresGate(t, ctx, st.db)
+	if err := lockMemberWriteAuthorizationTx(ctx, gate, fixture.workspace.ID, bot.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		result <- st.RemoveBotFromWorkspace(ctx, fixture.workspace.ID, bot.ID, fixture.owner.ID)
+	}()
+	waitForPostgresBlockers(t, ctx, st.db, gatePID, 1)
+
+	if err := requireMembershipTx(ctx, gate, fixture.workspace.ID, bot.ID); err != nil {
+		t.Fatalf("bot membership disappeared before writer completed: %v", err)
+	}
+	if err := gate.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err := receivePostgresResult(t, result); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.requireMembership(ctx, fixture.workspace.ID, bot.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("removed bot membership returned %v", err)
+	}
+}
+
+func TestPostgresGuestClientNonceRecoveryPrecedesQuotaCheck(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(context.Context, *Store, postgresConcurrencyFixture, store.Channel) (store.Message, string, error)
+		retry func(context.Context, *Store, postgresConcurrencyFixture, store.Channel, string) (store.Message, bool, error)
+	}{
+		{
+			name: "channel message",
+			write: func(ctx context.Context, st *Store, f postgresConcurrencyFixture, guestChannel store.Channel) (store.Message, string, error) {
+				message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+					ChannelID: guestChannel.ID,
+					AuthorID:  f.member.ID,
+					Body:      "guest nonce retry",
+					Nonce:     "guest-message-retry",
+				})
+				return message, message.ID, err
+			},
+			retry: func(ctx context.Context, st *Store, f postgresConcurrencyFixture, guestChannel store.Channel, _ string) (store.Message, bool, error) {
+				message, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+					ChannelID: guestChannel.ID,
+					AuthorID:  f.member.ID,
+					Body:      "guest nonce retry",
+					Nonce:     "guest-message-retry",
+				})
+				return message, event.ID == "", err
+			},
+		},
+		{
+			name: "thread reply",
+			write: func(ctx context.Context, st *Store, f postgresConcurrencyFixture, guestChannel store.Channel) (store.Message, string, error) {
+				root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+					ChannelID: guestChannel.ID,
+					AuthorID:  f.owner.ID,
+					Body:      "guest retry thread",
+				})
+				if err != nil {
+					return store.Message{}, "", err
+				}
+				reply, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+					RootMessageID: root.ID,
+					AuthorID:      f.member.ID,
+					Body:          "guest reply retry",
+					Nonce:         "guest-reply-retry",
+				})
+				return reply, root.ID, err
+			},
+			retry: func(ctx context.Context, st *Store, f postgresConcurrencyFixture, _ store.Channel, rootID string) (store.Message, bool, error) {
+				reply, _, events, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+					RootMessageID: rootID,
+					AuthorID:      f.member.ID,
+					Body:          "guest reply retry",
+					Nonce:         "guest-reply-retry",
+				})
+				return reply, len(events) == 0, err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			st, fixture, guestChannel := newPostgresGuestConcurrencyFixture(t, ctx)
+			created, retryState, err := tt.write(ctx, st, fixture, guestChannel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 1; i < store.GuestPostLimit; i++ {
+				if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+					ChannelID: guestChannel.ID,
+					AuthorID:  fixture.member.ID,
+					Body:      fmt.Sprintf("guest quota filler %d", i),
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			retried, emittedNoEvents, err := tt.retry(ctx, st, fixture, guestChannel, retryState)
+			if err != nil {
+				t.Fatalf("idempotent retry at quota returned %v", err)
+			}
+			if retried.ID != created.ID {
+				t.Fatalf("idempotent retry returned %q, want %q", retried.ID, created.ID)
+			}
+			if !emittedNoEvents {
+				t.Fatal("idempotent retry emitted duplicate events")
+			}
+			if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+				ChannelID: guestChannel.ID,
+				AuthorID:  fixture.member.ID,
+				Body:      "new guest post over quota",
+			}); !errors.Is(err, store.ErrPostRateLimited) {
+				t.Fatalf("new guest post at quota returned %v", err)
+			}
+		})
+	}
+}
+
+func TestPostgresConcurrentGuestClientNonceRecoveryAtQuotaBoundary(t *testing.T) {
+	ctx := context.Background()
+	st, fixture, guestChannel := newPostgresGuestConcurrencyFixture(t, ctx)
+	for i := 0; i < store.GuestPostLimit-1; i++ {
+		if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+			ChannelID: guestChannel.ID,
+			AuthorID:  fixture.member.ID,
+			Body:      fmt.Sprintf("guest quota seed %d", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gate, gatePID := beginPostgresGate(t, ctx, st.db)
+	if err := lockGuestPostBudgetTx(ctx, gate, fixture.workspace.ID, fixture.member.ID); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		message store.Message
+		event   store.Event
+		err     error
+	}
+	results := make(chan result, 2)
+	write := func() {
+		message, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+			ChannelID: guestChannel.ID,
+			AuthorID:  fixture.member.ID,
+			Body:      "concurrent guest nonce",
+			Nonce:     "concurrent-guest-nonce",
+		})
+		results <- result{message: message, event: event, err: err}
+	}
+	go write()
+	go write()
+	waitForPostgresBlockers(t, ctx, st.db, gatePID, 2)
+	if err := gate.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	first := receivePostgresResult(t, results)
+	second := receivePostgresResult(t, results)
+	if first.err != nil || second.err != nil {
+		t.Fatalf("concurrent guest retries returned %v and %v", first.err, second.err)
+	}
+	if first.message.ID == "" || first.message.ID != second.message.ID {
+		t.Fatalf("concurrent guest retries returned different messages: %q and %q", first.message.ID, second.message.ID)
+	}
+	eventCount := 0
+	if first.event.ID != "" {
+		eventCount++
+	}
+	if second.event.ID != "" {
+		eventCount++
+	}
+	if eventCount != 1 {
+		t.Fatalf("concurrent guest retries emitted %d events, want 1", eventCount)
+	}
+}
+
 func TestPostgresConcurrentClientNonceRecovery(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -409,6 +601,41 @@ func newPostgresConcurrencyFixture(t *testing.T, ctx context.Context) (*Store, p
 		channel:   channel,
 		direct:    direct,
 	}
+}
+
+func newPostgresGuestConcurrencyFixture(t *testing.T, ctx context.Context) (*Store, postgresConcurrencyFixture, store.Channel) {
+	t.Helper()
+	st, fixture := newPostgresConcurrencyFixture(t, ctx)
+	if err := storedb.New(st.db).UpdateWorkspaceMemberRole(ctx, storedb.UpdateWorkspaceMemberRoleParams{
+		WorkspaceID: fixture.workspace.ID,
+		UserID:      fixture.member.ID,
+		Role:        store.WorkspaceRoleGuest,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	routeID, err := newRouteID('C')
+	if err != nil {
+		t.Fatal(err)
+	}
+	guestChannel := store.Channel{
+		ID:          newID("chn"),
+		RouteID:     routeID,
+		WorkspaceID: fixture.workspace.ID,
+		Name:        store.GuestChannelName,
+		Kind:        "public",
+		CreatedAt:   now(),
+	}
+	if err := st.q.InsertChannel(ctx, storedb.InsertChannelParams{
+		ID:          guestChannel.ID,
+		RouteID:     sqlText(guestChannel.RouteID),
+		WorkspaceID: guestChannel.WorkspaceID,
+		Name:        guestChannel.Name,
+		Kind:        guestChannel.Kind,
+		CreatedAt:   guestChannel.CreatedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return st, fixture, guestChannel
 }
 
 func beginPostgresGate(t *testing.T, ctx context.Context, db *sql.DB) (*sql.Tx, int) {

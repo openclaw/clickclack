@@ -536,6 +536,9 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 		return err
 	}
 	defer tx.Rollback()
+	if err := lockMemberModerationTx(ctx, tx, workspaceID, requesterID, botUserID); err != nil {
+		return err
+	}
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
 		return err
 	}

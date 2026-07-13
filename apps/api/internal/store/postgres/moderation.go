@@ -149,25 +149,44 @@ func requireNoModerationBlockTx(ctx context.Context, tx *sql.Tx, workspaceID, us
 }
 
 func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, userID string) error {
-	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
-		return err
-	}
-	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
+	role, err := requireCanPostAuthorizationTx(ctx, tx, workspaceID, channelID, userID)
 	if err != nil {
-		return err
-	}
-	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
 		return err
 	}
 	if role != store.WorkspaceRoleGuest {
 		return nil
 	}
-	if err := requireGuestChannelAccessTx(ctx, tx, workspaceID, channelID, userID); err != nil {
-		return err
+	return requireGuestPostBudgetTx(ctx, tx, workspaceID, userID)
+}
+
+func requireCanPostAuthorizationTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, userID string) (string, error) {
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
+		return "", err
 	}
+	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
+	if err != nil {
+		return "", err
+	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
+		return "", err
+	}
+	if role != store.WorkspaceRoleGuest {
+		return role, nil
+	}
+	if err := requireGuestChannelAccessTx(ctx, tx, workspaceID, channelID, userID); err != nil {
+		return "", err
+	}
+	return role, nil
+}
+
+func requireGuestPostBudgetTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	if err := lockGuestPostBudgetTx(ctx, tx, workspaceID, userID); err != nil {
 		return err
 	}
+	return requireGuestPostBudgetAvailableTx(ctx, tx, workspaceID, userID)
+}
+
+func requireGuestPostBudgetAvailableTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339Nano)
 	count, err := storedb.New(tx).CountRecentWorkspaceMessagesByAuthor(ctx, storedb.CountRecentWorkspaceMessagesByAuthorParams{
 		WorkspaceID: workspaceID,

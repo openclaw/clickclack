@@ -125,7 +125,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	nonce, err := normalizeUploadNonce(r.URL.Query().Get("nonce"))
+	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -136,7 +136,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if workspaceID != "" {
-		if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
+		if !s.authorizeWorkspaceAccess(w, r, act, workspaceID) {
 			return
 		}
 		if nonce != "" {
@@ -354,7 +354,7 @@ func (r *uploadQuotaReader) Read(p []byte) (int, error) {
 }
 
 func (s *Server) authorizeUploadWorkspace(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) (store.UploadQuota, bool) {
-	if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
+	if !s.authorizeWorkspaceAccess(w, r, act, workspaceID) {
 		return store.UploadQuota{}, false
 	}
 	return s.checkUploadQuota(w, r, act, workspaceID)
@@ -373,7 +373,7 @@ func (s *Server) checkUploadQuota(w http.ResponseWriter, r *http.Request, act ac
 	return quota, true
 }
 
-func (s *Server) authorizeUploadWorkspaceAccess(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) bool {
+func (s *Server) authorizeWorkspaceAccess(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) bool {
 	if err := act.requireWorkspace(workspaceID); err != nil {
 		writeError(w, http.StatusForbidden, err)
 		return false
@@ -385,7 +385,7 @@ func (s *Server) authorizeUploadWorkspaceAccess(w http.ResponseWriter, r *http.R
 	return true
 }
 
-func normalizeUploadNonce(value string) (string, error) {
+func normalizeClientNonce(value string) (string, error) {
 	nonce := strings.TrimSpace(value)
 	if utf8.RuneCountInString(nonce) > 128 {
 		return "", errors.New("nonce is too long")
@@ -422,7 +422,7 @@ func (s *Server) getUploadByNonce(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("workspace_id is required"))
 		return
 	}
-	nonce, err := normalizeUploadNonce(r.URL.Query().Get("nonce"))
+	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -431,7 +431,7 @@ func (s *Server) getUploadByNonce(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("nonce is required"))
 		return
 	}
-	if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
+	if !s.authorizeWorkspaceAccess(w, r, act, workspaceID) {
 		return
 	}
 	upload, err := s.store.GetUploadByNonce(r.Context(), act.user.ID, nonce)

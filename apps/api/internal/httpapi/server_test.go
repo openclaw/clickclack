@@ -143,6 +143,31 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if replayStatus != http.StatusOK || nonceReplay.Message.ID != nonceCreated.Message.ID || nonceReplay.Event != nil {
 		t.Fatalf("unexpected nonce replay response: status=%d payload=%#v", replayStatus, nonceReplay)
 	}
+	nonceLookupURL := server.URL + "/api/messages/by-nonce?workspace_id=" + url.QueryEscape(workspace.ID) + "&nonce=http-nonce-1"
+	nonceLookupResponse, err := http.Get(nonceLookupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nonceLookupResponse.Body.Close()
+	var nonceLookup struct {
+		Message store.Message `json:"message"`
+	}
+	if err := json.NewDecoder(nonceLookupResponse.Body).Decode(&nonceLookup); err != nil {
+		t.Fatal(err)
+	}
+	if nonceLookupResponse.StatusCode != http.StatusOK ||
+		nonceLookupResponse.Header.Get("X-ClickClack-Message-Nonce") != "supported" ||
+		nonceLookup.Message.ID != nonceCreated.Message.ID {
+		t.Fatalf("unexpected message nonce lookup: status=%s headers=%v message=%#v", nonceLookupResponse.Status, nonceLookupResponse.Header, nonceLookup.Message)
+	}
+	missingNonceResponse, err := http.Get(server.URL + "/api/messages/by-nonce?workspace_id=" + url.QueryEscape(workspace.ID) + "&nonce=missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingNonceResponse.Body.Close()
+	if missingNonceResponse.StatusCode != http.StatusNotFound || missingNonceResponse.Header.Get("X-ClickClack-Message-Nonce") != "supported" {
+		t.Fatalf("unexpected missing message nonce response: status=%s headers=%v", missingNonceResponse.Status, missingNonceResponse.Header)
+	}
 
 	messages := getJSON[struct {
 		Messages []store.Message `json:"messages"`
@@ -191,6 +216,16 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	attach := postJSON[map[string]bool](t, server.URL+"/api/messages/"+created.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
 	if !attach["ok"] {
 		t.Fatal("expected attachment success")
+	}
+	nonceAttach := postJSON[map[string]bool](t, server.URL+"/api/messages/"+nonceCreated.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	if !nonceAttach["ok"] {
+		t.Fatal("expected nonce message attachment success")
+	}
+	nonceLookup = getJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, nonceLookupURL)
+	if len(nonceLookup.Message.Attachments) != 1 || nonceLookup.Message.Attachments[0].ID != upload.ID {
+		t.Fatalf("message nonce lookup did not hydrate attachments: %#v", nonceLookup.Message.Attachments)
 	}
 	body := getBody(t, server.URL+"/api/uploads/"+upload.ID)
 	if body != "hello upload" {
@@ -2772,14 +2807,14 @@ func TestUploadQuotaReaderStopsOverBudget(t *testing.T) {
 	}
 }
 
-func TestNormalizeUploadNonceCountsCharacters(t *testing.T) {
+func TestNormalizeClientNonceCountsCharacters(t *testing.T) {
 	t.Parallel()
 
 	valid := strings.Repeat("é", 128)
-	if normalized, err := normalizeUploadNonce(valid); err != nil || normalized != valid {
+	if normalized, err := normalizeClientNonce(valid); err != nil || normalized != valid {
 		t.Fatalf("expected 128-character nonce to remain valid: normalized=%q err=%v", normalized, err)
 	}
-	if _, err := normalizeUploadNonce(strings.Repeat("é", 129)); err == nil {
+	if _, err := normalizeClientNonce(strings.Repeat("é", 129)); err == nil {
 		t.Fatal("expected 129-character nonce rejection")
 	}
 }

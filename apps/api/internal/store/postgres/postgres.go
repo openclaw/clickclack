@@ -486,6 +486,25 @@ func (s *Store) GetMessage(ctx context.Context, messageID, userID string) (store
 	return messages[0], nil
 }
 
+func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (store.Message, error) {
+	normalized, err := normalizeClientNonce(nonce)
+	if err != nil {
+		return store.Message{}, err
+	}
+	if normalized == "" {
+		return store.Message{}, sql.ErrNoRows
+	}
+	message, err := scanMessage(s.db.QueryRowContext(ctx, messageSelect()+` WHERE m.author_id = $1 AND m.client_nonce = $2`, authorID, normalized))
+	if err != nil {
+		return store.Message{}, err
+	}
+	messages, err := s.hydrateAttachments(ctx, []store.Message{message})
+	if err != nil {
+		return store.Message{}, err
+	}
+	return messages[0], nil
+}
+
 func (s *Store) requireMessageAccess(ctx context.Context, message store.Message, userID string) error {
 	if message.DirectConversationID != "" {
 		return s.requireDirectAccess(ctx, message.DirectConversationID, userID)

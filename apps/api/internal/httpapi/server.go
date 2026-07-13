@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -164,6 +165,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/channels/{channel_id}/messages", s.listMessages)
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
 		r.Post("/channels/{channel_id}/read", s.markChannelRead)
+		r.Get("/messages/by-nonce", s.getMessageByNonce)
 		r.Get("/messages/{message_id}", s.getMessage)
 		r.Patch("/messages/{message_id}", s.updateMessage)
 		r.Delete("/messages/{message_id}", s.deleteMessage)
@@ -971,6 +973,47 @@ func (s *Server) getMessage(w http.ResponseWriter, r *http.Request) {
 		message, err = s.store.GetMessage(r.Context(), chi.URLParam(r, "message_id"), act.user.ID)
 	}
 	writeResult(w, map[string]any{"message": message}, err)
+}
+
+func (s *Server) getMessageByNonce(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-ClickClack-Message-Nonce", "supported")
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if err := act.requireScope("messages:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	if workspaceID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("workspace_id is required"))
+		return
+	}
+	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if nonce == "" {
+		writeError(w, http.StatusBadRequest, errors.New("nonce is required"))
+		return
+	}
+	if !s.authorizeWorkspaceAccess(w, r, act, workspaceID) {
+		return
+	}
+	message, err := s.store.GetMessageByNonce(r.Context(), act.user.ID, nonce)
+	switch {
+	case err == nil && message.WorkspaceID != workspaceID:
+		writeStoreError(w, store.ErrClientNonceConflict)
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"message": message})
+	case errors.Is(err, sql.ErrNoRows):
+		writeError(w, http.StatusNotFound, err)
+	default:
+		writeStoreError(w, err)
+	}
 }
 
 func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {

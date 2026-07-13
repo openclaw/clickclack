@@ -67,10 +67,11 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 	}
 	appInstallationID := strings.TrimSpace(input.AppInstallationID)
 	if appInstallationID != "" {
+		var one int
 		if err := tx.QueryRowContext(ctx, `
-			SELECT bot_user_id
+			SELECT 1
 			FROM app_installations
-			WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL`, appInstallationID, workspaceID).Scan(&createdBy); err != nil {
+			WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL`, appInstallationID, workspaceID).Scan(&one); err != nil {
 			return store.EventSubscription{}, err
 		}
 	}
@@ -138,11 +139,31 @@ func (s *Store) ListEventSubscriptionsForEvent(ctx context.Context, event store.
 	}
 	out := make([]store.EventSubscription, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
-		if subscriptionMatchesEvent(subscription, event.Type) && subscriptionCanReceiveEvent(subscription, event) {
+		principal, active, err := s.eventSubscriptionPrincipal(ctx, subscription)
+		if err != nil {
+			return nil, err
+		}
+		if active && subscriptionMatchesEvent(subscription, event.Type) && principalCanReceiveEvent(principal, event) {
 			out = append(out, subscription)
 		}
 	}
 	return out, nil
+}
+
+func (s *Store) eventSubscriptionPrincipal(ctx context.Context, subscription store.EventSubscription) (string, bool, error) {
+	if subscription.AppInstallationID == "" {
+		return subscription.CreatedBy, true, nil
+	}
+	var botUserID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT bot_user_id
+		FROM app_installations
+		WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL`,
+		subscription.AppInstallationID, subscription.WorkspaceID).Scan(&botUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return botUserID, err == nil, err
 }
 
 func (s *Store) CreateEventDeliveryAttempt(ctx context.Context, input store.CreateEventDeliveryAttemptInput) (store.EventDeliveryAttempt, error) {
@@ -245,12 +266,12 @@ func subscriptionMatchesEvent(subscription store.EventSubscription, eventType st
 	return false
 }
 
-func subscriptionCanReceiveEvent(subscription store.EventSubscription, event store.Event) bool {
+func principalCanReceiveEvent(principal string, event store.Event) bool {
 	if len(event.RecipientUserIDs) == 0 {
 		return true
 	}
 	for _, userID := range event.RecipientUserIDs {
-		if subscription.CreatedBy == userID {
+		if principal == userID {
 			return true
 		}
 	}

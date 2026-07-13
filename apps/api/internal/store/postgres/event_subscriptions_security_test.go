@@ -55,8 +55,8 @@ func TestAppEventSubscriptionUsesInstallationBotPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if appSubscription.CreatedBy != bot.ID {
-		t.Fatalf("app subscription principal = %q, want bot %q", appSubscription.CreatedBy, bot.ID)
+	if appSubscription.CreatedBy != owner.ID {
+		t.Fatalf("app subscription creator = %q, want owner %q", appSubscription.CreatedBy, owner.ID)
 	}
 	userSubscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
 		WorkspaceID: workspace.ID,
@@ -96,5 +96,16 @@ func TestAppEventSubscriptionUsesInstallationBotPrincipal(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != userSubscription.ID {
 		t.Fatalf("user-private event subscriptions = %#v, want user subscription", got)
+	}
+
+	if _, err := st.RevokeAppInstallation(ctx, installation.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.ListEventSubscriptionsForEvent(ctx, botEvent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("revoked app subscriptions = %#v, want none", got)
 	}
 }

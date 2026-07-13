@@ -176,6 +176,43 @@ func (q *Queries) ClearMemberTimeout(ctx context.Context, arg ClearMemberTimeout
 	return err
 }
 
+const countDesktopOAuthGrants = `-- name: CountDesktopOAuthGrants :one
+SELECT COUNT(*)
+FROM desktop_oauth_grants
+`
+
+func (q *Queries) CountDesktopOAuthGrants(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDesktopOAuthGrants)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOAuthTransactions = `-- name: CountOAuthTransactions :one
+SELECT COUNT(*)
+FROM oauth_transactions
+`
+
+func (q *Queries) CountOAuthTransactions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOAuthTransactions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOAuthTransactionsForBinding = `-- name: CountOAuthTransactionsForBinding :one
+SELECT COUNT(*)
+FROM oauth_transactions
+WHERE browser_binding_hash = $1
+`
+
+func (q *Queries) CountOAuthTransactionsForBinding(ctx context.Context, browserBindingHash string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOAuthTransactionsForBinding, browserBindingHash)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentWorkspaceMessagesByAuthor = `-- name: CountRecentWorkspaceMessagesByAuthor :one
 SELECT COUNT(*)
 FROM messages m
@@ -306,6 +343,50 @@ func (q *Queries) CountWorkspaceMembersByRole(ctx context.Context, arg CountWork
 	return count, err
 }
 
+const deleteDesktopOAuthGrant = `-- name: DeleteDesktopOAuthGrant :execrows
+DELETE FROM desktop_oauth_grants
+WHERE id = $1 AND grant_hash = $2
+`
+
+type DeleteDesktopOAuthGrantParams struct {
+	ID        string `json:"id"`
+	GrantHash string `json:"grant_hash"`
+}
+
+func (q *Queries) DeleteDesktopOAuthGrant(ctx context.Context, arg DeleteDesktopOAuthGrantParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteDesktopOAuthGrant, arg.ID, arg.GrantHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteExpiredDesktopOAuthGrants = `-- name: DeleteExpiredDesktopOAuthGrants :execrows
+DELETE FROM desktop_oauth_grants
+WHERE expires_at_unix <= $1
+`
+
+func (q *Queries) DeleteExpiredDesktopOAuthGrants(ctx context.Context, nowUnix int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredDesktopOAuthGrants, nowUnix)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteExpiredOAuthTransactions = `-- name: DeleteExpiredOAuthTransactions :execrows
+DELETE FROM oauth_transactions
+WHERE expires_at_unix <= $1
+`
+
+func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, nowUnix int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredOAuthTransactions, nowUnix)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteExpiredUploadQuotaReservations = `-- name: DeleteExpiredUploadQuotaReservations :exec
 DELETE FROM upload_quota_reservations
 WHERE expires_at <= $1
@@ -331,6 +412,24 @@ type DeleteMessageBodyParams struct {
 
 func (q *Queries) DeleteMessageBody(ctx context.Context, arg DeleteMessageBodyParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteMessageBody, arg.DeletedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteOAuthTransaction = `-- name: DeleteOAuthTransaction :execrows
+DELETE FROM oauth_transactions
+WHERE id = $1 AND state_hash = $2
+`
+
+type DeleteOAuthTransactionParams struct {
+	ID        string `json:"id"`
+	StateHash string `json:"state_hash"`
+}
+
+func (q *Queries) DeleteOAuthTransaction(ctx context.Context, arg DeleteOAuthTransactionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteOAuthTransaction, arg.ID, arg.StateHash)
 	if err != nil {
 		return 0, err
 	}
@@ -776,6 +875,27 @@ func (q *Queries) GetChannelWorkspace(ctx context.Context, id string) (string, e
 	return workspace_id, err
 }
 
+const getDesktopOAuthGrantForConsume = `-- name: GetDesktopOAuthGrantForConsume :one
+SELECT id, grant_hash, user_id, desktop_challenge, created_at_unix, expires_at_unix
+FROM desktop_oauth_grants
+WHERE grant_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetDesktopOAuthGrantForConsume(ctx context.Context, grantHash string) (DesktopOauthGrant, error) {
+	row := q.db.QueryRowContext(ctx, getDesktopOAuthGrantForConsume, grantHash)
+	var i DesktopOauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.GrantHash,
+		&i.UserID,
+		&i.DesktopChallenge,
+		&i.CreatedAtUnix,
+		&i.ExpiresAtUnix,
+	)
+	return i, err
+}
+
 const getDirectByIDAndWorkspace = `-- name: GetDirectByIDAndWorkspace :one
 SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created_at
 FROM direct_conversations dc
@@ -1001,6 +1121,30 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (G
 	row := q.db.QueryRowContext(ctx, getNotificationSettings, userID)
 	var i GetNotificationSettingsRow
 	err := row.Scan(&i.PushoverEnabled, &i.PushoverUserKey)
+	return i, err
+}
+
+const getOAuthTransactionForConsume = `-- name: GetOAuthTransactionForConsume :one
+SELECT id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+       created_at_unix, expires_at_unix
+FROM oauth_transactions
+WHERE state_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash string) (OauthTransaction, error) {
+	row := q.db.QueryRowContext(ctx, getOAuthTransactionForConsume, stateHash)
+	var i OauthTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.StateHash,
+		&i.BrowserBindingHash,
+		&i.Mode,
+		&i.PkceVerifier,
+		&i.DesktopChallenge,
+		&i.CreatedAtUnix,
+		&i.ExpiresAtUnix,
+	)
 	return i, err
 }
 
@@ -1513,6 +1657,36 @@ func (q *Queries) InsertDefaultWorkspaceMember(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertDesktopOAuthGrant = `-- name: InsertDesktopOAuthGrant :exec
+INSERT INTO desktop_oauth_grants (
+  id, grant_hash, user_id, desktop_challenge, created_at_unix, expires_at_unix
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6
+)
+`
+
+type InsertDesktopOAuthGrantParams struct {
+	ID               string `json:"id"`
+	GrantHash        string `json:"grant_hash"`
+	UserID           string `json:"user_id"`
+	DesktopChallenge string `json:"desktop_challenge"`
+	CreatedAtUnix    int64  `json:"created_at_unix"`
+	ExpiresAtUnix    int64  `json:"expires_at_unix"`
+}
+
+func (q *Queries) InsertDesktopOAuthGrant(ctx context.Context, arg InsertDesktopOAuthGrantParams) error {
+	_, err := q.db.ExecContext(ctx, insertDesktopOAuthGrant,
+		arg.ID,
+		arg.GrantHash,
+		arg.UserID,
+		arg.DesktopChallenge,
+		arg.CreatedAtUnix,
+		arg.ExpiresAtUnix,
+	)
+	return err
+}
+
 const insertDirectConversation = `-- name: InsertDirectConversation :execrows
 INSERT INTO direct_conversations (id, route_id, workspace_id, created_at, member_set_key)
 VALUES ($1, $2, $3, $4, $5)
@@ -1742,6 +1916,42 @@ func (q *Queries) InsertMagicLink(ctx context.Context, arg InsertMagicLinkParams
 		arg.DisplayName,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertOAuthTransaction = `-- name: InsertOAuthTransaction :exec
+INSERT INTO oauth_transactions (
+  id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+  created_at_unix, expires_at_unix
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, $7,
+  $8
+)
+`
+
+type InsertOAuthTransactionParams struct {
+	ID                 string `json:"id"`
+	StateHash          string `json:"state_hash"`
+	BrowserBindingHash string `json:"browser_binding_hash"`
+	Mode               string `json:"mode"`
+	PkceVerifier       string `json:"pkce_verifier"`
+	DesktopChallenge   string `json:"desktop_challenge"`
+	CreatedAtUnix      int64  `json:"created_at_unix"`
+	ExpiresAtUnix      int64  `json:"expires_at_unix"`
+}
+
+func (q *Queries) InsertOAuthTransaction(ctx context.Context, arg InsertOAuthTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, insertOAuthTransaction,
+		arg.ID,
+		arg.StateHash,
+		arg.BrowserBindingHash,
+		arg.Mode,
+		arg.PkceVerifier,
+		arg.DesktopChallenge,
+		arg.CreatedAtUnix,
+		arg.ExpiresAtUnix,
 	)
 	return err
 }

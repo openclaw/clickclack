@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrQuotedMessageOutOfScope is returned when a message tries to quote another
@@ -33,6 +34,12 @@ var ErrPostRateLimited = errors.New("waiting room post limit reached")
 // ErrUploadQuotaExceeded is returned when a user has exhausted their upload
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
+
+var (
+	ErrOAuthTransactionInvalid  = errors.New("invalid or expired oauth transaction")
+	ErrOAuthCapacityExceeded    = errors.New("too many pending oauth requests")
+	ErrDesktopOAuthGrantInvalid = errors.New("invalid or expired desktop oauth grant")
+)
 
 // ErrInvalidMessageKind is returned when a caller supplies a message kind that
 // is not one of the recognised values. HTTP callers surface it as a 400.
@@ -701,6 +708,31 @@ type Session struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+const (
+	OAuthModeBrowser = "browser"
+	OAuthModeDesktop = "desktop"
+)
+
+type OAuthTransaction struct {
+	ID                 string
+	StateHash          string
+	BrowserBindingHash string
+	Mode               string
+	PKCEVerifier       string
+	DesktopChallenge   string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+}
+
+type DesktopOAuthGrant struct {
+	ID               string
+	GrantHash        string
+	UserID           string
+	DesktopChallenge string
+	CreatedAt        time.Time
+	ExpiresAt        time.Time
+}
+
 type ReadReceipt struct {
 	ScopeID     string `json:"scope_id"`
 	UserID      string `json:"user_id"`
@@ -847,5 +879,9 @@ type Store interface {
 	ConsumeMagicLink(ctx context.Context, token string) (User, Session, error)
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
+	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error
+	ConsumeOAuthTransaction(ctx context.Context, stateHash, browserBindingHash string, now time.Time) (OAuthTransaction, error)
+	CreateDesktopOAuthGrant(ctx context.Context, grant DesktopOAuthGrant) error
+	ConsumeDesktopOAuthGrant(ctx context.Context, grantHash, desktopChallenge string, now time.Time) (Session, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)
 }

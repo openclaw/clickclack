@@ -86,6 +86,15 @@ type ConnectedAccount struct {
 	RevokedAt         sql.NullString `json:"revoked_at"`
 }
 
+type DesktopOauthGrant struct {
+	ID               string `json:"id"`
+	GrantHash        string `json:"grant_hash"`
+	UserID           string `json:"user_id"`
+	DesktopChallenge string `json:"desktop_challenge"`
+	CreatedAtUnix    int64  `json:"created_at_unix"`
+	ExpiresAtUnix    int64  `json:"expires_at_unix"`
+}
+
 type DirectConversation struct {
 	ID           string         `json:"id"`
 	WorkspaceID  string         `json:"workspace_id"`
@@ -204,6 +213,17 @@ type MessageAttachment struct {
 	MessageID string `json:"message_id"`
 	UploadID  string `json:"upload_id"`
 	CreatedAt string `json:"created_at"`
+}
+
+type OauthTransaction struct {
+	ID                 string `json:"id"`
+	StateHash          string `json:"state_hash"`
+	BrowserBindingHash string `json:"browser_binding_hash"`
+	Mode               string `json:"mode"`
+	PkceVerifier       string `json:"pkce_verifier"`
+	DesktopChallenge   string `json:"desktop_challenge"`
+	CreatedAtUnix      int64  `json:"created_at_unix"`
+	ExpiresAtUnix      int64  `json:"expires_at_unix"`
 }
 
 type PendingUploadCleanup struct {

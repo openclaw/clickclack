@@ -42,6 +42,64 @@ WHERE s.token_hash = sqlc.arg(token_hash)
 INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
 VALUES (sqlc.arg(id), sqlc.arg(token), sqlc.arg(token_hash), sqlc.arg(user_id), sqlc.arg(created_at), sqlc.arg(expires_at));
 
+-- name: DeleteExpiredOAuthTransactions :execrows
+DELETE FROM oauth_transactions
+WHERE expires_at_unix <= sqlc.arg(now_unix);
+
+-- name: CountOAuthTransactions :one
+SELECT COUNT(*)
+FROM oauth_transactions;
+
+-- name: CountOAuthTransactionsForBinding :one
+SELECT COUNT(*)
+FROM oauth_transactions
+WHERE browser_binding_hash = sqlc.arg(browser_binding_hash);
+
+-- name: InsertOAuthTransaction :exec
+INSERT INTO oauth_transactions (
+  id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+  created_at_unix, expires_at_unix
+) VALUES (
+  sqlc.arg(id), sqlc.arg(state_hash), sqlc.arg(browser_binding_hash), sqlc.arg(mode),
+  sqlc.arg(pkce_verifier), sqlc.arg(desktop_challenge), sqlc.arg(created_at_unix),
+  sqlc.arg(expires_at_unix)
+);
+
+-- name: GetOAuthTransactionForConsume :one
+SELECT id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+       created_at_unix, expires_at_unix
+FROM oauth_transactions
+WHERE state_hash = sqlc.arg(state_hash);
+
+-- name: DeleteOAuthTransaction :execrows
+DELETE FROM oauth_transactions
+WHERE id = sqlc.arg(id) AND state_hash = sqlc.arg(state_hash);
+
+-- name: DeleteExpiredDesktopOAuthGrants :execrows
+DELETE FROM desktop_oauth_grants
+WHERE expires_at_unix <= sqlc.arg(now_unix);
+
+-- name: CountDesktopOAuthGrants :one
+SELECT COUNT(*)
+FROM desktop_oauth_grants;
+
+-- name: InsertDesktopOAuthGrant :exec
+INSERT INTO desktop_oauth_grants (
+  id, grant_hash, user_id, desktop_challenge, created_at_unix, expires_at_unix
+) VALUES (
+  sqlc.arg(id), sqlc.arg(grant_hash), sqlc.arg(user_id), sqlc.arg(desktop_challenge),
+  sqlc.arg(created_at_unix), sqlc.arg(expires_at_unix)
+);
+
+-- name: GetDesktopOAuthGrantForConsume :one
+SELECT id, grant_hash, user_id, desktop_challenge, created_at_unix, expires_at_unix
+FROM desktop_oauth_grants
+WHERE grant_hash = sqlc.arg(grant_hash);
+
+-- name: DeleteDesktopOAuthGrant :execrows
+DELETE FROM desktop_oauth_grants
+WHERE id = sqlc.arg(id) AND grant_hash = sqlc.arg(grant_hash);
+
 -- name: GetUserByIdentityEmail :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
 FROM identities i

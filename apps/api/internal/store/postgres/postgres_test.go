@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -250,6 +251,71 @@ func newIsolatedPostgresTestStore(t *testing.T) *Store {
 		_ = adminDB.Close()
 	})
 	return st
+}
+
+func TestCreateReservedUploadSerializesWithNonceRetries(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Upload Owner", "postgres-upload-nonce@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	const nonce = "postgres-upload-finalization"
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, nonce, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocker, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Rollback()
+	if err := lockUploadNonceTx(ctx, blocker, owner.ID, nonce); err != nil {
+		t.Fatal(err)
+	}
+
+	blockedCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
+	_, err = st.CreateReservedUpload(blockedCtx, reservation.ID, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Nonce:       nonce,
+		Filename:    "blocked.txt",
+		ContentType: "text/plain",
+		ByteSize:    4,
+		StoragePath: "memory://blocked.txt",
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected finalization to wait for the nonce lock, got %v", err)
+	}
+	if err := blocker.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	upload, err := st.CreateReservedUpload(ctx, reservation.ID, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Nonce:       nonce,
+		Filename:    "committed.txt",
+		ContentType: "text/plain",
+		ByteSize:    4,
+		StoragePath: "memory://committed.txt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upload.Nonce != nonce {
+		t.Fatalf("finalized upload lost nonce: %#v", upload)
+	}
 }
 
 func applyPostgresMigrationsBefore(t *testing.T, ctx context.Context, st *Store, cutoff string) {

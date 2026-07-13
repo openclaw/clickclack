@@ -161,6 +161,13 @@ func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, 
 		return store.Upload{}, err
 	}
 	defer tx.Rollback()
+	if nonce != "" {
+		// Finalization and retries must serialize on the same nonce. Without this
+		// lock, a retry can miss both the committed upload and deleted reservation.
+		if err := lockUploadNonceTx(ctx, tx, input.OwnerID, nonce); err != nil {
+			return store.Upload{}, err
+		}
+	}
 	if err := lockUploadQuotaTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {
 		return store.Upload{}, err
 	}

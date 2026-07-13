@@ -213,13 +213,13 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	token, err := s.exchangeGitHubCode(r.Context(), code, transaction.PKCEVerifier, redirectURL)
 	if err != nil {
 		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
-		writeError(w, http.StatusBadGateway, err)
+		s.writeGitHubOAuthProviderError(w, r, "token exchange", err)
 		return
 	}
 	profile, err := s.fetchGitHubProfile(r.Context(), token)
 	if err != nil {
 		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
-		writeError(w, http.StatusBadGateway, err)
+		s.writeGitHubOAuthProviderError(w, r, "profile fetch", err)
 		return
 	}
 	if err := s.ensureGitHubAllowedOrgMembership(r.Context(), token); err != nil {
@@ -229,7 +229,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
-		writeError(w, http.StatusBadGateway, err)
+		s.writeGitHubOAuthProviderError(w, r, "organization check", err)
 		return
 	}
 	user, err := s.store.UpsertIdentityUser(r.Context(), store.UpsertIdentityUserInput{
@@ -345,6 +345,11 @@ func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writeGitHubOAuthServerError(w http.ResponseWriter, r *http.Request, phase string, err error) {
 	log.Printf("github oauth %s failed correlation_id=%q error_type=%T", phase, correlationIDFromContext(r.Context()), err)
 	writeError(w, http.StatusInternalServerError, errors.New("github oauth request failed"))
+}
+
+func (s *Server) writeGitHubOAuthProviderError(w http.ResponseWriter, r *http.Request, phase string, err error) {
+	log.Printf("github oauth provider %s failed correlation_id=%q error_type=%T", phase, correlationIDFromContext(r.Context()), err)
+	writeError(w, http.StatusBadGateway, errors.New("github authentication provider request failed"))
 }
 
 func desktopCodeChallenge(verifier string) string {

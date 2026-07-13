@@ -1184,6 +1184,17 @@ func TestGitHubOAuthDoesNotExposeInternalStoreErrors(t *testing.T) {
 	if !strings.Contains(body, "github oauth request failed") {
 		t.Fatalf("unexpected public OAuth error: %s", body)
 	}
+
+	providerRecorder := httptest.NewRecorder()
+	api := New(base, realtime.NewHub(), Options{})
+	api.writeGitHubOAuthProviderError(providerRecorder, request, "profile fetch", errors.New("dial database.internal with token=secret"))
+	providerBody := providerRecorder.Body.String()
+	if providerRecorder.Code != http.StatusBadGateway || strings.Contains(providerBody, "database.internal") || strings.Contains(providerBody, "secret") {
+		t.Fatalf("provider OAuth error leaked to client: %d %s", providerRecorder.Code, providerBody)
+	}
+	if !strings.Contains(providerBody, "github authentication provider request failed") {
+		t.Fatalf("unexpected public provider error: %s", providerBody)
+	}
 }
 
 type failingOAuthTransactionStore struct {

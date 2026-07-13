@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { zipSync } from "fflate";
 import { deflateRawSync } from "node:zlib";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
 import { parseSpreadsheet } from "../../apps/web/src/lib/office-parser";
@@ -14,62 +15,45 @@ import {
 import type { Upload } from "../../apps/web/src/lib/types";
 
 type Fixture = { filename: string; contentType: string; body: Buffer };
+type ZipCompression = 0 | 8;
 
 const RELATIONSHIPS_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_RELATIONSHIP_NS =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-function storedZip(files: Record<string, string | Buffer>): Buffer {
-  const local: Buffer[] = [];
-  const central: Buffer[] = [];
-  let offset = 0;
-  for (const [name, contents] of Object.entries(files)) {
-    const filename = Buffer.from(name);
-    const body = Buffer.from(contents);
-    const localHeader = Buffer.alloc(30);
-    localHeader.writeUInt32LE(0x04034b50, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt32LE(body.length, 18);
-    localHeader.writeUInt32LE(body.length, 22);
-    localHeader.writeUInt16LE(filename.length, 26);
-    local.push(localHeader, filename, body);
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(0x02014b50, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt32LE(body.length, 20);
-    centralHeader.writeUInt32LE(body.length, 24);
-    centralHeader.writeUInt16LE(filename.length, 28);
-    centralHeader.writeUInt32LE(offset, 42);
-    central.push(centralHeader, filename);
-    offset += localHeader.length + filename.length + body.length;
-  }
-  const centralSize = central.reduce((total, part) => total + part.length, 0);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(Object.keys(files).length, 8);
-  end.writeUInt16LE(Object.keys(files).length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...local, ...central, end]);
+function zip(files: Record<string, string | Buffer>, compression: ZipCompression): Buffer {
+  const contents = Object.fromEntries(
+    Object.entries(files).map(([name, body]) => [name, new Uint8Array(Buffer.from(body))]),
+  );
+  return Buffer.from(zipSync(contents, { level: compression === 8 ? 6 : 0 }));
 }
 
 function officePackage(
   documentTarget: "xl/workbook.xml" | "ppt/presentation.xml",
   files: Record<string, string | Buffer>,
+  compression: ZipCompression = 0,
 ): Buffer {
-  return storedZip({
-    "_rels/.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdOffice" Type="${OFFICE_RELATIONSHIP_NS}/officeDocument" Target="${documentTarget}"/></Relationships>`,
-    ...files,
-  });
+  return zip(
+    {
+      "_rels/.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdOffice" Type="${OFFICE_RELATIONSHIP_NS}/officeDocument" Target="${documentTarget}"/></Relationships>`,
+      ...files,
+    },
+    compression,
+  );
 }
 
-function workbookPackage(files: Record<string, string | Buffer>): Buffer {
-  return officePackage("xl/workbook.xml", files);
+function workbookPackage(
+  files: Record<string, string | Buffer>,
+  compression: ZipCompression = 0,
+): Buffer {
+  return officePackage("xl/workbook.xml", files, compression);
 }
 
-function presentationPackage(files: Record<string, string | Buffer>): Buffer {
-  return officePackage("ppt/presentation.xml", files);
+function presentationPackage(
+  files: Record<string, string | Buffer>,
+  compression: ZipCompression = 0,
+): Buffer {
+  return officePackage("ppt/presentation.xml", files, compression);
 }
 
 function workbookFixture(): Buffer {
@@ -89,6 +73,28 @@ function presentationFixture(): Buffer {
     "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Launch plan</t></r></p><p><r><t>Three milestones for a calm rollout</t></r></p></txBody></sp></sld>`,
     "ppt/slides/slide2.xml": `<sld><sp><txBody><p><r><t>Next steps</t></r></p><p><r><t>Invite the pilot team</t></r></p></txBody></sp></sld>`,
   });
+}
+
+function deflatedWorkbookFixture(): Buffer {
+  return workbookPackage(
+    {
+      "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Namespaced" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+      "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Deflated namespaced workbook</t></is></c></row></sheetData></worksheet>`,
+    },
+    8,
+  );
+}
+
+function deflatedPresentationFixture(): Buffer {
+  return presentationPackage(
+    {
+      "ppt/presentation.xml": `<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="${OFFICE_RELATIONSHIP_NS}"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+      "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
+      "ppt/slides/slide1.xml": `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Deflated namespaced slide</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`,
+    },
+    8,
+  );
 }
 
 function absoluteRelationshipWorkbook(): Buffer {
@@ -417,9 +423,19 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   expect(classifyArtifact(uploadShape("forecast.xlsx", "application/octet-stream"))).toBe(
     "spreadsheet",
   );
+  expect(
+    classifyArtifact(
+      uploadShape("forecast.xlsm", "application/vnd.ms-excel.sheet.macroenabled.12"),
+    ),
+  ).toBe("spreadsheet");
   expect(classifyArtifact(uploadShape("launch.pptx", "application/octet-stream"))).toBe(
     "presentation",
   );
+  expect(
+    classifyArtifact(
+      uploadShape("launch.pptm", "application/vnd.ms-powerpoint.presentation.macroenabled.12"),
+    ),
+  ).toBe("presentation");
   expect(classifyArtifact(uploadShape("brief.docx", "application/octet-stream"))).toBe("docx");
   expect(classifyArtifact(uploadShape("spoofed.docx", "text/html"))).toBe("docx");
   expect(classifyArtifact(uploadShape("spoofed.docx", "application/pdf"))).toBe("docx");
@@ -474,6 +490,16 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       filename: "launch.pptx",
       contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       body: presentationFixture(),
+    },
+    {
+      filename: "namespaced.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: deflatedWorkbookFixture(),
+    },
+    {
+      filename: "namespaced.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: deflatedPresentationFixture(),
     },
     {
       filename: "sparse.xlsx",
@@ -547,6 +573,14 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
   }
   await viewer.getByRole("tab", { name: "Assumptions" }).click();
   await expect(viewer.getByRole("region", { name: "Assumptions worksheet" })).toContainText("0.18");
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open namespaced.xlsx" }).click();
+  await expect(viewer.getByText("Deflated namespaced workbook")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open namespaced.pptx" }).click();
+  await expect(viewer.getByText("Deflated namespaced slide")).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await page.getByRole("button", { name: "Open absolute.xlsx" }).click();

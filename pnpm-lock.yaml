@@ -23,6 +23,9 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       oxfmt:
         specifier: ^0.58.0
         version: 0.58.0(svelte@5.56.4)

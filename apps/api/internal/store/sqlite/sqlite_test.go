@@ -287,6 +287,45 @@ func TestUploadQuotaRejectsOwnerWorkspaceOverflow(t *testing.T) {
 	}
 }
 
+func TestUploadNonceLookupSurvivesWorkspaceMembershipRemoval(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "stale-upload-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	created, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Nonce:       "stale-workspace-nonce",
+		Filename:    "proof.txt",
+		ContentType: "text/plain",
+		ByteSize:    5,
+		StoragePath: "/tmp/proof.txt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspace.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := st.GetUploadByNonce(ctx, owner.ID, created.Nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.ID != created.ID || found.WorkspaceID != workspace.ID {
+		t.Fatalf("unexpected upload lookup after membership removal: %#v", found)
+	}
+}
+
 func TestReservedUploadRechecksModerationOnFinalize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -305,11 +305,7 @@ func (s *Store) GetUploadByNonce(ctx context.Context, ownerID, nonce string) (st
 	if err != nil {
 		return store.Upload{}, err
 	}
-	upload := storeUploadFromGetUploadByOwnerNonce(row)
-	if err := s.requireMembership(ctx, upload.WorkspaceID, ownerID); err != nil {
-		return store.Upload{}, err
-	}
-	return upload, nil
+	return storeUploadFromGetUploadByOwnerNonce(row), nil
 }
 
 func (s *Store) UploadHasDirectMessageAttachment(ctx context.Context, uploadID string) (bool, error) {

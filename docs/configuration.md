@@ -10,9 +10,14 @@ read_when:
 earlier ones for any given key:
 
 1. Hard-coded defaults (`Addr=":8080"`, `Data="./data"`).
-2. Environment variables.
-3. JSON config file passed via `--config`.
+2. JSON config file passed via `--config`.
+3. Environment variables.
 4. CLI flags that were explicitly set.
+
+An explicitly present `dev_bootstrap` value in the config file is the one
+exception: it is not replaced by `CLICKCLACK_DEV_BOOTSTRAP`. This prevents a
+stale process environment from silently enabling development authentication
+against a deployment file that explicitly disables it.
 
 Source: `apps/api/internal/config/config.go` and the `applyFlagOverrides`
 hook in `cmd/clickclack/main.go`.
@@ -66,7 +71,8 @@ hook in `cmd/clickclack/main.go`.
 ```
 
 Pass with `--config /etc/clickclack/config.json`. Values from the file
-override env vars; CLI flags override the file if explicitly set.
+are overridden by environment variables; CLI flags override both when
+explicitly set. The `dev_bootstrap` exception is described above.
 
 ## Public origin and cookie namespace
 

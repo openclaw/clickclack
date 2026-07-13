@@ -11,7 +11,7 @@
     workspaceIconURL?: string;
     connected: boolean;
     sidebarCollapsed: boolean;
-    showCollapse?: boolean;
+    showHeader?: boolean;
     channels: Channel[];
     directConversations: DirectConversation[];
     recentPeople: User[];
@@ -40,7 +40,7 @@
     workspaceIconURL,
     connected,
     sidebarCollapsed,
-    showCollapse = true,
+    showHeader = true,
     channels,
     directConversations,
     recentPeople,
@@ -178,6 +178,7 @@
 <svelte:window onstorage={handleStorage} />
 
 <aside class="sidebar" aria-label="Channels and DMs">
+  {#if showHeader}
   <header class="workspace-header">
     <button
       type="button"
@@ -202,7 +203,6 @@
       </span>
     </button>
     <div class="workspace-header-actions">
-      {#if showCollapse}
       <button
         type="button"
         class="sidebar-collapse"
@@ -221,9 +221,9 @@
           />
         </svg>
       </button>
-      {/if}
     </div>
   </header>
+  {/if}
 
   <div class="sidebar-scroll">
     <ChannelList

@@ -802,6 +802,12 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await titlebar.getByRole("button", { name: "Expand sidebar" }).click();
   await expect(shell).not.toHaveClass(/sidebar-collapsed/);
 
+  await expect(page.locator(".sidebar .workspace-header")).toHaveCount(0);
+  await titlebar.getByRole("button", { name: "Workspace settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Workspace settings" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+
   await page.getByLabel("Message body").fill("desktop titlebar search probe");
   await page.getByRole("button", { name: "Send" }).click();
   await titlebarSearch.fill("titlebar search probe");
@@ -887,6 +893,7 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
 
   await expect(page.locator(".desktop-titlebar")).toHaveCount(0);
   await expect(page.locator(".topbar .search")).toBeVisible();
+  await expect(page.locator(".sidebar .workspace-header")).toBeVisible();
   await expect(page.locator(".sidebar .sidebar-collapse")).toBeVisible();
 });
 

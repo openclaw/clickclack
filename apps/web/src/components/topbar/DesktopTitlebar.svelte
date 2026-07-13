@@ -1,10 +1,13 @@
 <script lang="ts">
   type Props = {
+    connected: boolean;
     mobileNavigation: boolean;
     mobileNavOpen: boolean;
     platform: string;
     searchQuery: string;
     sidebarCollapsed: boolean;
+    workspaceName?: string;
+    onOpenWorkspaceSettings: () => void;
     onResetSearch: () => void;
     onSearch: () => void;
     onSearchQuery: (value: string) => void;
@@ -12,11 +15,14 @@
   };
 
   let {
+    connected,
     mobileNavigation,
     mobileNavOpen,
     platform,
     searchQuery,
     sidebarCollapsed,
+    workspaceName,
+    onOpenWorkspaceSettings,
     onResetSearch,
     onSearch,
     onSearchQuery,
@@ -65,6 +71,18 @@
           />
         </svg>
       </button>
+      <button
+        type="button"
+        class="desktop-titlebar-workspace"
+        aria-label="Workspace settings"
+        title="Workspace settings"
+        onclick={onOpenWorkspaceSettings}
+      >
+        {workspaceName || "ClickClack"}
+      </button>
+      {#if !connected}
+        <span class="desktop-titlebar-status" role="status">Connecting…</span>
+      {/if}
     </div>
 
     <form

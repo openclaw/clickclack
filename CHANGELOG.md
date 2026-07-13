@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Decluttered the shell chrome like Slack: the desktop title bar now holds only the sidebar toggle and centered search (app settings stay on the native menu and Cmd/Ctrl+,), the sidebar workspace name became a menu button with a chevron that opens workspace settings, and the always-on "Connected" labels are gone — a pulsing "Connecting…" line appears under the workspace name only while the realtime link is down.
+- Unified the desktop shell chrome like Slack: title bar, workspace rail, and sidebar share one continuous plate with the conversation floating on it as a rounded card, the sidebar workspace header is gone on desktop — the workspace name lives in the title bar and opens workspace settings — and the always-on "Connected" labels are gone everywhere (app settings stay on the native menu and Cmd/Ctrl+,; a pulsing "Connecting…" note appears only while the realtime link is down). The browser app keeps the sidebar workspace header as a menu button with a chevron.
 - Fixed live agent-activity bursts so same-turn preambles grow in place without dropping realtime rows or pulling a bottom-pinned timeline away from the live edge.
 - Softened message bubbles: hairline accent-tint borders replace the heavier outlines, gentler keycap under-edges, and roomier padding.
 - Added Appearance settings with a light/dark/system color mode and four full-app board themes (Signal, the heritage Ember, Moss, Iris) — each tuned for both modes via a light-dark() token refactor, applied instantly with live swatch previews, persisted per device, and flash-free on load.

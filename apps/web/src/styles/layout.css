@@ -159,6 +159,57 @@
 
 .shell.desktop-shell {
   grid-template-rows: 52px minmax(0, 1fr);
+  /* One continuous chrome plate behind title bar, rail, and sidebar — the
+     content panes float on it as a card, Slack-style. */
+  background:
+    radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px)
+    0 0 / 14px 14px,
+    var(--rail);
+}
+
+.desktop-shell > .guild-rail,
+.desktop-shell > .sidebar {
+  background: transparent;
+  border-right: 0;
+}
+
+/* No workspace header row on desktop: the sidebar is just the scroll list
+   plus the user card. */
+.desktop-shell > .sidebar {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* Narrow windows turn the rail and sidebar into overlay drawers (see
+   modals.css); floating panes need their opaque surfaces back. */
+@media (max-width: 820px) {
+  .desktop-shell > .guild-rail {
+    background:
+      radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px)
+      0 0 / 14px 14px,
+      var(--rail);
+    border-right: 1px solid var(--line);
+  }
+
+  .desktop-shell > .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+}
+
+.desktop-shell > .timeline {
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-top-left-radius: 12px;
+}
+
+.desktop-shell:not(.thread-open):not(.artifact-open) > .timeline {
+  border-top-right-radius: 12px;
+}
+
+.desktop-shell > .thread,
+.desktop-shell > .artifact-viewer {
+  border-top: 1px solid var(--line);
+  border-top-right-radius: 12px;
 }
 
 .desktop-shell > .desktop-titlebar {
@@ -199,11 +250,7 @@
   min-width: 0;
   height: 52px;
   padding: 0;
-  border-bottom: 1px solid var(--line);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
-    color-mix(in srgb, var(--panel) 88%, var(--bg));
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  background: transparent;
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -252,10 +299,48 @@
   color: var(--text-strong);
 }
 
-.desktop-titlebar-leading > button {
+.desktop-titlebar-leading > .desktop-sidebar-toggle {
   width: 30px;
   height: 30px;
   border-radius: 8px;
+}
+
+.desktop-titlebar-workspace {
+  max-width: 190px;
+  overflow: hidden;
+  padding: 5px 9px;
+  border-radius: 8px;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-titlebar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.desktop-titlebar-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  animation: presence-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-titlebar-status::before {
+    animation: none;
+  }
 }
 
 .desktop-titlebar-search.search {

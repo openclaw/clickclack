@@ -2777,11 +2777,14 @@
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
+      {connected}
       platform={desktop.platform}
       {searchQuery}
       {sidebarCollapsed}
       {mobileNavOpen}
       mobileNavigation={mobileNavViewport}
+      workspaceName={selectedWorkspace?.name}
+      onOpenWorkspaceSettings={openWorkspaceSettings}
       onResetSearch={resetSearch}
       onSearch={() => void searchMessages()}
       onSearchQuery={(value) => (searchQuery = value)}
@@ -2828,7 +2831,7 @@
     workspaceIconURL={selectedWorkspace?.icon_url}
     {connected}
     {sidebarCollapsed}
-    showCollapse={!integratedTitleBar}
+    showHeader={!integratedTitleBar}
     {channels}
     {directConversations}
     {recentPeople}

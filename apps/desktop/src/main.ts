@@ -37,6 +37,14 @@ import {
   type PublicDesktopSettings,
   type WindowState,
 } from "./contract";
+import {
+  activeDesktopAuthAttempt,
+  applyWindowsUnreadOverlay,
+  isValidClickClackProbeResponse,
+  nextDesktopAuthAttempt,
+  RendererSignalQueue,
+  type DesktopAuthAttempt,
+} from "./runtime";
 
 const PROTOCOL = "clickclack";
 const SETTINGS_FILE = "desktop.json";
@@ -52,10 +60,11 @@ let quitting = false;
 let routesReady = false;
 let pendingRoute: string | null = null;
 let pendingProtocolURL: string | null = null;
-let pendingDesktopAuth: { serverUrl: string; verifier: string } | null = null;
+let pendingDesktopAuth: DesktopAuthAttempt | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 let integratedTitleBar = false;
+const quickComposeQueue = new RendererSignalQueue();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -121,6 +130,7 @@ function registerProtocol() {
 
 function createMainWindow(route = currentRoute): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  quickComposeQueue.reset();
   const saved = visibleWindowState(settings.window);
   const window = new BrowserWindow({
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#131419" : "#f7f3ed",
@@ -152,6 +162,7 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   });
   mainWindow = window;
   configureWebContents(window);
+  applyUnreadOverlay(window);
 
   window.once("ready-to-show", () => {
     if (saved.maximized) window.maximize();
@@ -165,7 +176,10 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     }
   });
   window.on("closed", () => {
-    if (mainWindow === window) mainWindow = null;
+    if (mainWindow === window) {
+      mainWindow = null;
+      quickComposeQueue.reset();
+    }
   });
   window.on("resize", scheduleWindowStateSave);
   window.on("move", scheduleWindowStateSave);
@@ -174,6 +188,14 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   window.webContents.on("did-navigate", (_event, url) => {
     const parsed = routeFromServerURL(url);
     if (parsed) currentRoute = parsed;
+  });
+  window.webContents.on("did-start-loading", () => {
+    if (mainWindow === window) quickComposeQueue.beginLoading();
+  });
+  window.webContents.on("did-finish-load", () => {
+    if (mainWindow === window && quickComposeQueue.finishLoading()) {
+      window.webContents.send("desktop:quick-compose");
+    }
   });
   window.webContents.on("render-process-gone", (_event, details) => {
     if (details.reason !== "clean-exit") void window.webContents.reload();
@@ -381,15 +403,20 @@ function registerIPC() {
     requireSettingsSender(event.sender.id);
     const serverUrl = normalizeServerURL(String(input ?? ""));
     try {
-      const response = await net.fetch(appURL(serverUrl), {
-        method: "HEAD",
-        redirect: "follow",
+      const response = await net.fetch(new URL("/readyz", serverUrl).toString(), {
+        headers: { Accept: "application/json" },
+        method: "GET",
+        redirect: "manual",
         signal: AbortSignal.timeout(8000),
       });
-      if (response.status >= 500) {
-        return { detail: `Server answered with HTTP ${response.status}`, ok: false, serverUrl };
+      if (!(await isValidClickClackProbeResponse(response, serverUrl))) {
+        const detail =
+          response.status === 200
+            ? "Server did not return a ClickClack readiness response"
+            : `ClickClack readiness check returned HTTP ${response.status}`;
+        return { detail, ok: false, serverUrl };
       }
-      return { detail: `ClickClack answered on ${new URL(serverUrl).host}`, ok: true, serverUrl };
+      return { detail: `ClickClack is ready on ${new URL(serverUrl).host}`, ok: true, serverUrl };
     } catch (error) {
       return {
         detail: error instanceof Error ? error.message : "Could not reach this server",
@@ -580,16 +607,15 @@ function setUnreadCount(next: number) {
   if (unreadCount === next) return;
   unreadCount = next;
   app.setBadgeCount(next);
-  if (mainWindow && process.platform === "win32") {
-    const overlay = next > 0 ? nativeImage.createFromPath(assetPath("unread-badge.png")) : null;
-    mainWindow.setOverlayIcon(overlay, next > 0 ? `${next} unread messages` : "");
-  }
+  applyUnreadOverlay(mainWindow);
   updateTrayMenu();
 }
 
 function quickCompose() {
   showMainWindow();
-  mainWindow?.webContents.send("desktop:quick-compose");
+  if (mainWindow && quickComposeQueue.request()) {
+    mainWindow.webContents.send("desktop:quick-compose");
+  }
 }
 
 function showMainWindow() {
@@ -632,21 +658,24 @@ function handleProtocolURL(input: string) {
 
 async function beginDesktopOAuth() {
   const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
   const serverUrl = normalizeServerURL(settings.serverUrl);
-  pendingDesktopAuth = { serverUrl, verifier };
+  const next = nextDesktopAuthAttempt(pendingDesktopAuth, serverUrl, verifier);
+  pendingDesktopAuth = next.attempt;
   showMainWindow();
+  if (!next.shouldOpen) return;
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
   try {
     await shell.openExternal(desktopOAuthStartURL(serverUrl, challenge));
   } catch (error) {
-    pendingDesktopAuth = null;
+    if (pendingDesktopAuth === next.attempt) pendingDesktopAuth = null;
     throw error;
   }
 }
 
 async function completeDesktopOAuth(code: string) {
-  const pending = pendingDesktopAuth;
-  if (!pending || pending.serverUrl !== normalizeServerURL(settings.serverUrl)) {
+  const pending = activeDesktopAuthAttempt(pendingDesktopAuth, settings.serverUrl);
+  pendingDesktopAuth = null;
+  if (!pending) {
     await showDesktopAuthError("This sign-in request expired. Start again from ClickClack.");
     return;
   }
@@ -744,6 +773,13 @@ function isExternalURL(input: string): boolean {
   } catch {
     return false;
   }
+}
+
+function applyUnreadOverlay(window: BrowserWindow | null) {
+  if (window?.isDestroyed()) return;
+  applyWindowsUnreadOverlay(process.platform, window, unreadCount, () =>
+    nativeImage.createFromPath(assetPath("unread-badge.png")),
+  );
 }
 
 function visibleWindowState(saved: WindowState | undefined): WindowState {

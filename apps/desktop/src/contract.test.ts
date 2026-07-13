@@ -15,6 +15,13 @@ import {
   safeAppRoute,
   sanitizeNotification,
 } from "./contract";
+import {
+  activeDesktopAuthAttempt,
+  applyWindowsUnreadOverlay,
+  isValidClickClackProbeResponse,
+  nextDesktopAuthAttempt,
+  RendererSignalQueue,
+} from "./runtime";
 
 test("normalizes hosted and loopback servers", () => {
   assert.equal(normalizeServerURL("https://chat.example.com/app/"), "https://chat.example.com");
@@ -183,4 +190,109 @@ test("recovers safely from malformed persisted settings", () => {
     y: undefined,
     maximized: true,
   });
+});
+
+test("accepts only a genuine same-origin ClickClack readiness response", async () => {
+  const response = (
+    url: string,
+    status: number,
+    body: unknown,
+    redirected = false,
+  ): Pick<Response, "json" | "redirected" | "status" | "url"> => ({
+    json: async () => body,
+    redirected,
+    status,
+    url,
+  });
+  const serverUrl = "https://chat.example.com";
+  const readyUrl = `${serverUrl}/readyz`;
+
+  assert.equal(
+    await isValidClickClackProbeResponse(response(readyUrl, 200, { status: "ready" }), serverUrl),
+    true,
+  );
+  assert.equal(
+    await isValidClickClackProbeResponse(
+      response(readyUrl, 200, { status: "ready" }, true),
+      serverUrl,
+    ),
+    false,
+  );
+  assert.equal(
+    await isValidClickClackProbeResponse(
+      response("https://other.example/readyz", 200, { status: "ready" }),
+      serverUrl,
+    ),
+    false,
+  );
+  assert.equal(
+    await isValidClickClackProbeResponse(response(readyUrl, 404, { status: "ready" }), serverUrl),
+    false,
+  );
+  assert.equal(
+    await isValidClickClackProbeResponse(response(readyUrl, 200, { status: "ok" }), serverUrl),
+    false,
+  );
+});
+
+test("deduplicates active desktop OAuth attempts and expires stale state", () => {
+  const startedAt = 10_000;
+  const first = nextDesktopAuthAttempt(
+    null,
+    "https://chat.example.com",
+    "first-verifier",
+    startedAt,
+  );
+  const duplicate = nextDesktopAuthAttempt(
+    first.attempt,
+    "https://chat.example.com",
+    "second-verifier",
+    startedAt + 1,
+  );
+  assert.equal(first.shouldOpen, true);
+  assert.equal(duplicate.shouldOpen, false);
+  assert.equal(duplicate.attempt, first.attempt);
+  assert.equal(
+    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 299_999),
+    first.attempt,
+  );
+  assert.equal(
+    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 300_000),
+    null,
+  );
+  const replacement = nextDesktopAuthAttempt(
+    first.attempt,
+    "https://chat.example.com",
+    "replacement-verifier",
+    startedAt + 300_000,
+  );
+  assert.equal(replacement.shouldOpen, true);
+  assert.equal(replacement.attempt.verifier, "replacement-verifier");
+});
+
+test("reapplies Windows unread overlays to replacement windows", () => {
+  const calls: Array<{ description: string; overlay: string | null; window: string }> = [];
+  const createWindow = (name: string) => ({
+    setOverlayIcon(overlay: string | null, description: string) {
+      calls.push({ description, overlay, window: name });
+    },
+  });
+  applyWindowsUnreadOverlay("win32", createWindow("initial"), 7, () => "badge");
+  applyWindowsUnreadOverlay("win32", createWindow("replacement"), 7, () => "badge");
+  applyWindowsUnreadOverlay("darwin", createWindow("mac"), 7, () => "unused");
+  assert.deepEqual(calls, [
+    { description: "7 unread messages", overlay: "badge", window: "initial" },
+    { description: "7 unread messages", overlay: "badge", window: "replacement" },
+  ]);
+});
+
+test("queues Quick Compose until the renderer finishes loading", () => {
+  const queue = new RendererSignalQueue();
+  assert.equal(queue.request(), false);
+  assert.equal(queue.finishLoading(), true);
+  assert.equal(queue.finishLoading(), false);
+  assert.equal(queue.request(), true);
+  queue.beginLoading();
+  assert.equal(queue.request(), false);
+  assert.equal(queue.finishLoading(), true);
 });

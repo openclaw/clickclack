@@ -618,13 +618,18 @@ WHERE workspace_id = sqlc.arg(workspace_id)
   AND user_id = sqlc.arg(user_id);
 
 -- name: InsertUpload :exec
-INSERT INTO uploads (id, workspace_id, owner_id, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(owner_id), sqlc.arg(filename), sqlc.arg(content_type), sqlc.arg(byte_size), sqlc.arg(width), sqlc.arg(height), sqlc.arg(duration_ms), sqlc.arg(storage_path), sqlc.arg(created_at));
+INSERT INTO uploads (id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(owner_id), sqlc.arg(client_nonce), sqlc.arg(filename), sqlc.arg(content_type), sqlc.arg(byte_size), sqlc.arg(width), sqlc.arg(height), sqlc.arg(duration_ms), sqlc.arg(storage_path), sqlc.arg(created_at));
 
 -- name: GetUpload :one
-SELECT id, workspace_id, owner_id, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
+SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
 FROM uploads
 WHERE id = sqlc.arg(id);
+
+-- name: GetUploadByOwnerNonce :one
+SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
+FROM uploads
+WHERE owner_id = sqlc.arg(owner_id) AND client_nonce = sqlc.arg(client_nonce);
 
 -- name: GetUploadWorkspace :one
 SELECT workspace_id

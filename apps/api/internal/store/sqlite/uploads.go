@@ -14,6 +14,10 @@ import (
 const uploadQuotaReservationTTL = 15 * time.Minute
 
 func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput) (store.Upload, error) {
+	nonce, err := normalizeClientNonce(input.Nonce)
+	if err != nil {
+		return store.Upload{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.Upload{}, err
@@ -26,6 +30,7 @@ func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput)
 		ID:          newID("upl"),
 		WorkspaceID: input.WorkspaceID,
 		OwnerID:     input.OwnerID,
+		Nonce:       nonce,
 		Filename:    input.Filename,
 		ContentType: input.ContentType,
 		ByteSize:    input.ByteSize,
@@ -39,6 +44,7 @@ func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput)
 		ID:          upload.ID,
 		WorkspaceID: upload.WorkspaceID,
 		OwnerID:     upload.OwnerID,
+		ClientNonce: upload.Nonce,
 		Filename:    upload.Filename,
 		ContentType: upload.ContentType,
 		ByteSize:    upload.ByteSize,
@@ -102,6 +108,10 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID stri
 }
 
 func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, input store.CreateUploadInput) (store.Upload, error) {
+	nonce, err := normalizeClientNonce(input.Nonce)
+	if err != nil {
+		return store.Upload{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.Upload{}, err
@@ -134,6 +144,7 @@ func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, 
 		ID:          newID("upl"),
 		WorkspaceID: input.WorkspaceID,
 		OwnerID:     input.OwnerID,
+		Nonce:       nonce,
 		Filename:    input.Filename,
 		ContentType: input.ContentType,
 		ByteSize:    input.ByteSize,
@@ -147,6 +158,7 @@ func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, 
 		ID:          upload.ID,
 		WorkspaceID: upload.WorkspaceID,
 		OwnerID:     upload.OwnerID,
+		ClientNonce: upload.Nonce,
 		Filename:    upload.Filename,
 		ContentType: upload.ContentType,
 		ByteSize:    upload.ByteSize,
@@ -274,6 +286,28 @@ func (s *Store) GetUpload(ctx context.Context, uploadID, userID string) (store.U
 	}
 	if !visible {
 		return store.Upload{}, errors.New("upload is not visible")
+	}
+	return upload, nil
+}
+
+func (s *Store) GetUploadByNonce(ctx context.Context, ownerID, nonce string) (store.Upload, error) {
+	normalized, err := normalizeClientNonce(nonce)
+	if err != nil {
+		return store.Upload{}, err
+	}
+	if normalized == "" {
+		return store.Upload{}, sql.ErrNoRows
+	}
+	row, err := s.q.GetUploadByOwnerNonce(ctx, storedb.GetUploadByOwnerNonceParams{
+		OwnerID:     ownerID,
+		ClientNonce: normalized,
+	})
+	if err != nil {
+		return store.Upload{}, err
+	}
+	upload := storeUploadFromGetUploadByOwnerNonce(row)
+	if err := s.requireMembership(ctx, upload.WorkspaceID, ownerID); err != nil {
+		return store.Upload{}, err
 	}
 	return upload, nil
 }

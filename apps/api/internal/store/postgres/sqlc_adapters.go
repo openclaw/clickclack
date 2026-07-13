@@ -130,6 +130,24 @@ func storeUploadFromGetUpload(row storedb.GetUploadRow) store.Upload {
 		ID:          row.ID,
 		WorkspaceID: row.WorkspaceID,
 		OwnerID:     row.OwnerID,
+		Nonce:       row.ClientNonce,
+		Filename:    row.Filename,
+		ContentType: row.ContentType,
+		ByteSize:    row.ByteSize,
+		Width:       int(row.Width),
+		Height:      int(row.Height),
+		DurationMS:  int(row.DurationMs),
+		StoragePath: row.StoragePath,
+		CreatedAt:   row.CreatedAt,
+	}
+}
+
+func storeUploadFromGetUploadByOwnerNonce(row storedb.GetUploadByOwnerNonceRow) store.Upload {
+	return store.Upload{
+		ID:          row.ID,
+		WorkspaceID: row.WorkspaceID,
+		OwnerID:     row.OwnerID,
+		Nonce:       row.ClientNonce,
 		Filename:    row.Filename,
 		ContentType: row.ContentType,
 		ByteSize:    row.ByteSize,

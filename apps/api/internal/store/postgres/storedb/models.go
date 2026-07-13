@@ -304,6 +304,7 @@ type Upload struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
 	ByteSize    int64  `json:"byte_size"`

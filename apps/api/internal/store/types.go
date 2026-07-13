@@ -35,6 +35,10 @@ var ErrPostRateLimited = errors.New("waiting room post limit reached")
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
 
+// ErrUploadNonceConflict is returned when a client reuses an upload nonce in
+// another workspace.
+var ErrUploadNonceConflict = errors.New("upload nonce was already used in another workspace")
+
 var (
 	ErrOAuthTransactionInvalid  = errors.New("invalid or expired oauth transaction")
 	ErrOAuthCapacityExceeded    = errors.New("too many pending oauth requests")
@@ -569,6 +573,7 @@ type Upload struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	Nonce       string `json:"nonce,omitempty"`
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
 	ByteSize    int64  `json:"byte_size"`
@@ -592,6 +597,7 @@ type PendingUploadCleanup struct {
 type CreateUploadInput struct {
 	WorkspaceID string
 	OwnerID     string
+	Nonce       string
 	Filename    string
 	ContentType string
 	ByteSize    int64
@@ -862,6 +868,7 @@ type Store interface {
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)
 	CreateUpload(ctx context.Context, input CreateUploadInput) (Upload, error)
 	GetUpload(ctx context.Context, uploadID, userID string) (Upload, error)
+	GetUploadByNonce(ctx context.Context, ownerID, nonce string) (Upload, error)
 	UploadHasDirectMessageAttachment(ctx context.Context, uploadID string) (bool, error)
 	UploadHasOtherDirectMessageAttachment(ctx context.Context, uploadID, messageID string) (bool, error)
 	AttachUpload(ctx context.Context, input AttachUploadInput) (Event, error)

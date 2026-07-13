@@ -1210,7 +1210,7 @@ func (q *Queries) GetThreadState(ctx context.Context, rootMessageID string) (Thr
 }
 
 const getUpload = `-- name: GetUpload :one
-SELECT id, workspace_id, owner_id, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
+SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
 FROM uploads
 WHERE id = $1
 `
@@ -1219,6 +1219,7 @@ type GetUploadRow struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
 	ByteSize    int64  `json:"byte_size"`
@@ -1236,6 +1237,53 @@ func (q *Queries) GetUpload(ctx context.Context, id string) (GetUploadRow, error
 		&i.ID,
 		&i.WorkspaceID,
 		&i.OwnerID,
+		&i.ClientNonce,
+		&i.Filename,
+		&i.ContentType,
+		&i.ByteSize,
+		&i.Width,
+		&i.Height,
+		&i.DurationMs,
+		&i.StoragePath,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUploadByOwnerNonce = `-- name: GetUploadByOwnerNonce :one
+SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
+FROM uploads
+WHERE owner_id = $1 AND client_nonce = $2
+`
+
+type GetUploadByOwnerNonceParams struct {
+	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
+}
+
+type GetUploadByOwnerNonceRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	ByteSize    int64  `json:"byte_size"`
+	Width       int64  `json:"width"`
+	Height      int64  `json:"height"`
+	DurationMs  int64  `json:"duration_ms"`
+	StoragePath string `json:"storage_path"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (q *Queries) GetUploadByOwnerNonce(ctx context.Context, arg GetUploadByOwnerNonceParams) (GetUploadByOwnerNonceRow, error) {
+	row := q.db.QueryRowContext(ctx, getUploadByOwnerNonce, arg.OwnerID, arg.ClientNonce)
+	var i GetUploadByOwnerNonceRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.OwnerID,
+		&i.ClientNonce,
 		&i.Filename,
 		&i.ContentType,
 		&i.ByteSize,
@@ -2076,14 +2124,15 @@ func (q *Queries) InsertThreadState(ctx context.Context, rootMessageID string) e
 }
 
 const insertUpload = `-- name: InsertUpload :exec
-INSERT INTO uploads (id, workspace_id, owner_id, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO uploads (id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `
 
 type InsertUploadParams struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
 	ByteSize    int64  `json:"byte_size"`
@@ -2099,6 +2148,7 @@ func (q *Queries) InsertUpload(ctx context.Context, arg InsertUploadParams) erro
 		arg.ID,
 		arg.WorkspaceID,
 		arg.OwnerID,
+		arg.ClientNonce,
 		arg.Filename,
 		arg.ContentType,
 		arg.ByteSize,

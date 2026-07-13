@@ -199,6 +199,7 @@ CREATE TABLE uploads (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_nonce TEXT NOT NULL DEFAULT '',
   filename TEXT NOT NULL,
   content_type TEXT NOT NULL,
   byte_size BIGINT NOT NULL,
@@ -210,6 +211,7 @@ CREATE TABLE uploads (
 );
 
 CREATE INDEX idx_uploads_workspace_owner ON uploads(workspace_id, owner_id);
+CREATE UNIQUE INDEX idx_uploads_owner_client_nonce ON uploads(owner_id, client_nonce) WHERE client_nonce <> '';
 
 CREATE TABLE upload_quota_reservations (
   id TEXT PRIMARY KEY,

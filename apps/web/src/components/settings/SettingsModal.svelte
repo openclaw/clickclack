@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import Avatar from "../avatar/Avatar.svelte";
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
@@ -54,6 +54,8 @@
   const user = $derived(refreshedUser?.id === initialUser.id ? refreshedUser : initialUser);
   let userStatus = $state<"ready" | "loading" | "error">("ready");
   let userError = $state("");
+  let modalRoot = $state<HTMLDivElement | null>(null);
+  let dialog = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     activeSection = initialSection;
@@ -62,7 +64,22 @@
   // Refresh user from the API on mount so the modal always reflects
   // server-side truth, not whatever's stale in ChatApp state.
   onMount(() => {
+    if (!modalRoot || !dialog) return;
+    const mountedDialog = dialog;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const inerted = inertBackground(modalRoot);
+    let mounted = true;
+    void tick().then(() => {
+      if (mounted) firstFocusableElement(mountedDialog)?.focus();
+    });
     void refreshUser();
+    return () => {
+      mounted = false;
+      restoreBackground(inerted);
+      queueMicrotask(() => {
+        if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+      });
+    };
   });
 
   async function refreshUser() {
@@ -93,26 +110,89 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== "Escape") return;
-    const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
       return;
     }
-    event.preventDefault();
-    onClose();
+    if (event.key !== "Tab") return;
+    const focusable = focusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const active = document.activeElement;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function openWorkspaceSection(workspace: Workspace, slug: string) {
     onClose();
     void goto(workspaceSettingsPath(workspace.route_id || workspace.id, slug));
   }
+
+  type InertedElement = {
+    element: HTMLElement;
+    inert: boolean;
+    ariaHidden: string | null;
+  };
+
+  function inertBackground(root: HTMLElement): InertedElement[] {
+    const parent = root.parentElement;
+    if (!parent) return [];
+    return [...parent.children].flatMap((child) => {
+      if (!(child instanceof HTMLElement) || child === root) return [];
+      const state = {
+        element: child,
+        inert: child.inert,
+        ariaHidden: child.getAttribute("aria-hidden"),
+      };
+      child.inert = true;
+      child.setAttribute("aria-hidden", "true");
+      return [state];
+    });
+  }
+
+  function restoreBackground(states: InertedElement[]) {
+    for (const { element, inert, ariaHidden } of states) {
+      element.inert = inert;
+      if (ariaHidden === null) element.removeAttribute("aria-hidden");
+      else element.setAttribute("aria-hidden", ariaHidden);
+    }
+  }
+
+  function focusableElements(root: HTMLElement): HTMLElement[] {
+    return [...root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+  }
+
+  function firstFocusableElement(root: HTMLElement): HTMLElement | undefined {
+    return focusableElements(root)[0];
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="settings-modal-scrim" role="presentation" onclick={handleScrimClick}>
-  <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Account settings">
+<div bind:this={modalRoot} class="settings-modal-scrim" role="presentation" onclick={handleScrimClick}>
+  <div
+    bind:this={dialog}
+    class="settings-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Account settings"
+    tabindex="-1"
+  >
     <button type="button" class="settings-modal__close" onclick={onClose} aria-label="Close">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M18 6L6 18M6 6l12 12" />

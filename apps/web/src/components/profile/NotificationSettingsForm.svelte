@@ -40,9 +40,6 @@
       const data = await api<{ user: User }>("/api/me", {
         method: "PATCH",
         body: JSON.stringify({
-          display_name: currentUser.display_name,
-          handle: currentUser.handle ? `@${currentUser.handle}` : "",
-          avatar_url: currentUser.avatar_url,
           notification_settings: {
             pushover_enabled: pushoverEnabled,
             pushover_user_key: pushoverUserKey,

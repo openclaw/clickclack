@@ -67,7 +67,6 @@
           display_name: displayName,
           handle: normalizedHandleForSave(),
           avatar_url: avatarURL,
-          notification_settings: currentUser.notification_settings,
         }),
       });
       savedUser = data.user;

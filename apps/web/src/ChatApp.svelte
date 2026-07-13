@@ -90,6 +90,8 @@
   let searchQuery = "";
   let searchResults: SearchResult[] = [];
   let pendingUpload: Upload | null = null;
+  let uploadWorkspaceID = "";
+  let uploadSerial = 0;
   let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
@@ -582,6 +584,7 @@
     const workspaceChanged = selectedWorkspaceID !== workspace.id;
     if (workspaceChanged) {
       captureScrollMemory();
+      clearPendingUpload();
       selectedWorkspaceID = workspace.id;
       selectedChannelID = "";
       selectedDirectID = "";
@@ -1745,6 +1748,15 @@
       status = "pick or create a channel";
       return;
     }
+    if (uploadWorkspaceID === selectedWorkspaceID) {
+      status = "wait for the upload to finish";
+      return;
+    }
+    if (pendingUpload && pendingUpload.workspace_id !== selectedWorkspaceID) {
+      clearPendingUpload();
+      status = "attachment cleared after workspace change";
+      return;
+    }
     stopTyping();
     const activeContext: "channel" | "dm" = selectedDirectID ? "dm" : "channel";
     const quote = replyTarget && replyContext === activeContext ? replyTarget : null;
@@ -1759,7 +1771,7 @@
     };
     messageBody = "";
     if (quote) clearReplyTarget();
-    pendingUpload = null;
+    clearPendingUpload();
     await dispatchDraft(draft);
   }
 
@@ -2044,16 +2056,36 @@
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file || !selectedWorkspaceID) return;
-    const probe = await probeMediaDimensions(file);
-    const form = new FormData();
-    form.set("workspace_id", selectedWorkspaceID);
-    form.set("file", file);
-    if (probe.width > 0) form.set("width", String(probe.width));
-    if (probe.height > 0) form.set("height", String(probe.height));
-    if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
-    const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
-    pendingUpload = data.upload;
-    input.value = "";
+    const workspaceID = selectedWorkspaceID;
+    const serial = ++uploadSerial;
+    pendingUpload = null;
+    uploadWorkspaceID = workspaceID;
+    try {
+      const probe = await probeMediaDimensions(file);
+      const form = new FormData();
+      form.set("workspace_id", workspaceID);
+      form.set("file", file);
+      if (probe.width > 0) form.set("width", String(probe.width));
+      if (probe.height > 0) form.set("height", String(probe.height));
+      if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
+      const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
+      if (
+        serial === uploadSerial &&
+        selectedWorkspaceID === workspaceID &&
+        data.upload.workspace_id === workspaceID
+      ) {
+        pendingUpload = data.upload;
+      }
+    } finally {
+      if (serial === uploadSerial) uploadWorkspaceID = "";
+      input.value = "";
+    }
+  }
+
+  function clearPendingUpload() {
+    uploadSerial++;
+    pendingUpload = null;
+    uploadWorkspaceID = "";
   }
 
   async function loadDirectConversations() {
@@ -2185,10 +2217,13 @@
     if (!selectedWorkspaceID) return;
     socket = connectRealtime({
       workspaceID: selectedWorkspaceID,
-      onEvent: (event) => {
-        void handleEvent(event).catch((error) => {
+      onEvent: async (event) => {
+        try {
+          await handleEvent(event);
+        } catch (error) {
           status = error instanceof Error ? error.message : "Could not process realtime event";
-        });
+          throw error;
+        }
       },
       onStatusChange: (next) => (connected = next),
     });
@@ -2958,7 +2993,7 @@
       onFocus={() => (activeComposerContext = "message")}
       onInputRef={(node) => (messageInput = node)}
       onUploadFile={uploadFile}
-      onRemoveUpload={() => (pendingUpload = null)}
+      onRemoveUpload={clearPendingUpload}
       onClearReply={clearReplyTarget}
       onApplyMarkdownWrap={applyMarkdownWrap}
       onAppendToComposer={appendToComposer}

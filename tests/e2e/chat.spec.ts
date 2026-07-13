@@ -753,6 +753,17 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expectLayout("left", "right");
   await expectLayout("right", "left");
   await expectLayout("right", "right");
+
+  await page.reload();
+  await waitForAppReady(page);
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+  await expect(page.locator("html")).toHaveAttribute("data-other-align", "right");
+  await expect.poll(() => messageSide(selfMessage)).toBe("right");
+  await expect.poll(() => messageSide(humanMessage)).toBe("right");
+  await expect.poll(() => messageSide(agentMessage)).toBe("right");
+  await expect.poll(() => threadControlSide(selfMessage)).toBe("right");
+  await expect.poll(() => threadControlSide(humanMessage)).toBe("right");
+  await expect.poll(() => threadControlSide(agentMessage)).toBe("right");
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {

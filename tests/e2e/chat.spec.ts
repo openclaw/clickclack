@@ -667,6 +667,25 @@ test("aligns self and other messages independently", async ({ page }) => {
     data: { body: selfMessage },
   });
   expect(selfMessageResponse.ok()).toBe(true);
+  const { message: createdSelfMessage } = (await selfMessageResponse.json()) as {
+    message: { id: string };
+  };
+  const uploadResponse = await page.request.post(`/api/uploads?workspace_id=${workspaceId}`, {
+    multipart: {
+      file: {
+        name: "alignment-proof.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("Attachment alignment proof."),
+      },
+    },
+  });
+  expect(uploadResponse.ok()).toBe(true);
+  const { upload } = (await uploadResponse.json()) as { upload: { id: string } };
+  const attachResponse = await page.request.post(
+    `/api/messages/${createdSelfMessage.id}/attachments`,
+    { data: { upload_id: upload.id } },
+  );
+  expect(attachResponse.ok()).toBe(true);
 
   const humanName = `Alignment Human ${Date.now()}`;
   const humanUserId = clickclack([
@@ -693,16 +712,32 @@ test("aligns self and other messages independently", async ({ page }) => {
       display_name: "Alignment Bot",
       handle: `alignment-bot-${Date.now()}`,
       token_name: "e2e",
-      scopes: ["bot:write"],
+      scopes: ["bot:write", "agent_activity:write"],
     },
   });
   expect(botResponse.ok()).toBe(true);
   const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
-  const agentMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    headers: { Authorization: `Bearer ${createdBot.bot_token.token}` },
-    data: { body: agentMessage },
-  });
-  expect(agentMessageResponse.ok()).toBe(true);
+  const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
+  const turnId = `alignment-turn-${Date.now()}`;
+  for (const data of [
+    {
+      body: "Checking aligned agent activity.",
+      kind: "agent_commentary",
+      turn_id: turnId,
+    },
+    {
+      body: "**bash inspect alignment**\n\nverified nested content bounds",
+      kind: "agent_tool",
+      turn_id: turnId,
+    },
+    { body: agentMessage },
+  ]) {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+      headers: botHeaders,
+      data,
+    });
+    expect(response.ok()).toBe(true);
+  }
 
   await page.goto("/app");
   await waitForAppReady(page);
@@ -754,6 +789,45 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expectLayout("right", "left");
   await expectLayout("right", "right");
 
+  await settings.getByRole("button", { name: "Close" }).click();
+  const selfGroup = page.locator(".message-group", {
+    has: page.getByText(selfMessage, { exact: true }),
+  });
+  const attachmentGrid = selfGroup.getByLabel("Attachments");
+  await expect(attachmentGrid).toBeVisible();
+  await expect
+    .poll(() =>
+      selfGroup.evaluate((group) => {
+        const body = group.querySelector<HTMLElement>(":scope > .group-body");
+        const attachments = group.querySelector<HTMLElement>(".attachment-grid");
+        if (!body || !attachments) return false;
+        const bodyRect = body.getBoundingClientRect();
+        const attachmentsRect = attachments.getBoundingClientRect();
+        const leftInset = attachmentsRect.left - bodyRect.left;
+        const rightInset = bodyRect.right - attachmentsRect.right;
+        return rightInset < leftInset;
+      }),
+    )
+    .toBe(true);
+
+  const preamble = page.getByLabel("Agent preamble");
+  await preamble.getByRole("button", { name: "Show preamble" }).click();
+  await expect(preamble.getByText("Checking aligned agent activity.")).toBeVisible();
+  await preamble.getByRole("button", { name: /bash inspect alignment/ }).click();
+  await expect(preamble.getByText("verified nested content bounds")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator(".message-group", { has: preamble }).evaluate((group) => {
+        const body = group.querySelector<HTMLElement>(":scope > .group-body");
+        const nested = group.querySelector<HTMLElement>(".preamble-contract");
+        if (!body || !nested) return false;
+        const bodyRect = body.getBoundingClientRect();
+        const nestedRect = nested.getBoundingClientRect();
+        return nestedRect.left >= bodyRect.left && nestedRect.right <= bodyRect.right;
+      }),
+    )
+    .toBe(true);
+
   await page.reload();
   await waitForAppReady(page);
   await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
@@ -764,6 +838,8 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => threadControlSide(selfMessage)).toBe("right");
   await expect.poll(() => threadControlSide(humanMessage)).toBe("right");
   await expect.poll(() => threadControlSide(agentMessage)).toBe("right");
+  await expect(attachmentGrid).toBeVisible();
+  await expect(preamble).toBeVisible();
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {

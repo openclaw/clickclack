@@ -6,6 +6,9 @@ info:
     name: MIT
 servers:
   - url: http://localhost:8080
+security:
+  - bearerAuth: []
+  - cookieAuth: []
 paths:
   /healthz:
     get:
@@ -69,6 +72,7 @@ paths:
   /api/auth/magic/request:
     post:
       operationId: requestMagicLink
+      security: []
       requestBody:
         required: true
         content:
@@ -78,6 +82,10 @@ paths:
       responses:
         "201":
           description: Created local magic-link token in dev-bootstrap mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagicLinkResponse"
         "403":
           description: Dev-bootstrap token minting requires a loopback client and local request host
         "501":
@@ -85,6 +93,7 @@ paths:
   /api/auth/magic/consume:
     post:
       operationId: consumeMagicLink
+      security: []
       requestBody:
         required: true
         content:
@@ -94,9 +103,14 @@ paths:
       responses:
         "200":
           description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
   /api/auth/github/start:
     get:
       operationId: startGitHubOAuth
+      security: []
       responses:
         "302":
           description: Redirect to GitHub OAuth authorization
@@ -105,6 +119,7 @@ paths:
   /api/auth/github/desktop/start:
     get:
       operationId: startDesktopGitHubOAuth
+      security: []
       parameters:
         - name: code_challenge
           in: query
@@ -124,6 +139,7 @@ paths:
   /api/auth/github/desktop/consume:
     post:
       operationId: consumeDesktopGitHubOAuth
+      security: []
       requestBody:
         required: true
         content:
@@ -133,6 +149,10 @@ paths:
       responses:
         "200":
           description: One-time desktop grant consumed and session cookie created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
         "400":
           description: Invalid, expired, or previously consumed desktop grant
         "403":
@@ -140,6 +160,7 @@ paths:
   /api/auth/github/callback:
     get:
       operationId: finishGitHubOAuth
+      security: []
       parameters:
         - name: code
           in: query
@@ -213,6 +234,10 @@ paths:
       responses:
         "200":
           description: Workspace list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceListResponse"
     post:
       operationId: createWorkspace
       requestBody:
@@ -224,6 +249,10 @@ paths:
       responses:
         "201":
           description: Created workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
   /api/routes/{workspace_route_id}/{target_route_id}:
     get:
       operationId: resolveRoute
@@ -281,7 +310,7 @@ paths:
                   workspace:
                     $ref: "#/components/schemas/Workspace"
                   event:
-                    type: object
+                    $ref: "#/components/schemas/Event"
         "403":
           description: Workspace manager permission required
     delete:
@@ -316,7 +345,7 @@ paths:
                   workspace:
                     $ref: "#/components/schemas/Workspace"
                   event:
-                    type: object
+                    $ref: "#/components/schemas/Event"
         "403":
           description: Workspace owner permission required
   /api/workspaces/{workspace_id}/members:
@@ -397,7 +426,7 @@ paths:
                   member:
                     $ref: "#/components/schemas/MemberModeration"
                   event:
-                    type: object
+                    $ref: "#/components/schemas/Event"
   /api/workspaces/{workspace_id}/channels:
     get:
       operationId: listChannels
@@ -406,6 +435,10 @@ paths:
       responses:
         "200":
           description: Channel list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelListResponse"
     post:
       operationId: createChannel
       parameters:
@@ -419,6 +452,10 @@ paths:
       responses:
         "201":
           description: Created channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelMutationResponse"
   /api/workspaces/{workspace_id}/topics:
     get:
       operationId: listTopics
@@ -427,6 +464,10 @@ paths:
       responses:
         "200":
           description: Workspace topics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopicListResponse"
     post:
       operationId: createTopic
       parameters:
@@ -440,6 +481,10 @@ paths:
       responses:
         "201":
           description: Created topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopicResponse"
   /api/workspaces/{workspace_id}/bots:
     get:
       operationId: listBots
@@ -610,6 +655,10 @@ paths:
       responses:
         "200":
           description: Active app installations for a workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstallationListResponse"
     post:
       operationId: createAppInstallation
       parameters:
@@ -623,6 +672,10 @@ paths:
       responses:
         "201":
           description: Installed app binding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstallationResponse"
   /api/app-installations/{installation_id}/revoke:
     post:
       operationId: revokeAppInstallation
@@ -635,6 +688,10 @@ paths:
       responses:
         "200":
           description: Revoked app installation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstallationResponse"
   /api/workspaces/{workspace_id}/slash-commands:
     get:
       operationId: listSlashCommands
@@ -643,6 +700,10 @@ paths:
       responses:
         "200":
           description: Active registered slash commands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlashCommandListResponse"
     post:
       operationId: createSlashCommand
       parameters:
@@ -656,6 +717,10 @@ paths:
       responses:
         "201":
           description: Registered slash command and one-time signing secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlashCommandResponse"
   /api/slash-commands/{command_id}/revoke:
     post:
       operationId: revokeSlashCommand
@@ -668,6 +733,10 @@ paths:
       responses:
         "200":
           description: Revoked slash command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlashCommandResponse"
   /api/workspaces/{workspace_id}/event-subscriptions:
     get:
       operationId: listEventSubscriptions
@@ -676,6 +745,10 @@ paths:
       responses:
         "200":
           description: Active outgoing event subscriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSubscriptionListResponse"
     post:
       operationId: createEventSubscription
       parameters:
@@ -689,6 +762,10 @@ paths:
       responses:
         "201":
           description: Created event subscription and one-time signing secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSubscriptionResponse"
   /api/event-subscriptions/{subscription_id}/revoke:
     post:
       operationId: revokeEventSubscription
@@ -701,6 +778,10 @@ paths:
       responses:
         "200":
           description: Revoked event subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSubscriptionResponse"
   /api/event-subscriptions/{subscription_id}/deliveries:
     get:
       operationId: listEventDeliveryAttempts
@@ -713,6 +794,10 @@ paths:
       responses:
         "200":
           description: Event delivery attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDeliveryAttemptListResponse"
   /api/workspaces/{workspace_id}/audit-log:
     get:
       operationId: listAuditLogEntries
@@ -722,9 +807,16 @@ paths:
           in: query
           schema:
             type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
       responses:
         "200":
           description: Workspace audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
   /api/workspaces/{workspace_id}/connected-accounts:
     get:
       operationId: listConnectedAccounts
@@ -733,6 +825,10 @@ paths:
       responses:
         "200":
           description: Active connected accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectedAccountListResponse"
     post:
       operationId: createConnectedAccount
       parameters:
@@ -746,6 +842,10 @@ paths:
       responses:
         "201":
           description: Created connected account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectedAccountResponse"
   /api/connected-accounts/{account_id}/revoke:
     post:
       operationId: revokeConnectedAccount
@@ -758,6 +858,10 @@ paths:
       responses:
         "200":
           description: Revoked connected account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectedAccountResponse"
   /api/channels/{channel_id}:
     patch:
       operationId: updateChannel
@@ -772,6 +876,10 @@ paths:
       responses:
         "200":
           description: Updated channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelMutationResponse"
   /api/channels/{channel_id}/messages:
     get:
       operationId: listMessages
@@ -781,13 +889,34 @@ paths:
           in: query
           schema:
             type: integer
+            format: int64
+            minimum: 0
+        - name: before_seq
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: around_seq
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
         - name: limit
           in: query
           schema:
             type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
       responses:
         "200":
           description: Root channel messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
     post:
       operationId: createMessage
       parameters:
@@ -797,12 +926,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateMessageRequest"
+              $ref: "#/components/schemas/CreateMessageRequest"
       responses:
         "200":
           description: Existing message returned for an idempotent nonce replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
         "201":
           description: Created message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
   /api/channels/{channel_id}/read:
     post:
       operationId: markChannelRead
@@ -817,6 +954,10 @@ paths:
       responses:
         "200":
           description: Updated channel read receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadReceiptResponse"
   /api/messages/{message_id}:
     get:
       operationId: getMessage
@@ -825,6 +966,10 @@ paths:
       responses:
         "200":
           description: Message visible to the current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
     patch:
       operationId: updateMessage
       parameters:
@@ -834,10 +979,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateMessageRequest"
+              $ref: "#/components/schemas/UpdateMessageRequest"
       responses:
         "200":
           description: Updated message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
     delete:
       operationId: deleteMessage
       parameters:
@@ -845,14 +994,29 @@ paths:
       responses:
         "200":
           description: Soft-deleted message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
   /api/messages/{message_id}/thread:
     get:
       operationId: getThread
       parameters:
         - $ref: "#/components/parameters/message_id"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
       responses:
         "200":
           description: Thread root and replies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadResponse"
   /api/messages/{message_id}/thread/replies:
     post:
       operationId: createThreadReply
@@ -867,8 +1031,16 @@ paths:
       responses:
         "200":
           description: Existing thread reply returned for an idempotent nonce replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadReplyResponse"
         "201":
           description: Created thread reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadReplyResponse"
   /api/messages/{message_id}/reactions:
     post:
       operationId: addReaction
@@ -883,8 +1055,16 @@ paths:
       responses:
         "200":
           description: Reaction already existed; no event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventMutationResponse"
         "201":
           description: Added reaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventMutationResponse"
   /api/messages/{message_id}/attachments:
     post:
       operationId: attachUpload
@@ -899,6 +1079,10 @@ paths:
       responses:
         "200":
           description: Attached upload to message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
   /api/messages/{message_id}/reactions/{emoji}:
     delete:
       operationId: removeReaction
@@ -912,6 +1096,10 @@ paths:
       responses:
         "200":
           description: Removed reaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventMutationResponse"
   /api/realtime/events:
     get:
       operationId: listEvents
@@ -929,6 +1117,9 @@ paths:
           in: query
           schema:
             type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
         - name: include_tail
           in: query
           description: Include the latest durable cursor visible at request start.
@@ -937,6 +1128,10 @@ paths:
       responses:
         "200":
           description: Durable events after cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
   /api/realtime/ephemeral:
     post:
       operationId: publishEphemeral
@@ -949,6 +1144,10 @@ paths:
       responses:
         "202":
           description: Ephemeral event accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventMutationResponse"
   /api/realtime/ws:
     get:
       operationId: realtimeWebSocket
@@ -984,9 +1183,20 @@ paths:
           required: false
           schema:
             type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
       responses:
         "200":
           description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
   /api/uploads:
     post:
       operationId: createUpload
@@ -1022,6 +1232,10 @@ paths:
       responses:
         "201":
           description: Created upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
   /api/uploads/{upload_id}:
     get:
       operationId: getUpload
@@ -1046,6 +1260,10 @@ paths:
       responses:
         "200":
           description: DM list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationListResponse"
     post:
       operationId: createDirectConversation
       requestBody:
@@ -1057,6 +1275,10 @@ paths:
       responses:
         "201":
           description: Created DM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationResponse"
   /api/dms/{conversation_id}:
     get:
       operationId: getDirectConversation
@@ -1065,6 +1287,10 @@ paths:
       responses:
         "200":
           description: Direct conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationResponse"
     delete:
       operationId: hideDirectConversation
       parameters:
@@ -1072,6 +1298,10 @@ paths:
       responses:
         "200":
           description: Closed direct conversation for the current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
   /api/dms/{conversation_id}/open:
     post:
       operationId: reopenDirectConversation
@@ -1080,6 +1310,10 @@ paths:
       responses:
         "200":
           description: Reopened direct conversation for the current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationResponse"
   /api/dms/{conversation_id}/messages:
     get:
       operationId: listDirectMessages
@@ -1089,13 +1323,34 @@ paths:
           in: query
           schema:
             type: integer
+            format: int64
+            minimum: 0
+        - name: before_seq
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: around_seq
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
         - name: limit
           in: query
           schema:
             type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
       responses:
         "200":
           description: Direct messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
     post:
       operationId: createDirectMessage
       parameters:
@@ -1109,8 +1364,16 @@ paths:
       responses:
         "200":
           description: Existing direct message returned for an idempotent nonce replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
         "201":
           description: Created direct message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
   /api/dms/{conversation_id}/read:
     post:
       operationId: markDirectRead
@@ -1125,6 +1388,10 @@ paths:
       responses:
         "200":
           description: Updated direct-conversation read receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadReceiptResponse"
   /api/hooks/mattermost/{channel_id}:
     post:
       operationId: mattermostIncomingWebhook
@@ -1139,6 +1406,10 @@ paths:
       responses:
         "201":
           description: Created message from incoming webhook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageMutationResponse"
   /api/hooks/slash/{channel_id}:
     post:
       operationId: slashCommand
@@ -1151,9 +1422,30 @@ paths:
             schema:
               $ref: "#/components/schemas/SlashCommandRequest"
       responses:
+        "200":
+          description: Registered slash-command callback response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlashCommandCallbackResponse"
         "201":
           description: Slash-command callback response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlashCommandCallbackResponse"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: ClickClack token
+      description: Use an sst_ human session token or a scoped ccb_ bot token.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cc_session
+      description: Browser session cookie set by magic-link or GitHub OAuth login.
   parameters:
     workspace_id:
       name: workspace_id
@@ -1194,6 +1486,311 @@ components:
         type: string
         pattern: "^([CDM][A-Z0-9]{16}|(chn|dm|msg)_[A-Za-z0-9-]+)$"
   schemas:
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    MagicLink:
+      type: object
+      required: [id, email, display_name, created_at, expires_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        used_at:
+          type: string
+          format: date-time
+    MagicLinkResponse:
+      type: object
+      required: [magic_link, token]
+      properties:
+        magic_link:
+          $ref: "#/components/schemas/MagicLink"
+        token:
+          type: string
+          description: One-time mgt_ magic-link token.
+          pattern: "^mgt_"
+    Session:
+      type: object
+      required: [id, token, user_id, created_at, expires_at]
+      properties:
+        id:
+          type: string
+          description: Persisted session record ID.
+          pattern: "^ses_"
+        token:
+          type: string
+          description: Bearer session token returned only when the session is created.
+          pattern: "^sst_"
+        user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    AuthSessionResponse:
+      type: object
+      required: [user, session, token]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        session:
+          $ref: "#/components/schemas/Session"
+        token:
+          type: string
+          description: Same sst_ bearer token as session.token.
+          pattern: "^sst_"
+    WorkspaceListResponse:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+    WorkspaceResponse:
+      type: object
+      required: [workspace]
+      properties:
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+    ChannelListResponse:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Channel"
+    ChannelMutationResponse:
+      type: object
+      required: [channel, event]
+      properties:
+        channel:
+          $ref: "#/components/schemas/Channel"
+        event:
+          $ref: "#/components/schemas/Event"
+    TopicListResponse:
+      type: object
+      required: [topics]
+      properties:
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/Topic"
+    TopicResponse:
+      type: object
+      required: [topic]
+      properties:
+        topic:
+          $ref: "#/components/schemas/Topic"
+    AppInstallationListResponse:
+      type: object
+      required: [app_installations]
+      properties:
+        app_installations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppInstallation"
+    AppInstallationResponse:
+      type: object
+      required: [app_installation]
+      properties:
+        app_installation:
+          $ref: "#/components/schemas/AppInstallation"
+    SlashCommandListResponse:
+      type: object
+      required: [slash_commands]
+      properties:
+        slash_commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlashCommand"
+    SlashCommandResponse:
+      type: object
+      required: [slash_command]
+      properties:
+        slash_command:
+          $ref: "#/components/schemas/SlashCommand"
+    EventSubscriptionListResponse:
+      type: object
+      required: [event_subscriptions]
+      properties:
+        event_subscriptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSubscription"
+    EventSubscriptionResponse:
+      type: object
+      required: [event_subscription]
+      properties:
+        event_subscription:
+          $ref: "#/components/schemas/EventSubscription"
+    EventDeliveryAttemptListResponse:
+      type: object
+      required: [event_delivery_attempts]
+      properties:
+        event_delivery_attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventDeliveryAttempt"
+    AuditLogListResponse:
+      type: object
+      required: [audit_log_entries]
+      properties:
+        audit_log_entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+    ConnectedAccountListResponse:
+      type: object
+      required: [connected_accounts]
+      properties:
+        connected_accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectedAccount"
+    ConnectedAccountResponse:
+      type: object
+      required: [connected_account]
+      properties:
+        connected_account:
+          $ref: "#/components/schemas/ConnectedAccount"
+    MessagePage:
+      type: object
+      required: [messages, oldest_seq, newest_seq, has_older, has_newer]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        oldest_seq:
+          type: integer
+          format: int64
+        newest_seq:
+          type: integer
+          format: int64
+        has_older:
+          type: boolean
+        has_newer:
+          type: boolean
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+    MessageMutationResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        event:
+          $ref: "#/components/schemas/Event"
+    ThreadResponse:
+      type: object
+      required: [root, replies, thread_state]
+      properties:
+        root:
+          $ref: "#/components/schemas/Message"
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        thread_state:
+          $ref: "#/components/schemas/ThreadState"
+    ThreadReplyResponse:
+      type: object
+      required: [message, thread_state, events]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        thread_state:
+          $ref: "#/components/schemas/ThreadState"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+    EventMutationResponse:
+      type: object
+      required: [event]
+      properties:
+        event:
+          $ref: "#/components/schemas/Event"
+    ReadReceiptResponse:
+      type: object
+      required: [receipt]
+      properties:
+        receipt:
+          $ref: "#/components/schemas/ReadReceipt"
+    EventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        tail_cursor:
+          type: string
+    SearchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+    UploadResponse:
+      type: object
+      required: [upload]
+      properties:
+        upload:
+          $ref: "#/components/schemas/Upload"
+    DirectConversationListResponse:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/DirectConversation"
+    DirectConversationResponse:
+      type: object
+      required: [conversation]
+      properties:
+        conversation:
+          $ref: "#/components/schemas/DirectConversation"
+    SlashCommandCallbackResponse:
+      type: object
+      required: [response_type, text, message, event]
+      properties:
+        response_type:
+          type: string
+        text:
+          type: string
+        message:
+          $ref: "#/components/schemas/Message"
+        event:
+          $ref: "#/components/schemas/Event"
+        invocation:
+          $ref: "#/components/schemas/SlashCommandInvocation"
     CreateWorkspaceRequest:
       type: object
       required: [name]
@@ -1559,6 +2156,36 @@ components:
         completed_at:
           type: string
           format: date-time
+    SlashCommandInvocation:
+      type: object
+      required: [id, command_id, workspace_id, channel_id, user_id, text, response_status, created_at]
+      properties:
+        id:
+          type: string
+        command_id:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        user_id:
+          type: string
+        text:
+          type: string
+        payload_json:
+          type: string
+        response_status:
+          type: integer
+        response_body:
+          type: string
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
     AuditLogEntry:
       type: object
       required: [id, workspace_id, actor_user_id, action, target_type, target_id, metadata, created_at]
@@ -1610,6 +2237,29 @@ components:
         revoked_at:
           type: string
           format: date-time
+    Event:
+      type: object
+      required: [id, cursor, type, workspace_id, created_at, payload]
+      properties:
+        id:
+          type: string
+        cursor:
+          type: string
+        type:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
     CreateConnectedAccountRequest:
       type: object
       required: [user_id, provider, provider_account_id]
@@ -1977,6 +2627,8 @@ components:
           type: string
         thread_root_id:
           type: string
+        topic_id:
+          type: string
         channel_seq:
           type: integer
           format: int64
@@ -2006,6 +2658,10 @@ components:
           description: Correlates durable agent activity rows from one agent turn.
         author:
           $ref: "#/components/schemas/User"
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Upload"
         quoted_message_id:
           type: string
         quoted_body_snapshot:
@@ -2018,6 +2674,44 @@ components:
           $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
+    Upload:
+      type: object
+      required: [id, workspace_id, owner_id, filename, content_type, byte_size, width, height, duration_ms, created_at]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        owner_id:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+        byte_size:
+          type: integer
+          format: int64
+        width:
+          type: integer
+          minimum: 0
+        height:
+          type: integer
+          minimum: 0
+        duration_ms:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+    SearchResult:
+      type: object
+      required: [message, rank]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        rank:
+          type: number
+          format: double
     RouteTarget:
       type: object
       required: [workspace_id, workspace_route_id, target_type, target_id, target_route_id, canonical_path]
@@ -2076,7 +2770,8 @@ components:
           type: string
         type:
           type: string
-          enum: [typing.started, typing.stopped, presence.changed]
+          enum: [typing.started, typing.stopped, presence.changed, agent.progress]
+          description: agent.progress requires bot-token auth and exactly one channel_id or direct_conversation_id target.
         payload:
           type: object
           additionalProperties: true

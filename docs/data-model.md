@@ -7,8 +7,11 @@ read_when:
 # Data Model
 
 SQLite schema lives in `apps/api/internal/store/sqlite/migrations/`. The
-mirror in `infra/migrations/sqlite` is for tooling and stays in sync.
 Postgres schema lives in `apps/api/internal/store/postgres/migrations/`.
+Those embedded migration directories are canonical and append-only.
+`infra/migrations/sqlite` is a partial legacy tooling snapshot; it is not a
+runtime input and is not maintained as a complete mirror. There is no
+`infra/migrations/postgres` mirror.
 
 ## IDs
 
@@ -26,7 +29,8 @@ Sortable ULID-style text IDs with semantic prefixes:
 | `upl_`  | upload |
 | `inv_`  | invite |
 | `mlk_`  | magic link |
-| `ses_`  | session |
+| `ses_`  | session record |
+| `sst_`  | human session bearer token |
 
 Public app URLs use separate immutable random route IDs. They do not replace
 the internal IDs above. Workspaces expose `T...`, channels expose `C...`,

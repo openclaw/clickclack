@@ -132,7 +132,7 @@ Environment variables:
 
 ```sh
 CLICKCLACK_SERVER=https://clickclack.chat
-CLICKCLACK_TOKEN=ses_...
+CLICKCLACK_TOKEN=sst_...
 CLICKCLACK_USER_ID=usr_dev
 CLICKCLACK_WORKSPACE=wsp_...
 CLICKCLACK_CHANNEL=chn_...
@@ -143,7 +143,7 @@ User config:
 ```json
 {
   "server": "https://clickclack.chat",
-  "token": "ses_...",
+  "token": "sst_...",
   "workspace": "main",
   "channel": "general"
 }
@@ -245,7 +245,7 @@ Post a message to a hosted server:
 
 ```sh
 CLICKCLACK_SERVER=https://clickclack.chat \
-CLICKCLACK_TOKEN=ses_... \
+CLICKCLACK_TOKEN=sst_... \
 clickclack send --channel ops "release started"
 ```
 

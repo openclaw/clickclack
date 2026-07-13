@@ -45,12 +45,13 @@ TOKEN=$(go run ./apps/api/cmd/clickclack admin magic-link create \
 
 SESSION=$(go run ./apps/api/cmd/clickclack login \
   --magic-token "$TOKEN" --plain --no-store)
-# prints ses_...
+# prints sst_...
 ```
 
-That `ses_...` is what bots and CLIs put in `Authorization: Bearer`. The
-browser already has it as the `cc_session` cookie if you ran consume from the
-SPA.
+That `sst_...` is the human session bearer token that CLIs put in
+`Authorization: Bearer`. Bots should use scoped `ccb_...` bot tokens instead.
+The browser already has the session token as the `cc_session` cookie if you ran
+consume from the SPA.
 
 To store the session for future CLI commands, omit `--no-store`.
 

@@ -1,5 +1,10 @@
 export type { components, paths } from "./generated/openapi";
 
+export type NotificationSettings = {
+  pushover_enabled: boolean;
+  pushover_user_key: string;
+};
+
 export type User = {
   id: string;
   kind: "human" | "bot";
@@ -8,6 +13,7 @@ export type User = {
   handle: string;
   avatar_url: string;
   created_at: string;
+  notification_settings?: NotificationSettings;
 };
 
 export type BotToken = {
@@ -202,7 +208,28 @@ export type Message = {
   quoted_body_snapshot?: string;
   quoted_author_id?: string;
   quoted_author?: User;
+  thread_state?: ThreadState;
   nonce?: string;
+};
+
+export type ThreadState = {
+  root_message_id: string;
+  reply_count: number;
+  last_reply_at?: string;
+  last_reply_author_ids: string[];
+};
+
+export type MessageListOptions = {
+  afterSeq?: number;
+  beforeSeq?: number;
+  aroundSeq?: number;
+  limit?: number;
+};
+
+export type Thread = {
+  root: Message;
+  replies: Message[];
+  thread_state: ThreadState;
 };
 
 export type Upload = {
@@ -262,6 +289,11 @@ export type RealtimeEvent = {
   seq?: number;
   created_at: string;
   payload: RealtimeEventPayload;
+};
+
+export type SearchResult = {
+  message: Message;
+  rank: number;
 };
 
 export type ClickClackClientOptions = {
@@ -329,6 +361,7 @@ export class ClickClackClient {
     display_name: string;
     handle?: string;
     avatar_url?: string;
+    notification_settings?: NotificationSettings;
   }): Promise<User> {
     const data = await this.request<{ user: User }>("/api/me", {
       method: "PATCH",
@@ -677,9 +710,13 @@ export class ClickClackClient {
       });
       return data.channel;
     },
-    messages: async (channelId: string, afterSeq = 0): Promise<Message[]> => {
+    messages: async (
+      channelId: string,
+      options: number | MessageListOptions = 0,
+    ): Promise<Message[]> => {
+      const params = messageListParams(options);
       const data = await this.request<{ messages: Message[] }>(
-        `/api/channels/${channelId}/messages?after_seq=${afterSeq}`,
+        `/api/channels/${channelId}/messages?${params.toString()}`,
       );
       return data.messages;
     },
@@ -723,8 +760,9 @@ export class ClickClackClient {
   };
 
   threads = {
-    get: async (messageId: string) => {
-      return this.request(`/api/messages/${messageId}/thread`);
+    get: async (messageId: string, limit = 100): Promise<Thread> => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      return this.request<Thread>(`/api/messages/${messageId}/thread?${params.toString()}`);
     },
     reply: async (
       messageId: string,
@@ -741,10 +779,15 @@ export class ClickClackClient {
     },
   };
 
-  search = async (workspaceId: string, query: string, options: { channelId?: string } = {}) => {
+  search = async (
+    workspaceId: string,
+    query: string,
+    options: { channelId?: string; limit?: number } = {},
+  ): Promise<{ results: SearchResult[] }> => {
     const params = new URLSearchParams({ workspace_id: workspaceId, q: query });
     if (options.channelId) params.set("channel_id", options.channelId);
-    return this.request(`/api/search?${params.toString()}`);
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    return this.request<{ results: SearchResult[] }>(`/api/search?${params.toString()}`);
   };
 
   uploads = {
@@ -800,9 +843,13 @@ export class ClickClackClient {
       );
       return data.conversation;
     },
-    messages: async (conversationId: string, afterSeq = 0): Promise<Message[]> => {
+    messages: async (
+      conversationId: string,
+      options: number | MessageListOptions = 0,
+    ): Promise<Message[]> => {
+      const params = messageListParams(options);
       const data = await this.request<{ messages: Message[] }>(
-        `/api/dms/${conversationId}/messages?after_seq=${afterSeq}`,
+        `/api/dms/${conversationId}/messages?${params.toString()}`,
       );
       return data.messages;
     },
@@ -827,7 +874,7 @@ export class ClickClackClient {
       workspaceId: string;
       channelId?: string;
       directConversationId?: string;
-      type: "typing.started" | "typing.stopped" | "presence.changed";
+      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress";
       payload?: Record<string, unknown>;
     }): Promise<RealtimeEvent> => {
       const data = await this.request<{ event: RealtimeEvent }>("/api/realtime/ephemeral", {
@@ -937,4 +984,14 @@ export class ClickClackBot {
 
 function isActiveSocket(socket: WebSocket): boolean {
   return socket.readyState === 0 || socket.readyState === 1;
+}
+
+function messageListParams(options: number | MessageListOptions): URLSearchParams {
+  const normalized = typeof options === "number" ? { afterSeq: options } : options;
+  const params = new URLSearchParams();
+  if (normalized.afterSeq !== undefined) params.set("after_seq", String(normalized.afterSeq));
+  if (normalized.beforeSeq !== undefined) params.set("before_seq", String(normalized.beforeSeq));
+  if (normalized.aroundSeq !== undefined) params.set("around_seq", String(normalized.aroundSeq));
+  if (normalized.limit !== undefined) params.set("limit", String(normalized.limit));
+  return params;
 }

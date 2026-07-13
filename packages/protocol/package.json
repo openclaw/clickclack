@@ -4,7 +4,8 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "generate": "openapi-typescript openapi.yaml -o ../sdk-ts/src/generated/openapi.d.ts"
+    "generate": "openapi-typescript openapi.yaml -o ../sdk-ts/src/generated/openapi.d.ts",
+    "typecheck": "node scripts/check-contract.mjs"
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0"

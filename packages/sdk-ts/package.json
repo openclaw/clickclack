@@ -8,7 +8,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-generated-types.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.contract.json"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2"

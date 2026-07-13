@@ -90,6 +90,8 @@
   let searchQuery = "";
   let searchResults: SearchResult[] = [];
   let pendingUpload: Upload | null = null;
+  let uploadPreview: Upload | null = null;
+  let uploadAbortController: AbortController | null = null;
   let uploadWorkspaceID = "";
   let uploadSerial = 0;
   let showGifPicker = false;
@@ -240,6 +242,9 @@
         return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
       })
     : [];
+  $: composerUpload = pendingUpload ?? (
+    uploadWorkspaceID === selectedWorkspaceID ? uploadPreview : null
+  );
 
   onMount(() => {
     initAppearance();
@@ -340,6 +345,7 @@
   }
 
   onDestroy(() => {
+    uploadAbortController?.abort();
     socket?.close();
     socket = null;
     connected = false;
@@ -1748,10 +1754,6 @@
       status = "pick or create a channel";
       return;
     }
-    if (uploadWorkspaceID === selectedWorkspaceID) {
-      status = "wait for the upload to finish";
-      return;
-    }
     if (pendingUpload && pendingUpload.workspace_id !== selectedWorkspaceID) {
       clearPendingUpload();
       status = "attachment cleared after workspace change";
@@ -2057,18 +2059,35 @@
     const file = input.files?.[0];
     if (!file || !selectedWorkspaceID) return;
     const workspaceID = selectedWorkspaceID;
+    uploadAbortController?.abort();
     const serial = ++uploadSerial;
+    const controller = new AbortController();
+    uploadAbortController = controller;
     pendingUpload = null;
     uploadWorkspaceID = workspaceID;
+    uploadPreview = {
+      id: `pending_${serial}`,
+      workspace_id: workspaceID,
+      owner_id: user?.id || "",
+      filename: file.name,
+      content_type: "application/octet-stream",
+      byte_size: file.size,
+      created_at: new Date().toISOString(),
+    };
     try {
       const probe = await probeMediaDimensions(file);
+      if (controller.signal.aborted) return;
       const form = new FormData();
       form.set("workspace_id", workspaceID);
       form.set("file", file);
       if (probe.width > 0) form.set("width", String(probe.width));
       if (probe.height > 0) form.set("height", String(probe.height));
       if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
-      const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
+      const data = await api<{ upload: Upload }>("/api/uploads", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
       if (
         serial === uploadSerial &&
         selectedWorkspaceID === workspaceID &&
@@ -2076,15 +2095,26 @@
       ) {
         pendingUpload = data.upload;
       }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        status = error instanceof Error ? error.message : "Could not upload attachment";
+      }
     } finally {
-      if (serial === uploadSerial) uploadWorkspaceID = "";
+      if (serial === uploadSerial) {
+        uploadWorkspaceID = "";
+        uploadPreview = null;
+        uploadAbortController = null;
+      }
       input.value = "";
     }
   }
 
   function clearPendingUpload() {
     uploadSerial++;
+    uploadAbortController?.abort();
+    uploadAbortController = null;
     pendingUpload = null;
+    uploadPreview = null;
     uploadWorkspaceID = "";
   }
 
@@ -2973,7 +3003,7 @@
       placeholder={selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
       ariaLabel="Message body"
       submitLabel="Send"
-      pendingUpload={pendingUpload}
+      pendingUpload={composerUpload}
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload={Boolean(selectedWorkspaceID && (selectedChannelID || selectedDirectID))}
       showToolbar

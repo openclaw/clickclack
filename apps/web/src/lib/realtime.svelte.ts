@@ -22,7 +22,6 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
   let reconnectTimer: number | undefined;
   let closed = false;
   let connected = false;
-  let deliveryQueue = Promise.resolve();
   let generation = 0;
 
   function setConnected(next: boolean) {
@@ -42,6 +41,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
 
     const current = new WebSocket(url);
     let deliveryFailed = false;
+    let deliveryQueue = Promise.resolve();
     socket = current;
 
     current.addEventListener("open", () => {

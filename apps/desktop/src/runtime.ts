@@ -1,12 +1,17 @@
+import { createHash } from "node:crypto";
 import { normalizeServerURL } from "./contract";
 
-const DESKTOP_AUTH_ATTEMPT_TTL_MS = 5 * 60 * 1000;
+const DESKTOP_AUTH_ATTEMPT_TTL_MS = 10 * 60 * 1000;
 
 export type DesktopAuthAttempt = {
   serverUrl: string;
   startedAt: number;
   verifier: string;
 };
+
+export function desktopAuthCodeChallenge(attempt: DesktopAuthAttempt): string {
+  return createHash("sha256").update(attempt.verifier).digest("base64url");
+}
 
 type ProbeResponse = Pick<Response, "json" | "redirected" | "status" | "url">;
 

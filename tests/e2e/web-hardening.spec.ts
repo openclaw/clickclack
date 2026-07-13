@@ -200,9 +200,11 @@ test("realtime never persists a cursor from an obsolete reconnect generation", a
     await expect.poll(() => FakeWebSocket.instances).toHaveLength(2);
     FakeWebSocket.instances[1].emit("message", JSON.stringify(realtimeEvent("cursor-2")));
 
-    releaseFirst?.();
     await expect.poll(() => delivered).toEqual(["cursor-1", "cursor-2"]);
     await expect.poll(() => writes).toEqual(["cursor-2"]);
+    releaseFirst?.();
+    await expect.poll(() => delivered).toEqual(["cursor-1", "cursor-2"]);
+    expect(writes).toEqual(["cursor-2"]);
     connection.close();
   } finally {
     restore();
@@ -319,8 +321,33 @@ function delayedUploadRoute() {
   };
 }
 
-test("message send stays blocked while its upload is pending", async ({ page }) => {
-  const { workspace, channel } = await createWorkspaceWithChannel(page, "Upload wait");
+test("stalled uploads can be canceled before completion", async ({ page }) => {
+  const { workspace, channel } = await createWorkspaceWithChannel(page, "Upload cancel");
+  const upload = delayedUploadRoute();
+  await page.route("**/api/uploads", upload.handler);
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect(page.getByLabel("Message body")).toHaveAttribute(
+    "placeholder",
+    `Message #${channel.name}`,
+  );
+
+  const selectFile = page.getByLabel("Upload file").setInputFiles({
+    name: "cancel-me.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("cancel me"),
+  });
+  await upload.requestStarted;
+  await expect(page.getByText("cancel-me.txt")).toBeVisible();
+  await page.getByRole("button", { name: "Remove attachment" }).click();
+  await expect(page.getByText("cancel-me.txt")).toHaveCount(0);
+
+  upload.release();
+  await selectFile;
+  await expect(page.getByText("cancel-me.txt")).toHaveCount(0);
+});
+
+test("stalled uploads do not block text sends", async ({ page }) => {
+  const { workspace, channel } = await createWorkspaceWithChannel(page, "Upload send");
   const upload = delayedUploadRoute();
   let messagePosts = 0;
   page.on("request", (request) => {
@@ -344,19 +371,18 @@ test("message send stays blocked while its upload is pending", async ({ page }) 
     buffer: Buffer.from("wait for me"),
   });
   await upload.requestStarted;
-  await page.getByLabel("Message body").fill("send with completed upload");
+  await expect(page.getByText("blocked-send.txt")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove attachment" })).toBeVisible();
+  await page.getByLabel("Message body").fill("send without stalled upload");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect.poll(() => messagePosts).toBe(0);
-  await expect(page.getByLabel("Message body")).toHaveValue("send with completed upload");
+  await expect.poll(() => messagePosts).toBe(1);
+  await expect(page.getByText("blocked-send.txt")).toHaveCount(0);
+  await expect(
+    page.locator(".markdown").filter({ hasText: "send without stalled upload" }),
+  ).toBeVisible();
 
   upload.release();
   await selectFile;
-  await expect(page.getByText("blocked-send.txt")).toBeVisible();
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect.poll(() => messagePosts).toBe(1);
-  await expect(
-    page.locator(".markdown").filter({ hasText: "send with completed upload" }),
-  ).toBeVisible();
 });
 
 test("workspace changes discard uploads that finish for the previous workspace", async ({

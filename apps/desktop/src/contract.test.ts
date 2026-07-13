@@ -18,6 +18,7 @@ import {
 import {
   activeDesktopAuthAttempt,
   applyWindowsUnreadOverlay,
+  desktopAuthCodeChallenge,
   isValidClickClackProbeResponse,
   nextDesktopAuthAttempt,
   RendererSignalQueue,
@@ -254,18 +255,22 @@ test("reopens active desktop OAuth attempts and expires stale state", () => {
   assert.equal(duplicate.attempt, first.attempt);
   assert.equal(duplicate.attempt.verifier, "first-verifier");
   assert.equal(
-    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 299_999),
+    desktopAuthCodeChallenge(duplicate.attempt),
+    "9qLcfEWJv2_LRnrAT1iTbjU3i1Q7NmQgYW2YKo-E-PI",
+  );
+  assert.equal(
+    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 599_999),
     first.attempt,
   );
   assert.equal(
-    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 300_000),
+    activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 600_000),
     null,
   );
   const replacement = nextDesktopAuthAttempt(
     first.attempt,
     "https://chat.example.com",
     "replacement-verifier",
-    startedAt + 300_000,
+    startedAt + 600_000,
   );
   assert.equal(replacement.shouldOpen, true);
   assert.equal(replacement.attempt.verifier, "replacement-verifier");

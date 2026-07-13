@@ -15,7 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import {
   appURL,
@@ -40,6 +40,7 @@ import {
 import {
   activeDesktopAuthAttempt,
   applyWindowsUnreadOverlay,
+  desktopAuthCodeChallenge,
   isValidClickClackProbeResponse,
   nextDesktopAuthAttempt,
   RendererSignalQueue,
@@ -663,7 +664,7 @@ async function beginDesktopOAuth() {
   pendingDesktopAuth = next.attempt;
   showMainWindow();
   if (!next.shouldOpen) return;
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const challenge = desktopAuthCodeChallenge(next.attempt);
   try {
     await shell.openExternal(desktopOAuthStartURL(serverUrl, challenge));
   } catch (error) {

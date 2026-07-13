@@ -209,6 +209,7 @@ export type Upload = {
   id: string;
   workspace_id: string;
   owner_id: string;
+  nonce?: string;
   filename: string;
   content_type: string;
   byte_size: number;
@@ -752,14 +753,29 @@ export class ClickClackClient {
       workspaceId: string,
       file: File | Blob,
       filename = "upload.bin",
+      options: { nonce?: string } = {},
     ): Promise<Upload> => {
       const form = new FormData();
       form.set("file", file, filename);
       const params = new URLSearchParams({ workspace_id: workspaceId });
+      if (options.nonce) params.set("nonce", options.nonce);
       const data = await this.request<{ upload: Upload }>(`/api/uploads?${params.toString()}`, {
         method: "POST",
         body: form,
       });
+      return data.upload;
+    },
+    findByNonce: async (workspaceId: string, nonce: string): Promise<Upload | undefined> => {
+      const params = new URLSearchParams({ workspace_id: workspaceId, nonce });
+      const response = await this.fetchResponse(`/api/uploads/by-nonce?${params.toString()}`);
+      if (
+        response.status === 404 &&
+        response.headers.get("X-ClickClack-Upload-Nonce") === "supported"
+      ) {
+        await response.text();
+        return undefined;
+      }
+      const data = await this.readResponse<{ upload: Upload }>(response);
       return data.upload;
     },
     attach: async (messageId: string, uploadId: string): Promise<void> => {
@@ -865,7 +881,7 @@ export class ClickClackClient {
     },
   };
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  private async fetchResponse(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers);
     const method = (init.method ?? "GET").toUpperCase();
     headers.set("Accept", "application/json");
@@ -875,7 +891,10 @@ export class ClickClackClient {
       headers.set("X-ClickClack-CSRF", "1");
     if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
     if (this.userId) headers.set("X-ClickClack-User", this.userId);
-    const response = await this.fetcher(`${this.baseUrl}${path}`, { ...init, headers });
+    return this.fetcher(`${this.baseUrl}${path}`, { ...init, headers });
+  }
+
+  private async readResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       throw new Error(await response.text());
     }
@@ -884,6 +903,10 @@ export class ClickClackClient {
     }
     const text = await response.text();
     return text ? (JSON.parse(text) as T) : (undefined as T);
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return this.readResponse<T>(await this.fetchResponse(path, init));
   }
 }
 

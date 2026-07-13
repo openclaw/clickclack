@@ -1033,6 +1033,12 @@ paths:
           description: Optional workspace id for multipart clients that cannot send fields before the file part. If omitted, workspace_id must be included as a form field before file.
           schema:
             type: string
+        - name: nonce
+          in: query
+          description: Optional idempotency nonce. Requires workspace_id in the query. Replays return the original upload without reading the multipart body.
+          schema:
+            type: string
+            maxLength: 128
       requestBody:
         required: true
         content:
@@ -1057,8 +1063,58 @@ paths:
                   type: integer
                   minimum: 0
       responses:
+        "200":
+          description: Existing upload replayed by nonce
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
         "201":
           description: Created upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "409":
+          description: The nonce belongs to an upload in another workspace
+  /api/uploads/by-nonce:
+    get:
+      operationId: getUploadByNonce
+      parameters:
+        - name: workspace_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nonce
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: Upload metadata
+          headers:
+            X-ClickClack-Upload-Nonce:
+              description: Indicates that durable upload nonce lookup is supported.
+              schema:
+                type: string
+                enum: [supported]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "404":
+          description: No upload exists for this nonce
+          headers:
+            X-ClickClack-Upload-Nonce:
+              description: Indicates that durable upload nonce lookup is supported.
+              schema:
+                type: string
+                enum: [supported]
+        "409":
+          description: The nonce belongs to an upload in another workspace
   /api/uploads/{upload_id}:
     get:
       operationId: getUpload
@@ -2063,6 +2119,43 @@ components:
           $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
+    Upload:
+      type: object
+      required: [id, workspace_id, owner_id, filename, content_type, byte_size, created_at]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        owner_id:
+          type: string
+        nonce:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+        byte_size:
+          type: integer
+          format: int64
+        width:
+          type: integer
+          minimum: 0
+        height:
+          type: integer
+          minimum: 0
+        duration_ms:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+    UploadResponse:
+      type: object
+      required: [upload]
+      properties:
+        upload:
+          $ref: "#/components/schemas/Upload"
     RouteTarget:
       type: object
       required: [workspace_id, workspace_route_id, target_type, target_id, target_route_id, canonical_path]

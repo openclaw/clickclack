@@ -791,6 +791,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/uploads/by-nonce": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getUploadByNonce"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/uploads/{upload_id}": {
     parameters: {
       query?: never;
@@ -1380,6 +1396,24 @@ export interface components {
       quoted_author?: components["schemas"]["User"];
       thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
+    };
+    Upload: {
+      id: string;
+      workspace_id: string;
+      owner_id: string;
+      nonce?: string;
+      filename: string;
+      content_type: string;
+      /** Format: int64 */
+      byte_size: number;
+      width?: number;
+      height?: number;
+      duration_ms?: number;
+      /** Format: date-time */
+      created_at: string;
+    };
+    UploadResponse: {
+      upload: components["schemas"]["Upload"];
     };
     RouteTarget: {
       workspace_id: string;
@@ -3193,6 +3227,8 @@ export interface operations {
       query?: {
         /** @description Optional workspace id for multipart clients that cannot send fields before the file part. If omitted, workspace_id must be included as a form field before file. */
         workspace_id?: string;
+        /** @description Optional idempotency nonce. Requires workspace_id in the query. Replays return the original upload without reading the multipart body. */
+        nonce?: string;
       };
       header?: never;
       path?: never;
@@ -3212,8 +3248,67 @@ export interface operations {
       };
     };
     responses: {
+      /** @description Existing upload replayed by nonce */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadResponse"];
+        };
+      };
       /** @description Created upload */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadResponse"];
+        };
+      };
+      /** @description The nonce belongs to an upload in another workspace */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getUploadByNonce: {
+    parameters: {
+      query: {
+        workspace_id: string;
+        nonce: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Upload metadata */
+      200: {
+        headers: {
+          /** @description Indicates that durable upload nonce lookup is supported. */
+          "X-ClickClack-Upload-Nonce"?: "supported";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadResponse"];
+        };
+      };
+      /** @description No upload exists for this nonce */
+      404: {
+        headers: {
+          /** @description Indicates that durable upload nonce lookup is supported. */
+          "X-ClickClack-Upload-Nonce"?: "supported";
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The nonce belongs to an upload in another workspace */
+      409: {
         headers: {
           [name: string]: unknown;
         };

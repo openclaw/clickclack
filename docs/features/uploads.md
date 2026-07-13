@@ -31,7 +31,8 @@ POST /api/messages/{message_id}/attachments        # { upload_id }
   first request returns `201`; later requests from the same uploader return the
   original upload with `200` without reading or storing the multipart body.
   The nonce lookup endpoint returns the same metadata without downloading the
-  file. Reusing the nonce for another workspace returns `409`.
+  file and includes `X-ClickClack-Upload-Nonce: supported`, including on a
+  `404` lookup miss. Reusing the nonce for another workspace returns `409`.
 - Guests cannot upload or attach files while they are still in the waiting
   room. Timed-out and blocked users are also upload-restricted.
 

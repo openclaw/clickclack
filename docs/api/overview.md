@@ -51,7 +51,7 @@ The value is not stored on message rows or exported as a metrics label.
 | Reactions     | `/api/messages/{id}/reactions` | [reactions](../features/reactions.md) |
 | Realtime      | `/api/realtime/{ws,events,ephemeral}` | [realtime](../features/realtime.md) |
 | Search        | `/api/search` | [search](../features/search.md) |
-| Uploads       | `/api/uploads`, `/api/messages/{id}/attachments` | [uploads](../features/uploads.md) |
+| Uploads       | `/api/uploads`, `/api/uploads/by-nonce`, `/api/messages/{id}/attachments` | [uploads](../features/uploads.md) |
 | DMs           | `/api/dms`, `/api/dms/{id}`, `/api/dms/{id}/open`, `/api/dms/{id}/messages` | [dms](../features/dms.md) |
 | Integrations  | `/api/hooks/mattermost/{channel}` | [integrations](../features/integrations.md) |
 | Operations    | `/healthz`, `/readyz`, opt-in `/metrics` | [deployment](../deployment.md) |

@@ -77,7 +77,7 @@ See [features/auth.md](features/auth.md).
 | `messages`    | `get`, `update`, `delete` |
 | `threads`     | `get`, `reply` |
 | `search(workspaceId, q)` | full-text search |
-| `uploads`     | `create(workspaceId, file)`, `attach(messageId, uploadId)` |
+| `uploads`     | `create(workspaceId, file, filename?, { nonce? })`, `findByNonce(workspaceId, nonce)`, `attach(messageId, uploadId)` |
 | `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
 | `events`      | `publishEphemeral`, `subscribe` |
 

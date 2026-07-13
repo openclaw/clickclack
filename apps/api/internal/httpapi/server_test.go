@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
@@ -2472,6 +2473,71 @@ func TestSecureCookiesFollowPublicURL(t *testing.T) {
 	cookie := findCookie(resp.Cookies(), "cc_session")
 	if cookie == nil || !cookie.Secure {
 		t.Fatalf("expected secure session cookie, got %#v", cookie)
+	}
+}
+
+func TestNamespacedSessionCookiePolicy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Cookie User", Email: "cookie@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookieNames, err := authpolicy.NewCookieNames("prod", "https://chat.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(st, realtime.NewHub(), Options{
+		CookieNames:    cookieNames,
+		DisableDevAuth: true,
+		GitHubOAuth:    GitHubOAuthConfig{PublicURL: "https://chat.example.com"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/me", nil)
+	req.AddCookie(&http.Cookie{Name: "cc_session", Value: session.Token})
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected legacy cookie to be ignored, got %d", recorder.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/me", nil)
+	req.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: session.Token})
+	recorder = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected namespaced cookie authentication, got %d", recorder.Code)
+	}
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	req = httptest.NewRequest(http.MethodPost, "https://chat.example.com/test", nil)
+	req.AddCookie(&http.Cookie{Name: "cc_session", Value: "foreign"})
+	recorder = httptest.NewRecorder()
+	srv.requireCookieCSRF(next).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("expected foreign cookie to bypass session CSRF handling, got %d", recorder.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "https://chat.example.com/test", nil)
+	req.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: session.Token})
+	recorder = httptest.NewRecorder()
+	srv.requireCookieCSRF(next).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected active session cookie to require CSRF proof, got %d", recorder.Code)
+	}
+
+	recorder = httptest.NewRecorder()
+	srv.setSessionCookie(recorder, httptest.NewRequest(http.MethodGet, "https://chat.example.com/", nil), session)
+	cookie := findCookie(recorder.Result().Cookies(), cookieNames.Session)
+	if cookie == nil || !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("unexpected namespaced session cookie: %#v", cookie)
 	}
 }
 

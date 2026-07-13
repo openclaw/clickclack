@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 	"github.com/openclaw/clickclack/apps/api/internal/config"
 	"github.com/openclaw/clickclack/apps/api/internal/fakeco"
 	"github.com/openclaw/clickclack/apps/api/internal/httpapi"
@@ -94,6 +95,13 @@ func serve(args []string) error {
 		return err
 	}
 	applyFlagOverrides(flags, &cfg)
+	if err := cfg.ValidateServe(); err != nil {
+		return err
+	}
+	cookieNames, err := authpolicy.NewCookieNames(cfg.CookieNamespace, cfg.PublicURL)
+	if err != nil {
+		return err
+	}
 	url := resolveDB(cfg.Data, cfg.DB)
 	if err := ensureDirs(cfg.Data); err != nil {
 		return err
@@ -127,6 +135,7 @@ func serve(args []string) error {
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadStorage:  uploads,
 		DisableDevAuth: !cfg.DevBootstrap,
+		CookieNames:    cookieNames,
 		GitHubOAuth: httpapi.GitHubOAuthConfig{
 			ClientID:     cfg.GitHubClientID,
 			ClientSecret: cfg.GitHubClientSecret,

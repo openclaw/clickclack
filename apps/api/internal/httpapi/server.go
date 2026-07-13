@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
@@ -29,6 +30,7 @@ type Server struct {
 	uploadDir      string
 	uploadStorage  uploadstore.Store
 	githubOAuth    GitHubOAuthConfig
+	cookies        authpolicy.CookieNames
 	desktopOAuth   *desktopOAuthBroker
 	disableDevAuth bool
 	pushNotifier   PushNotifier
@@ -57,6 +59,7 @@ type Options struct {
 	UploadDir      string
 	UploadStorage  uploadstore.Store
 	GitHubOAuth    GitHubOAuthConfig
+	CookieNames    authpolicy.CookieNames
 	DisableDevAuth bool
 	PushNotifier   PushNotifier
 	MetricsEnabled bool
@@ -74,12 +77,17 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	if options.MetricsEnabled {
 		metrics = newMetricsRegistry()
 	}
+	cookieNames := options.CookieNames
+	if cookieNames.Session == "" {
+		cookieNames = authpolicy.DefaultCookieNames()
+	}
 	return &Server{
 		store:          st,
 		hub:            hub,
 		uploadDir:      options.UploadDir,
 		uploadStorage:  uploadStorage,
 		githubOAuth:    options.GitHubOAuth.withDefaults(),
+		cookies:        cookieNames,
 		desktopOAuth:   newDesktopOAuthBroker(),
 		disableDevAuth: options.DisableDevAuth,
 		pushNotifier:   options.PushNotifier,
@@ -190,7 +198,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) requireCookieCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isSafeMethod(r.Method) || hasBearerAuth(r) || !hasSessionCookie(r) {
+		if isSafeMethod(r.Method) || hasBearerAuth(r) || !s.hasSessionCookie(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -215,8 +223,8 @@ func hasBearerAuth(r *http.Request) bool {
 	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
-func hasSessionCookie(r *http.Request) bool {
-	cookie, err := r.Cookie("cc_session")
+func (s *Server) hasSessionCookie(r *http.Request) bool {
+	cookie, err := r.Cookie(s.cookies.Session)
 	return err == nil && cookie.Value != ""
 }
 
@@ -1255,7 +1263,7 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 		user, err := s.store.GetSessionUser(r.Context(), token)
 		return actor{user: user}, err
 	}
-	if cookie, err := r.Cookie("cc_session"); err == nil && cookie.Value != "" {
+	if cookie, err := r.Cookie(s.cookies.Session); err == nil && cookie.Value != "" {
 		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
 		return actor{user: user}, err
 	}

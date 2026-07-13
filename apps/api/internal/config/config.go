@@ -2,8 +2,13 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
+
+	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 )
 
 type Config struct {
@@ -14,6 +19,7 @@ type Config struct {
 	Environment        string `json:"environment"`
 	MetricsEnabled     bool   `json:"metrics_enabled"`
 	PublicURL          string `json:"public_url"`
+	CookieNamespace    string `json:"cookie_namespace"`
 	DevBootstrap       bool   `json:"dev_bootstrap"`
 	GitHubClientID     string `json:"github_client_id"`
 	GitHubClientSecret string `json:"github_client_secret"`
@@ -72,6 +78,9 @@ func Load(path string) (Config, error) {
 	if env := os.Getenv("CLICKCLACK_PUBLIC_URL"); env != "" {
 		cfg.PublicURL = env
 	}
+	if env := os.Getenv("CLICKCLACK_COOKIE_NAMESPACE"); env != "" {
+		cfg.CookieNamespace = env
+	}
 	if env := os.Getenv("CLICKCLACK_DEV_BOOTSTRAP"); env != "" && !fileHasDevBootstrap {
 		value, err := strconv.ParseBool(env)
 		if err != nil {
@@ -113,4 +122,32 @@ func Load(path string) (Config, error) {
 		cfg.Data = "./data"
 	}
 	return cfg, nil
+}
+
+func (c *Config) ValidateServe() error {
+	namespace, err := authpolicy.ParseCookieNamespace(c.CookieNamespace)
+	if err != nil {
+		return fmt.Errorf("CLICKCLACK_COOKIE_NAMESPACE: %w", err)
+	}
+	publicURL, err := authpolicy.CanonicalPublicURL(c.PublicURL)
+	if err != nil {
+		return fmt.Errorf("CLICKCLACK_PUBLIC_URL: %w", err)
+	}
+	hasClientID := strings.TrimSpace(c.GitHubClientID) != ""
+	hasClientSecret := strings.TrimSpace(c.GitHubClientSecret) != ""
+	if hasClientID != hasClientSecret {
+		return errors.New("CLICKCLACK_GITHUB_CLIENT_ID and CLICKCLACK_GITHUB_CLIENT_SECRET must be configured together")
+	}
+	if hasClientID && publicURL == "" {
+		return errors.New("GitHub OAuth requires CLICKCLACK_PUBLIC_URL")
+	}
+	if (strings.TrimSpace(c.GitHubAllowedOrg) != "" || strings.TrimSpace(c.GitHubModeratorOrg) != "") && !hasClientID {
+		return errors.New("GitHub organization settings require GitHub OAuth credentials")
+	}
+	if _, err := authpolicy.NewCookieNames(namespace, publicURL); err != nil {
+		return fmt.Errorf("cookie policy: %w", err)
+	}
+	c.CookieNamespace = namespace
+	c.PublicURL = publicURL
+	return nil
 }

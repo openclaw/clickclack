@@ -511,7 +511,7 @@ func (s *Server) githubRedirectURL(r *http.Request) string {
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, session store.Session) {
 	expires, _ := time.Parse(time.RFC3339Nano, session.ExpiresAt)
-	http.SetCookie(w, &http.Cookie{Name: "cc_session", Value: session.Token, Path: "/", Expires: expires, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: s.cookies.Session, Value: session.Token, Path: "/", Expires: expires, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
 }
 
 func (s *Server) secureCookies(r *http.Request) bool {

@@ -14,6 +14,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_ENVIRONMENT", "fakeco")
 	t.Setenv("CLICKCLACK_METRICS_ENABLED", "true")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "https://clickclack.test")
+	t.Setenv("CLICKCLACK_COOKIE_NAMESPACE", "prod-2")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "false")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "client")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "secret")
@@ -28,7 +29,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
 		t.Fatalf("unexpected env config: %#v", cfg)
 	}
 
@@ -51,6 +52,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_ENVIRONMENT", "")
 	t.Setenv("CLICKCLACK_METRICS_ENABLED", "")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "")
+	t.Setenv("CLICKCLACK_COOKIE_NAMESPACE", "")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "")
@@ -102,5 +104,40 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	}
 	if _, err := Load(badPath); err == nil {
 		t.Fatal("expected bad json error")
+	}
+}
+
+func TestValidateServe(t *testing.T) {
+	t.Parallel()
+	cfg := Config{
+		PublicURL:          "https://Chat.Example.com:443/",
+		CookieNamespace:    " prod-2 ",
+		GitHubClientID:     "client",
+		GitHubClientSecret: "secret",
+	}
+	if err := cfg.ValidateServe(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PublicURL != "https://chat.example.com" || cfg.CookieNamespace != "prod-2" {
+		t.Fatalf("unexpected validated config: %#v", cfg)
+	}
+
+	for _, tc := range []struct {
+		name string
+		cfg  Config
+	}{
+		{"invalid namespace", Config{CookieNamespace: "__Host-session", PublicURL: "https://chat.example.com"}},
+		{"namespace without public url", Config{CookieNamespace: "prod"}},
+		{"non-https remote url", Config{PublicURL: "http://chat.example.com"}},
+		{"public url path", Config{PublicURL: "https://chat.example.com/app"}},
+		{"missing client secret", Config{PublicURL: "https://chat.example.com", GitHubClientID: "client"}},
+		{"oauth without public url", Config{GitHubClientID: "client", GitHubClientSecret: "secret"}},
+		{"org without oauth", Config{GitHubAllowedOrg: "openclaw"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.cfg.ValidateServe(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
 	}
 }

@@ -24,9 +24,13 @@ export const PRESENTATION_TOTAL_TEXT_LIMIT = 1024 * 1024;
 export type OfficeKind = "spreadsheet" | "presentation";
 export type SpreadsheetCell = { reference: string; value: string };
 export type SpreadsheetSheet = { name: string; cells: SpreadsheetCell[]; truncated: boolean };
-export type SpreadsheetPreview = { sheets: SpreadsheetSheet[] };
+export type SpreadsheetPreview = { sheets: SpreadsheetSheet[]; hiddenSheets: number };
 export type PresentationSlide = { title: string; paragraphs: string[] };
-export type PresentationPreview = { slides: PresentationSlide[]; truncated: boolean };
+export type PresentationPreview = {
+  slides: PresentationSlide[];
+  hiddenSlides: number;
+  truncated: boolean;
+};
 export type OfficePreview = SpreadsheetPreview | PresentationPreview;
 
 type OfficeWorkerRequest = {

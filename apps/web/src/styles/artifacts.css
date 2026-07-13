@@ -281,6 +281,7 @@
 .artifact-viewer__sheet-tabs button.active { border-color: var(--line); background: var(--hover-strong); color: var(--text-strong); }
 .artifact-viewer__office-toolbar button:focus-visible,
 .artifact-viewer__sheet-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.artifact-viewer__office-toolbar { flex-wrap: wrap; }
 
 .artifact-viewer__spreadsheet { min-height: 0; overflow: auto; background: var(--panel); }
 .artifact-viewer__spreadsheet table { width: max-content; min-width: 100%; table-layout: fixed; border-spacing: 0; border-collapse: separate; color: var(--text); font-size: 12px; }

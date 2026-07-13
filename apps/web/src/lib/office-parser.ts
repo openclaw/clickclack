@@ -399,13 +399,21 @@ function parseSheetDescriptors(
   source: string,
   part: string,
   budget: ParseBudget,
-): SheetDescriptor[] {
+): { sheets: SheetDescriptor[]; hiddenSheets: number } {
   const sheets: SheetDescriptor[] = [];
+  let descriptorCount = 0;
+  let hiddenSheets = 0;
   parseXML(source, part, budget, {
     open: (tag) => {
       if (tag.local !== "sheet") return;
-      if (sheets.length >= SPREADSHEET_SHEET_LIMIT) {
+      descriptorCount += 1;
+      if (descriptorCount > SPREADSHEET_SHEET_LIMIT) {
         throw previewError("This workbook has too many worksheets to preview safely.");
+      }
+      const state = attribute(tag, "state").toLowerCase();
+      if (state && state !== "visible") {
+        hiddenSheets += 1;
+        return;
       }
       const relationID = attribute(tag, "id", RELATIONSHIP_ID_URI) || attribute(tag, "id");
       if (!relationID) throw previewError("This workbook contains a malformed worksheet.");
@@ -419,7 +427,7 @@ function parseSheetDescriptors(
       });
     },
   });
-  return sheets;
+  return { sheets, hiddenSheets };
 }
 
 function parseWorksheet(
@@ -523,7 +531,13 @@ function parseWorksheet(
           ? (sharedStrings[Number(current.raw)] ?? current.raw)
           : current.type === "inlineStr"
             ? current.inline
-            : current.raw;
+            : current.type === "b"
+              ? current.raw === "1"
+                ? "TRUE"
+                : current.raw === "0"
+                  ? "FALSE"
+                  : current.raw
+              : current.raw;
       const available = Math.min(SPREADSHEET_CELL_TEXT_LIMIT, Math.max(0, remainingText.value));
       const boundedValue = value.slice(0, available);
       remainingText.value -= boundedValue.length;
@@ -563,7 +577,7 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
   const remainingCells = { value: SPREADSHEET_CELL_LIMIT };
   const remainingText = { value: SPREADSHEET_TOTAL_TEXT_LIMIT };
   const seenTargets = new Set<string>();
-  for (const descriptor of descriptors) {
+  for (const descriptor of descriptors.sheets) {
     const worksheetPart = relatedPart(
       workbookPart,
       relationships,
@@ -588,7 +602,7 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
     );
   }
   if (!sheets.length) throw previewError("This workbook has no readable worksheets.");
-  return { sheets };
+  return { sheets, hiddenSheets: descriptors.hiddenSheets };
 }
 
 type SlideDescriptor = { relationID: string };
@@ -621,13 +635,20 @@ function parseSlide(
   number: number,
   budget: ParseBudget,
   outputBudget: PresentationOutputBudget,
-): PresentationSlide {
+): { hidden: boolean; slide: PresentationSlide } {
   const paragraphs: string[] = [];
+  let hidden = false;
   let current: string | null = null;
   let textDepth = 0;
   let characters = 0;
   parseXML(source, part, budget, {
     open: (tag) => {
+      if (tag.local === "sld") {
+        const show = attribute(tag, "show").toLowerCase();
+        hidden = show === "0" || show === "false" || show === "off";
+        return;
+      }
+      if (hidden) return;
       if (tag.local === "p") {
         if (paragraphs.length >= PRESENTATION_PARAGRAPH_LIMIT) {
           throw previewError("A slide contains too many paragraphs to preview safely.");
@@ -644,7 +665,7 @@ function parseSlide(
       }
     },
     text: (text) => {
-      if (current === null || textDepth === 0) return;
+      if (hidden || current === null || textDepth === 0) return;
       const available = Math.min(
         PRESENTATION_TEXT_LIMIT - characters,
         PRESENTATION_TOTAL_TEXT_LIMIT - outputBudget.text,
@@ -664,6 +685,7 @@ function parseSlide(
       }
     },
     close: (tag) => {
+      if (hidden) return;
       if (tag.local === "t" && current !== null) {
         textDepth -= 1;
       } else if (tag.local === "p" && current !== null) {
@@ -680,7 +702,10 @@ function parseSlide(
       }
     },
   });
-  return { title: paragraphs[0] || `Slide ${number}`, paragraphs };
+  return {
+    hidden,
+    slide: { title: paragraphs[0] || `Slide ${number}`, paragraphs },
+  };
 }
 
 export function parsePresentation(bytes: Uint8Array): PresentationPreview {
@@ -699,6 +724,7 @@ export function parsePresentation(bytes: Uint8Array): PresentationPreview {
     budget,
   );
   const slides: PresentationSlide[] = [];
+  let hiddenSlides = 0;
   const seenTargets = new Set<string>();
   const outputBudget: PresentationOutputBudget = {
     paragraphs: 0,
@@ -706,7 +732,7 @@ export function parsePresentation(bytes: Uint8Array): PresentationPreview {
     exhausted: false,
     truncated: false,
   };
-  for (const descriptor of descriptors.slides) {
+  for (const [descriptorIndex, descriptor] of descriptors.slides.entries()) {
     if (outputBudget.exhausted) break;
     const slidePart = relatedPart(presentationPart, relationships, descriptor.relationID, "/slide");
     if (!slidePart) throw previewError("This presentation contains a malformed slide.");
@@ -714,13 +740,20 @@ export function parsePresentation(bytes: Uint8Array): PresentationPreview {
       throw previewError("This presentation contains duplicate slide relationships.");
     }
     seenTargets.add(slidePart);
-    slides.push(
-      parseSlide(partText(parts, slidePart), slidePart, slides.length + 1, budget, outputBudget),
+    const result = parseSlide(
+      partText(parts, slidePart),
+      slidePart,
+      descriptorIndex + 1,
+      budget,
+      outputBudget,
     );
+    if (result.hidden) hiddenSlides += 1;
+    else slides.push(result.slide);
   }
   if (!slides.length) throw previewError("This presentation has no readable slides.");
   return {
     slides,
+    hiddenSlides,
     truncated: descriptors.truncated || outputBudget.truncated,
   };
 }

@@ -608,6 +608,8 @@
   {:else if kind === "spreadsheet" && spreadsheet}
     <div class="artifact-viewer__office-toolbar" aria-label="Workbook controls">
       <span>{spreadsheet.sheets.length} {spreadsheet.sheets.length === 1 ? "sheet" : "sheets"}</span>
+      <span>Raw cached values; number and date formatting omitted</span>
+      {#if spreadsheet.hiddenSheets > 0}<span>{spreadsheet.hiddenSheets} hidden {spreadsheet.hiddenSheets === 1 ? "sheet" : "sheets"} omitted</span>{/if}
     </div>
     <div class="artifact-viewer__spreadsheet" role="region" aria-label={`${spreadsheet.sheets[activeSheet].name} worksheet`} tabindex="0">
       <table>
@@ -635,7 +637,9 @@
           {#if index === 0}<h2>{paragraph}</h2>{:else}<p>{paragraph}</p>{/if}
         {/each}
       </article>
-      {#if presentation.truncated}<p class="artifact-viewer__office-note">Only the first 200 slides are available in preview.</p>{/if}
+      <p class="artifact-viewer__office-note">Text outline only. Visuals, layout, animations, and speaker notes are omitted.</p>
+      {#if presentation.hiddenSlides > 0}<p class="artifact-viewer__office-note">{presentation.hiddenSlides} hidden {presentation.hiddenSlides === 1 ? "slide" : "slides"} omitted.</p>{/if}
+      {#if presentation.truncated}<p class="artifact-viewer__office-note">Some slide content was omitted by preview limits.</p>{/if}
     </div>
   {:else if kind === "html" && mode === "preview" && renderedHTML}
     <article class="artifact-viewer__document artifact-viewer__html">{@html renderedHTML}</article>

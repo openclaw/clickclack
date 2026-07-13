@@ -135,7 +135,7 @@ export function artifactKindLabel(kind: ArtifactKind): string {
     case "spreadsheet":
       return "Spreadsheet";
     case "presentation":
-      return "Slide deck";
+      return "Slide text outline";
     case "html":
       return "Web page";
     default:

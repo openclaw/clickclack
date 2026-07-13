@@ -170,6 +170,24 @@ function presentationWithUnusedLargeMedia(): Buffer {
   });
 }
 
+function hiddenContentWorkbook(): Buffer {
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Visible" r:id="rId1"/><sheet name="Private" state="veryHidden" r:id="rId2"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="b"><v>1</v></c></row></sheetData></worksheet>`,
+    "xl/worksheets/sheet2.xml": `<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Hidden workbook secret</t></is></c></row></sheetData></worksheet>`,
+  });
+}
+
+function hiddenSlidePresentation(): Buffer {
+  return presentationPackage({
+    "ppt/presentation.xml": `<presentation xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sldIdLst><sldId r:id="rId1"/><sldId r:id="rId2"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide2.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld show="0"><sp><txBody><p><r><t>Hidden slide secret</t></r></p></txBody></sp></sld>`,
+    "ppt/slides/slide2.xml": `<sld><sp><txBody><p><r><t>Visible slide</t></r></p></txBody></sp></sld>`,
+  });
+}
+
 function sparseWorkbookFixture(): Buffer {
   return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sparse" r:id="rId1"/></sheets></workbook>`,
@@ -507,6 +525,16 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       body: presentationWithUnusedLargeMedia(),
     },
+    {
+      filename: "hidden-content.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: hiddenContentWorkbook(),
+    },
+    {
+      filename: "hidden-slide.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: hiddenSlidePresentation(),
+    },
   ]);
   await page.goto("/app");
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
@@ -559,6 +587,19 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
 
   await page.getByRole("button", { name: "Open media-heavy.pptx" }).click();
   await expect(viewer.getByText("Text-only preview survives media")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open hidden-content.xlsx" }).click();
+  await expect(viewer.getByText("TRUE", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("1 hidden sheet omitted")).toBeVisible();
+  await expect(viewer.getByText("Hidden workbook secret")).toHaveCount(0);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open hidden-slide.pptx" }).click();
+  await expect(viewer.getByText("Visible slide")).toBeVisible();
+  await expect(viewer.getByText("1 hidden slide omitted.")).toBeVisible();
+  await expect(viewer.getByText("Hidden slide secret")).toHaveCount(0);
+  await expect(viewer.getByText("Text outline only.")).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await page.getByRole("button", { name: "Open sparse.xlsx" }).click();

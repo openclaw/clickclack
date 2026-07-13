@@ -64,6 +64,11 @@ const (
 )
 
 func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
+	c.ClientID = strings.TrimSpace(c.ClientID)
+	c.ClientSecret = strings.TrimSpace(c.ClientSecret)
+	c.PublicURL = strings.TrimSpace(c.PublicURL)
+	c.AllowedOrg = strings.TrimSpace(c.AllowedOrg)
+	c.ModeratorOrg = strings.TrimSpace(c.ModeratorOrg)
 	if c.AuthURL == "" {
 		c.AuthURL = "https://github.com/login/oauth/authorize"
 	}

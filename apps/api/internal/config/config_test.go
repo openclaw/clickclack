@@ -112,14 +112,23 @@ func TestValidateServe(t *testing.T) {
 	cfg := Config{
 		PublicURL:          "https://Chat.Example.com:443/",
 		CookieNamespace:    " prod-2 ",
-		GitHubClientID:     "client",
-		GitHubClientSecret: "secret",
+		GitHubClientID:     " client ",
+		GitHubClientSecret: " secret ",
+		GitHubAllowedOrg:   " openclaw ",
 	}
 	if err := cfg.ValidateServe(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PublicURL != "https://chat.example.com" || cfg.CookieNamespace != "prod-2" {
+	if cfg.PublicURL != "https://chat.example.com" || cfg.CookieNamespace != "prod-2" || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" {
 		t.Fatalf("unexpected validated config: %#v", cfg)
+	}
+
+	disabled := Config{GitHubClientID: " ", GitHubClientSecret: "\t"}
+	if err := disabled.ValidateServe(); err != nil {
+		t.Fatal(err)
+	}
+	if disabled.GitHubClientID != "" || disabled.GitHubClientSecret != "" {
+		t.Fatalf("expected whitespace credentials to normalize as disabled: %#v", disabled)
 	}
 
 	for _, tc := range []struct {

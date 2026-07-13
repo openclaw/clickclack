@@ -133,15 +133,19 @@ func (c *Config) ValidateServe() error {
 	if err != nil {
 		return fmt.Errorf("CLICKCLACK_PUBLIC_URL: %w", err)
 	}
-	hasClientID := strings.TrimSpace(c.GitHubClientID) != ""
-	hasClientSecret := strings.TrimSpace(c.GitHubClientSecret) != ""
+	clientID := strings.TrimSpace(c.GitHubClientID)
+	clientSecret := strings.TrimSpace(c.GitHubClientSecret)
+	allowedOrg := strings.TrimSpace(c.GitHubAllowedOrg)
+	moderatorOrg := strings.TrimSpace(c.GitHubModeratorOrg)
+	hasClientID := clientID != ""
+	hasClientSecret := clientSecret != ""
 	if hasClientID != hasClientSecret {
 		return errors.New("CLICKCLACK_GITHUB_CLIENT_ID and CLICKCLACK_GITHUB_CLIENT_SECRET must be configured together")
 	}
 	if hasClientID && publicURL == "" {
 		return errors.New("GitHub OAuth requires CLICKCLACK_PUBLIC_URL")
 	}
-	if (strings.TrimSpace(c.GitHubAllowedOrg) != "" || strings.TrimSpace(c.GitHubModeratorOrg) != "") && !hasClientID {
+	if (allowedOrg != "" || moderatorOrg != "") && !hasClientID {
 		return errors.New("GitHub organization settings require GitHub OAuth credentials")
 	}
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL); err != nil {
@@ -149,5 +153,9 @@ func (c *Config) ValidateServe() error {
 	}
 	c.CookieNamespace = namespace
 	c.PublicURL = publicURL
+	c.GitHubClientID = clientID
+	c.GitHubClientSecret = clientSecret
+	c.GitHubAllowedOrg = allowedOrg
+	c.GitHubModeratorOrg = moderatorOrg
 	return nil
 }

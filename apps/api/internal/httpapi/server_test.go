@@ -1455,7 +1455,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		t.Fatalf("expected revoked_at on slash command, got %#v", revokedCommand.SlashCommand)
 	}
 	var eventSigningSecret string
-	var eventPayload map[string]any
+	eventPayloadCh := make(chan map[string]any, 1)
 	eventCallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1465,9 +1465,11 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		if r.Header.Get("X-ClickClack-Event-ID") == "" || timestamp == "" || r.Header.Get("X-ClickClack-Signature") != signSlashCallback(eventSigningSecret, timestamp, body) {
 			t.Fatalf("event callback signature mismatch")
 		}
+		var eventPayload map[string]any
 		if err := json.Unmarshal(body, &eventPayload); err != nil {
 			t.Fatal(err)
 		}
+		eventPayloadCh <- eventPayload
 		writeJSON(w, http.StatusAccepted, map[string]string{"ok": "true"})
 	}))
 	defer eventCallbackServer.Close()
@@ -1502,10 +1504,16 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		deliveries = getJSONAsUser[struct {
 			EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
 		}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
-		if eventPayload != nil && len(deliveries.EventDeliveryAttempts) > 0 {
+		if len(deliveries.EventDeliveryAttempts) > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	var eventPayload map[string]any
+	select {
+	case eventPayload = <-eventPayloadCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event callback payload")
 	}
 	if eventPayload == nil || eventPayload["event"].(map[string]any)["type"] != "message.created" {
 		t.Fatalf("expected message.created event payload, got %#v", eventPayload)

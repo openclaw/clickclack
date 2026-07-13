@@ -61,9 +61,7 @@
     activeSection = initialSection;
   });
 
-  // Refresh user from the API on mount so the modal always reflects
-  // server-side truth, not whatever's stale in ChatApp state.
-  onMount(() => {
+  $effect(() => {
     if (!modalRoot || !dialog) return;
     const mountedDialog = dialog;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -72,7 +70,6 @@
     void tick().then(() => {
       if (mounted) firstFocusableElement(mountedDialog)?.focus();
     });
-    void refreshUser();
     return () => {
       mounted = false;
       restoreBackground(inerted);
@@ -80,6 +77,12 @@
         if (trigger?.isConnected) trigger.focus({ preventScroll: true });
       });
     };
+  });
+
+  // Refresh user from the API on mount so the modal always reflects
+  // server-side truth, not whatever's stale in ChatApp state.
+  onMount(() => {
+    void refreshUser();
   });
 
   async function refreshUser() {

@@ -385,8 +385,15 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   const mobilePage = await mobileContext.newPage();
   await mobilePage.goto(`/app/${workspace.route_id}`);
   await waitForAppReady(mobilePage);
-  await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
-  await mobilePage.getByRole("button", { name: `Move #${names[1]}` }).click();
+  await expect
+    .poll(() => channelNames(mobilePage))
+    .toEqual([names[0], addedName, names[1], names[2]]);
+  const mobileNavigationToggle = mobilePage.getByRole("button", { name: "Toggle navigation" });
+  await mobileNavigationToggle.click();
+  await expect(mobileNavigationToggle).toHaveAttribute("aria-expanded", "true");
+  const mobileMoveButton = mobilePage.getByRole("button", { name: `Move #${names[1]}` });
+  await expect(mobileMoveButton).toBeInViewport();
+  await mobileMoveButton.click();
   await mobilePage
     .getByRole("menu", { name: `Move #${names[1]}` })
     .getByRole("menuitem", { name: "Move up" })

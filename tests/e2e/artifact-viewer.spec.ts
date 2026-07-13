@@ -199,6 +199,26 @@ function cumulativeCellTextWorkbook(): Buffer {
   });
 }
 
+function cumulativeXMLFloodWorkbook(): Buffer {
+  const files: Record<string, string> = {};
+  const sheetElements = "<x/>".repeat(20_000);
+  const sheets: string[] = [];
+  const relationships: string[] = [];
+  for (let index = 1; index <= 6; index += 1) {
+    sheets.push(`<sheet name="Sheet ${index}" r:id="rId${index}"/>`);
+    relationships.push(
+      `<Relationship Id="rId${index}" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet${index}.xml"/>`,
+    );
+    files[`xl/worksheets/sheet${index}.xml`] =
+      `<worksheet><sheetData>${sheetElements}</sheetData></worksheet>`;
+  }
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets>${sheets.join("")}</sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}">${relationships.join("")}</Relationships>`,
+    ...files,
+  });
+}
+
 function lyingWorkbookEntry(compression: 0 | 8): Buffer {
   const filename = Buffer.from("xl/workbook.xml");
   const expanded = Buffer.alloc(2 * 1024 * 1024, 0x61);
@@ -417,6 +437,12 @@ test("bounds spreadsheet cell text and cumulative preview output", () => {
   );
   expect(outputLength).toBe(SPREADSHEET_TOTAL_TEXT_LIMIT);
   expect(cumulative.sheets[0].truncated).toBe(true);
+});
+
+test("bounds cumulative Office XML work across package parts", () => {
+  expect(() => parseSpreadsheet(new Uint8Array(cumulativeXMLFloodWorkbook()))).toThrow(
+    "too much XML structure",
+  );
 });
 
 test("opens spreadsheets and slide decks with navigation", async ({ page }) => {

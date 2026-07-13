@@ -7,9 +7,12 @@ import {
   OFFICE_ENTRY_LIMIT,
   OFFICE_TOTAL_LIMIT,
   OFFICE_XML_ELEMENT_LIMIT,
+  OFFICE_XML_TOTAL_ELEMENT_LIMIT,
   PRESENTATION_PARAGRAPH_LIMIT,
   PRESENTATION_SLIDE_LIMIT,
   PRESENTATION_TEXT_LIMIT,
+  PRESENTATION_TOTAL_PARAGRAPH_LIMIT,
+  PRESENTATION_TOTAL_TEXT_LIMIT,
   SPREADSHEET_CELL_LIMIT,
   SPREADSHEET_CELL_TEXT_LIMIT,
   SPREADSHEET_COLUMN_LIMIT,
@@ -29,6 +32,12 @@ import {
 
 type XMLParts = Map<string, Uint8Array<ArrayBuffer>>;
 type ParseBudget = { elements: number };
+type PresentationOutputBudget = {
+  paragraphs: number;
+  text: number;
+  exhausted: boolean;
+  truncated: boolean;
+};
 type Relationship = { id: string; type: string; target: string };
 type XMLHandlers = {
   open?: (tag: QualifiedTag) => void;
@@ -205,6 +214,9 @@ function parseXML(source: string, part: string, budget: ParseBudget, handlers: X
     budget.elements += 1;
     if (partElements > OFFICE_XML_ELEMENT_LIMIT) {
       throw previewError("This Office file has too many XML elements to preview safely.");
+    }
+    if (budget.elements > OFFICE_XML_TOTAL_ELEMENT_LIMIT) {
+      throw previewError("This Office file has too much XML structure to preview safely.");
     }
     openTags.push(qualifiedTag);
     handlers.open?.(qualifiedTag);
@@ -608,6 +620,7 @@ function parseSlide(
   part: string,
   number: number,
   budget: ParseBudget,
+  outputBudget: PresentationOutputBudget,
 ): PresentationSlide {
   const paragraphs: string[] = [];
   let current: string | null = null;
@@ -619,6 +632,12 @@ function parseSlide(
         if (paragraphs.length >= PRESENTATION_PARAGRAPH_LIMIT) {
           throw previewError("A slide contains too many paragraphs to preview safely.");
         }
+        if (outputBudget.paragraphs >= PRESENTATION_TOTAL_PARAGRAPH_LIMIT) {
+          outputBudget.exhausted = true;
+          outputBudget.truncated = true;
+          current = null;
+          return;
+        }
         current = "";
       } else if (tag.local === "t" && current !== null) {
         textDepth += 1;
@@ -626,17 +645,36 @@ function parseSlide(
     },
     text: (text) => {
       if (current === null || textDepth === 0) return;
-      characters += text.length;
-      if (characters > PRESENTATION_TEXT_LIMIT) {
-        throw previewError("A slide contains too much text to preview safely.");
+      const available = Math.min(
+        PRESENTATION_TEXT_LIMIT - characters,
+        PRESENTATION_TOTAL_TEXT_LIMIT - outputBudget.text,
+      );
+      if (available <= 0) {
+        outputBudget.exhausted = true;
+        outputBudget.truncated = true;
+        return;
       }
-      current += text;
+      const boundedText = text.slice(0, available);
+      current += boundedText;
+      characters += boundedText.length;
+      outputBudget.text += boundedText.length;
+      if (boundedText.length < text.length) {
+        outputBudget.exhausted = true;
+        outputBudget.truncated = true;
+      }
     },
     close: (tag) => {
       if (tag.local === "t" && current !== null) {
         textDepth -= 1;
       } else if (tag.local === "p" && current !== null) {
-        if (current) paragraphs.push(current);
+        if (current) {
+          paragraphs.push(current);
+          outputBudget.paragraphs += 1;
+          if (outputBudget.paragraphs >= PRESENTATION_TOTAL_PARAGRAPH_LIMIT) {
+            outputBudget.exhausted = true;
+            outputBudget.truncated = true;
+          }
+        }
         current = null;
         textDepth = 0;
       }
@@ -662,15 +700,27 @@ export function parsePresentation(bytes: Uint8Array): PresentationPreview {
   );
   const slides: PresentationSlide[] = [];
   const seenTargets = new Set<string>();
+  const outputBudget: PresentationOutputBudget = {
+    paragraphs: 0,
+    text: 0,
+    exhausted: false,
+    truncated: false,
+  };
   for (const descriptor of descriptors.slides) {
+    if (outputBudget.exhausted) break;
     const slidePart = relatedPart(presentationPart, relationships, descriptor.relationID, "/slide");
     if (!slidePart) throw previewError("This presentation contains a malformed slide.");
     if (seenTargets.has(slidePart)) {
       throw previewError("This presentation contains duplicate slide relationships.");
     }
     seenTargets.add(slidePart);
-    slides.push(parseSlide(partText(parts, slidePart), slidePart, slides.length + 1, budget));
+    slides.push(
+      parseSlide(partText(parts, slidePart), slidePart, slides.length + 1, budget, outputBudget),
+    );
   }
   if (!slides.length) throw previewError("This presentation has no readable slides.");
-  return { slides, truncated: descriptors.truncated };
+  return {
+    slides,
+    truncated: descriptors.truncated || outputBudget.truncated,
+  };
 }

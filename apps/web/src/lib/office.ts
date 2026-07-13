@@ -3,6 +3,7 @@ export const OFFICE_ENTRY_LIMIT = 4 * 1024 * 1024;
 export const OFFICE_TOTAL_LIMIT = 12 * 1024 * 1024;
 export const OFFICE_ENTRY_COUNT_LIMIT = 512;
 export const OFFICE_XML_ELEMENT_LIMIT = 25_000;
+export const OFFICE_XML_TOTAL_ELEMENT_LIMIT = 100_000;
 export const OFFICE_PARSE_TIMEOUT_MS = 5_000;
 export const SPREADSHEET_CELL_LIMIT = 10_000;
 export const SPREADSHEET_CELL_TEXT_LIMIT = 4 * 1024;
@@ -17,6 +18,8 @@ export const SPREADSHEET_SHARED_TEXT_LIMIT = 1024 * 1024;
 export const PRESENTATION_SLIDE_LIMIT = 200;
 export const PRESENTATION_PARAGRAPH_LIMIT = 2_000;
 export const PRESENTATION_TEXT_LIMIT = 64 * 1024;
+export const PRESENTATION_TOTAL_PARAGRAPH_LIMIT = 10_000;
+export const PRESENTATION_TOTAL_TEXT_LIMIT = 1024 * 1024;
 
 export type OfficeKind = "spreadsheet" | "presentation";
 export type SpreadsheetCell = { reference: string; value: string };

@@ -19,13 +19,15 @@ func TestParseCookieNamespace(t *testing.T) {
 func TestCanonicalPublicURL(t *testing.T) {
 	t.Parallel()
 	for input, expected := range map[string]string{
-		"":                              "",
-		"https://Chat.Example.com":      "https://chat.example.com",
-		"https://chat.example.com:443/": "https://chat.example.com",
-		"https://chat.example.com:8443": "https://chat.example.com:8443",
-		"http://localhost:8080/":        "http://localhost:8080",
-		"http://127.0.0.1:8080":         "http://127.0.0.1:8080",
-		"http://[::1]:8080":             "http://[::1]:8080",
+		"":                               "",
+		"https://Chat.Example.com":       "https://chat.example.com",
+		"https://chat.example.com:443/":  "https://chat.example.com",
+		"https://chat.example.com:0443/": "https://chat.example.com",
+		"https://chat.example.com:8443":  "https://chat.example.com:8443",
+		"https://chat.example.com:08443": "https://chat.example.com:8443",
+		"http://localhost:8080/":         "http://localhost:8080",
+		"http://127.0.0.1:8080":          "http://127.0.0.1:8080",
+		"http://[::1]:8080":              "http://[::1]:8080",
 	} {
 		got, err := CanonicalPublicURL(input)
 		if err != nil {

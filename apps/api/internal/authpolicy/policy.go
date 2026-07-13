@@ -107,6 +107,7 @@ func CanonicalPublicURL(input string) (string, error) {
 		if err != nil || number < 1 || number > 65535 {
 			return "", errors.New("public URL has an invalid port")
 		}
+		port = strconv.Itoa(number)
 	}
 	if port == defaultPort(value.Scheme) {
 		port = ""

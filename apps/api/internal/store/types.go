@@ -39,6 +39,10 @@ var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
 // another workspace.
 var ErrUploadNonceConflict = errors.New("upload nonce was already used in another workspace")
 
+// ErrUploadNonceInProgress is returned while another request owns the same
+// upload nonce claim and has not committed or released it yet.
+var ErrUploadNonceInProgress = errors.New("upload nonce is already in progress")
+
 var (
 	ErrOAuthTransactionInvalid  = errors.New("invalid or expired oauth transaction")
 	ErrOAuthCapacityExceeded    = errors.New("too many pending oauth requests")
@@ -627,6 +631,7 @@ type UploadQuotaReservation struct {
 	ID          string
 	WorkspaceID string
 	OwnerID     string
+	Nonce       string
 	ByteSize    int64
 	CreatedAt   string
 	ExpiresAt   string
@@ -831,7 +836,7 @@ type Store interface {
 	UserHasNonGuestMembership(ctx context.Context, userID string) (bool, error)
 	UploadQuota(ctx context.Context, workspaceID, userID string) (UploadQuota, error)
 	CanCreateUpload(ctx context.Context, workspaceID, userID string, byteSize int64) error
-	ReserveUploadQuota(ctx context.Context, workspaceID, userID string, byteSize int64) (UploadQuotaReservation, error)
+	ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (UploadQuotaReservation, error)
 	CreateReservedUpload(ctx context.Context, reservationID string, input CreateUploadInput) (Upload, error)
 	ReleaseUploadQuotaReservation(ctx context.Context, reservationID, userID string) error
 	FirstUser(ctx context.Context) (User, error)

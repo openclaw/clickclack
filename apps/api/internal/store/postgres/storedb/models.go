@@ -319,6 +319,7 @@ type UploadQuotaReservation struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
 	ByteSize    int64  `json:"byte_size"`
 	CreatedAt   string `json:"created_at"`
 	ExpiresAt   string `json:"expires_at"`

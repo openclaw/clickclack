@@ -217,6 +217,7 @@ CREATE TABLE upload_quota_reservations (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_nonce TEXT NOT NULL DEFAULT '',
   byte_size BIGINT NOT NULL,
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
@@ -224,6 +225,9 @@ CREATE TABLE upload_quota_reservations (
 
 CREATE INDEX idx_upload_quota_reservations_workspace_owner
   ON upload_quota_reservations(workspace_id, owner_id, expires_at);
+CREATE UNIQUE INDEX idx_upload_quota_reservations_owner_client_nonce
+  ON upload_quota_reservations(owner_id, client_nonce)
+  WHERE client_nonce <> '';
 
 CREATE TABLE pending_upload_cleanups (
   id TEXT PRIMARY KEY,

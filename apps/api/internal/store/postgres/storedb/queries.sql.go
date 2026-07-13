@@ -1297,7 +1297,7 @@ func (q *Queries) GetUploadByOwnerNonce(ctx context.Context, arg GetUploadByOwne
 }
 
 const getUploadQuotaReservation = `-- name: GetUploadQuotaReservation :one
-SELECT id, workspace_id, owner_id, byte_size, created_at, expires_at
+SELECT id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at
 FROM upload_quota_reservations
 WHERE id = $1
 `
@@ -1309,6 +1309,33 @@ func (q *Queries) GetUploadQuotaReservation(ctx context.Context, id string) (Upl
 		&i.ID,
 		&i.WorkspaceID,
 		&i.OwnerID,
+		&i.ClientNonce,
+		&i.ByteSize,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getUploadQuotaReservationByOwnerNonce = `-- name: GetUploadQuotaReservationByOwnerNonce :one
+SELECT id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at
+FROM upload_quota_reservations
+WHERE owner_id = $1 AND client_nonce = $2
+`
+
+type GetUploadQuotaReservationByOwnerNonceParams struct {
+	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
+}
+
+func (q *Queries) GetUploadQuotaReservationByOwnerNonce(ctx context.Context, arg GetUploadQuotaReservationByOwnerNonceParams) (UploadQuotaReservation, error) {
+	row := q.db.QueryRowContext(ctx, getUploadQuotaReservationByOwnerNonce, arg.OwnerID, arg.ClientNonce)
+	var i UploadQuotaReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.OwnerID,
+		&i.ClientNonce,
 		&i.ByteSize,
 		&i.CreatedAt,
 		&i.ExpiresAt,
@@ -2162,14 +2189,15 @@ func (q *Queries) InsertUpload(ctx context.Context, arg InsertUploadParams) erro
 }
 
 const insertUploadQuotaReservation = `-- name: InsertUploadQuotaReservation :exec
-INSERT INTO upload_quota_reservations (id, workspace_id, owner_id, byte_size, created_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO upload_quota_reservations (id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertUploadQuotaReservationParams struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	OwnerID     string `json:"owner_id"`
+	ClientNonce string `json:"client_nonce"`
 	ByteSize    int64  `json:"byte_size"`
 	CreatedAt   string `json:"created_at"`
 	ExpiresAt   string `json:"expires_at"`
@@ -2180,6 +2208,7 @@ func (q *Queries) InsertUploadQuotaReservation(ctx context.Context, arg InsertUp
 		arg.ID,
 		arg.WorkspaceID,
 		arg.OwnerID,
+		arg.ClientNonce,
 		arg.ByteSize,
 		arg.CreatedAt,
 		arg.ExpiresAt,

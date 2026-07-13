@@ -652,13 +652,18 @@ SELECT EXISTS (
 ) AS has_other_direct_message_attachment;
 
 -- name: InsertUploadQuotaReservation :exec
-INSERT INTO upload_quota_reservations (id, workspace_id, owner_id, byte_size, created_at, expires_at)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(owner_id), sqlc.arg(byte_size), sqlc.arg(created_at), sqlc.arg(expires_at));
+INSERT INTO upload_quota_reservations (id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(owner_id), sqlc.arg(client_nonce), sqlc.arg(byte_size), sqlc.arg(created_at), sqlc.arg(expires_at));
 
 -- name: GetUploadQuotaReservation :one
-SELECT id, workspace_id, owner_id, byte_size, created_at, expires_at
+SELECT id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at
 FROM upload_quota_reservations
 WHERE id = sqlc.arg(id);
+
+-- name: GetUploadQuotaReservationByOwnerNonce :one
+SELECT id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at
+FROM upload_quota_reservations
+WHERE owner_id = sqlc.arg(owner_id) AND client_nonce = sqlc.arg(client_nonce);
 
 -- name: DeleteUploadQuotaReservation :execrows
 DELETE FROM upload_quota_reservations

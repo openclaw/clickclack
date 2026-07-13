@@ -26,6 +26,8 @@ import (
 const (
 	maxUploadBytes       = 64 << 20
 	uploadCleanupTimeout = 5 * time.Second
+	uploadNonceRetryWait = 25 * time.Millisecond
+	uploadNonceRetryMax  = 250 * time.Millisecond
 )
 
 func formInt(values map[string]string, key string) int {
@@ -151,8 +153,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 				writeStoreError(w, err)
 				return
 			}
-		}
-		if _, ok := s.checkUploadQuota(w, r, act, workspaceID); !ok {
+		} else if _, ok := s.checkUploadQuota(w, r, act, workspaceID); !ok {
 			return
 		}
 	}
@@ -224,9 +225,13 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
-		reservation, err := s.store.ReserveUploadQuota(r.Context(), workspaceID, act.user.ID, int64(maxUploadBytes))
+		reservation, replayed, err := s.reserveUploadQuota(r.Context(), workspaceID, act.user.ID, nonce)
 		if err != nil {
 			writeStoreError(w, err)
+			return
+		}
+		if replayed != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"upload": *replayed})
 			return
 		}
 		reservationID = reservation.ID
@@ -284,6 +289,41 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeStoreError(w, err)
+}
+
+func (s *Server) reserveUploadQuota(ctx context.Context, workspaceID, ownerID, nonce string) (store.UploadQuotaReservation, *store.Upload, error) {
+	retryWait := uploadNonceRetryWait
+	for {
+		reservation, err := s.store.ReserveUploadQuota(ctx, workspaceID, ownerID, nonce, int64(maxUploadBytes))
+		if err == nil {
+			return reservation, nil, nil
+		}
+		if nonce == "" || !errors.Is(err, store.ErrUploadNonceInProgress) {
+			return store.UploadQuotaReservation{}, nil, err
+		}
+		existing, lookupErr := s.store.GetUploadByNonce(ctx, ownerID, nonce)
+		switch {
+		case lookupErr == nil && existing.WorkspaceID != workspaceID:
+			return store.UploadQuotaReservation{}, nil, store.ErrUploadNonceConflict
+		case lookupErr == nil:
+			return store.UploadQuotaReservation{}, &existing, nil
+		case !errors.Is(lookupErr, sql.ErrNoRows):
+			return store.UploadQuotaReservation{}, nil, lookupErr
+		}
+		timer := time.NewTimer(retryWait)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return store.UploadQuotaReservation{}, nil, ctx.Err()
+		case <-timer.C:
+		}
+		retryWait = min(retryWait*2, uploadNonceRetryMax)
+	}
 }
 
 type uploadQuotaReader struct {

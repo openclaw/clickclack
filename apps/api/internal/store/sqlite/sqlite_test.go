@@ -365,6 +365,45 @@ func TestUploadNonceValidationCountsCharacters(t *testing.T) {
 	}
 }
 
+func TestUploadReservationClaimsOwnerNonceBeforeQuota(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "reservation-nonce-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other Upload Claims"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "claim-1", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reservation.Nonce != "claim-1" {
+		t.Fatalf("reservation lost nonce claim: %#v", reservation)
+	}
+	if _, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "claim-1", 10); !errors.Is(err, store.ErrUploadNonceInProgress) {
+		t.Fatalf("expected same-workspace in-progress claim, got %v", err)
+	}
+	if _, err := st.ReserveUploadQuota(ctx, otherWorkspace.ID, owner.ID, "claim-1", 10); !errors.Is(err, store.ErrUploadNonceConflict) {
+		t.Fatalf("expected cross-workspace nonce conflict, got %v", err)
+	}
+	if err := st.ReleaseUploadQuotaReservation(ctx, reservation.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ReserveUploadQuota(ctx, otherWorkspace.ID, owner.ID, "claim-1", 10); err != nil {
+		t.Fatalf("released nonce claim remained locked: %v", err)
+	}
+}
+
 func TestReservedUploadRechecksModerationOnFinalize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -386,7 +425,7 @@ func TestReservedUploadRechecksModerationOnFinalize(t *testing.T) {
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
 	}
-	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, member.ID, 10)
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, member.ID, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +460,7 @@ func TestReservedUploadRejectsNegativeFinalizeSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := workspaces[0]
-	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, 10)
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -59,7 +59,11 @@ func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput)
 	return upload, tx.Commit()
 }
 
-func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID string, byteSize int64) (store.UploadQuotaReservation, error) {
+func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (store.UploadQuotaReservation, error) {
+	normalizedNonce, err := normalizeClientNonce(nonce)
+	if err != nil {
+		return store.UploadQuotaReservation{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.UploadQuotaReservation{}, err
@@ -79,6 +83,32 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID stri
 	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
 		return store.UploadQuotaReservation{}, err
 	}
+	if normalizedNonce != "" {
+		uploadRow, err := qtx.GetUploadByOwnerNonce(ctx, storedb.GetUploadByOwnerNonceParams{
+			OwnerID:     userID,
+			ClientNonce: normalizedNonce,
+		})
+		switch {
+		case err == nil && storeUploadFromGetUploadByOwnerNonce(uploadRow).WorkspaceID != workspaceID:
+			return store.UploadQuotaReservation{}, store.ErrUploadNonceConflict
+		case err == nil:
+			return store.UploadQuotaReservation{}, store.ErrUploadNonceInProgress
+		case !errors.Is(err, sql.ErrNoRows):
+			return store.UploadQuotaReservation{}, err
+		}
+		existing, err := qtx.GetUploadQuotaReservationByOwnerNonce(ctx, storedb.GetUploadQuotaReservationByOwnerNonceParams{
+			OwnerID:     userID,
+			ClientNonce: normalizedNonce,
+		})
+		switch {
+		case err == nil && existing.WorkspaceID != workspaceID:
+			return store.UploadQuotaReservation{}, store.ErrUploadNonceConflict
+		case err == nil:
+			return store.UploadQuotaReservation{}, store.ErrUploadNonceInProgress
+		case !errors.Is(err, sql.ErrNoRows):
+			return store.UploadQuotaReservation{}, err
+		}
+	}
 	quota, err := uploadQuotaTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return store.UploadQuotaReservation{}, err
@@ -90,6 +120,7 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID stri
 		ID:          newID("uqr"),
 		WorkspaceID: workspaceID,
 		OwnerID:     userID,
+		Nonce:       normalizedNonce,
 		ByteSize:    min(byteSize, quota.RemainingBytes),
 		CreatedAt:   uploadReservationTime(reservationNow),
 		ExpiresAt:   uploadReservationTime(reservationNow.Add(uploadQuotaReservationTTL)),
@@ -98,6 +129,7 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID stri
 		ID:          reservation.ID,
 		WorkspaceID: reservation.WorkspaceID,
 		OwnerID:     reservation.OwnerID,
+		ClientNonce: reservation.Nonce,
 		ByteSize:    reservation.ByteSize,
 		CreatedAt:   reservation.CreatedAt,
 		ExpiresAt:   reservation.ExpiresAt,
@@ -125,7 +157,7 @@ func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, 
 	if err != nil {
 		return store.Upload{}, err
 	}
-	if reservation.WorkspaceID != input.WorkspaceID || reservation.OwnerID != input.OwnerID {
+	if reservation.WorkspaceID != input.WorkspaceID || reservation.OwnerID != input.OwnerID || reservation.ClientNonce != nonce {
 		return store.Upload{}, errors.New("upload quota reservation does not match upload")
 	}
 	if err := requireMembershipTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {

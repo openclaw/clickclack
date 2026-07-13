@@ -2935,7 +2935,7 @@ func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
 	}
 }
 
-func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.T) {
+func TestConcurrentUploadNonceReplayClaimsNonceBeforeQuota(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	dataDir := t.TempDir()
@@ -2956,6 +2956,18 @@ func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.
 		t.Fatal(err)
 	}
 	workspace := workspaces[0]
+	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
+		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+			WorkspaceID: workspace.ID,
+			OwnerID:     owner.ID,
+			Filename:    fmt.Sprintf("quota-%d.txt", i),
+			ContentType: "text/plain",
+			ByteSize:    1,
+			StoragePath: fmt.Sprintf("memory://quota-%d.txt", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	storage := newConcurrentUploadStore()
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadStorage: storage}).Handler())
 	t.Cleanup(server.Close)
@@ -2967,7 +2979,7 @@ func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.
 	}
 	results := make(chan result, 2)
 	client := &http.Client{Timeout: 5 * time.Second}
-	for i := range 2 {
+	startUpload := func(i int) {
 		go func() {
 			req, err := newUploadWithNonceRequest(
 				server.URL+"/api/uploads",
@@ -2996,6 +3008,19 @@ func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.
 			results <- result{upload: body.Upload, status: resp.StatusCode}
 		}()
 	}
+	startUpload(0)
+	select {
+	case <-storage.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first upload did not reach object storage")
+	}
+	startUpload(1)
+	select {
+	case result := <-results:
+		t.Fatalf("concurrent retry completed before the nonce owner committed: %#v", result)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(storage.release)
 
 	readResult := func() result {
 		select {
@@ -3018,22 +3043,24 @@ func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.
 	if first.upload.ID == "" || first.upload.ID != second.upload.ID {
 		t.Fatalf("concurrent replay returned different uploads: first=%#v second=%#v", first.upload, second.upload)
 	}
-	select {
-	case <-storage.deleted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("losing upload object was not deleted")
+	storage.mu.Lock()
+	saves := storage.saves
+	storage.mu.Unlock()
+	if saves != 1 {
+		t.Fatalf("concurrent retry reached object storage %d times", saves)
 	}
 	select {
 	case path := <-storage.deleted:
-		t.Fatalf("deleted more than one upload object: %s", path)
+		t.Fatalf("nonce claim unexpectedly created a losing object: %s", path)
 	default:
 	}
 	quota, err := st.UploadQuota(ctx, workspace.ID, owner.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if quota.UsedCount != 1 || quota.UsedBytes != int64(len("same body")) {
-		t.Fatalf("losing reservation was not released: %#v", quota)
+	expectedBytes := store.UploadQuotaCountPerUserWorkspace - 1 + int64(len("same body"))
+	if quota.UsedCount != store.UploadQuotaCountPerUserWorkspace || quota.UsedBytes != expectedBytes {
+		t.Fatalf("nonce claim did not preserve exact quota accounting: %#v", quota)
 	}
 }
 
@@ -3227,12 +3254,15 @@ func (s *quotaObservingUploadStore) ServeHTTP(http.ResponseWriter, *http.Request
 type concurrentUploadStore struct {
 	mu      sync.Mutex
 	saves   int
+	started chan struct{}
 	release chan struct{}
 	deleted chan string
+	once    sync.Once
 }
 
 func newConcurrentUploadStore() *concurrentUploadStore {
 	return &concurrentUploadStore{
+		started: make(chan struct{}),
 		release: make(chan struct{}),
 		deleted: make(chan string, 2),
 	}
@@ -3246,10 +3276,8 @@ func (s *concurrentUploadStore) Save(ctx context.Context, body io.Reader, _ uplo
 	s.mu.Lock()
 	s.saves++
 	saveID := s.saves
-	if s.saves == 2 {
-		close(s.release)
-	}
 	s.mu.Unlock()
+	s.once.Do(func() { close(s.started) })
 	select {
 	case <-s.release:
 	case <-ctx.Done():

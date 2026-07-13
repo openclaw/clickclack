@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -99,6 +100,13 @@ func TestMutationsCreateDurableEvents(t *testing.T) {
 	}
 	if _, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: dmMessage.ID, UserID: owner.ID}); err != nil {
 		t.Fatal(err)
+	}
+	dmBySecond, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: second.ID, Body: "dm by second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: dmBySecond.ID, UserID: owner.ID}); !errors.Is(err, store.ErrMessageNotWritable) {
+		t.Fatalf("expected owner non-author DM participant delete to be rejected, got %v", err)
 	}
 	events, err := st.ListEventsAfter(ctx, workspaces[0].ID, owner.ID, "", 20)
 	if err != nil {
@@ -392,6 +400,66 @@ func TestMutationsRejectInvalidInput(t *testing.T) {
 	}
 	if _, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: member.ID}); err == nil {
 		t.Fatal("expected non-author member message delete error")
+	}
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "moderator-mutations@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	memberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: member.ID, Body: "delete my own"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletedByAuthor, deleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberMessage.ID, UserID: member.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletedByAuthor.DeletedAt == nil || deleteEvent.Type != "message.deleted" {
+		t.Fatalf("expected author delete to soft-delete the message, got %#v %#v", deletedByAuthor, deleteEvent)
+	}
+	anotherMemberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: member.ID, Body: "owner moderate me"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletedByOwner, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: anotherMemberMessage.ID, UserID: owner.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletedByOwner.DeletedAt == nil {
+		t.Fatalf("expected owner delete to soft-delete the message, got %#v", deletedByOwner)
+	}
+	moderatorBlockedMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: member.ID, Body: "moderator cannot delete this"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: moderatorBlockedMessage.ID, UserID: moderator.ID}); !errors.Is(err, store.ErrMessageNotWritable) {
+		t.Fatalf("expected moderator non-author delete to be blocked, got %v", err)
+	}
+	dmMemberA, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "DM Member A", Email: "dm-a-mutations@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmMemberB, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "DM Member B", Email: "dm-b-mutations@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dmMember := range []store.User{dmMemberA, dmMemberB} {
+		if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, dmMember.ID, store.WorkspaceRoleMember); err != nil {
+			t.Fatal(err)
+		}
+	}
+	memberDM, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspaces[0].ID, UserID: dmMemberA.ID, MemberIDs: []string{dmMemberB.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberDMMessage, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: memberDM.ID, AuthorID: dmMemberA.ID, Body: "owner cannot delete private dm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberDMMessage.ID, UserID: owner.ID}); err == nil {
+		t.Fatal("expected owner outside DM to be blocked from deleting the message")
 	}
 	reactionMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "react"})
 	if err != nil {

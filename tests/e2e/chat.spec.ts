@@ -713,6 +713,9 @@ test("aligns self and other messages independently", async ({ page }) => {
     data: { body: humanMessage },
   });
   expect(humanMessageResponse.ok()).toBe(true);
+  const { message: createdHumanMessage } = (await humanMessageResponse.json()) as {
+    message: { id: string };
+  };
 
   const botResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
     data: {
@@ -726,6 +729,7 @@ test("aligns self and other messages independently", async ({ page }) => {
   const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
   const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
   const turnId = `alignment-turn-${Date.now()}`;
+  let createdAgentMessage: { id: string } | undefined;
   for (const data of [
     {
       body: "Checking aligned agent activity.",
@@ -744,6 +748,22 @@ test("aligns self and other messages independently", async ({ page }) => {
       data,
     });
     expect(response.ok()).toBe(true);
+    if (data.body === agentMessage) {
+      const payload = (await response.json()) as { message: { id: string } };
+      createdAgentMessage = payload.message;
+    }
+  }
+  expect(createdAgentMessage).toBeDefined();
+
+  for (const [messageID, body] of [
+    [createdSelfMessage.id, "self alignment reply"],
+    [createdHumanMessage.id, "human alignment reply"],
+    [createdAgentMessage!.id, "agent alignment reply"],
+  ]) {
+    const replyResponse = await page.request.post(`/api/messages/${messageID}/thread/replies`, {
+      data: { body },
+    });
+    expect(replyResponse.ok()).toBe(true);
   }
 
   await page.goto("/app");

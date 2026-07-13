@@ -16,6 +16,9 @@
     selected: boolean;
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
+    currentUserID?: string;
+    canDeleteAnyMessage?: boolean;
+    deleting?: boolean;
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
@@ -23,6 +26,7 @@
     onOpenArtifact: (upload: Upload) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
+    onDeleteMessage?: (message: Message) => void;
   };
 
   let {
@@ -33,6 +37,9 @@
     selected,
     replyContext,
     selectedThreadID,
+    currentUserID,
+    canDeleteAnyMessage = false,
+    deleting = false,
     onReply,
     onOpenThread,
     onJumpToQuote,
@@ -40,10 +47,16 @@
     onOpenArtifact,
     onRetry,
     onDiscard,
+    onDeleteMessage,
   }: Props = $props();
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
+  let isDeleted = $derived(Boolean(message.deleted_at));
+  let canDeleteMessage = $derived(
+    canDeleteAnyMessage ||
+      (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID),
+  );
   // Coalesced agent activity: consecutive same-turn agent_commentary/agent_tool
   // rows are collapsed (client-side) into one synthetic row carrying a
   // preamble_block. When present, the row renders as a single preamble block
@@ -64,9 +77,13 @@
   let threadReplyCount = $derived(message.thread_state?.reply_count || 0);
   let hasThreadReplies = $derived(threadReplyCount > 0);
   let threadTime = $derived(threadActivityTime(message));
+  let isThreadOpen = $derived(selectedThreadID === message.id);
+  let canOpenThread = $derived(
+    !preambleBlock && !isPending && !isFailed && (!isDeleted || hasThreadReplies || isThreadOpen),
+  );
 
   function openThreadFromRow(event: MouseEvent) {
-    if (preambleBlock || isPending || isFailed) return;
+    if (!canOpenThread) return;
     if (window.getSelection()?.toString()) return;
     const target = event.target as HTMLElement | null;
     if (
@@ -94,12 +111,13 @@
   class:selected
   class:is-pending={isPending}
   class:is-failed={isFailed}
+  class:is-deleted={isDeleted}
   class:is-preamble={Boolean(preambleBlock)}
   class:is-preamble-collapsed={preambleBlock?.final === true}
   class:is-preamble-live={preambleBlock?.final === false}
   class:before-final-message={precedesFinalMessage}
   class:after-preamble={followsPreamble}
-  class:can-open-thread={!preambleBlock && !isPending && !isFailed}
+  class:can-open-thread={canOpenThread}
   data-message-id={message.id}
   use:openThreadOnClick
 >
@@ -107,6 +125,8 @@
   <div class="message-content">
     {#if preambleBlock}
       <PreambleBlock block={preambleBlock} />
+    {:else if isDeleted}
+      <div class="message-deleted">This message was deleted.</div>
     {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(message.body)}</div>
@@ -133,20 +153,21 @@
         {/if}
       </div>
     {/if}
+    {/if}
+    {#if canOpenThread}
     <button
       type="button"
       class:has-replies={hasThreadReplies}
-      class:is-open={selectedThreadID === message.id}
+      class:is-open={isThreadOpen}
       class="thread-hint tooltip"
       data-tooltip={threadSummary(message, selectedThreadID)}
       aria-label={threadSummary(message, selectedThreadID)}
-      disabled={isPending || isFailed}
       onclick={() => onOpenThread(message)}
     >
       <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
       </svg>
-      {#if hasThreadReplies || selectedThreadID === message.id}
+      {#if hasThreadReplies || isThreadOpen}
         <span>{threadActivityLabel(message)}</span>
         {#if threadTime}
           <time datetime={message.thread_state?.last_reply_at}>{threadTime}</time>
@@ -155,7 +176,7 @@
     </button>
     {/if}
   </div>
-  {#if !preambleBlock}
+  {#if !preambleBlock && !isDeleted}
   <div class="message-actions" aria-label="Message actions">
     <button
       type="button"
@@ -181,6 +202,20 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
       </svg>
     </button>
+    {#if canDeleteMessage && onDeleteMessage}
+      <button
+        type="button"
+        aria-label="Delete message"
+        class="tooltip message-action-danger"
+        data-tooltip="Delete message"
+        disabled={isPending || isFailed || deleting}
+        onclick={() => onDeleteMessage?.(message)}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
+        </svg>
+      </button>
+    {/if}
   </div>
   {/if}
 </div>

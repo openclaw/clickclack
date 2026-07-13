@@ -48,11 +48,6 @@
   --brand-a: light-dark(#0072b0, #41c6ff);
   --brand-b: light-dark(#2653e8, #6d8bff);
   --brand-contrast: light-dark(#ffffff, #061420);
-  /* User (self) message bubble: accent-tinted alternate shading, held at a
-     similar low opacity to the agent delivery/activity washes so the two read
-     as a matched pair rather than competing fills. Derived from var(--accent)
-     so color modes and board themes flow automatically. */
-  --user-bubble-soft: color-mix(in srgb, var(--accent) 8%, transparent);
   /* Two-tone agent turn: the preamble (working log) is amber while the turn
      streams and as it collapses to the bar on top, and the final delivered
      answer owns the indigo. These are semantic constants shared by every

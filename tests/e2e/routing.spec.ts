@@ -56,9 +56,11 @@ test("app routes restore channels, DMs, threads, fallbacks, and history navigati
   const dmResponse = await page.request.post("/api/dms", {
     data: { workspace_id: workspaceID, member_ids: [secondUserID] },
   });
+  expect(dmResponse.ok()).toBe(true);
   const { conversation } = (await dmResponse.json()) as {
     conversation: { id: string; route_id: string };
   };
+  expect(conversation?.route_id).toBeTruthy();
 
   await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
@@ -99,9 +101,11 @@ test("app routes restore channels, DMs, threads, fallbacks, and history navigati
   const lateDMResponse = await page.request.post("/api/dms", {
     data: { workspace_id: workspaceID, member_ids: [lateUserID] },
   });
+  expect(lateDMResponse.ok()).toBe(true);
   const { conversation: lateConversation } = (await lateDMResponse.json()) as {
     conversation: { id: string; route_id: string };
   };
+  expect(lateConversation?.route_id).toBeTruthy();
   await page.goto(`/app/${workspace.route_id}/${lateConversation.route_id}`);
   await expect(page.getByRole("heading", { name: /Late Route User/ })).toBeVisible();
   await expect(page).toHaveURL(
@@ -277,16 +281,25 @@ test("uploading a workspace icon preserves pending profile edits", async ({ page
   await page.goto(`/app/${workspace.route_id}/settings/overview`);
   await page.getByLabel("Workspace name").fill(nextName);
   await page.getByLabel("Workspace slug").fill(nextSlug);
-  await page.getByLabel("Workspace icon file").setInputFiles({
-    name: "icon.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
+  const [uploadResult, updateResult] = await Promise.all([
+    page.waitForResponse(
+      (res) => res.url().endsWith("/api/uploads") && res.request().method() === "POST",
     ),
-  });
-
-  await expect(page.getByText("Workspace icon updated.")).toBeVisible();
+    page.waitForResponse(
+      (res) =>
+        res.url().endsWith(`/api/workspaces/${workspace.id}`) && res.request().method() === "PATCH",
+    ),
+    page.getByLabel("Workspace icon file").setInputFiles({
+      name: "icon.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  ]);
+  expect(uploadResult.ok()).toBe(true);
+  expect(updateResult.ok()).toBe(true);
   await expect(page.getByLabel("Workspace name")).toHaveValue(nextName);
   await expect(page.getByLabel("Workspace slug")).toHaveValue(nextSlug);
   const persisted = await page.request.get(`/api/workspaces/${workspace.id}`);
@@ -317,16 +330,25 @@ test("uploading a workspace icon does not overwrite concurrent profile edits", a
     data: { name: concurrentName },
   });
   expect(concurrentUpdate.ok()).toBe(true);
-  await page.getByLabel("Workspace icon file").setInputFiles({
-    name: "icon.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
+  const [uploadResult, updateResult] = await Promise.all([
+    page.waitForResponse(
+      (res) => res.url().endsWith("/api/uploads") && res.request().method() === "POST",
     ),
-  });
-
-  await expect(page.getByText("Workspace icon updated.")).toBeVisible();
+    page.waitForResponse(
+      (res) =>
+        res.url().endsWith(`/api/workspaces/${workspace.id}`) && res.request().method() === "PATCH",
+    ),
+    page.getByLabel("Workspace icon file").setInputFiles({
+      name: "icon.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  ]);
+  expect(uploadResult.ok()).toBe(true);
+  expect(updateResult.ok()).toBe(true);
   const persisted = await page.request.get(`/api/workspaces/${workspace.id}`);
   expect(persisted.ok()).toBe(true);
   const body = (await persisted.json()) as {

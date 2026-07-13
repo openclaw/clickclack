@@ -311,7 +311,15 @@ func (s *Store) DeleteMessage(ctx context.Context, input store.DeleteMessageInpu
 		return store.Message{}, store.Event{}, err
 	}
 	if msg.AuthorID != input.UserID {
-		return store.Message{}, store.Event{}, errors.New("only the author can delete a message")
+		if msg.DirectConversationID != "" {
+			return store.Message{}, store.Event{}, store.ErrMessageNotWritable
+		}
+		if err := requireWorkspaceOwnerTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
+			if errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+				return store.Message{}, store.Event{}, store.ErrMessageNotWritable
+			}
+			return store.Message{}, store.Event{}, err
+		}
 	}
 	if msg.DeletedAt != nil {
 		return msg, store.Event{}, tx.Commit()

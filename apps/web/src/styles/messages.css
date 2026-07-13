@@ -365,6 +365,10 @@
   opacity: 1;
 }
 
+.message-row.is-deleted {
+  color: var(--muted);
+}
+
 .message-failed {
   display: inline-flex;
   align-items: center;
@@ -788,23 +792,6 @@
   border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
 }
 
-/* User (self) message bubble. Mirrors the agent delivery bubble's weight
-   (same padding, radius, keycap under-edge) but in the cyan accent tint
-   instead of the delivery indigo, so an exchange reads as two matched but
-   distinct keys. The bubble hugs its content (fit-content) up to a readable
-   max so the left/right alignment toggle is visually meaningful. Scoped to
-   ordinary self rows; the agent preamble/delivery treatments are never self
-   and stay untouched. */
-.message-group.is-self .message-content {
-  width: fit-content;
-  max-width: min(100%, 680px);
-  padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--user-bubble-soft);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
 /* The current user and every other participant have independent alignment
    preferences. "Other" includes both human teammates and agents. */
 :root[data-user-align="right"] .message-group.is-self,
@@ -1076,11 +1063,7 @@
 }
 
 .thread-hint:not(.has-replies):not(.is-open) {
-  width: 24px;
-  height: 22px;
-  justify-content: center;
-  padding: 0;
-  opacity: 0.62;
+  display: none;
 }
 
 .thread-hint svg {
@@ -1156,6 +1139,20 @@
 .message-actions button:hover {
   background: var(--hover-strong);
   color: var(--text-strong);
+}
+
+.message-actions .message-action-danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.message-deleted {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
 }
 
 .markdown {

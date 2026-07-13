@@ -127,6 +127,39 @@
   background: var(--hover);
 }
 
+.thread .reply-quote-btn,
+.thread .thread-action-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.thread .reply-quote-btn:hover,
+.thread .thread-action-btn:hover {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.thread .reply-quote-btn:disabled,
+.thread .thread-action-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.thread .thread-action-btn--danger {
+  color: var(--danger);
+}
+
+.thread .thread-action-btn--danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
 .reply-composer {
   --composer-card-top: 10px;
   --composer-overlay-inset-x: 14px;

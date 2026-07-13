@@ -15,6 +15,7 @@
     threadState: ThreadState | null;
     replyBody: string;
     replyTarget: Message | null;
+    currentUserID?: string;
     mentionPeople?: User[];
     onClose: () => void;
     onReplyBody: (value: string) => void;
@@ -22,7 +23,10 @@
     onReplyKeydown: (event: KeyboardEvent) => void;
     onReplyFocus: () => void;
     onReplyInputRef: (node: HTMLTextAreaElement | null) => void;
+    canDeleteAnyMessage?: boolean;
+    deletingMessageIDs?: ReadonlySet<string>;
     onSetReplyTarget: (message: Message, context: "thread") => void;
+    onDeleteMessage?: (message: Message) => void;
     onClearReply: () => void;
     onActivateThreadComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;
@@ -37,6 +41,7 @@
     threadState,
     replyBody,
     replyTarget,
+    currentUserID,
     mentionPeople = [],
     onClose,
     onReplyBody,
@@ -44,7 +49,10 @@
     onReplyKeydown,
     onReplyFocus,
     onReplyInputRef,
+    canDeleteAnyMessage = false,
+    deletingMessageIDs = new Set<string>(),
     onSetReplyTarget,
+    onDeleteMessage,
     onClearReply,
     onActivateThreadComposer,
     onInlineImagePointerUp,
@@ -52,6 +60,10 @@
     onOpenImage,
     onOpenArtifact,
   }: Props = $props();
+
+  const canDelete = (message: Message) =>
+    canDeleteAnyMessage ||
+    (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID);
 </script>
 
 <header>
@@ -63,7 +75,7 @@
     class="close"
     aria-label="Close thread"
     onclick={onClose}
-  >×</button>
+  >&times;</button>
 </header>
 <div
   class="thread-scroll"
@@ -85,16 +97,40 @@
         <strong>{root.author?.display_name || "Local User"}</strong>
         {#if root.author?.handle}<span>{handleLabel(root.author.handle)}</span>{/if}
         <time>{time(root.created_at)}</time>
-        <button
-          type="button"
-          class="reply-quote-btn"
-          aria-label="Reply"
-          data-tooltip="Reply"
-          onclick={() => onSetReplyTarget(root, "thread")}
-        >↩</button>
+        {#if !root.deleted_at}
+          <button
+            type="button"
+            class="reply-quote-btn"
+            aria-label="Reply"
+            data-tooltip="Reply"
+            onclick={() => onSetReplyTarget(root, "thread")}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
+            </svg>
+          </button>
+          {#if canDelete(root) && onDeleteMessage}
+            <button
+              type="button"
+              class="thread-action-btn thread-action-btn--danger"
+              aria-label="Delete message"
+              data-tooltip="Delete message"
+              disabled={deletingMessageIDs.has(root.id)}
+              onclick={() => onDeleteMessage?.(root)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
+              </svg>
+            </button>
+          {/if}
+        {/if}
       </header>
-      <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(root.body)}</div>
-      {#if root.attachments?.length}
+      {#if root.deleted_at}
+        <div class="message-deleted">This message was deleted.</div>
+      {:else}
+        <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(root.body)}</div>
+      {/if}
+      {#if !root.deleted_at && root.attachments?.length}
         <div class="attachment-grid compact" aria-label="Attachments">
           {#each root.attachments as attachment (attachment.id)}
             <MediaAttachment
@@ -124,17 +160,41 @@
             <strong>{reply.author?.display_name || "Local User"}</strong>
             {#if reply.author?.handle}<span>{handleLabel(reply.author.handle)}</span>{/if}
             <time>{time(reply.created_at)}</time>
-            <button
-              type="button"
-              class="reply-quote-btn"
-              aria-label="Reply"
-              data-tooltip="Reply"
-              onclick={() => onSetReplyTarget(reply, "thread")}
-            >↩</button>
+            {#if !reply.deleted_at}
+              <button
+                type="button"
+                class="reply-quote-btn"
+                aria-label="Reply"
+                data-tooltip="Reply"
+                onclick={() => onSetReplyTarget(reply, "thread")}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
+                </svg>
+              </button>
+              {#if canDelete(reply) && onDeleteMessage}
+                <button
+                  type="button"
+                  class="thread-action-btn thread-action-btn--danger"
+                  aria-label="Delete message"
+                  data-tooltip="Delete message"
+                  disabled={deletingMessageIDs.has(reply.id)}
+                  onclick={() => onDeleteMessage?.(reply)}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
+                  </svg>
+                </button>
+              {/if}
+            {/if}
           </header>
-          <QuoteBlock message={reply} onJump={onJumpToQuote} />
-          <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(reply.body)}</div>
-          {#if reply.attachments?.length}
+          {#if reply.deleted_at}
+            <div class="message-deleted">This message was deleted.</div>
+          {:else}
+            <QuoteBlock message={reply} onJump={onJumpToQuote} />
+            <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(reply.body)}</div>
+          {/if}
+          {#if !reply.deleted_at && reply.attachments?.length}
             <div class="attachment-grid compact" aria-label="Attachments">
               {#each reply.attachments as attachment (attachment.id)}
                 <MediaAttachment

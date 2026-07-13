@@ -153,6 +153,7 @@
   let routeApplySerial = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
   let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
+  let deletingMessageIDs = new Set<string>();
 
   type MessageWindow = Omit<MessagePage, "messages"> & {
     messages: Message[];
@@ -175,6 +176,7 @@
 
   $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceID);
   $: currentWorkspaceRole = selectedWorkspace?.role || "";
+  $: canDeleteAnyMessage = currentWorkspaceRole === "owner";
   $: selectedProfileModeration = selectedProfile
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
@@ -1872,6 +1874,27 @@
     setActiveMessages(messages.filter((m) => m.id !== message.id));
   }
 
+  async function deleteMessage(message: Message) {
+    if (!message.id || message.deleted_at || deletingMessageIDs.has(message.id)) return;
+    if (!window.confirm("Delete this message?")) return;
+    deletingMessageIDs = new Set([...deletingMessageIDs, message.id]);
+    try {
+      const data = await api<{ message: Message }>(`/api/messages/${message.id}`, { method: "DELETE" });
+      const deleted = data.message;
+      setActiveMessages(messages.map((current) => (current.id === deleted.id ? { ...current, ...deleted } : current)));
+      replies = replies.map((reply) => (reply.id === deleted.id ? { ...reply, ...deleted } : reply));
+      if (selectedThread?.id === deleted.id) selectedThread = { ...selectedThread, ...deleted };
+      if (replyTarget?.id === deleted.id) clearReplyTarget();
+      status = "";
+    } catch (error) {
+      status = error instanceof Error ? error.message : "Could not delete message";
+    } finally {
+      const next = new Set(deletingMessageIDs);
+      next.delete(message.id);
+      deletingMessageIDs = next;
+    }
+  }
+
   async function openThread(message: Message) {
     await refreshThread(message.id, message);
     if (selectedWorkspaceID && selectedThread?.route_id && window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)) {
@@ -2920,6 +2943,8 @@
       prepending={olderPageState !== "idle"}
       selectedThreadID={selectedThread?.id}
       currentUserID={user?.id}
+      canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
+      {deletingMessageIDs}
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => (activeComposerContext = "message")}
       onInlineImagePointerUp={handleInlineImagePointerUp}
@@ -2939,6 +2964,7 @@
       }}
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
+      onDeleteMessage={(message) => void deleteMessage(message)}
     />
 
     <AgentProgress turns={agentProgressTurns} />
@@ -3019,8 +3045,12 @@
         onReplyKeydown={handleReplyKey}
         onReplyFocus={() => (activeComposerContext = "thread")}
         onReplyInputRef={(node) => (replyInput = node)}
+        currentUserID={user?.id}
         onSetReplyTarget={setReplyTarget}
         onClearReply={clearReplyTarget}
+        canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
+        {deletingMessageIDs}
+        onDeleteMessage={(message) => void deleteMessage(message)}
         onActivateThreadComposer={() => (activeComposerContext = "thread")}
         onInlineImagePointerUp={handleInlineImagePointerUp}
         onJumpToQuote={(message) => void jumpToQuotedMessage(message)}

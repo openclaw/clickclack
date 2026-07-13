@@ -282,6 +282,108 @@ func TestDirectTypingEphemeralIsLimitedToConversationMembers(t *testing.T) {
 	}
 }
 
+func TestOwnersAndAuthorsCanDeleteMessages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner-admin-delete@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel := channels[0]
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "moderator-admin-delete@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-admin-delete@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherMember, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Other", Email: "other-admin-delete@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range []struct {
+		userID string
+		role   string
+	}{
+		{moderator.ID, store.WorkspaceRoleModerator},
+		{member.ID, store.WorkspaceRoleMember},
+		{otherMember.ID, store.WorkspaceRoleMember},
+	} {
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, entry.userID, entry.role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	ownMessage := postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, member.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "author can remove this"}).Message
+	deletedByAuthor := deleteJSONBodyAsUser[struct {
+		Message store.Message `json:"message"`
+		Event   store.Event   `json:"event"`
+	}](t, member.ID, server.URL+"/api/messages/"+ownMessage.ID)
+	if deletedByAuthor.Message.DeletedAt == nil || deletedByAuthor.Event.Type != "message.deleted" {
+		t.Fatalf("unexpected author delete payload: %#v", deletedByAuthor)
+	}
+
+	secondMemberMessage := postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, member.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "owner can remove this"}).Message
+	deletedByOwner := deleteJSONBodyAsUser[struct {
+		Message store.Message `json:"message"`
+		Event   store.Event   `json:"event"`
+	}](t, owner.ID, server.URL+"/api/messages/"+secondMemberMessage.ID)
+	if deletedByOwner.Message.DeletedAt == nil || deletedByOwner.Event.Type != "message.deleted" {
+		t.Fatalf("unexpected owner delete payload: %#v", deletedByOwner)
+	}
+
+	thirdMemberMessage := postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, member.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "moderator cannot remove this"}).Message
+	expectStatusAsUser(t, moderator.ID, http.MethodDelete, server.URL+"/api/messages/"+thirdMemberMessage.ID, nil, http.StatusForbidden)
+
+	fourthMemberMessage := postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, member.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "member cannot remove this"}).Message
+	expectStatusAsUser(t, otherMember.ID, http.MethodDelete, server.URL+"/api/messages/"+fourthMemberMessage.ID, nil, http.StatusForbidden)
+
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{member.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmMessage := postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, member.ID, server.URL+"/api/dms/"+dm.ID+"/messages", map[string]string{"body": "dm author only delete"}).Message
+	expectStatusAsUser(t, owner.ID, http.MethodDelete, server.URL+"/api/messages/"+dmMessage.ID, nil, http.StatusForbidden)
+	deletedByDMAuthor := deleteJSONBodyAsUser[struct {
+		Message store.Message `json:"message"`
+		Event   store.Event   `json:"event"`
+	}](t, member.ID, server.URL+"/api/messages/"+dmMessage.ID)
+	if deletedByDMAuthor.Message.DeletedAt == nil || deletedByDMAuthor.Event.Type != "message.deleted" {
+		t.Fatalf("unexpected dm author delete payload: %#v", deletedByDMAuthor)
+	}
+}
+
 func TestChannelTypingEphemeralRequiresVisibleChannel(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -522,6 +624,16 @@ func deleteJSONBody[T any](t *testing.T, endpoint string) T {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return doJSON[T](t, req)
+}
+
+func deleteJSONBodyAsUser[T any](t *testing.T, userID, endpoint string) T {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-ClickClack-User", userID)
 	return doJSON[T](t, req)
 }
 

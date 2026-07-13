@@ -76,10 +76,11 @@ test.describe("type-to-focus composer", () => {
   });
 
   test("redirect targets the thread composer when a thread is open", async ({ page }) => {
-    await page.getByLabel("Message body").fill("thread root");
+    const rootBody = `thread root ${Date.now()}`;
+    await page.getByLabel("Message body").fill(rootBody);
     await page.getByRole("button", { name: "Send" }).click();
-    const row = page.locator(".message-row", {
-      has: page.locator(".markdown").filter({ hasText: "thread root" }),
+    const row = page.locator(".message-row:not(.is-pending)", {
+      has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
     await row.hover();
     await row.getByRole("button", { name: "Open thread" }).click();
@@ -95,10 +96,11 @@ test.describe("type-to-focus composer", () => {
   test("typing after chat action buttons still redirects to the active composer", async ({
     page,
   }) => {
-    await page.getByLabel("Message body").fill("button focus root");
+    const rootBody = `button focus root ${Date.now()}`;
+    await page.getByLabel("Message body").fill(rootBody);
     await page.getByRole("button", { name: "Send" }).click();
-    const row = page.locator(".message-row", {
-      has: page.locator(".markdown").filter({ hasText: "button focus root" }),
+    const row = page.locator(".message-row:not(.is-pending)", {
+      has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
 
     await row.hover();
@@ -123,10 +125,11 @@ test.describe("type-to-focus composer", () => {
   });
 
   test("typing with selected thread quote text does not redirect to composer", async ({ page }) => {
-    await page.getByLabel("Message body").fill("thread quote root");
+    const rootBody = `thread quote root ${Date.now()}`;
+    await page.getByLabel("Message body").fill(rootBody);
     await page.getByRole("button", { name: "Send" }).click();
-    const row = page.locator(".message-row", {
-      has: page.locator(".markdown").filter({ hasText: "thread quote root" }),
+    const row = page.locator(".message-row:not(.is-pending)", {
+      has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
     await row.hover();
     await row.getByRole("button", { name: "Open thread" }).click();
@@ -141,7 +144,7 @@ test.describe("type-to-focus composer", () => {
       .click();
 
     const quoteSnippet = page.locator(".thread .quote-block .quote-snippet", {
-      hasText: "thread quote root",
+      hasText: rootBody,
     });
     await expect(quoteSnippet).toBeVisible();
     await quoteSnippet.evaluate((el) => {

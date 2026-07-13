@@ -10,6 +10,8 @@
     group: MessageGroupType;
     currentUserID?: string;
     selectedThreadID?: string;
+    canDeleteAnyMessage?: boolean;
+    deletingMessageIDs?: ReadonlySet<string>;
     replyContext: "channel" | "dm";
     onOpenProfile: (profile?: Message["author"]) => void;
     onReply: (message: Message, context: "channel" | "dm") => void;
@@ -19,12 +21,15 @@
     onOpenArtifact: (upload: Upload) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
+    onDeleteMessage?: (message: Message) => void;
   };
 
   let {
     group,
     currentUserID,
     selectedThreadID,
+    canDeleteAnyMessage = false,
+    deletingMessageIDs = new Set<string>(),
     replyContext,
     onOpenProfile,
     onReply,
@@ -34,6 +39,7 @@
     onOpenArtifact,
     onRetry,
     onDiscard,
+    onDeleteMessage,
   }: Props = $props();
 
   const author = $derived(group.messages[0]?.author);
@@ -75,6 +81,9 @@
         selected={selectedThreadID === message.id}
         {replyContext}
         {selectedThreadID}
+        {currentUserID}
+        {canDeleteAnyMessage}
+        deleting={deletingMessageIDs.has(message.id)}
         {onReply}
         {onOpenThread}
         {onJumpToQuote}
@@ -82,6 +91,7 @@
         {onOpenArtifact}
         {onRetry}
         {onDiscard}
+        {onDeleteMessage}
       />
     {/each}
   </div>

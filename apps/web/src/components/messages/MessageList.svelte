@@ -54,6 +54,8 @@
     selectedChannel?: Channel;
     selectedThreadID?: string;
     currentUserID?: string;
+    canDeleteAnyMessage?: boolean;
+    deletingMessageIDs?: ReadonlySet<string>;
     onListRef: (handle: MessageListHandle | null) => void;
     onActivateMessageComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;
@@ -71,6 +73,7 @@
     onMarkRead?: (readThroughSeq?: number) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
+    onDeleteMessage?: (message: Message) => void;
   };
 
   let {
@@ -91,6 +94,8 @@
     selectedChannel,
     selectedThreadID,
     currentUserID,
+    canDeleteAnyMessage = false,
+    deletingMessageIDs = new Set<string>(),
     onListRef,
     onActivateMessageComposer,
     onInlineImagePointerUp,
@@ -108,6 +113,7 @@
     onMarkRead,
     onRetry,
     onDiscard,
+    onDeleteMessage,
   }: Props = $props();
 
   // Sub-pixel tolerance — matches virtua's official chat example (FIXME comment
@@ -856,6 +862,8 @@
               {currentUserID}
               {selectedThreadID}
               {replyContext}
+              {canDeleteAnyMessage}
+              {deletingMessageIDs}
               {onOpenProfile}
               {onReply}
               {onOpenThread}
@@ -864,6 +872,7 @@
               {onOpenArtifact}
               {onRetry}
               {onDiscard}
+              {onDeleteMessage}
             />
           {/if}
         {/snippet}

@@ -41,7 +41,7 @@ export function nextDesktopAuthAttempt(
   const normalizedServerUrl = normalizeServerURL(serverUrl);
   const age = current ? now - current.startedAt : Number.POSITIVE_INFINITY;
   if (current?.serverUrl === normalizedServerUrl && age >= 0 && age < DESKTOP_AUTH_ATTEMPT_TTL_MS) {
-    return { attempt: current, shouldOpen: false };
+    return { attempt: current, shouldOpen: true };
   }
   return {
     attempt: { serverUrl: normalizedServerUrl, startedAt: now, verifier },

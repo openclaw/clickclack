@@ -235,7 +235,7 @@ test("accepts only a genuine same-origin ClickClack readiness response", async (
   );
 });
 
-test("deduplicates active desktop OAuth attempts and expires stale state", () => {
+test("reopens active desktop OAuth attempts and expires stale state", () => {
   const startedAt = 10_000;
   const first = nextDesktopAuthAttempt(
     null,
@@ -250,8 +250,9 @@ test("deduplicates active desktop OAuth attempts and expires stale state", () =>
     startedAt + 1,
   );
   assert.equal(first.shouldOpen, true);
-  assert.equal(duplicate.shouldOpen, false);
+  assert.equal(duplicate.shouldOpen, true);
   assert.equal(duplicate.attempt, first.attempt);
+  assert.equal(duplicate.attempt.verifier, "first-verifier");
   assert.equal(
     activeDesktopAuthAttempt(first.attempt, "https://chat.example.com", startedAt + 299_999),
     first.attempt,

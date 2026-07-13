@@ -23,6 +23,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
   let closed = false;
   let connected = false;
   let deliveryQueue = Promise.resolve();
+  let generation = 0;
 
   function setConnected(next: boolean) {
     if (connected === next) return;
@@ -32,6 +33,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
 
   function open() {
     if (closed) return;
+    const currentGeneration = ++generation;
     const url = new URL("/api/realtime/ws", window.location.href);
     url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("workspace_id", workspaceID);
@@ -55,10 +57,12 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
       }
       if (!isRealtimeEvent(event)) return;
       deliveryQueue = deliveryQueue.then(async () => {
-        if (closed || deliveryFailed) return;
+        if (closed || deliveryFailed || generation !== currentGeneration) return;
         try {
           await onEvent(event);
-          if (event.cursor) writeCursor(workspaceID, event.cursor);
+          if (event.cursor && generation === currentGeneration) {
+            writeCursor(workspaceID, event.cursor);
+          }
         } catch (error) {
           deliveryFailed = true;
           console.error("realtime event delivery failed", error);
@@ -70,6 +74,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     current.addEventListener("close", () => {
       if (socket !== current || closed) return;
       socket = null;
+      generation++;
       setConnected(false);
       reconnectTimer = window.setTimeout(open, reconnectDelayMs);
     });
@@ -83,6 +88,7 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     },
     close() {
       closed = true;
+      generation++;
       setConnected(false);
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       socket?.close();

@@ -170,6 +170,44 @@ test("realtime does not advance past a failed event", async () => {
   }
 });
 
+test("realtime never persists a cursor from an obsolete reconnect generation", async () => {
+  const writes: string[] = [];
+  const delivered: string[] = [];
+  let releaseFirst: (() => void) | undefined;
+  const firstDelivery = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const restore = installRealtimeGlobals({
+    getItem: () => null,
+    setItem: (_key, value) => writes.push(value),
+  });
+
+  try {
+    const connection = connectRealtime({
+      workspaceID: "workspace-1",
+      reconnectDelayMs: 0,
+      onEvent: async (event) => {
+        delivered.push(event.cursor);
+        if (event.cursor === "cursor-1") await firstDelivery;
+      },
+    });
+    const firstSocket = FakeWebSocket.instances[0];
+    firstSocket.emit("message", JSON.stringify(realtimeEvent("cursor-1")));
+    await expect.poll(() => delivered).toEqual(["cursor-1"]);
+
+    firstSocket.emit("close");
+    await expect.poll(() => FakeWebSocket.instances).toHaveLength(2);
+    FakeWebSocket.instances[1].emit("message", JSON.stringify(realtimeEvent("cursor-2")));
+
+    releaseFirst?.();
+    await expect.poll(() => delivered).toEqual(["cursor-1", "cursor-2"]);
+    await expect.poll(() => writes).toEqual(["cursor-2"]);
+    connection.close();
+  } finally {
+    restore();
+  }
+});
+
 async function currentUser(page: Page): Promise<User> {
   const response = await page.request.get("/api/me");
   expect(response.ok()).toBe(true);

@@ -888,6 +888,63 @@ func TestAuthTokenHashMigrationBackfillsLegacyTokens(t *testing.T) {
 	}
 }
 
+func TestWriteTransactionsWaitAcrossStoreConnections(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "clickclack.db")
+	first, err := Open("sqlite://" + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = first.Close() })
+	second, err := Open("sqlite://" + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+
+	writer, err := first.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback()
+
+	reader, err := second.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("read-only transaction should not wait for a writer reservation: %v", err)
+	}
+	if err := reader.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan error, 1)
+	go func() {
+		tx, err := second.db.BeginTx(ctx, nil)
+		if err == nil {
+			err = tx.Rollback()
+		}
+		started <- err
+	}()
+
+	select {
+	case err := <-started:
+		t.Fatalf("competing write transaction returned before the active writer released its lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if err := writer.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-started:
+		if err != nil {
+			t.Fatalf("competing write transaction failed after the lock was released: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("competing write transaction did not start after the lock was released")
+	}
+}
+
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "clickclack.db"))

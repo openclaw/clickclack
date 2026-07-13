@@ -36,7 +36,7 @@ func Open(dbURL string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", path+"?_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}

@@ -238,7 +238,7 @@ func (s *Store) UploadQuota(ctx context.Context, workspaceID, userID string) (st
 }
 
 func (s *Store) CanCreateUpload(ctx context.Context, workspaceID, userID string, byteSize int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}

@@ -95,7 +95,7 @@ func requireGuestChannelAccessTx(ctx context.Context, tx *sql.Tx, workspaceID, c
 }
 
 func (s *Store) requireGuestChannelAccess(ctx context.Context, workspaceID, channelID, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (s *Store) requireGuestChannelAccess(ctx context.Context, workspaceID, chan
 }
 
 func (s *Store) CanPublishEphemeral(ctx context.Context, workspaceID, channelID, directConversationID, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func postsRemainingTx(ctx context.Context, q storedb.DBTX, workspaceID, userID, 
 }
 
 func (s *Store) ListWorkspaceMembers(ctx context.Context, workspaceID, actorUserID string) ([]store.MemberModeration, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}

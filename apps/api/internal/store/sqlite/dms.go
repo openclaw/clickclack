@@ -347,7 +347,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 }
 
 func (s *Store) requireDirectAccess(ctx context.Context, conversationID, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}

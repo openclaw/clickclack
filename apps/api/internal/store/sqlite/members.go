@@ -39,7 +39,7 @@ func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorU
 			cursor.RoleSort = store.WorkspaceMemberRoleSort(req.Role)
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return store.WorkspaceMemberPage{}, err
 	}

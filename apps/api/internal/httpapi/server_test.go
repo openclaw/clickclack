@@ -2523,6 +2523,17 @@ func TestNamespacedSessionCookiePolicy(t *testing.T) {
 		t.Fatalf("expected duplicate session cookies to be rejected, got %d", recorder.Code)
 	}
 
+	devServer := New(st, realtime.NewHub(), Options{CookieNames: cookieNames})
+	devRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/me", nil)
+	devRequest.RemoteAddr = "127.0.0.1:12345"
+	devRequest.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: session.Token})
+	devRequest.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: "shadowed"})
+	devRecorder := httptest.NewRecorder()
+	devServer.Handler().ServeHTTP(devRecorder, devRequest)
+	if devRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected duplicate cookies to block the dev fallback, got %d", devRecorder.Code)
+	}
+
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})

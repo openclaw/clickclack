@@ -1278,7 +1278,11 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 		user, err := s.store.GetSessionUser(r.Context(), token)
 		return actor{user: user}, err
 	}
-	if cookie, err := requestCookie(r, s.cookies.Session); err == nil && cookie.Value != "" {
+	cookie, err := requestCookie(r, s.cookies.Session)
+	if errors.Is(err, errAmbiguousCookie) {
+		return actor{}, err
+	}
+	if err == nil && cookie.Value != "" {
 		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
 		return actor{user: user}, err
 	}

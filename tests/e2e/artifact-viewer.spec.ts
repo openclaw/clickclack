@@ -687,6 +687,10 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
   await page.goto("/app");
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  const closeViewer = async () => {
+    await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+    await expect(viewer).toHaveCount(0);
+  };
 
   await page.getByRole("button", { name: "Open forecast.xlsx" }).click();
   await expect(viewer.getByRole("region", { name: "Forecast worksheet" })).toContainText("125000");
@@ -695,23 +699,23 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
   }
   await viewer.getByRole("tab", { name: "Assumptions" }).click();
   await expect(viewer.getByRole("region", { name: "Assumptions worksheet" })).toContainText("0.18");
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open namespaced.xlsx" }).click();
   await expect(viewer.getByText("Deflated namespaced workbook")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open namespaced.pptx" }).click();
   await expect(viewer.getByText("Deflated namespaced slide")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open strict.xlsx" }).click();
   await expect(viewer.getByText("Strict workbook relationship")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open strict.pptx" }).click();
   await expect(viewer.getByText("Strict presentation relationship")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open dense.pptx" }).click();
   const denseSlide = viewer.getByLabel("Slide 1: Dense outline");
@@ -736,30 +740,30 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       }),
     )
     .toBe(true);
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open phonetic.xlsx" }).click();
   await expect(viewer.getByText("Tokyo", { exact: true })).toBeVisible();
   await expect(viewer.getByText("Kyoto", { exact: true })).toBeVisible();
   await expect(viewer.getByText("とうきょう")).toHaveCount(0);
   await expect(viewer.getByText("きょうと")).toHaveCount(0);
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open mixed-sheets.xlsx" }).click();
   await expect(viewer.getByText("Visible worksheet data")).toBeVisible();
   await expect(viewer.getByText("3 non-worksheet sheets omitted")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open per-slide-limit.pptx" }).click();
   await expect(viewer.getByLabel("Slide 1: Oversized slide")).toBeVisible();
   await viewer.getByRole("button", { name: "Next" }).click();
   await expect(viewer.getByLabel("Slide 2: Later slide remains available")).toBeVisible();
   await expect(viewer.getByText("Some slide content was omitted by preview limits.")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open absolute.xlsx" }).click();
   await expect(viewer.getByText("Resolved from package root")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open many-sheets.xlsx" }).click();
   await expect(viewer.getByRole("alert")).toContainText("too many worksheets");
@@ -769,51 +773,51 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       fullPage: true,
     });
   }
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open xml-element-flood.xlsx" }).click();
   await expect(viewer.getByRole("alert")).toContainText("too many XML elements");
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open cell-budget.xlsx" }).click();
   await viewer.getByRole("tab", { name: "Second" }).click();
   await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open omitted-references.xlsx" }).click();
   await expect(viewer.locator("tbody tr").nth(2)).toContainText("Derived A3");
   await expect(viewer.locator("tbody tr").nth(2)).toContainText("Derived B3");
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open shared-string-flood.xlsx" }).click();
   await expect(viewer.getByRole("alert")).toContainText("too many shared strings");
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open paragraph-flood.pptx" }).click();
   await expect(viewer.getByRole("alert")).toContainText("too many paragraphs");
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open media-heavy.pptx" }).click();
   await expect(viewer.getByText("Text-only preview survives media")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open hidden-content.xlsx" }).click();
   await expect(viewer.getByText("TRUE", { exact: true })).toBeVisible();
   await expect(viewer.getByText("1 hidden sheet omitted")).toBeVisible();
   await expect(viewer.getByText("Hidden workbook secret")).toHaveCount(0);
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open hidden-slide.pptx" }).click();
   await expect(viewer.getByText("Visible slide")).toBeVisible();
   await expect(viewer.getByText("1 hidden slide omitted.")).toBeVisible();
   await expect(viewer.getByText("Hidden slide secret")).toHaveCount(0);
   await expect(viewer.getByText("Text outline only.")).toBeVisible();
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open sparse.xlsx" }).click();
   await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
   await expect(viewer.locator("tbody td")).toHaveCount(10_000);
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open long-cell.xlsx" }).click();
   await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
@@ -825,7 +829,7 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
         .evaluate((cell) => cell.getBoundingClientRect().width),
     )
     .toBeLessThanOrEqual(160);
-  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+  await closeViewer();
 
   await page.getByRole("button", { name: "Open launch.pptx" }).click();
   await expect(viewer.getByLabel("Slide 1: Launch plan")).toContainText("Three milestones");

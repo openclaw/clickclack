@@ -1410,7 +1410,13 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await page.getByLabel("Message body").fill(body);
+  const messageCreated = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/api/channels/${channel.id}/messages`) &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Send" }).click();
+  expect((await messageCreated).ok()).toBe(true);
 
   const row = page.locator(".message-row:not(.is-pending)", {
     has: page.locator(".markdown").filter({ hasText: body }),

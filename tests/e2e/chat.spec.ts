@@ -1687,11 +1687,18 @@ test("browser notifications announce incoming messages outside the active conver
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
   const workspaceId = workspaces.workspaces[0].id;
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(page.locator('.shell[data-connected="true"]')).toBeVisible();
+
   const channelName = `notify-${randomUUID()}`;
   const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
     data: { name: channelName, kind: "public" },
   });
   const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  await expect(page.getByRole("link", { name: `# ${channel.channel.name}` })).toBeVisible();
+
   const senderID = clickclack([
     "admin",
     "user",
@@ -1706,9 +1713,6 @@ test("browser notifications announce incoming messages outside the active conver
     `${channelName}@example.com`,
   ]);
 
-  await page.goto("/app");
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
-  await expect(page.locator('.shell[data-connected="true"]')).toBeVisible();
   const remoteResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
     headers: { "X-ClickClack-User": senderID },
     data: { body: "ping from another channel" },

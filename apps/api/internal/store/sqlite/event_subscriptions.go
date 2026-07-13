@@ -10,6 +10,8 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+const maxActiveEventSubscriptionsPerWorkspace = 25
+
 func (s *Store) ListEventSubscriptions(ctx context.Context, workspaceID, requesterID string) ([]store.EventSubscription, error) {
 	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
 		return nil, err
@@ -49,6 +51,16 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 	defer tx.Rollback()
 	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.EventSubscription{}, err
+	}
+	var activeSubscriptions int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM event_subscriptions
+		WHERE workspace_id = ? AND revoked_at IS NULL`, workspaceID).Scan(&activeSubscriptions); err != nil {
+		return store.EventSubscription{}, err
+	}
+	if activeSubscriptions >= maxActiveEventSubscriptionsPerWorkspace {
+		return store.EventSubscription{}, errors.New("event subscription quota exceeded")
 	}
 	appInstallationID := strings.TrimSpace(input.AppInstallationID)
 	if appInstallationID != "" {
@@ -124,7 +136,7 @@ func (s *Store) ListEventSubscriptionsForEvent(ctx context.Context, event store.
 	}
 	out := make([]store.EventSubscription, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
-		if subscriptionMatchesEvent(subscription, event.Type) {
+		if subscriptionMatchesEvent(subscription, event.Type) && subscriptionCanReceiveEvent(subscription, event) {
 			out = append(out, subscription)
 		}
 	}
@@ -225,6 +237,18 @@ func normalizeEventTypes(values []string) ([]string, error) {
 func subscriptionMatchesEvent(subscription store.EventSubscription, eventType string) bool {
 	for _, value := range subscription.EventTypes {
 		if value == "*" || value == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func subscriptionCanReceiveEvent(subscription store.EventSubscription, event store.Event) bool {
+	if len(event.RecipientUserIDs) == 0 {
+		return true
+	}
+	for _, userID := range event.RecipientUserIDs {
+		if subscription.CreatedBy == userID {
 			return true
 		}
 	}

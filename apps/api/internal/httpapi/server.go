@@ -24,16 +24,19 @@ import (
 )
 
 type Server struct {
-	store          store.Store
-	hub            *realtime.Hub
-	uploadDir      string
-	uploadStorage  uploadstore.Store
-	githubOAuth    GitHubOAuthConfig
-	desktopOAuth   *desktopOAuthBroker
-	disableDevAuth bool
-	pushNotifier   PushNotifier
-	metrics        *metricsRegistry
-	build          buildMetadata
+	store           store.Store
+	hub             *realtime.Hub
+	uploadDir       string
+	uploadStorage   uploadstore.Store
+	githubOAuth     GitHubOAuthConfig
+	desktopOAuth    *desktopOAuthBroker
+	disableDevAuth  bool
+	pushNotifier    PushNotifier
+	metrics         *metricsRegistry
+	build           buildMetadata
+	callbackPolicy  *callbackNetworkPolicy
+	callbackClient  *http.Client
+	eventDeliveries *eventDeliveryDispatcher
 }
 
 const (
@@ -74,7 +77,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	if options.MetricsEnabled {
 		metrics = newMetricsRegistry()
 	}
-	return &Server{
+	server := &Server{
 		store:          st,
 		hub:            hub,
 		uploadDir:      options.UploadDir,
@@ -90,6 +93,10 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 			Commit:      options.Commit,
 		},
 	}
+	server.callbackPolicy = newCallbackNetworkPolicy()
+	server.callbackClient = server.callbackPolicy.client()
+	server.eventDeliveries = newEventDeliveryDispatcher(server)
+	return server
 }
 
 func (s *Server) Handler() http.Handler {
@@ -185,7 +192,22 @@ func (s *Server) Handler() http.Handler {
 	r.NotFound(s.serveSPA)
 	r.Head("/*", s.serveSPA)
 	r.Get("/*", s.serveSPA)
-	return r
+	return &serverHandler{Handler: r, server: s}
+}
+
+type serverHandler struct {
+	http.Handler
+	server *Server
+}
+
+func (h *serverHandler) Close() {
+	h.server.Close()
+}
+
+func (s *Server) Close() {
+	if s.eventDeliveries != nil {
+		s.eventDeliveries.close()
+	}
 }
 
 func (s *Server) requireCookieCSRF(next http.Handler) http.Handler {
@@ -353,22 +375,76 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName          string                      `json:"display_name"`
-		Handle               string                      `json:"handle"`
-		AvatarURL            string                      `json:"avatar_url"`
-		NotificationSettings *store.NotificationSettings `json:"notification_settings"`
+		DisplayName          *string `json:"display_name"`
+		Handle               *string `json:"handle"`
+		AvatarURL            *string `json:"avatar_url"`
+		NotificationSettings *struct {
+			PushoverEnabled *bool   `json:"pushover_enabled"`
+			PushoverUserKey *string `json:"pushover_user_key"`
+		} `json:"notification_settings"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	updated, err := s.store.UpdateUserProfileAndNotificationSettings(r.Context(), store.UpdateUserProfileAndNotificationSettingsInput{
-		UserID:               act.user.ID,
-		DisplayName:          body.DisplayName,
-		Handle:               body.Handle,
-		AvatarURL:            body.AvatarURL,
-		NotificationSettings: body.NotificationSettings,
-	})
+	profileSupplied := body.DisplayName != nil || body.Handle != nil || body.AvatarURL != nil
+	displayName := act.user.DisplayName
+	handle := act.user.Handle
+	avatarURL := act.user.AvatarURL
+	if body.DisplayName != nil {
+		displayName = *body.DisplayName
+	}
+	if body.Handle != nil {
+		handle = *body.Handle
+	}
+	if body.AvatarURL != nil {
+		avatarURL = *body.AvatarURL
+	}
+
+	var notificationSettings *store.NotificationSettings
+	if body.NotificationSettings != nil {
+		current := store.NotificationSettings{}
+		if act.user.NotificationSettings != nil {
+			current = *act.user.NotificationSettings
+		}
+		if body.NotificationSettings.PushoverEnabled != nil {
+			current.PushoverEnabled = *body.NotificationSettings.PushoverEnabled
+		}
+		if body.NotificationSettings.PushoverUserKey != nil {
+			current.PushoverUserKey = *body.NotificationSettings.PushoverUserKey
+		}
+		notificationSettings = &current
+	}
+
+	var updated store.User
+	switch {
+	case profileSupplied && notificationSettings != nil:
+		updated, err = s.store.UpdateUserProfileAndNotificationSettings(r.Context(), store.UpdateUserProfileAndNotificationSettingsInput{
+			UserID:               act.user.ID,
+			DisplayName:          displayName,
+			Handle:               handle,
+			AvatarURL:            avatarURL,
+			NotificationSettings: notificationSettings,
+		})
+	case profileSupplied:
+		updated, err = s.store.UpdateUserProfile(r.Context(), store.UpdateUserProfileInput{
+			UserID:      act.user.ID,
+			DisplayName: displayName,
+			Handle:      handle,
+			AvatarURL:   avatarURL,
+		})
+	case notificationSettings != nil:
+		_, err = s.store.UpdateNotificationSettings(r.Context(), store.UpdateNotificationSettingsInput{
+			UserID:          act.user.ID,
+			PushoverEnabled: notificationSettings.PushoverEnabled,
+			PushoverUserKey: notificationSettings.PushoverUserKey,
+		})
+		if err == nil {
+			updated, err = s.store.GetUser(r.Context(), act.user.ID)
+		}
+	default:
+		updated = act.user
+	}
 	writeResult(w, map[string]any{"user": updated}, err)
 }
 
@@ -803,7 +879,12 @@ func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	topics, err := s.store.ListTopics(r.Context(), chi.URLParam(r, "workspace_id"), act.user.ID)
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	topics, err := s.store.ListTopics(r.Context(), workspaceID, act.user.ID)
 	writeResult(w, map[string]any{"topics": topics}, err)
 }
 
@@ -817,6 +898,11 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 	var body struct {
 		ChannelID string `json:"channel_id"`
 		Name      string `json:"name"`
@@ -825,7 +911,7 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: chi.URLParam(r, "workspace_id"), ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
+	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: workspaceID, ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"topic": topic}, err)
 }
 
@@ -1519,6 +1605,9 @@ func writeMessagePage(w http.ResponseWriter, page store.MessagePage, err error) 
 }
 
 func ListenAndServe(ctx context.Context, addr string, handler http.Handler) error {
+	if closer, ok := handler.(interface{ Close() }); ok {
+		defer closer.Close()
+	}
 	server := newHTTPServer(addr, handler)
 	go func() {
 		<-ctx.Done()

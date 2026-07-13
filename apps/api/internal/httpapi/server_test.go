@@ -1183,7 +1183,10 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := channels[0]
-	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	serverState := New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")})
+	configureLocalCallbackPolicy(serverState)
+	server := httptest.NewServer(serverState.Handler())
+	t.Cleanup(serverState.Close)
 	t.Cleanup(server.Close)
 
 	index := getBody(t, server.URL+"/")
@@ -1422,7 +1425,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		"app_installation_id": createdInstall.AppInstallation.ID,
 		"command":             "/deploy",
 		"description":         "Deploy something",
-		"callback_url":        callbackServer.URL,
+		"callback_url":        localCallbackURL(callbackServer.URL),
 		"bot_user_id":         createdBot.Bot.ID,
 	})
 	signingSecret = registeredCommand.SlashCommand.SigningSecret
@@ -1473,7 +1476,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", map[string]any{
 		"app_installation_id": createdInstall.AppInstallation.ID,
 		"event_types":         []string{"message.created"},
-		"callback_url":        eventCallbackServer.URL,
+		"callback_url":        localCallbackURL(eventCallbackServer.URL),
 	})
 	eventSigningSecret = eventSubscription.EventSubscription.SigningSecret
 	if eventSigningSecret == "" {
@@ -1491,12 +1494,22 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	if topicMessage.Message.TopicID != createdTopic.Topic.ID {
 		t.Fatalf("expected topic_id on message, got %#v", topicMessage.Message)
 	}
+	var deliveries struct {
+		EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		deliveries = getJSONAsUser[struct {
+			EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
+		}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
+		if eventPayload != nil && len(deliveries.EventDeliveryAttempts) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if eventPayload == nil || eventPayload["event"].(map[string]any)["type"] != "message.created" {
 		t.Fatalf("expected message.created event payload, got %#v", eventPayload)
 	}
-	deliveries := getJSONAsUser[struct {
-		EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
-	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
 	if len(deliveries.EventDeliveryAttempts) == 0 || deliveries.EventDeliveryAttempts[0].ResponseStatus != http.StatusAccepted {
 		t.Fatalf("expected accepted event delivery attempt, got %#v", deliveries.EventDeliveryAttempts)
 	}

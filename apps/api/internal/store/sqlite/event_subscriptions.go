@@ -55,8 +55,19 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 	var activeSubscriptions int
 	if err := tx.QueryRowContext(ctx, `
 		SELECT COUNT(*)
-		FROM event_subscriptions
-		WHERE workspace_id = ? AND revoked_at IS NULL`, workspaceID).Scan(&activeSubscriptions); err != nil {
+		FROM event_subscriptions es
+		WHERE es.workspace_id = ?
+		  AND es.revoked_at IS NULL
+		  AND (
+		    es.app_installation_id IS NULL
+		    OR EXISTS (
+		      SELECT 1
+		      FROM app_installations ai
+		      WHERE ai.id = es.app_installation_id
+		        AND ai.workspace_id = es.workspace_id
+		        AND ai.revoked_at IS NULL
+		    )
+		  )`, workspaceID).Scan(&activeSubscriptions); err != nil {
 		return store.EventSubscription{}, err
 	}
 	if activeSubscriptions >= maxActiveEventSubscriptionsPerWorkspace {

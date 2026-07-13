@@ -3033,6 +3033,34 @@ func (q *Queries) MembershipRolesForUpdate(ctx context.Context, arg MembershipRo
 	return items, nil
 }
 
+const patchUserProfile = `-- name: PatchUserProfile :execrows
+UPDATE users
+SET display_name = COALESCE($1, display_name),
+    handle = COALESCE($2, handle),
+    avatar_url = COALESCE($3, avatar_url)
+WHERE id = $4
+`
+
+type PatchUserProfileParams struct {
+	DisplayName sql.NullString `json:"display_name"`
+	Handle      sql.NullString `json:"handle"`
+	AvatarUrl   sql.NullString `json:"avatar_url"`
+	ID          string         `json:"id"`
+}
+
+func (q *Queries) PatchUserProfile(ctx context.Context, arg PatchUserProfileParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, patchUserProfile,
+		arg.DisplayName,
+		arg.Handle,
+		arg.AvatarUrl,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const pruneEvents = `-- name: PruneEvents :execrows
 DELETE FROM events AS e
 WHERE e.workspace_id = $1

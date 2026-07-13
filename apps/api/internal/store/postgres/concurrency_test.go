@@ -126,6 +126,87 @@ func TestPostgresModerationWaitsForInFlightWriteAuthorization(t *testing.T) {
 	}
 }
 
+func TestPostgresClientNonceRecoveryPrecedesModerationCheck(t *testing.T) {
+	ctx := context.Background()
+	st, fixture := newPostgresConcurrencyFixture(t, ctx)
+	message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: fixture.channel.ID,
+		AuthorID:  fixture.member.ID,
+		Body:      "committed message",
+		Nonce:     "moderated-message-retry",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: fixture.channel.ID,
+		AuthorID:  fixture.owner.ID,
+		Body:      "thread root",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: root.ID,
+		AuthorID:      fixture.member.ID,
+		Body:          "committed reply",
+		Nonce:         "moderated-reply-retry",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocked := true
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+		WorkspaceID:  fixture.workspace.ID,
+		ActorUserID:  fixture.owner.ID,
+		TargetUserID: fixture.member.ID,
+		Blocked:      &blocked,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	retriedMessage, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: fixture.channel.ID,
+		AuthorID:  fixture.member.ID,
+		Body:      "committed message",
+		Nonce:     "moderated-message-retry",
+	})
+	if err != nil {
+		t.Fatalf("committed message retry returned %v", err)
+	}
+	if retriedMessage.ID != message.ID || event.ID != "" {
+		t.Fatalf("message retry returned %#v with event %#v", retriedMessage, event)
+	}
+	retriedReply, _, events, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: root.ID,
+		AuthorID:      fixture.member.ID,
+		Body:          "committed reply",
+		Nonce:         "moderated-reply-retry",
+	})
+	if err != nil {
+		t.Fatalf("committed reply retry returned %v", err)
+	}
+	if retriedReply.ID != reply.ID || len(events) != 0 {
+		t.Fatalf("reply retry returned %#v with events %#v", retriedReply, events)
+	}
+
+	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: fixture.channel.ID,
+		AuthorID:  fixture.member.ID,
+		Body:      "new blocked message",
+	}); !errors.Is(err, store.ErrModerationRestricted) {
+		t.Fatalf("new message after moderation returned %v", err)
+	}
+	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: root.ID,
+		AuthorID:      fixture.member.ID,
+		Body:          "new blocked reply",
+	}); !errors.Is(err, store.ErrModerationRestricted) {
+		t.Fatalf("new reply after moderation returned %v", err)
+	}
+}
+
 func TestPostgresBotRemovalWaitsForInFlightWriteAuthorization(t *testing.T) {
 	ctx := context.Background()
 	st, fixture := newPostgresConcurrencyFixture(t, ctx)

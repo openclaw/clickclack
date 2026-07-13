@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -107,5 +108,24 @@ func TestAppEventSubscriptionUsesInstallationBotPrincipal(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("revoked app subscriptions = %#v, want none", got)
+	}
+
+	for i := 1; i < maxActiveEventSubscriptionsPerWorkspace; i++ {
+		if _, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+			WorkspaceID: workspace.ID,
+			EventTypes:  []string{"message.created"},
+			CallbackURL: "https://quota.example.com/" + strings.Repeat("x", i),
+			CreatedBy:   owner.ID,
+		}); err != nil {
+			t.Fatalf("create active subscription %d after app revocation: %v", i+1, err)
+		}
+	}
+	if _, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+		WorkspaceID: workspace.ID,
+		EventTypes:  []string{"message.created"},
+		CallbackURL: "https://quota.example.com/overflow",
+		CreatedBy:   owner.ID,
+	}); err == nil || !strings.Contains(err.Error(), "quota") {
+		t.Fatalf("expected active subscription quota error, got %v", err)
 	}
 }

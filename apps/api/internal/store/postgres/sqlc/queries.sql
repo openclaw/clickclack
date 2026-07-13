@@ -83,6 +83,13 @@ SET display_name = sqlc.arg(display_name),
     avatar_url = sqlc.arg(avatar_url)
 WHERE id = sqlc.arg(id);
 
+-- name: PatchUserProfile :execrows
+UPDATE users
+SET display_name = COALESCE(sqlc.narg(display_name), display_name),
+    handle = COALESCE(sqlc.narg(handle), handle),
+    avatar_url = COALESCE(sqlc.narg(avatar_url), avatar_url)
+WHERE id = sqlc.arg(id);
+
 -- name: UpdateWorkspaceMemberSortKeys :exec
 UPDATE workspace_members
 SET sort_name = lower(COALESCE(NULLIF(sqlc.arg(display_name), ''), NULLIF(sqlc.arg(handle), ''), user_id)),

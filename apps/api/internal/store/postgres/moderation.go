@@ -163,6 +163,10 @@ func requireCanPostAuthorizationTx(ctx context.Context, tx *sql.Tx, workspaceID,
 	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
 		return "", err
 	}
+	return requireCanPostAuthorizationLockedTx(ctx, tx, workspaceID, channelID, userID)
+}
+
+func requireCanPostAuthorizationLockedTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, userID string) (string, error) {
 	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return "", err
@@ -211,6 +215,10 @@ func requireCanSendDirectTx(ctx context.Context, tx *sql.Tx, workspaceID, userID
 	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
 		return err
 	}
+	return requireCanSendDirectLockedTx(ctx, tx, workspaceID, userID)
+}
+
+func requireCanSendDirectLockedTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return err

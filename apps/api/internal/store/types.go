@@ -486,6 +486,19 @@ type UpdateUserProfileAndNotificationSettingsInput struct {
 	NotificationSettings *NotificationSettings
 }
 
+type PatchNotificationSettingsInput struct {
+	PushoverEnabled *bool
+	PushoverUserKey *string
+}
+
+type PatchUserInput struct {
+	UserID               string
+	DisplayName          *string
+	Handle               *string
+	AvatarURL            *string
+	NotificationSettings *PatchNotificationSettingsInput
+}
+
 type CreateWorkspaceInput struct {
 	Name string
 	Slug string
@@ -781,6 +794,7 @@ type Store interface {
 	UpsertIdentityUser(ctx context.Context, input UpsertIdentityUserInput) (User, error)
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
 	UpdateUserProfileAndNotificationSettings(ctx context.Context, input UpdateUserProfileAndNotificationSettingsInput) (User, error)
+	PatchUser(ctx context.Context, input PatchUserInput) (User, error)
 	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string) ([]PushNotificationRecipient, error)
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error

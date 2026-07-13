@@ -180,54 +180,34 @@ func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {
-	displayName, handle, avatarURL, err := normalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
-	if err != nil {
-		return store.User{}, err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return store.User{}, err
-	}
-	defer tx.Rollback()
-	qtx := s.q.WithTx(tx)
-	if err := qtx.UpdateUserProfile(ctx, storedb.UpdateUserProfileParams{
-		DisplayName: displayName,
-		Handle:      handle,
-		AvatarUrl:   avatarURL,
-		ID:          input.UserID,
-	}); err != nil {
-		return store.User{}, profileUpdateError(err)
-	}
-	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
-		DisplayName: displayName,
-		Handle:      handle,
+	return s.PatchUser(ctx, store.PatchUserInput{
 		UserID:      input.UserID,
-	}); err != nil {
-		return store.User{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return store.User{}, err
-	}
-	return s.GetUser(ctx, input.UserID)
+		DisplayName: &input.DisplayName,
+		Handle:      &input.Handle,
+		AvatarURL:   &input.AvatarURL,
+	})
 }
 
 func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, input store.UpdateUserProfileAndNotificationSettingsInput) (store.User, error) {
-	displayName, handle, avatarURL, err := normalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
+	patch := store.PatchUserInput{
+		UserID:      input.UserID,
+		DisplayName: &input.DisplayName,
+		Handle:      &input.Handle,
+		AvatarURL:   &input.AvatarURL,
+	}
+	if input.NotificationSettings != nil {
+		patch.NotificationSettings = &store.PatchNotificationSettingsInput{
+			PushoverEnabled: &input.NotificationSettings.PushoverEnabled,
+			PushoverUserKey: &input.NotificationSettings.PushoverUserKey,
+		}
+	}
+	return s.PatchUser(ctx, patch)
+}
+
+func (s *Store) PatchUser(ctx context.Context, input store.PatchUserInput) (store.User, error) {
+	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input)
 	if err != nil {
 		return store.User{}, err
-	}
-	var settings store.NotificationSettings
-	var settingsEnabled int64
-	if input.NotificationSettings != nil {
-		settingsInput := store.UpdateNotificationSettingsInput{
-			UserID:          input.UserID,
-			PushoverEnabled: input.NotificationSettings.PushoverEnabled,
-			PushoverUserKey: input.NotificationSettings.PushoverUserKey,
-		}
-		settings, settingsEnabled, err = normalizeNotificationSettings(settingsInput)
-		if err != nil {
-			return store.User{}, err
-		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -235,22 +215,51 @@ func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, in
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
-	if err := qtx.UpdateUserProfile(ctx, storedb.UpdateUserProfileParams{
+	affected, err := qtx.PatchUserProfile(ctx, storedb.PatchUserProfileParams{
 		DisplayName: displayName,
 		Handle:      handle,
 		AvatarUrl:   avatarURL,
 		ID:          input.UserID,
-	}); err != nil {
+	})
+	if err != nil {
 		return store.User{}, profileUpdateError(err)
 	}
+	if affected == 0 {
+		return store.User{}, sql.ErrNoRows
+	}
+	userRow, err := qtx.GetUser(ctx, input.UserID)
+	if err != nil {
+		return store.User{}, err
+	}
 	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
-		DisplayName: displayName,
-		Handle:      handle,
+		DisplayName: userRow.DisplayName,
+		Handle:      userRow.Handle,
 		UserID:      input.UserID,
 	}); err != nil {
 		return store.User{}, err
 	}
-	if input.NotificationSettings != nil {
+	if notificationPatchSupplied(input.NotificationSettings) {
+		settings := store.NotificationSettings{}
+		settingsRow, err := qtx.GetNotificationSettings(ctx, input.UserID)
+		if err == nil {
+			settings = storeNotificationSettingsFromDB(settingsRow)
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return store.User{}, err
+		}
+		if input.NotificationSettings.PushoverEnabled != nil {
+			settings.PushoverEnabled = *input.NotificationSettings.PushoverEnabled
+		}
+		if input.NotificationSettings.PushoverUserKey != nil {
+			settings.PushoverUserKey = *input.NotificationSettings.PushoverUserKey
+		}
+		settings, settingsEnabled, err := normalizeNotificationSettings(store.UpdateNotificationSettingsInput{
+			UserID:          input.UserID,
+			PushoverEnabled: settings.PushoverEnabled,
+			PushoverUserKey: settings.PushoverUserKey,
+		})
+		if err != nil {
+			return store.User{}, err
+		}
 		if err := qtx.UpsertNotificationSettings(ctx, storedb.UpsertNotificationSettingsParams{
 			UserID:          input.UserID,
 			PushoverEnabled: settingsEnabled,
@@ -265,23 +274,45 @@ func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, in
 	return s.GetUser(ctx, input.UserID)
 }
 
-func normalizeUserProfile(displayNameInput, handleInput, avatarURLInput string) (string, string, string, error) {
-	displayName := strings.TrimSpace(displayNameInput)
-	if displayName == "" {
-		return "", "", "", errors.New("display_name is required")
+func normalizeUserProfilePatch(input store.PatchUserInput) (sql.NullString, sql.NullString, sql.NullString, error) {
+	var displayName, handle, avatarURL sql.NullString
+	if input.DisplayName != nil {
+		normalized, err := normalizeDisplayName(*input.DisplayName)
+		if err != nil {
+			return displayName, handle, avatarURL, err
+		}
+		displayName = sqlText(normalized)
 	}
-	if len(displayName) > 80 {
-		return "", "", "", errors.New("display_name is too long")
+	if input.Handle != nil {
+		normalized, err := normalizeHandle(*input.Handle)
+		if err != nil {
+			return displayName, handle, avatarURL, err
+		}
+		handle = sqlText(normalized)
 	}
-	handle, err := normalizeHandle(handleInput)
-	if err != nil {
-		return "", "", "", err
-	}
-	avatarURL, err := normalizeAvatarURL(avatarURLInput)
-	if err != nil {
-		return "", "", "", err
+	if input.AvatarURL != nil {
+		normalized, err := normalizeAvatarURL(*input.AvatarURL)
+		if err != nil {
+			return displayName, handle, avatarURL, err
+		}
+		avatarURL = sqlText(normalized)
 	}
 	return displayName, handle, avatarURL, nil
+}
+
+func notificationPatchSupplied(input *store.PatchNotificationSettingsInput) bool {
+	return input != nil && (input.PushoverEnabled != nil || input.PushoverUserKey != nil)
+}
+
+func normalizeDisplayName(input string) (string, error) {
+	displayName := strings.TrimSpace(input)
+	if displayName == "" {
+		return "", errors.New("display_name is required")
+	}
+	if len(displayName) > 80 {
+		return "", errors.New("display_name is too long")
+	}
+	return displayName, nil
 }
 
 func profileUpdateError(err error) error {

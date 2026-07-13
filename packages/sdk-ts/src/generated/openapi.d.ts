@@ -615,6 +615,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/messages/by-nonce": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getMessageByNonce"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/messages/{message_id}": {
     parameters: {
       query?: never;
@@ -1396,6 +1412,9 @@ export interface components {
       quoted_author?: components["schemas"]["User"];
       thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
+    };
+    MessageResponse: {
+      message: components["schemas"]["Message"];
     };
     Upload: {
       id: string;
@@ -2935,6 +2954,47 @@ export interface operations {
     responses: {
       /** @description Updated channel read receipt */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getMessageByNonce: {
+    parameters: {
+      query: {
+        workspace_id: string;
+        nonce: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Message created by the authenticated owner with this nonce */
+      200: {
+        headers: {
+          /** @description Indicates that durable message nonce lookup is supported. */
+          "X-ClickClack-Message-Nonce"?: "supported";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageResponse"];
+        };
+      };
+      /** @description No message exists for this owner and nonce */
+      404: {
+        headers: {
+          /** @description Indicates that durable message nonce lookup is supported. */
+          "X-ClickClack-Message-Nonce"?: "supported";
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The nonce belongs to a message in another workspace */
+      409: {
         headers: {
           [name: string]: unknown;
         };

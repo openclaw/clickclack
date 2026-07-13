@@ -854,6 +854,44 @@ paths:
       responses:
         "200":
           description: Updated channel read receipt
+  /api/messages/by-nonce:
+    get:
+      operationId: getMessageByNonce
+      parameters:
+        - name: workspace_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nonce
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: Message created by the authenticated owner with this nonce
+          headers:
+            X-ClickClack-Message-Nonce:
+              description: Indicates that durable message nonce lookup is supported.
+              schema:
+                type: string
+                enum: [supported]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "404":
+          description: No message exists for this owner and nonce
+          headers:
+            X-ClickClack-Message-Nonce:
+              description: Indicates that durable message nonce lookup is supported.
+              schema:
+                type: string
+                enum: [supported]
+        "409":
+          description: The nonce belongs to a message in another workspace
   /api/messages/{message_id}:
     get:
       operationId: getMessage
@@ -2119,6 +2157,12 @@ components:
           $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
     Upload:
       type: object
       required: [id, workspace_id, owner_id, filename, content_type, byte_size, created_at]

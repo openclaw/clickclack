@@ -708,6 +708,19 @@ export class ClickClackClient {
       const data = await this.request<{ message: Message }>(`/api/messages/${messageId}`);
       return data.message;
     },
+    findByNonce: async (workspaceId: string, nonce: string): Promise<Message | undefined> => {
+      const params = new URLSearchParams({ workspace_id: workspaceId, nonce });
+      const response = await this.fetchResponse(`/api/messages/by-nonce?${params.toString()}`);
+      if (
+        response.status === 404 &&
+        response.headers.get("X-ClickClack-Message-Nonce") === "supported"
+      ) {
+        await response.text();
+        return undefined;
+      }
+      const data = await this.readResponse<{ message: Message }>(response);
+      return data.message;
+    },
     update: async (messageId: string, input: { body: string }): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/messages/${messageId}`, {
         method: "PATCH",

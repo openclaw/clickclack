@@ -27,6 +27,7 @@ func TestOAuthTransactionsAndDesktopGrants(t *testing.T) {
 		Mode:               store.OAuthModeDesktop,
 		PKCEVerifier:       "pkce-verifier",
 		DesktopChallenge:   "desktop-challenge",
+		DesktopProtocol:    2,
 		CreatedAt:          now,
 		ExpiresAt:          now.Add(10 * time.Minute),
 	}
@@ -40,7 +41,7 @@ func TestOAuthTransactionsAndDesktopGrants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if consumed.Mode != store.OAuthModeDesktop || consumed.PKCEVerifier != transaction.PKCEVerifier || consumed.DesktopChallenge != transaction.DesktopChallenge {
+	if consumed.Mode != store.OAuthModeDesktop || consumed.PKCEVerifier != transaction.PKCEVerifier || consumed.DesktopChallenge != transaction.DesktopChallenge || consumed.DesktopProtocol != 2 {
 		t.Fatalf("unexpected consumed transaction: %#v", consumed)
 	}
 	if _, err := st.ConsumeOAuthTransaction(ctx, transaction.StateHash, transaction.BrowserBindingHash, now); !errors.Is(err, store.ErrOAuthTransactionInvalid) {

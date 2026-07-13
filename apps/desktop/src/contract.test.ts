@@ -52,15 +52,27 @@ test("builds and validates the desktop OAuth handoff", () => {
   const challenge = "a".repeat(43);
   assert.equal(
     desktopOAuthStartURL("https://chat.example.com", challenge),
-    `https://chat.example.com/api/auth/github/desktop/start?code_challenge=${challenge}`,
+    `https://chat.example.com/api/auth/github/desktop/start?code_challenge=${challenge}&desktop_protocol=2`,
   );
   assert.throws(() => desktopOAuthStartURL("https://chat.example.com", "short"), /challenge/);
   assert.equal(
     desktopOAuthCallbackCode(`clickclack://auth/callback?code=${"a1".repeat(16)}`),
     "a1".repeat(16),
   );
+  assert.equal(
+    desktopOAuthCallbackCode(`chat.clickclack.desktop:/auth/callback?code=${"a1".repeat(16)}`),
+    "a1".repeat(16),
+  );
+  assert.equal(
+    desktopOAuthCallbackCode(`chat.clickclack.desktop:/auth/callback?code=${"A".repeat(43)}`),
+    "A".repeat(43),
+  );
   assert.equal(desktopOAuthCallbackCode("clickclack://auth/callback?code=bad"), null);
   assert.equal(desktopOAuthCallbackCode(`clickclack://app/callback?code=${"a1".repeat(16)}`), null);
+  assert.equal(
+    desktopOAuthCallbackCode(`chat.clickclack.desktop:/wrong?code=${"a1".repeat(16)}`),
+    null,
+  );
 });
 
 test("exposes the desktop bridge only to the configured server origin", () => {

@@ -720,6 +720,7 @@ type OAuthTransaction struct {
 	Mode               string
 	PKCEVerifier       string
 	DesktopChallenge   string
+	DesktopProtocol    int64
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
 }

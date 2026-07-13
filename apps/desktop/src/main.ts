@@ -20,6 +20,7 @@ import path from "node:path";
 import {
   appURL,
   clampUnreadCount,
+  DESKTOP_AUTH_PROTOCOL,
   deepLinkToRoute,
   defaultSettings,
   desktopTitleBarOptions,
@@ -30,6 +31,7 @@ import {
   desktopOAuthStartURL,
   mergeSettings,
   hasIntegratedTitleBarCapability,
+  LEGACY_DESKTOP_PROTOCOL,
   normalizeServerURL,
   safeAppRoute,
   sanitizeNotification,
@@ -38,7 +40,7 @@ import {
   type WindowState,
 } from "./contract";
 
-const PROTOCOL = "clickclack";
+const PROTOCOLS = [LEGACY_DESKTOP_PROTOCOL, DESKTOP_AUTH_PROTOCOL] as const;
 const SETTINGS_FILE = "desktop.json";
 const APP_NAME = "ClickClack";
 
@@ -62,7 +64,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   registerProtocol();
   app.on("second-instance", (_event, commandLine) => {
-    const link = commandLine.find((argument) => argument.startsWith(`${PROTOCOL}://`));
+    const link = protocolURLFromArgs(commandLine);
     if (link) handleProtocolURL(link);
     else openRouteWhenReady(currentRoute);
   });
@@ -87,7 +89,7 @@ async function start() {
   createApplicationMenu();
   createTray();
 
-  const startupLink = process.argv.find((argument) => argument.startsWith(`${PROTOCOL}://`));
+  const startupLink = protocolURLFromArgs(process.argv);
   const initialRoute = pendingRoute ?? (startupLink ? deepLinkToRoute(startupLink) : null);
   pendingRoute = null;
   if (initialRoute) currentRoute = initialRoute;
@@ -112,11 +114,17 @@ async function start() {
 }
 
 function registerProtocol() {
-  if (process.defaultApp && process.argv[1]) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
-    return;
+  for (const protocol of PROTOCOLS) {
+    if (process.defaultApp && process.argv[1]) {
+      app.setAsDefaultProtocolClient(protocol, process.execPath, [path.resolve(process.argv[1])]);
+      continue;
+    }
+    app.setAsDefaultProtocolClient(protocol);
   }
-  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+function protocolURLFromArgs(args: readonly string[]): string | undefined {
+  return args.find((argument) => PROTOCOLS.some((protocol) => argument.startsWith(`${protocol}:`)));
 }
 
 function createMainWindow(route = currentRoute): BrowserWindow {
@@ -298,7 +306,7 @@ function guardMainFrameNavigation(
     return;
   }
   event.preventDefault();
-  if (url.startsWith(`${PROTOCOL}://`)) {
+  if (url.startsWith(`${LEGACY_DESKTOP_PROTOCOL}://`)) {
     openRoute(deepLinkToRoute(url));
   } else if (isExternalURL(url)) {
     void shell.openExternal(url);
@@ -666,11 +674,20 @@ async function completeDesktopOAuth(code: string) {
       },
     );
     if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
-    const cookies = await session.defaultSession.cookies.get({
-      name: "cc_session",
-      url: pending.serverUrl,
-    });
-    if (cookies.length === 0) throw new Error("Server did not create a desktop session");
+    await response.arrayBuffer();
+    const meResponse = await session.defaultSession.fetch(
+      new URL("/api/me", pending.serverUrl).toString(),
+      {
+        credentials: "include",
+        method: "GET",
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!meResponse.ok) {
+      throw new Error(`Server did not establish a desktop session (HTTP ${meResponse.status})`);
+    }
+    await meResponse.arrayBuffer();
     pendingDesktopAuth = null;
     currentRoute = "/app";
     const window = mainWindow ?? createMainWindow(currentRoute);

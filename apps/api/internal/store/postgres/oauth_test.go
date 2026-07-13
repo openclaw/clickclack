@@ -28,6 +28,7 @@ func TestPostgresOAuthTransactionsAndDesktopGrants(t *testing.T) {
 		Mode:               store.OAuthModeDesktop,
 		PKCEVerifier:       "pkce-verifier",
 		DesktopChallenge:   "desktop-challenge",
+		DesktopProtocol:    2,
 		CreatedAt:          now,
 		ExpiresAt:          now.Add(10 * time.Minute),
 	}

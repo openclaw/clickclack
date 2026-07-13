@@ -222,6 +222,7 @@ type OauthTransaction struct {
 	Mode               string `json:"mode"`
 	PkceVerifier       string `json:"pkce_verifier"`
 	DesktopChallenge   string `json:"desktop_challenge"`
+	DesktopProtocol    int64  `json:"desktop_protocol"`
 	CreatedAtUnix      int64  `json:"created_at_unix"`
 	ExpiresAtUnix      int64  `json:"expires_at_unix"`
 }

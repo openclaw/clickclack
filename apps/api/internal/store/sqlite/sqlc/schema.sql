@@ -454,6 +454,7 @@ CREATE TABLE oauth_transactions (
   mode TEXT NOT NULL CHECK (mode IN ('browser', 'desktop')),
   pkce_verifier TEXT NOT NULL,
   desktop_challenge TEXT NOT NULL DEFAULT '',
+  desktop_protocol INTEGER NOT NULL DEFAULT 0,
   created_at_unix INTEGER NOT NULL,
   expires_at_unix INTEGER NOT NULL
 );

@@ -55,6 +55,7 @@ func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OA
 		Mode:               transaction.Mode,
 		PkceVerifier:       transaction.PKCEVerifier,
 		DesktopChallenge:   transaction.DesktopChallenge,
+		DesktopProtocol:    transaction.DesktopProtocol,
 		CreatedAtUnix:      transaction.CreatedAt.Unix(),
 		ExpiresAtUnix:      transaction.ExpiresAt.Unix(),
 	}); err != nil {
@@ -186,6 +187,7 @@ func oauthTransactionFromDB(row storedb.OauthTransaction) store.OAuthTransaction
 		Mode:               row.Mode,
 		PKCEVerifier:       row.PkceVerifier,
 		DesktopChallenge:   row.DesktopChallenge,
+		DesktopProtocol:    row.DesktopProtocol,
 		CreatedAt:          time.Unix(row.CreatedAtUnix, 0).UTC(),
 		ExpiresAt:          time.Unix(row.ExpiresAtUnix, 0).UTC(),
 	}
@@ -201,7 +203,10 @@ func validateOAuthTransaction(transaction store.OAuthTransaction) error {
 	if transaction.Mode == store.OAuthModeDesktop && transaction.DesktopChallenge == "" {
 		return store.ErrOAuthTransactionInvalid
 	}
-	if transaction.Mode == store.OAuthModeBrowser && transaction.DesktopChallenge != "" {
+	if transaction.Mode == store.OAuthModeDesktop && transaction.DesktopProtocol != 1 && transaction.DesktopProtocol != 2 {
+		return store.ErrOAuthTransactionInvalid
+	}
+	if transaction.Mode == store.OAuthModeBrowser && (transaction.DesktopChallenge != "" || transaction.DesktopProtocol != 0) {
 		return store.ErrOAuthTransactionInvalid
 	}
 	if transaction.CreatedAt.IsZero() || !transaction.ExpiresAt.After(transaction.CreatedAt) {

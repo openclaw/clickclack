@@ -1122,7 +1122,7 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (G
 
 const getOAuthTransactionForConsume = `-- name: GetOAuthTransactionForConsume :one
 SELECT id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
-       created_at_unix, expires_at_unix
+       desktop_protocol, created_at_unix, expires_at_unix
 FROM oauth_transactions
 WHERE state_hash = ?1
 `
@@ -1137,6 +1137,7 @@ func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash s
 		&i.Mode,
 		&i.PkceVerifier,
 		&i.DesktopChallenge,
+		&i.DesktopProtocol,
 		&i.CreatedAtUnix,
 		&i.ExpiresAtUnix,
 	)
@@ -1917,11 +1918,11 @@ func (q *Queries) InsertMagicLink(ctx context.Context, arg InsertMagicLinkParams
 const insertOAuthTransaction = `-- name: InsertOAuthTransaction :exec
 INSERT INTO oauth_transactions (
   id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
-  created_at_unix, expires_at_unix
+  desktop_protocol, created_at_unix, expires_at_unix
 ) VALUES (
   ?1, ?2, ?3, ?4,
   ?5, ?6, ?7,
-  ?8
+  ?8, ?9
 )
 `
 
@@ -1932,6 +1933,7 @@ type InsertOAuthTransactionParams struct {
 	Mode               string `json:"mode"`
 	PkceVerifier       string `json:"pkce_verifier"`
 	DesktopChallenge   string `json:"desktop_challenge"`
+	DesktopProtocol    int64  `json:"desktop_protocol"`
 	CreatedAtUnix      int64  `json:"created_at_unix"`
 	ExpiresAtUnix      int64  `json:"expires_at_unix"`
 }
@@ -1944,6 +1946,7 @@ func (q *Queries) InsertOAuthTransaction(ctx context.Context, arg InsertOAuthTra
 		arg.Mode,
 		arg.PkceVerifier,
 		arg.DesktopChallenge,
+		arg.DesktopProtocol,
 		arg.CreatedAtUnix,
 		arg.ExpiresAtUnix,
 	)

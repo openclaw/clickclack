@@ -38,12 +38,13 @@ var errGitHubOrgDenied = errors.New("github account is not a member of the allow
 const defaultGitHubHTTPTimeout = 30 * time.Second
 
 const (
-	desktopOAuthCallbackURL  = "clickclack://auth/callback"
-	oauthTransactionTTL      = 10 * time.Minute
-	oauthBrowserBindingTTL   = 30 * time.Minute
-	desktopOAuthGrantTTL     = 5 * time.Minute
-	oauthSecretBytes         = 32
-	oauthEncodedSecretLength = 43
+	desktopOAuthLegacyCallbackURL = "clickclack://auth/callback"
+	desktopOAuthCallbackURL       = "chat.clickclack.desktop:/auth/callback"
+	oauthTransactionTTL           = 10 * time.Minute
+	oauthBrowserBindingTTL        = 30 * time.Minute
+	desktopOAuthGrantTTL          = 5 * time.Minute
+	oauthSecretBytes              = 32
+	oauthEncodedSecretLength      = 43
 )
 
 func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
@@ -69,7 +70,7 @@ func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 }
 
 func (s *Server) githubStart(w http.ResponseWriter, r *http.Request) {
-	s.startGitHubOAuth(w, r, "")
+	s.startGitHubOAuth(w, r, "", 0)
 }
 
 func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
@@ -78,10 +79,19 @@ func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("valid desktop oauth code challenge is required"))
 		return
 	}
-	s.startGitHubOAuth(w, r, challenge)
+	protocol, err := desktopProtocolVersion(r.URL.Query().Get("desktop_protocol"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if s.cookies.Session != "cc_session" && protocol < 2 {
+		writeDesktopUpgradeRequired(w)
+		return
+	}
+	s.startGitHubOAuth(w, r, challenge, protocol)
 }
 
-func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, desktopChallenge string) {
+func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, desktopChallenge string, desktopProtocol int64) {
 	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
 		writeError(w, http.StatusNotImplemented, errors.New("github oauth is not configured"))
 		return
@@ -121,6 +131,7 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 		Mode:               mode,
 		PKCEVerifier:       pkceVerifier,
 		DesktopChallenge:   desktopChallenge,
+		DesktopProtocol:    desktopProtocol,
 		CreatedAt:          now,
 		ExpiresAt:          now.Add(oauthTransactionTTL),
 	}); err != nil {
@@ -211,7 +222,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("invalid desktop oauth transaction"))
 		return
 	}
-	grantCode, err := randomOAuthSecret()
+	grantCode, err := newDesktopOAuthGrantCode(transaction.DesktopProtocol)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -231,11 +242,28 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	callback, _ := url.Parse(desktopOAuthCallbackURL)
-	query := callback.Query()
-	query.Set("code", grantCode)
-	callback.RawQuery = query.Encode()
-	http.Redirect(w, r, callback.String(), http.StatusFound)
+	http.Redirect(w, r, desktopOAuthCallback(transaction.DesktopProtocol, grantCode), http.StatusFound)
+}
+
+func desktopProtocolVersion(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 1, nil
+	}
+	protocol, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || protocol < 1 || protocol > 2 {
+		return 0, errors.New("unsupported desktop oauth protocol")
+	}
+	return protocol, nil
+}
+
+func writeDesktopUpgradeRequired(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusUpgradeRequired)
+	_, _ = w.Write([]byte("<!doctype html><meta charset=utf-8><title>ClickClack update required</title><h1>Update ClickClack to sign in</h1><p>This server requires a newer ClickClack desktop app.</p>"))
 }
 
 func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +278,7 @@ func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if !validDesktopCode(body.Code, oauthEncodedSecretLength, oauthEncodedSecretLength) || !validDesktopCode(body.Verifier, 43, 128) {
+	if !validOAuthGrantCode(body.Code) || !validDesktopCode(body.Verifier, 43, 128) {
 		writeError(w, http.StatusBadRequest, errors.New("invalid desktop oauth grant"))
 		return
 	}
@@ -516,6 +544,48 @@ func randomOAuthSecret() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func randomLegacyOAuthGrant() (string, error) {
+	var data [16]byte
+	if _, err := rand.Read(data[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data[:]), nil
+}
+
+func newDesktopOAuthGrantCode(protocol int64) (string, error) {
+	if protocol == 1 {
+		return randomLegacyOAuthGrant()
+	}
+	return randomOAuthSecret()
+}
+
+func desktopOAuthCallback(protocol int64, grantCode string) string {
+	callbackURL := desktopOAuthLegacyCallbackURL
+	if protocol >= 2 {
+		callbackURL = desktopOAuthCallbackURL
+	}
+	callback, _ := url.Parse(callbackURL)
+	query := callback.Query()
+	query.Set("code", grantCode)
+	callback.RawQuery = query.Encode()
+	return callback.String()
+}
+
+func validOAuthGrantCode(value string) bool {
+	if validDesktopCode(value, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+		return true
+	}
+	if len(value) != 32 {
+		return false
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func secretHash(value string) string {

@@ -114,11 +114,20 @@ paths:
             minLength: 43
             maxLength: 43
             pattern: "^[A-Za-z0-9_-]+$"
+        - name: desktop_protocol
+          in: query
+          required: false
+          description: Desktop OAuth handoff version. Omitted clients use legacy protocol 1.
+          schema:
+            type: integer
+            enum: [1, 2]
       responses:
         "302":
           description: Redirect the system browser to GitHub OAuth authorization
         "400":
-          description: Invalid desktop code challenge
+          description: Invalid desktop code challenge or unsupported protocol
+        "426":
+          description: Desktop app upgrade required before a namespaced server can begin authentication
         "501":
           description: GitHub OAuth not configured
   /api/auth/github/desktop/consume:

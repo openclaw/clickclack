@@ -1609,6 +1609,8 @@ export interface operations {
     parameters: {
       query: {
         code_challenge: string;
+        /** @description Desktop OAuth handoff version. Omitted clients use legacy protocol 1. */
+        desktop_protocol?: 1 | 2;
       };
       header?: never;
       path?: never;
@@ -1623,8 +1625,15 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description Invalid desktop code challenge */
+      /** @description Invalid desktop code challenge or unsupported protocol */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Desktop app upgrade required before a namespaced server can begin authentication */
+      426: {
         headers: {
           [name: string]: unknown;
         };

@@ -83,7 +83,7 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 
 	verifier := strings.Repeat("v", 43)
 	challenge := desktopCodeChallenge(verifier)
-	resp, err := client.Get(server.URL + "/api/auth/github/desktop/start?code_challenge=" + challenge)
+	resp, err := client.Get(server.URL + "/api/auth/github/desktop/start?code_challenge=" + challenge + "&desktop_protocol=2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	grantCode := callback.Query().Get("code")
-	if resp.StatusCode != http.StatusFound || callback.Scheme != "clickclack" || callback.Host != "auth" || callback.Path != "/callback" || !validDesktopCode(grantCode, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+	if resp.StatusCode != http.StatusFound || callback.Scheme != "chat.clickclack.desktop" || callback.Host != "" || callback.Path != "/auth/callback" || !validDesktopCode(grantCode, oauthEncodedSecretLength, oauthEncodedSecretLength) {
 		t.Fatalf("unexpected desktop callback: %s %s", resp.Status, callback.String())
 	}
 	if cookie := findCookie(resp.Cookies(), "cc_session"); cookie != nil {
@@ -170,6 +170,76 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		t.Fatalf("expected one-time grant rejection, got %s", resp.Status)
 	}
 	resp.Body.Close()
+}
+
+func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
+	t.Parallel()
+	st := newEmptyHTTPStore(t)
+	challenge := strings.Repeat("a", 43)
+	defaultServer := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      "https://github.example/authorize",
+	}}).Handler()
+	legacyRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/github/desktop/start?code_challenge="+challenge, nil)
+	legacyRequest.RemoteAddr = "127.0.0.1:12345"
+	legacyRecorder := httptest.NewRecorder()
+	defaultServer.ServeHTTP(legacyRecorder, legacyRequest)
+	if legacyRecorder.Code != http.StatusFound {
+		t.Fatalf("expected legacy desktop protocol on the default cookie server, got %d", legacyRecorder.Code)
+	}
+
+	names, err := authpolicy.NewCookieNames("prod", "https://chat.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	namespacedServer := New(st, realtime.NewHub(), Options{
+		CookieNames: names,
+		GitHubOAuth: GitHubOAuthConfig{
+			ClientID:     "client",
+			ClientSecret: "secret",
+			PublicURL:    "https://chat.example.com",
+			AuthURL:      "https://github.example/authorize",
+		},
+	}).Handler()
+	oldRequest := httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/auth/github/desktop/start?code_challenge="+challenge, nil)
+	oldRecorder := httptest.NewRecorder()
+	namespacedServer.ServeHTTP(oldRecorder, oldRequest)
+	if oldRecorder.Code != http.StatusUpgradeRequired || oldRecorder.Header().Get("Cache-Control") != "no-store" || !strings.Contains(oldRecorder.Body.String(), "Update ClickClack") {
+		t.Fatalf("expected early desktop upgrade response, got %d %q", oldRecorder.Code, oldRecorder.Body.String())
+	}
+	if oldRecorder.Header().Get("Location") != "" {
+		t.Fatalf("old desktop client was redirected to GitHub: %q", oldRecorder.Header().Get("Location"))
+	}
+
+	newRequest := httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/auth/github/desktop/start?code_challenge="+challenge+"&desktop_protocol=2", nil)
+	newRecorder := httptest.NewRecorder()
+	namespacedServer.ServeHTTP(newRecorder, newRequest)
+	if newRecorder.Code != http.StatusFound {
+		t.Fatalf("expected protocol 2 namespaced start, got %d %s", newRecorder.Code, newRecorder.Body.String())
+	}
+
+	invalidRequest := httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/auth/github/desktop/start?code_challenge="+challenge+"&desktop_protocol=3", nil)
+	invalidRecorder := httptest.NewRecorder()
+	namespacedServer.ServeHTTP(invalidRecorder, invalidRequest)
+	if invalidRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected unsupported protocol rejection, got %d", invalidRecorder.Code)
+	}
+
+	legacyGrant, err := newDesktopOAuthGrantCode(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !validOAuthGrantCode(legacyGrant) || len(legacyGrant) != 32 {
+		t.Fatalf("invalid legacy desktop grant %q", legacyGrant)
+	}
+	legacyCallback, err := url.Parse(desktopOAuthCallback(1, legacyGrant))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacyCallback.Scheme != "clickclack" || legacyCallback.Host != "auth" || legacyCallback.Path != "/callback" || legacyCallback.Query().Get("code") != legacyGrant {
+		t.Fatalf("unexpected legacy desktop callback %s", legacyCallback)
+	}
 }
 
 func TestGitHubOAuthFlow(t *testing.T) {

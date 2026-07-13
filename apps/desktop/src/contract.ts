@@ -2,6 +2,9 @@ export const DEFAULT_SERVER_URL = "https://app.clickclack.chat";
 export const DEFAULT_APP_ROUTE = "/app";
 export const DESKTOP_SERVER_ORIGIN_ARG = "--clickclack-server-origin=";
 export const DESKTOP_TITLEBAR_ARG = "--clickclack-integrated-titlebar";
+export const DESKTOP_AUTH_PROTOCOL = "chat.clickclack.desktop";
+export const LEGACY_DESKTOP_PROTOCOL = "clickclack";
+export const DESKTOP_OAUTH_PROTOCOL_VERSION = 2;
 
 export type WindowState = {
   height?: number;
@@ -124,6 +127,7 @@ export function desktopOAuthStartURL(serverUrl: string, codeChallenge: string): 
   }
   const value = new URL("/api/auth/github/desktop/start", normalizeServerURL(serverUrl));
   value.searchParams.set("code_challenge", codeChallenge);
+  value.searchParams.set("desktop_protocol", String(DESKTOP_OAUTH_PROTOCOL_VERSION));
   return value.toString();
 }
 
@@ -134,15 +138,19 @@ export function desktopOAuthCallbackCode(input: string): string | null {
   } catch {
     return null;
   }
-  if (
-    value.protocol !== "clickclack:" ||
-    value.hostname !== "auth" ||
-    value.pathname !== "/callback"
-  ) {
+  const legacy =
+    value.protocol === `${LEGACY_DESKTOP_PROTOCOL}:` &&
+    value.hostname === "auth" &&
+    value.pathname === "/callback";
+  const current =
+    value.protocol === `${DESKTOP_AUTH_PROTOCOL}:` &&
+    value.hostname === "" &&
+    value.pathname === "/auth/callback";
+  if (!legacy && !current) {
     return null;
   }
   const code = value.searchParams.get("code") ?? "";
-  return /^[a-f0-9]{32}$/.test(code) ? code : null;
+  return /^[a-f0-9]{32}$/.test(code) || /^[A-Za-z0-9_-]{43}$/.test(code) ? code : null;
 }
 
 export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: string | undefined) {
@@ -176,7 +184,7 @@ export function deepLinkToRoute(input: string): string | null {
   } catch {
     return null;
   }
-  if (value.protocol !== "clickclack:") return null;
+  if (value.protocol !== `${LEGACY_DESKTOP_PROTOCOL}:`) return null;
   if (value.hostname === "app") {
     return safeAppRoute(`/app${value.pathname}${value.search}${value.hash}`);
   }

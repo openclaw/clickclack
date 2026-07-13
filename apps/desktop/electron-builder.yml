@@ -17,6 +17,7 @@ protocols:
   - name: ClickClack link
     schemes:
       - clickclack
+      - chat.clickclack.desktop
 mac:
   category: public.app-category.social-networking
   icon: assets/icon.icns

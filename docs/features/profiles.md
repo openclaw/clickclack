@@ -43,7 +43,12 @@ except the author.
 
 The current user's profile control sits at the bottom of the channel sidebar.
 Click or right-click it to open account settings and edit display name, handle,
-avatar URL, and Pushover notification settings.
+avatar URL, conversation display preferences, and notification settings.
+
+Conversation display preferences can hide agent commentary or tool calls and
+independently place the current user's messages and other human or agent
+messages on the left or right. These preferences are stored on the local
+device, not in the user profile returned by `/api/me`.
 
 Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,

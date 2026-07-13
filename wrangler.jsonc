@@ -4,7 +4,10 @@
   "account_id": "91b59577e757131d68d55a471fe32aca",
   "main": "infra/cloudflare/worker.ts",
   "compatibility_date": "2026-05-17",
-  "workers_dev": true,
+  "workers_dev": false,
+  "build": {
+    "command": "bash -euo pipefail -c 'export CLICKCLACK_BUILD_FLAVOR=cloudflare; source scripts/docker-build-metadata.sh; install -d -m 0700 .pnpm-store; printf \"CLICKCLACK_VERSION=%s\\nCLICKCLACK_COMMIT=%s\\nCLICKCLACK_BUILD_DATE=%s\\n\" \"$CLICKCLACK_VERSION\" \"$CLICKCLACK_COMMIT\" \"$CLICKCLACK_BUILD_DATE\" >.pnpm-store/clickclack-cloudflare-build.env; chmod 0600 .pnpm-store/clickclack-cloudflare-build.env'"
+  },
   "routes": [
     { "pattern": "clickclack.chat", "custom_domain": true },
     { "pattern": "www.clickclack.chat", "custom_domain": true },

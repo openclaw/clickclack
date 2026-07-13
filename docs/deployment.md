@@ -71,11 +71,13 @@ existing tag.
 The provided `Dockerfile` is multi-stage:
 
 ```sh
-docker build \
-  --build-arg CLICKCLACK_WEB_VERSION="$(git rev-parse --short=12 HEAD)" \
-  -t clickclack .
+scripts/docker-build.sh -t clickclack .
 docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 ```
+
+The wrapper requires a clean Git worktree and injects the checked-out commit,
+its commit date, a derived local version, and the full commit as the web asset
+version.
 
 Stages:
 

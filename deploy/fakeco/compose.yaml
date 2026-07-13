@@ -5,7 +5,10 @@ x-clickclack-image: &clickclack-image
   build:
     context: ../..
     args:
-      CLICKCLACK_WEB_VERSION: ${CLICKCLACK_WEB_VERSION:-fakeco-local}
+      CLICKCLACK_VERSION: ${CLICKCLACK_VERSION:?run builds through deploy/fakeco/compose.sh}
+      CLICKCLACK_COMMIT: ${CLICKCLACK_COMMIT:?run builds through deploy/fakeco/compose.sh}
+      CLICKCLACK_BUILD_DATE: ${CLICKCLACK_BUILD_DATE:?run builds through deploy/fakeco/compose.sh}
+      CLICKCLACK_WEB_VERSION: ${CLICKCLACK_WEB_VERSION:?run builds through deploy/fakeco/compose.sh}
 
 x-clickclack-environment: &clickclack-environment
   CLICKCLACK_ADDR: ":8080"

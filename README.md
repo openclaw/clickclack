@@ -186,7 +186,7 @@ Single binary or Docker image. The repo `Dockerfile` is multi-stage and
 produces a small Alpine image with the SPA baked in:
 
 ```sh
-docker build -t clickclack .
+scripts/docker-build.sh -t clickclack .
 docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 ```
 

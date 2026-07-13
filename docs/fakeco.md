@@ -71,10 +71,10 @@ cd deploy/fakeco
 cp .env.example .env
 # Set CLICKCLACK_PUBLIC_URL and, if needed, the private bind address in .env.
 
-docker compose build
-docker compose --profile tools run --rm seed > seed-manifest.json
-docker compose up -d app
-docker compose ps
+./compose.sh build
+./compose.sh --profile tools run --rm seed > seed-manifest.json
+./compose.sh up -d app
+./compose.sh ps
 curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/readyz
 ```
@@ -90,7 +90,7 @@ workspace ID and the first user ID from the manifest. The first user is the
 workspace owner created by the deterministic seed:
 
 ```sh
-docker compose exec app clickclack admin bot create \
+./compose.sh exec app clickclack admin bot create \
   --workspace wsp_replace_from_manifest \
   --created-by usr_first_user_from_manifest \
   --name "FakeCo OpenClaw" \
@@ -195,7 +195,7 @@ database rows, not telemetry payloads.
 ## Backup and teardown
 
 For a retained test, run an online SQLite backup before stopping the service.
-`docker compose down` removes containers and the network but preserves the
+`./compose.sh down` removes containers and the network but preserves the
 named `clickclack-fakeco-data` volume.
 
 For AWS, run `teardown-plan` first. Guarded `teardown` then requires the exact

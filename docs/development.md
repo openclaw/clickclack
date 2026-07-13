@@ -69,6 +69,8 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 local builds deterministic while still allowing real source changes to update
 content-hashed assets. Release and Docker builds should set
 `CLICKCLACK_WEB_VERSION` to the commit or tag being shipped.
+Use `scripts/docker-build.sh` for local images so version, commit, commit date,
+and web asset metadata are derived together from a clean checkout.
 
 ## Layout
 
@@ -93,8 +95,7 @@ packages/
 examples/
   bot-ts/               # SDK usage example
 infra/
-  migrations/sqlite     # mirror of embedded SQLite migrations for tooling
-  migrations/postgres   # mirror of embedded Postgres migrations for tooling
+  migrations/sqlite     # partial legacy tooling snapshot; not canonical
 tests/
   e2e/                  # Playwright tests
 docs/                   # this directory

@@ -22,12 +22,13 @@ builds:
       - arm64
     flags:
       - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - >-
         -s -w
         -X main.version={{ .Version }}
         -X main.commit={{ .ShortCommit }}
-        -X main.date={{ .Date }}
+        -X main.date={{ .CommitDate }}
 
 archives:
   - id: bundles
@@ -69,8 +70,8 @@ changelog:
 release:
   draft: true
   use_existing_draft: true
-  replace_existing_artifacts: true
-  mode: replace
+  replace_existing_artifacts: false
+  mode: keep-existing
 
 nfpms:
   - id: linux-packages

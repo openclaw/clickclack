@@ -14,6 +14,8 @@ dist/
 .git/
 .claude/
 .artifacts/
+.pnpm-store/*
+!.pnpm-store/clickclack-cloudflare-build.env
 .DS_Store
 cloudflare-seed/uploads/*
 !cloudflare-seed/uploads/.gitkeep

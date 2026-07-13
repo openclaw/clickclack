@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Unified the desktop shell chrome like Slack: title bar, workspace rail, and sidebar share one continuous plate with the conversation floating on it as a rounded card, the sidebar workspace header and the in-card channel header are gone on desktop — the workspace name (click for workspace settings) and the current channel or DM title live in the title bar — and the always-on "Connected" labels are gone everywhere (app settings stay on the native menu and Cmd/Ctrl+,; a pulsing "Connecting…" note appears only while the realtime link is down). The browser app keeps its sidebar workspace header and channel header unchanged.
+- Hardened release and deployment integrity with main-reachable immutable release candidates, truthful reproducible build metadata, private Cloudflare routes, and automatic FakeCo rollback after failed updates.
 - Preserved web realtime and account state by advancing cursors only after successful delivery, isolating browser storage failures, discarding cross-workspace uploads, sending owned settings fields, and trapping modal focus.
 - Hardened desktop lifecycle behavior with strict server readiness validation, deduplicated expiring OAuth attempts, Windows unread overlay replay, and renderer-ready Quick Compose delivery.
 - Completed the OpenAPI and TypeScript SDK contract with bearer authentication, response schemas, query controls, agent progress, notification and thread state types, corrected message references, and generated-contract drift checks.

@@ -1125,6 +1125,7 @@ create_pre_update_backup() {
   trace backup
   [[ "\${FAIL_BACKUP:-false}" != true ]] || return 17
 }
+capture_rollback_runtime() { trace snapshot; }
 rm() { trace cleanup; }
 set_runtime_paths() { trace reset; }
 stage=initialize
@@ -1135,8 +1136,16 @@ pre_update_backup=false
 requested_source_commit="$REQUESTED_COMMIT"
 runtime_source_commit="$requested_source_commit"
 runtime_source_sha256="$REQUESTED_SHA256"
+runtime_build_version="$REQUESTED_VERSION"
+runtime_build_date="$REQUESTED_DATE"
+requested_build_version="$REQUESTED_VERSION"
+requested_build_date="$REQUESTED_DATE"
 CLICKCLACK_SOURCE_SHA256="$REQUESTED_SHA256"
 compose_override="$runtime_override"
+run_id=test-run
+rollback_runtime_env="$TEST_ROOT/runtime.rollback.env"
+rollback_runtime_override="$TEST_ROOT/compose.rollback.yaml"
+rollback_available=false
 prepare_pre_update_backup
 printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
   "$runtime_source_commit" "$pre_update_backup" "$compose_override"
@@ -1151,6 +1160,8 @@ printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
     RUNTIME_OVERRIDE: runtimeOverride,
     REQUESTED_COMMIT: requested,
     REQUESTED_SHA256: "c".repeat(64),
+    REQUESTED_VERSION: `0.0.0-fakeco.${requested.slice(0, 12)}`,
+    REQUESTED_DATE: "2026-07-13T00:00:00+00:00",
     RUNNING_COMMIT: running,
     RUNNING_SHA256: "d".repeat(64),
   };
@@ -1172,6 +1183,7 @@ printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
     "verify",
     "probe",
     "backup",
+    "snapshot",
     "cleanup",
     "reset",
   ]);
@@ -1191,6 +1203,7 @@ printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
     "verify",
     "probe",
     "backup",
+    "snapshot",
     "cleanup",
     "reset",
   ]);
@@ -1198,6 +1211,138 @@ printf 'runtime=%s\npre_update=%s\ncompose=%s\n' \
   const failedBackup = await runPrepare({ FAIL_BACKUP: "true" });
   assert.equal(failedBackup.result.status, 17);
   assert.deepEqual(failedBackup.trace, ["systemctl", "resolve", "verify", "probe", "backup"]);
+});
+
+test("failed candidate rollback restores and verifies the previous runtime", async (t) => {
+  const temporary = await temporaryDirectory(t);
+  const bootstrap = await readFile(bootstrapPath, "utf8");
+  const captureStart = bootstrap.indexOf("capture_rollback_runtime() {");
+  const captureEnd = bootstrap.indexOf("\nprepare_pre_update_backup() {", captureStart);
+  const rollbackStart = bootstrap.indexOf("rollback_previous_runtime() {");
+  const rollbackEnd = bootstrap.indexOf('\nif [[ "$action" == "bootstrap" ]]', rollbackStart);
+  assert.notEqual(captureStart, -1);
+  assert.notEqual(captureEnd, -1);
+  assert.notEqual(rollbackStart, -1);
+  assert.notEqual(rollbackEnd, -1);
+  const captureFunction = bootstrap.slice(captureStart, captureEnd).trim();
+  const rollbackFunction = bootstrap.slice(rollbackStart, rollbackEnd).trim();
+  const previous = "b".repeat(40);
+  const previousDigest = "c".repeat(64);
+  const previousVersion = `0.0.0-fakeco.${previous.slice(0, 12)}`;
+  const previousDate = "2026-07-12T23:00:00+00:00";
+  const runtimeEnv = path.join(temporary, "runtime.env");
+  const runtimeOverride = path.join(temporary, "compose.owner.yaml");
+  const rollbackEnv = path.join(temporary, "runtime.rollback.env");
+  const rollbackOverride = path.join(temporary, "compose.rollback.yaml");
+  const backupOverride = path.join(temporary, "compose.backup.yaml");
+  const tracePath = path.join(temporary, "trace.log");
+  await writeFile(
+    runtimeEnv,
+    "CLICKCLACK_PUBLIC_URL=http://10.0.0.10:8080\n" +
+      "CLICKCLACK_WEB_VERSION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+      `CLICKCLACK_VERSION=${previousVersion}\n` +
+      `CLICKCLACK_COMMIT=${previous}\n` +
+      `CLICKCLACK_BUILD_DATE=${previousDate}\n`,
+  );
+  await writeFile(runtimeOverride, "candidate override\n");
+  await writeFile(
+    backupOverride,
+    `services:\n  app:\n    image: "clickclack:fakeco-${previous}"\n  seed:\n    image: "clickclack:fakeco-${previous}"\n`,
+  );
+  const scriptPath = path.join(temporary, "rollback.sh");
+  await writeFile(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+${captureFunction}
+${rollbackFunction}
+trace() { printf '%s\n' "$1" >>"$TRACE_PATH"; }
+set_runtime_paths() {
+  release="$release_root/$runtime_source_commit"
+  image_name="clickclack:fakeco-$runtime_source_commit"
+  image_state="$state_root/image-$runtime_source_commit.id"
+  trace paths
+}
+compose() { trace "compose:$*"; }
+verify_running_image() {
+  trace verify
+  [[ "$runtime_source_commit" == "$PREVIOUS_COMMIT" ]]
+  [[ "$runtime_build_version" == "$PREVIOUS_VERSION" ]]
+  [[ "$runtime_build_date" == "$PREVIOUS_DATE" ]]
+}
+probe_service() { trace probe; }
+rollback_available=true
+rollback_in_progress=false
+previous_runtime_source_commit="$PREVIOUS_COMMIT"
+previous_runtime_source_sha256="$PREVIOUS_DIGEST"
+previous_runtime_build_version="$PREVIOUS_VERSION"
+previous_runtime_build_date="$PREVIOUS_DATE"
+rollback_runtime_env="$ROLLBACK_ENV"
+rollback_runtime_override="$ROLLBACK_OVERRIDE"
+backup_runtime_override="$BACKUP_OVERRIDE"
+runtime_env="$RUNTIME_ENV"
+runtime_override="$RUNTIME_OVERRIDE"
+runtime_source_commit="$PREVIOUS_COMMIT"
+runtime_source_sha256="$PREVIOUS_DIGEST"
+runtime_build_version="$PREVIOUS_VERSION"
+runtime_build_date="$PREVIOUS_DATE"
+compose_override="$runtime_override"
+release_root="$TEST_ROOT/releases"
+state_root="$TEST_ROOT/state"
+stage=service-probes
+capture_rollback_runtime
+runtime_source_commit="$CANDIDATE_COMMIT"
+runtime_source_sha256="$CANDIDATE_DIGEST"
+runtime_build_version="$CANDIDATE_VERSION"
+runtime_build_date="$CANDIDATE_DATE"
+printf '%s\n' 'candidate env' >"$runtime_env"
+printf '%s\n' 'candidate override' >"$runtime_override"
+rollback_previous_runtime
+printf 'commit=%s\nversion=%s\ndate=%s\nstage=%s\n' \
+  "$runtime_source_commit" "$runtime_build_version" "$runtime_build_date" "$stage"
+`,
+    { mode: 0o755 },
+  );
+  const result = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      TEST_ROOT: temporary,
+      TRACE_PATH: tracePath,
+      RUNTIME_ENV: runtimeEnv,
+      RUNTIME_OVERRIDE: runtimeOverride,
+      ROLLBACK_ENV: rollbackEnv,
+      ROLLBACK_OVERRIDE: rollbackOverride,
+      BACKUP_OVERRIDE: backupOverride,
+      PREVIOUS_COMMIT: previous,
+      PREVIOUS_DIGEST: previousDigest,
+      PREVIOUS_VERSION: previousVersion,
+      PREVIOUS_DATE: previousDate,
+      CANDIDATE_COMMIT: "a".repeat(40),
+      CANDIDATE_DIGEST: "d".repeat(64),
+      CANDIDATE_VERSION: "0.0.0-fakeco.aaaaaaaaaaaa",
+      CANDIDATE_DATE: "2026-07-13T00:00:00+00:00",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const expectedRuntimeEnv =
+    "CLICKCLACK_PUBLIC_URL=http://10.0.0.10:8080\n" +
+    `CLICKCLACK_WEB_VERSION=${previous}\n` +
+    `CLICKCLACK_VERSION=${previousVersion}\n` +
+    `CLICKCLACK_COMMIT=${previous}\n` +
+    `CLICKCLACK_BUILD_DATE=${previousDate}\n`;
+  assert.equal(await readFile(rollbackEnv, "utf8"), expectedRuntimeEnv);
+  assert.equal(await readFile(runtimeEnv, "utf8"), expectedRuntimeEnv);
+  assert.equal(await readFile(runtimeOverride, "utf8"), await readFile(backupOverride, "utf8"));
+  assert.deepEqual((await readFile(tracePath, "utf8")).trim().split("\n"), [
+    "paths",
+    "compose:up -d app",
+    "verify",
+    "probe",
+  ]);
+  assert.match(result.stdout, new RegExp(`commit=${previous}`, "u"));
+  assert.match(result.stdout, new RegExp(`version=${previousVersion}`, "u"));
+  assert.match(result.stdout, /stage=rollback-complete/u);
 });
 
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
@@ -1334,6 +1479,10 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /docker version --format '\{\{\.Server\.Arch\}\}' \| grep -Fx 'arm64'/u);
   assert.match(bootstrap, /clickclack:fakeco-\$runtime_source_commit/u);
   assert.match(bootstrap, /org\.opencontainers\.image\.revision/u);
+  assert.match(bootstrap, /org\.opencontainers\.image\.version/u);
+  assert.match(bootstrap, /org\.opencontainers\.image\.created/u);
+  assert.match(bootstrap, /docker run --rm "\$image_name" version/u);
+  assert.match(bootstrap, /docker exec "\$container_id" clickclack version/u);
   assert.match(bootstrap, /\.source\.sha256/u);
   assert.match(bootstrap, /docker inspect --format '\{\{\.Image\}\}'/u);
   assert.match(bootstrap, /docker inspect --format '\{\{\.Config\.Image\}\}'/u);
@@ -1395,6 +1544,19 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /--arg action pre-update/u);
   assert.match(bootstrap, /requested_source_commit: \$requested_source_commit/u);
   assert.match(bootstrap, /pre-update-upload-evidence/u);
+  assert.match(bootstrap, /rollback_previous_runtime/u);
+  assert.match(bootstrap, /rollback_status=succeeded/u);
+  assert.ok(
+    bootstrap.indexOf(
+      "  capture_rollback_runtime",
+      bootstrap.indexOf("prepare_pre_update_backup()"),
+    ) < bootstrap.indexOf('runtime_source_commit="$requested_source_commit"'),
+    "rollback config must be captured before switching to the candidate",
+  );
+  assert.ok(
+    bootstrap.indexOf("candidate_start_attempted=true") < bootstrap.indexOf("prove_seed_equality"),
+    "post-start verification must run with rollback armed",
+  );
   assert.match(bootstrap, /printf 'pre-update:%s:%s:%s'/u);
   assert.match(bootstrap, /backup_id="\$\{run_id%-\*\}-\$backup_suffix"/u);
   assert.match(bootstrap, /\[\[ "\$backup_id" != "\$run_id" \]\]/u);

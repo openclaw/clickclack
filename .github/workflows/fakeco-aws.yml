@@ -387,6 +387,10 @@ jobs:
           chmod 0600 "$source_archive" "$bootstrap_file"
           source_sha256="$(sha256sum "$source_archive" | cut -d' ' -f1)"
           bootstrap_sha256="$(sha256sum "$bootstrap_file" | cut -d' ' -f1)"
+          build_version="0.0.0-fakeco.${SOURCE_COMMIT:0:12}"
+          build_date="$(git show -s --format=%cI "$SOURCE_COMMIT")"
+          [[ "$build_version" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]
+          [[ "$build_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
           rendered="$RUNNER_TEMP/fakeco-rendered.json"
           parameters="$RUNNER_TEMP/fakeco-parameters.json"
           node deploy/fakeco/aws/owner.mjs render \
@@ -402,6 +406,8 @@ jobs:
             printf 'CLICKCLACK_BOOTSTRAP_FILE=%s\n' "$bootstrap_file"
             printf 'CLICKCLACK_SOURCE_SHA256=%s\n' "$source_sha256"
             printf 'CLICKCLACK_BOOTSTRAP_SHA256=%s\n' "$bootstrap_sha256"
+            printf 'CLICKCLACK_BUILD_VERSION=%s\n' "$build_version"
+            printf 'CLICKCLACK_BUILD_DATE=%s\n' "$build_date"
             printf 'CLICKCLACK_RENDERED=%s\n' "$rendered"
             printf 'CLICKCLACK_PARAMETERS=%s\n' "$parameters"
           } >>"$GITHUB_ENV"
@@ -738,9 +744,11 @@ jobs:
             --arg path "https://s3.us-west-2.amazonaws.com/$FAKECO_ARTIFACT_BUCKET/$CLICKCLACK_BOOTSTRAP_KEY" \
             '{path:$path}')"
           command_line="$(printf \
-            'printf "%%s  %%s\\n" %s bootstrap.sh | sha256sum --check --status && env CLICKCLACK_SOURCE_COMMIT=%s CLICKCLACK_OWNER_COMMIT=%s CLICKCLACK_SOURCE_URI=%s CLICKCLACK_SOURCE_SHA256=%s CLICKCLACK_BACKUP_BUCKET=%s CLICKCLACK_BACKUP_PREFIX=%s CLICKCLACK_LOG_BUCKET=%s CLICKCLACK_LOG_PREFIX=%s CLICKCLACK_DATA_KMS_KEY_ARN=%s bash bootstrap.sh %s' \
+            'printf "%%s  %%s\\n" %s bootstrap.sh | sha256sum --check --status && env CLICKCLACK_SOURCE_COMMIT=%s CLICKCLACK_BUILD_VERSION=%s CLICKCLACK_BUILD_DATE=%s CLICKCLACK_OWNER_COMMIT=%s CLICKCLACK_SOURCE_URI=%s CLICKCLACK_SOURCE_SHA256=%s CLICKCLACK_BACKUP_BUCKET=%s CLICKCLACK_BACKUP_PREFIX=%s CLICKCLACK_LOG_BUCKET=%s CLICKCLACK_LOG_PREFIX=%s CLICKCLACK_DATA_KMS_KEY_ARN=%s bash bootstrap.sh %s' \
             "$CLICKCLACK_BOOTSTRAP_SHA256" \
             "$SOURCE_COMMIT" \
+            "$CLICKCLACK_BUILD_VERSION" \
+            "$CLICKCLACK_BUILD_DATE" \
             "$GITHUB_SHA" \
             "$source_uri" \
             "$CLICKCLACK_SOURCE_SHA256" \

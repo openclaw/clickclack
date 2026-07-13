@@ -14,6 +14,8 @@ esac
 
 required=(
   CLICKCLACK_SOURCE_COMMIT
+  CLICKCLACK_BUILD_VERSION
+  CLICKCLACK_BUILD_DATE
   CLICKCLACK_OWNER_COMMIT
   CLICKCLACK_SOURCE_URI
   CLICKCLACK_SOURCE_SHA256
@@ -31,6 +33,8 @@ for name in "${required[@]}"; do
 done
 
 [[ "$CLICKCLACK_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$CLICKCLACK_BUILD_VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]
+[[ "$CLICKCLACK_BUILD_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]
 [[ "$CLICKCLACK_OWNER_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$CLICKCLACK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
 [[ "$CLICKCLACK_SOURCE_URI" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/clickclack/fakeco/[a-z0-9/_-]+\.tar\.gz$ ]]
@@ -47,17 +51,31 @@ log_root=/var/log/clickclack-fakeco
 runtime_env=/etc/clickclack-fakeco/runtime.env
 runtime_override=/etc/clickclack-fakeco/compose.owner.yaml
 requested_source_commit="$CLICKCLACK_SOURCE_COMMIT"
+requested_build_version="$CLICKCLACK_BUILD_VERSION"
+requested_build_date="$CLICKCLACK_BUILD_DATE"
 runtime_source_commit="$CLICKCLACK_SOURCE_COMMIT"
 runtime_source_sha256="$CLICKCLACK_SOURCE_SHA256"
+runtime_build_version="$CLICKCLACK_BUILD_VERSION"
+runtime_build_date="$CLICKCLACK_BUILD_DATE"
 release="$release_root/$runtime_source_commit"
 image_name="clickclack:fakeco-$runtime_source_commit"
 image_state="$state_root/image-$runtime_source_commit.id"
 compose_override="$runtime_override"
 backup_runtime_override="$state_root/compose.backup.yaml"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${CLICKCLACK_SOURCE_COMMIT:0:12}"
+rollback_runtime_env="$state_root/runtime.rollback-$run_id.env"
+rollback_runtime_override="$state_root/compose.rollback-$run_id.yaml"
 log_file="$log_root/$run_id.log"
 stage=initialize
 pre_update_backup=false
+rollback_available=false
+rollback_in_progress=false
+candidate_configured=false
+candidate_start_attempted=false
+previous_runtime_source_commit=
+previous_runtime_source_sha256=
+previous_runtime_build_version=
+previous_runtime_build_date=
 captured_backup_path=
 captured_backup_sha=
 captured_backup_size=
@@ -75,13 +93,36 @@ exec >>"$log_file" 2>&1
 
 failure() {
   local code=$?
+  local failed_stage="$stage"
+  local rollback_status=not-needed
+  trap - ERR
+  set +e
+  if [[ "$action" == "bootstrap" &&
+    "$rollback_available" == "true" &&
+    ("$candidate_configured" == "true" || "$candidate_start_attempted" == "true") ]]; then
+    rollback_status=failed
+    if rollback_previous_runtime; then
+      rollback_status=succeeded
+    fi
+  fi
   jq -cn \
     --arg status failed \
     --arg action "$action" \
-    --arg stage "$stage" \
+    --arg stage "$failed_stage" \
     --arg run_id "$run_id" \
+    --arg rollback "$rollback_status" \
+    --arg rollback_source_commit "$previous_runtime_source_commit" \
     --argjson exit_code "$code" \
-    '{status:$status,action:$action,stage:$stage,run_id:$run_id,exit_code:$exit_code}' >&3 || true
+    '{
+      status:$status,
+      action:$action,
+      stage:$stage,
+      run_id:$run_id,
+      exit_code:$exit_code,
+      rollback:$rollback,
+      rollback_source_commit:
+        (if $rollback_source_commit == "" then null else $rollback_source_commit end)
+    }' >&3 || true
   exit "$code"
 }
 trap failure ERR
@@ -99,6 +140,25 @@ set_runtime_paths() {
   release="$release_root/$runtime_source_commit"
   image_name="clickclack:fakeco-$runtime_source_commit"
   image_state="$state_root/image-$runtime_source_commit.id"
+}
+
+load_runtime_build_metadata() {
+  local version_line commit_line date_line metadata_count
+  metadata_count="$(grep -Ec '^CLICKCLACK_(VERSION|COMMIT|BUILD_DATE)=' "$runtime_env" || true)"
+  if [[ "$metadata_count" == "0" ]]; then
+    runtime_build_version=
+    runtime_build_date=
+    return
+  fi
+  [[ "$metadata_count" == "3" ]] || return 1
+  version_line="$(grep -E '^CLICKCLACK_VERSION=' "$runtime_env")" || return 1
+  commit_line="$(grep -E '^CLICKCLACK_COMMIT=' "$runtime_env")" || return 1
+  date_line="$(grep -E '^CLICKCLACK_BUILD_DATE=' "$runtime_env")" || return 1
+  runtime_build_version="${version_line#CLICKCLACK_VERSION=}"
+  runtime_build_date="${date_line#CLICKCLACK_BUILD_DATE=}"
+  [[ "$runtime_build_version" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]] || return 1
+  [[ "${commit_line#CLICKCLACK_COMMIT=}" == "$runtime_source_commit" ]] || return 1
+  [[ "$runtime_build_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]] || return 1
 }
 
 resolve_backup_runtime() {
@@ -122,6 +182,7 @@ resolve_backup_runtime() {
   [[ "$running_image_id" == "$recorded_image_id" ]] || return 1
   [[ "$(docker image inspect --format '{{.Id}}' "$image_name")" == "$recorded_image_id" ]] || return 1
   [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]] || return 1
+  load_runtime_build_metadata
   {
     printf '%s\n' 'services:'
     printf '%s\n' '  app:'
@@ -150,6 +211,16 @@ verify_persistent_runtime_config() {
   else
     grep -Fx "CLICKCLACK_WEB_VERSION=$runtime_source_commit" "$runtime_env" >/dev/null || return 1
     [[ "$(grep -Fxc "    image: \"$image_name\"" "$runtime_override" || true)" == "2" ]] || return 1
+  fi
+  if [[ -n "$runtime_build_version" ]]; then
+    grep -Fx "CLICKCLACK_VERSION=$runtime_build_version" "$runtime_env" >/dev/null || return 1
+    grep -Fx "CLICKCLACK_COMMIT=$runtime_source_commit" "$runtime_env" >/dev/null || return 1
+    grep -Fx "CLICKCLACK_BUILD_DATE=$runtime_build_date" "$runtime_env" >/dev/null || return 1
+  else
+    [[ "$action" == "backup" ||
+      "${pre_update_backup:-false}" == "true" ||
+      "${rollback_in_progress:-false}" == "true" ]] || return 1
+    ! grep -Eq '^CLICKCLACK_(VERSION|COMMIT|BUILD_DATE)=' "$runtime_env" || return 1
   fi
 }
 
@@ -252,22 +323,52 @@ write_runtime_config() {
     printf 'CLICKCLACK_BIND_ADDR=0.0.0.0\n'
     printf 'CLICKCLACK_PORT=8080\n'
     printf 'CLICKCLACK_WEB_VERSION=%s\n' "$runtime_source_commit"
+    printf 'CLICKCLACK_VERSION=%s\n' "$runtime_build_version"
+    printf 'CLICKCLACK_COMMIT=%s\n' "$runtime_source_commit"
+    printf 'CLICKCLACK_BUILD_DATE=%s\n' "$runtime_build_date"
   } >"$runtime_env"
   {
     printf '%s\n' 'services:'
     printf '%s\n' '  app:'
     printf '    image: "%s"\n' "$image_name"
     printf '%s\n' '    build:'
+    printf '%s\n' '      args:'
+    printf '        CLICKCLACK_VERSION: "%s"\n' "$runtime_build_version"
+    printf '        CLICKCLACK_COMMIT: "%s"\n' "$runtime_source_commit"
+    printf '        CLICKCLACK_BUILD_DATE: "%s"\n' "$runtime_build_date"
     printf '%s\n' '      labels:'
+    printf '        org.opencontainers.image.version: "%s"\n' "$runtime_build_version"
     printf '        org.opencontainers.image.revision: "%s"\n' "$runtime_source_commit"
+    printf '        org.opencontainers.image.created: "%s"\n' "$runtime_build_date"
     printf '%s\n' '  seed:'
     printf '    image: "%s"\n' "$image_name"
     printf '%s\n' '    build:'
+    printf '%s\n' '      args:'
+    printf '        CLICKCLACK_VERSION: "%s"\n' "$runtime_build_version"
+    printf '        CLICKCLACK_COMMIT: "%s"\n' "$runtime_source_commit"
+    printf '        CLICKCLACK_BUILD_DATE: "%s"\n' "$runtime_build_date"
     printf '%s\n' '      labels:'
+    printf '        org.opencontainers.image.version: "%s"\n' "$runtime_build_version"
     printf '        org.opencontainers.image.revision: "%s"\n' "$runtime_source_commit"
+    printf '        org.opencontainers.image.created: "%s"\n' "$runtime_build_date"
   } >"$runtime_override"
   chmod 0640 "$runtime_env"
   chmod 0640 "$runtime_override"
+  candidate_configured=true
+}
+
+verify_image_build_metadata() {
+  if [[ -z "$runtime_build_version" ]]; then
+    [[ "$action" == "backup" ||
+      "${pre_update_backup:-false}" == "true" ||
+      "${rollback_in_progress:-false}" == "true" ]]
+    return
+  fi
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image_name")" == "$runtime_build_version" ]]
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]]
+  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.created"}}' "$image_name")" == "$runtime_build_date" ]]
+  [[ "$(docker run --rm "$image_name" version)" == \
+    "clickclack $runtime_build_version ($runtime_source_commit, $runtime_build_date)" ]]
 }
 
 build_and_start() {
@@ -275,9 +376,10 @@ build_and_start() {
   compose build --pull app
   image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
   [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]]
+  verify_image_build_metadata
   printf '%s\n' "$image_id" >"$image_state"
   stage=start
+  candidate_start_attempted=true
   compose up -d app
   verify_running_image
 }
@@ -292,12 +394,16 @@ verify_running_image() {
   image_id="$(<"$image_state")"
   [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
   [[ "$(docker image inspect --format '{{.Id}}' "$image_name")" == "$image_id" ]] || return 1
-  [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_name")" == "$runtime_source_commit" ]] || return 1
+  verify_image_build_metadata || return 1
   container_id="$(compose ps -q app)"
   [[ -n "$container_id" && "$container_id" != *$'\n'* ]] || return 1
   [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" == "true" ]] || return 1
   [[ "$(docker inspect --format '{{.Image}}' "$container_id")" == "$image_id" ]] || return 1
   [[ "$(docker inspect --format '{{.Config.Image}}' "$container_id")" == "$image_name" ]] || return 1
+  if [[ -n "$runtime_build_version" ]]; then
+    [[ "$(docker exec "$container_id" clickclack version)" == \
+      "clickclack $runtime_build_version ($runtime_source_commit, $runtime_build_date)" ]] || return 1
+  fi
 }
 
 prove_seed_equality() {
@@ -346,7 +452,13 @@ probe_service() {
   grep -qi "^X-Correlation-Id: $correlation" "$ready_headers"
   curl -fsS --max-time 5 -o "$metrics" http://127.0.0.1:8080/metrics
   grep -F 'clickclack_ready 1' "$metrics"
-  grep -F 'clickclack_build_info{environment="fakeco"' "$metrics"
+  if [[ -n "$runtime_build_version" ]]; then
+    grep -F \
+      "clickclack_build_info{environment=\"fakeco\",version=\"$runtime_build_version\",commit=\"$runtime_source_commit\"} 1" \
+      "$metrics"
+  else
+    grep -F 'clickclack_build_info{environment="fakeco"' "$metrics"
+  fi
   if grep -Eq 'wsp_|usr_|chn_|msg_|FakeCo canary|Welcome to FakeCo|prompt|completion' "$metrics"; then
     printf '%s\n' 'metrics contained forbidden high-cardinality or body content' >&2
     return 1
@@ -408,6 +520,8 @@ cleanup_run_files() {
     "$state_root/metrics-$run_id.txt" \
     "$state_root/backup-head-$run_id.json" \
     "$state_root/app-$run_id.log" \
+    "$rollback_runtime_env" \
+    "$rollback_runtime_override" \
     "$log_file"
   if [[ "$action" == "backup" ]]; then
     rm -f -- "$backup_runtime_override"
@@ -568,6 +682,8 @@ create_backup() {
     --arg manifest_key "$manifest_key" \
     --arg log_bucket "$CLICKCLACK_LOG_BUCKET" \
     --arg log_key "$log_key" \
+    --arg version "$runtime_build_version" \
+    --arg build_date "$runtime_build_date" \
     '{
       schema_version: 1,
       status: "passed",
@@ -576,6 +692,9 @@ create_backup() {
       source_commit: $source_commit,
       stack_source_commit: $stack_source_commit,
       owner_commit: $owner_commit,
+      version: $version,
+      commit: $source_commit,
+      build_date: $build_date,
       runtime_commit_verified: true,
       image_id: $image_id,
       seed_equal: true,
@@ -599,6 +718,7 @@ create_backup() {
     --ssekms-key-id "$CLICKCLACK_DATA_KMS_KEY_ARN" \
     --if-none-match '*' \
     --output json >/dev/null
+  rollback_available=false
   cleanup_success "$captured_backup_path"
   stage=upload-log
   aws s3 cp "$log_file" "s3://$CLICKCLACK_LOG_BUCKET/$log_key" \
@@ -625,6 +745,23 @@ runtime_state_exists() {
   return 1
 }
 
+capture_rollback_runtime() {
+  local rollback_env_candidate="$rollback_runtime_env.tmp"
+  stage=rollback-capture
+  awk \
+    '!/^CLICKCLACK_(WEB_VERSION|VERSION|COMMIT|BUILD_DATE)=/' \
+    "$runtime_env" >"$rollback_env_candidate"
+  printf 'CLICKCLACK_WEB_VERSION=%s\n' "$runtime_source_commit" >>"$rollback_env_candidate"
+  if [[ -n "$runtime_build_version" ]]; then
+    printf 'CLICKCLACK_VERSION=%s\n' "$runtime_build_version" >>"$rollback_env_candidate"
+    printf 'CLICKCLACK_COMMIT=%s\n' "$runtime_source_commit" >>"$rollback_env_candidate"
+    printf 'CLICKCLACK_BUILD_DATE=%s\n' "$runtime_build_date" >>"$rollback_env_candidate"
+  fi
+  chmod 0640 "$rollback_env_candidate"
+  mv "$rollback_env_candidate" "$rollback_runtime_env"
+  install -m 0640 "$backup_runtime_override" "$rollback_runtime_override"
+}
+
 prepare_pre_update_backup() {
   stage=pre-update-detection
   runtime_state_exists || return 0
@@ -636,13 +773,45 @@ prepare_pre_update_backup() {
   verify_running_image
   probe_service
   create_pre_update_backup
+  capture_rollback_runtime
+  previous_runtime_source_commit="$runtime_source_commit"
+  previous_runtime_source_sha256="$runtime_source_sha256"
+  previous_runtime_build_version="$runtime_build_version"
+  previous_runtime_build_date="$runtime_build_date"
+  rollback_available=true
   rm -f -- "$backup_runtime_override"
   pre_update_backup=false
   runtime_source_commit="$requested_source_commit"
   runtime_source_sha256="$CLICKCLACK_SOURCE_SHA256"
+  runtime_build_version="$requested_build_version"
+  runtime_build_date="$requested_build_date"
   compose_override="$runtime_override"
   set_runtime_paths
   stage=pre-update-complete
+}
+
+rollback_previous_runtime() {
+  [[ "$rollback_available" == "true" ]] || return 1
+  [[ "$previous_runtime_source_commit" =~ ^[0-9a-f]{40}$ ]] || return 1
+  [[ "$previous_runtime_source_sha256" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ -f "$rollback_runtime_env" && ! -L "$rollback_runtime_env" ]] || return 1
+  [[ -f "$rollback_runtime_override" && ! -L "$rollback_runtime_override" ]] || return 1
+  rollback_in_progress=true
+  stage=rollback-config
+  install -m 0640 "$rollback_runtime_env" "$runtime_env" || return 1
+  install -m 0640 "$rollback_runtime_override" "$runtime_override" || return 1
+  runtime_source_commit="$previous_runtime_source_commit"
+  runtime_source_sha256="$previous_runtime_source_sha256"
+  runtime_build_version="$previous_runtime_build_version"
+  runtime_build_date="$previous_runtime_build_date"
+  compose_override="$runtime_override"
+  set_runtime_paths
+  stage=rollback-start
+  compose up -d app || return 1
+  verify_running_image || return 1
+  probe_service || return 1
+  rollback_in_progress=false
+  stage=rollback-complete
 }
 
 if [[ "$action" == "bootstrap" ]]; then

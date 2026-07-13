@@ -39,9 +39,12 @@ go build -o clickclack ./apps/api/cmd/clickclack
 The repo ships a multi-stage `Dockerfile`:
 
 ```sh
-docker build -t clickclack .
+scripts/docker-build.sh -t clickclack .
 docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 ```
+
+The build wrapper derives the version, commit, build date, and web asset
+version from the clean checked-out commit.
 
 The image runs as a non-root `clickclack` user, exposes `8080`, and mounts
 `/app/data` as a volume. Override the entrypoint command to run admin

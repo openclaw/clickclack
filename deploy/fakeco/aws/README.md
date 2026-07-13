@@ -271,7 +271,9 @@ Bootstrap:
    `arm64`.
 2. Creates a persistent 2 GiB build-only swap file inside the encrypted root
    volume, then builds the repo's digest-pinned multi-architecture Dockerfile
-   into a commit-specific image with a matching OCI revision label.
+   into a commit-specific image. Version, full commit, and commit date are
+   injected into the binary and OCI labels, then checked through the image,
+   running container, and metadata-only metrics.
 3. Runs `admin fakeco seed` twice, canonicalizes both manifests, requires byte
    equality, and verifies the expected three users, four channels, and seven
    seeded message IDs.
@@ -279,19 +281,23 @@ Bootstrap:
    `/readyz`, correlation echo, and opt-in `/metrics`.
 5. Rejects metrics containing user/workspace/channel/message ID prefixes or
    known body terms.
-6. Requires the release source hash, recorded image ID, OCI revision label,
-   running container image ID, and configured image name to match the requested
-   commit. A partial prior apply therefore fails closed instead of certifying a
-   stale container.
+6. Requires the release source hash, recorded image ID, OCI version, revision,
+   and creation labels, binary version output, running container image ID,
+   configured image name, and build-info metric to match the requested commit.
+   A partial prior apply therefore fails closed instead of certifying a stale
+   container.
 7. Uses `clickclack backup`, runs `PRAGMA integrity_check`, hashes the file,
    and uploads the encrypted database, metadata-only evidence, and bounded safe
    logs to the exact prefixes.
 8. Only after the backup and evidence are durable, removes the local backup.
    Apply and verify runs also remove stopped project containers, obsolete
    commit-scoped images/releases/image records, and unused image/build cache.
-   The active commit remains intact; teardown preserves any failed update
-   candidate until the retained-volume snapshot, and failures before durable
-   retention preserve their local candidate and backup for diagnosis.
+   The active commit remains intact. If a candidate fails after its runtime
+   configuration is written or its container is started, the owner atomically
+   restores the previously observed image/config pair and re-runs identity and
+   service probes before returning the original failure. The failed candidate
+   remains local for diagnosis. Teardown preserves it until the retained-volume
+   snapshot, and failures before durable retention preserve its local backup.
 
 Evidence records commit IDs, verified image ID, run ID, seed-manifest hash,
 boolean probe results, backup object key/hash, and log object key. It contains

@@ -2214,6 +2214,51 @@ func uploadFileAsUserWithContentType(t *testing.T, userID, endpoint, workspaceID
 	return out.Upload
 }
 
+func uploadFileWithNonceStatus(t *testing.T, endpoint, workspaceID, nonce, filename, content string) (store.Upload, int) {
+	t.Helper()
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := endpointURL.Query()
+	query.Set("workspace_id", workspaceID)
+	query.Set("nonce", nonce)
+	endpointURL.RawQuery = query.Encode()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("workspace_id", workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpointURL.String(), &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Upload store.Upload `json:"upload"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.Upload, resp.StatusCode
+}
+
 func uploadFileWithoutPartContentType(t *testing.T, endpoint, workspaceID string) store.Upload {
 	t.Helper()
 	var body bytes.Buffer
@@ -2758,6 +2803,97 @@ func TestUploadReservesQuotaBeforeObjectStorage(t *testing.T) {
 	}
 	if quota.UsedCount != 1 || quota.UsedBytes != upload.ByteSize {
 		t.Fatalf("reservation was not replaced by final upload row: quota=%#v upload=%#v", quota, upload)
+	}
+}
+
+func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "upload-nonce-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other Uploads"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	const nonce = "upload-retry-1"
+	first, firstStatus := uploadFileWithNonceStatus(t, server.URL+"/api/uploads", workspace.ID, nonce, "first.txt", "first body")
+	if firstStatus != http.StatusCreated || first.Nonce != nonce {
+		t.Fatalf("unexpected initial upload: status=%d upload=%#v", firstStatus, first)
+	}
+	lookup := getJSON[struct {
+		Upload store.Upload `json:"upload"`
+	}](t, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(workspace.ID)+"&nonce="+url.QueryEscape(nonce))
+	if lookup.Upload.ID != first.ID {
+		t.Fatalf("upload nonce lookup returned %#v, want %s", lookup.Upload, first.ID)
+	}
+	expectStatus(t, http.MethodGet, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(workspace.ID)+"&nonce=missing", nil, http.StatusNotFound)
+	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
+		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+			WorkspaceID: workspace.ID,
+			OwnerID:     owner.ID,
+			Filename:    fmt.Sprintf("quota-%d.txt", i),
+			ContentType: "text/plain",
+			ByteSize:    1,
+			StoragePath: fmt.Sprintf("memory://quota-%d.txt", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	quotaBeforeReplay, err := st.UploadQuota(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quotaBeforeReplay.RemainingCount != 0 {
+		t.Fatalf("expected upload count quota to be full, got %#v", quotaBeforeReplay)
+	}
+
+	replayed, replayStatus := uploadFileWithNonceStatus(t, server.URL+"/api/uploads", workspace.ID, nonce, "changed.txt", "changed body")
+	if replayStatus != http.StatusOK || replayed.ID != first.ID || replayed.Filename != first.Filename {
+		t.Fatalf("unexpected upload replay: status=%d upload=%#v first=%#v", replayStatus, replayed, first)
+	}
+	if body := getBody(t, server.URL+"/api/uploads/"+first.ID); body != "first body" {
+		t.Fatalf("upload replay replaced stored bytes: %q", body)
+	}
+	quotaAfterReplay, err := st.UploadQuota(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quotaAfterReplay != quotaBeforeReplay {
+		t.Fatalf("upload replay changed quota: before=%#v after=%#v", quotaBeforeReplay, quotaAfterReplay)
+	}
+	entries, err := os.ReadDir(filepath.Join(dataDir, "uploads"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("upload replay wrote another storage object: %v", entries)
+	}
+
+	if _, status := uploadFileWithNonceStatus(t, server.URL+"/api/uploads", otherWorkspace.ID, nonce, "other.txt", "other body"); status != http.StatusConflict {
+		t.Fatalf("expected cross-workspace nonce conflict, got %d", status)
+	}
+	expectStatus(t, http.MethodGet, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(otherWorkspace.ID)+"&nonce="+url.QueryEscape(nonce), nil, http.StatusConflict)
+	if _, status := uploadFileWithNonceStatus(t, server.URL+"/api/uploads", workspace.ID, strings.Repeat("n", 129), "long.txt", "long body"); status != http.StatusBadRequest {
+		t.Fatalf("expected overlong nonce rejection, got %d", status)
 	}
 }
 

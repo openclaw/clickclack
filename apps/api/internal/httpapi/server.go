@@ -176,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/realtime/ws", s.websocket)
 		r.Get("/search", s.search)
 		r.Post("/uploads", s.createUpload)
+		r.Get("/uploads/by-nonce", s.getUploadByNonce)
 		r.Get("/uploads/{upload_id}", s.getUpload)
 		r.Post("/messages/{message_id}/attachments", s.attachUpload)
 		r.Get("/dms", s.listDirectConversations)
@@ -1450,6 +1451,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, err)
 	case errors.Is(err, store.ErrUploadQuotaExceeded):
 		writeError(w, http.StatusRequestEntityTooLarge, err)
+	case errors.Is(err, store.ErrUploadNonceConflict):
+		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrModerationRestricted):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):

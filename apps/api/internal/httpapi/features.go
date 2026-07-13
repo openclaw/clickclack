@@ -122,6 +122,39 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	nonce, err := normalizeUploadNonce(r.URL.Query().Get("nonce"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	if nonce != "" && workspaceID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("workspace_id query parameter is required with nonce"))
+		return
+	}
+	if workspaceID != "" {
+		if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
+			return
+		}
+		if nonce != "" {
+			existing, err := s.store.GetUploadByNonce(r.Context(), act.user.ID, nonce)
+			switch {
+			case err == nil:
+				if existing.WorkspaceID != workspaceID {
+					writeStoreError(w, store.ErrUploadNonceConflict)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"upload": existing})
+				return
+			case !errors.Is(err, sql.ErrNoRows):
+				writeStoreError(w, err)
+				return
+			}
+		}
+		if _, ok := s.checkUploadQuota(w, r, act, workspaceID); !ok {
+			return
+		}
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -129,14 +162,6 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fields := map[string]string{}
-	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
-	if workspaceID != "" {
-		var ok bool
-		_, ok = s.authorizeUploadWorkspace(w, r, act, workspaceID)
-		if !ok {
-			return
-		}
-	}
 	var upload store.CreateUploadInput
 	var savedPath string
 	var reservationID string
@@ -213,6 +238,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		upload = store.CreateUploadInput{
 			WorkspaceID: workspaceID,
 			OwnerID:     act.user.ID,
+			Nonce:       nonce,
 			Filename:    filepath.Base(part.FileName()),
 			ContentType: contentType,
 			ByteSize:    saved.ByteSize,
@@ -237,8 +263,26 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		committed = true
 		reservationID = ""
+		writeJSON(w, http.StatusCreated, map[string]any{"upload": created})
+		return
 	}
-	writeResultStatus(w, http.StatusCreated, map[string]any{"upload": created}, err)
+	if nonce != "" {
+		// A concurrent request may have committed this nonce after the early lookup.
+		// Keep committed false so the deferred cleanup discards this request's object.
+		existing, lookupErr := s.store.GetUploadByNonce(r.Context(), act.user.ID, nonce)
+		switch {
+		case lookupErr == nil && existing.WorkspaceID == workspaceID:
+			writeJSON(w, http.StatusOK, map[string]any{"upload": existing})
+			return
+		case lookupErr == nil:
+			writeStoreError(w, store.ErrUploadNonceConflict)
+			return
+		case !errors.Is(lookupErr, sql.ErrNoRows):
+			writeStoreError(w, lookupErr)
+			return
+		}
+	}
+	writeStoreError(w, err)
 }
 
 type uploadQuotaReader struct {
@@ -269,14 +313,13 @@ func (r *uploadQuotaReader) Read(p []byte) (int, error) {
 }
 
 func (s *Server) authorizeUploadWorkspace(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) (store.UploadQuota, bool) {
-	if err := act.requireWorkspace(workspaceID); err != nil {
-		writeError(w, http.StatusForbidden, err)
+	if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
 		return store.UploadQuota{}, false
 	}
-	if _, err := s.store.GetWorkspace(r.Context(), workspaceID, act.user.ID); err != nil {
-		writeError(w, http.StatusForbidden, err)
-		return store.UploadQuota{}, false
-	}
+	return s.checkUploadQuota(w, r, act, workspaceID)
+}
+
+func (s *Server) checkUploadQuota(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) (store.UploadQuota, bool) {
 	quota, err := s.store.UploadQuota(r.Context(), workspaceID, act.user.ID)
 	if err != nil {
 		writeStoreError(w, err)
@@ -287,6 +330,26 @@ func (s *Server) authorizeUploadWorkspace(w http.ResponseWriter, r *http.Request
 		return store.UploadQuota{}, false
 	}
 	return quota, true
+}
+
+func (s *Server) authorizeUploadWorkspaceAccess(w http.ResponseWriter, r *http.Request, act actor, workspaceID string) bool {
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	if _, err := s.store.GetWorkspace(r.Context(), workspaceID, act.user.ID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	return true
+}
+
+func normalizeUploadNonce(value string) (string, error) {
+	nonce := strings.TrimSpace(value)
+	if len(nonce) > 128 {
+		return "", errors.New("nonce is too long")
+	}
+	return nonce, nil
 }
 
 func writeUploadBodyError(w http.ResponseWriter, err error, fallbackStatus int) {
@@ -300,6 +363,49 @@ func writeUploadBodyError(w http.ResponseWriter, err error, fallbackStatus int) 
 		return
 	}
 	writeError(w, fallbackStatus, err)
+}
+
+func (s *Server) getUploadByNonce(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if err := act.requireScope("uploads:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	if workspaceID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("workspace_id is required"))
+		return
+	}
+	nonce, err := normalizeUploadNonce(r.URL.Query().Get("nonce"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if nonce == "" {
+		writeError(w, http.StatusBadRequest, errors.New("nonce is required"))
+		return
+	}
+	if !s.authorizeUploadWorkspaceAccess(w, r, act, workspaceID) {
+		return
+	}
+	upload, err := s.store.GetUploadByNonce(r.Context(), act.user.ID, nonce)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if upload.WorkspaceID != workspaceID {
+		writeStoreError(w, store.ErrUploadNonceConflict)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upload": upload})
 }
 
 func (s *Server) getUpload(w http.ResponseWriter, r *http.Request) {

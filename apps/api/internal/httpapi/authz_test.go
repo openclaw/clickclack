@@ -52,6 +52,7 @@ func TestHTTPUnauthorizedRoutes(t *testing.T) {
 		{http.MethodGet, "/api/realtime/ws?workspace_id=wsp_missing", ""},
 		{http.MethodGet, "/api/search?workspace_id=wsp_missing&q=x", ""},
 		{http.MethodPost, "/api/uploads", ""},
+		{http.MethodGet, "/api/uploads/by-nonce?workspace_id=wsp_missing&nonce=missing", ""},
 		{http.MethodGet, "/api/uploads/upl_missing", ""},
 		{http.MethodPost, "/api/messages/msg_missing/attachments", `{"upload_id":"upl_missing"}`},
 		{http.MethodGet, "/api/dms?workspace_id=wsp_missing", ""},

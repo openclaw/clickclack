@@ -45,7 +45,7 @@ The value is not stored on message rows or exported as a metrics label.
 | Connected accounts | `/api/workspaces/{id}/connected-accounts`, `/api/connected-accounts/{id}/revoke` | [integrations](../features/integrations.md) |
 | Topics        | `/api/workspaces/{id}/topics` | [messages](../features/messages.md) |
 | Channels      | `/api/workspaces/{id}/channels`, `/api/channels/{id}` | [workspaces](../features/workspaces.md) |
-| Messages      | `/api/channels/{id}/messages`, `/api/messages/{id}` | [messages](../features/messages.md) |
+| Messages      | `/api/channels/{id}/messages`, `/api/messages/by-nonce`, `/api/messages/{id}` | [messages](../features/messages.md) |
 | Threads       | `/api/messages/{id}/thread`, `/api/messages/{id}/thread/replies` | [threads](../features/threads.md) |
 | Replies       | `quoted_message_id` on any message-create endpoint | [replies](../features/replies.md) |
 | Reactions     | `/api/messages/{id}/reactions` | [reactions](../features/reactions.md) |

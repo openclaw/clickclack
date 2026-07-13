@@ -19,6 +19,7 @@ on the same row via `quoted_message_id` and friends, documented in
 GET    /api/channels/{channel_id}/messages?after_seq=&before_seq=&around_seq=&limit=
 POST   /api/channels/{channel_id}/messages
 POST   /api/channels/{channel_id}/read
+GET    /api/messages/by-nonce?workspace_id=...&nonce=...
 GET    /api/messages/{message_id}
 PATCH  /api/messages/{message_id}
 DELETE /api/messages/{message_id}
@@ -36,6 +37,11 @@ DELETE /api/messages/{message_id}
   Empty bodies are rejected. `nonce` is an optional client idempotency key;
   replaying the same nonce with the same body, quote, and topic returns the
   existing message with HTTP 200 instead of creating a duplicate.
+- `GET /api/messages/by-nonce` lets the authenticated author reconcile a
+  durable create after an interrupted request. It returns the matching message,
+  including attachments, or a capability-marked 404 when no message exists.
+  The `X-ClickClack-Message-Nonce: supported` response header distinguishes
+  that result from an older server that does not implement the endpoint.
 - `POST /read` accepts `{seq}` and updates the caller's monotonic read pointer
   for the channel. The server caps `seq` to the channel's current last root
   message sequence.

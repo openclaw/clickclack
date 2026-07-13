@@ -74,7 +74,7 @@ See [features/auth.md](features/auth.md).
 | `auditLog`     | `list` |
 | `connectedAccounts` | `list`, `create`, `revoke` |
 | `channels`    | `list`, `create`, `update`, `messages`, `sendMessage`, `markRead` |
-| `messages`    | `get`, `update`, `delete` |
+| `messages`    | `get`, `findByNonce(workspaceId, nonce)`, `update`, `delete` |
 | `threads`     | `get`, `reply` |
 | `search(workspaceId, q)` | full-text search |
 | `uploads`     | `create(workspaceId, file, filename?, { nonce? })`, `findByNonce(workspaceId, nonce)`, `attach(messageId, uploadId)` |

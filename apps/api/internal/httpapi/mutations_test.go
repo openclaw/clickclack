@@ -118,6 +118,18 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if updatedMe.User.NotificationSettings == nil || !updatedMe.User.NotificationSettings.PushoverEnabled || updatedMe.User.NotificationSettings.PushoverUserKey == "" {
 		t.Fatalf("expected profile notification settings, got %#v", updatedMe.User)
 	}
+	clearedNotifications := patchJSON[struct {
+		User store.User `json:"user"`
+	}](t, server.URL+"/api/me", map[string]any{
+		"display_name": "Owner",
+		"notification_settings": map[string]any{
+			"pushover_enabled":  false,
+			"pushover_user_key": "",
+		},
+	})
+	if clearedNotifications.User.NotificationSettings == nil || clearedNotifications.User.NotificationSettings.PushoverEnabled || clearedNotifications.User.NotificationSettings.PushoverUserKey != "" {
+		t.Fatalf("expected cleared profile notification settings, got %#v", clearedNotifications.User)
+	}
 	beforeFailedProfile, err := st.GetUser(ctx, owner.ID)
 	if err != nil {
 		t.Fatal(err)

@@ -1638,7 +1638,7 @@ components:
         pushover_user_key:
           type: string
           description: Current user's Pushover user key. Must be set when Pushover notifications are enabled.
-          pattern: "^[A-Za-z0-9]{30}$"
+          pattern: "^$|^[A-Za-z0-9]{30}$"
     CreateChannelRequest:
       type: object
       required: [name]

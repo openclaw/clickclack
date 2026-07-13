@@ -26,6 +26,8 @@
    dialogs previously had no surface of their own and floated bare on the
    scrim; they now sit on a proper keycap card. */
 .profile-modal {
+  position: relative;
+  z-index: 1;
   width: min(480px, 100%);
   background: var(--panel);
   border: 1px solid var(--line-strong);

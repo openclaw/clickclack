@@ -233,6 +233,11 @@ POST /api/auth/github/desktop/consume
 
 Use limits appropriate to expected sign-in traffic and alert on sustained
 `429`, `503`, or `clickclack_github_oauth_events_total` rejection events.
+Configure proxy and CDN access logs to omit query strings on OAuth routes:
+GitHub callbacks contain short-lived authorization codes, and start URLs
+contain state or desktop challenge values. Never log `Authorization`, `Cookie`,
+or `Set-Cookie` headers. ClickClack's own request logger records route patterns
+without query strings.
 
 ## Migrations
 

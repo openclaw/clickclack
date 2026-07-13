@@ -1085,6 +1085,42 @@ func TestGitHubOAuthErrors(t *testing.T) {
 	}
 }
 
+func TestGitHubOAuthDoesNotExposeInternalStoreErrors(t *testing.T) {
+	t.Parallel()
+	base := newEmptyHTTPStore(t)
+	handler := New(failingOAuthTransactionStore{
+		Store: base,
+		err:   errors.New(`postgres://admin:secret@database.internal:5432/clickclack`),
+	}, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      "https://github.example/authorize",
+	}}).Handler()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/github/start", nil)
+	request.RemoteAddr = "127.0.0.1:12345"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("expected internal error, got %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "admin") || strings.Contains(body, "secret") || strings.Contains(body, "database.internal") {
+		t.Fatalf("internal OAuth error leaked to client: %s", body)
+	}
+	if !strings.Contains(body, "github oauth request failed") {
+		t.Fatalf("unexpected public OAuth error: %s", body)
+	}
+}
+
+type failingOAuthTransactionStore struct {
+	store.Store
+	err error
+}
+
+func (s failingOAuthTransactionStore) CreateOAuthTransaction(context.Context, store.OAuthTransaction) error {
+	return s.err
+}
+
 func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 	for _, cookie := range cookies {
 		if cookie.Name == name {

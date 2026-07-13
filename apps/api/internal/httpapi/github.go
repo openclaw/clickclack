@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -136,17 +137,17 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "browser binding", err)
 		return
 	}
 	state, err := randomOAuthSecret()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "state generation", err)
 		return
 	}
 	pkceVerifier, err := randomOAuthSecret()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "PKCE generation", err)
 		return
 	}
 	mode := store.OAuthModeBrowser
@@ -170,7 +171,7 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 			return
 		}
 		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "transaction creation", err)
 		return
 	}
 	http.Redirect(w, r, s.oauth2Config(redirectURL).AuthCodeURL(state, oauth2.S256ChallengeOption(pkceVerifier)), http.StatusFound)
@@ -196,7 +197,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, errors.New("invalid github oauth state"))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "transaction consumption", err)
 		return
 	}
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
@@ -239,17 +240,17 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		AvatarURL:       profile.AvatarURL,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		s.writeGitHubOAuthServerError(w, r, "identity provisioning", err)
 		return
 	}
 	if _, err := s.ensureGitHubWorkspace(r.Context(), token, user.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "workspace provisioning", err)
 		return
 	}
 	if transaction.Mode == store.OAuthModeBrowser {
 		session, err := s.store.CreateSession(r.Context(), user.ID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+			s.writeGitHubOAuthServerError(w, r, "browser session creation", err)
 			return
 		}
 		s.setSessionCookie(w, r, session)
@@ -263,7 +264,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	grantCode, err := newDesktopOAuthGrantCode(transaction.DesktopProtocol)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "desktop grant generation", err)
 		return
 	}
 	now := time.Now().UTC()
@@ -279,7 +280,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusServiceUnavailable, err)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "desktop grant creation", err)
 		return
 	}
 	s.recordGitHubOAuthEvent(githubOAuthEventDesktopGrantCreated)
@@ -333,12 +334,17 @@ func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err)
+		s.writeGitHubOAuthServerError(w, r, "desktop grant consumption", err)
 		return
 	}
 	s.setSessionCookie(w, r, session)
 	s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeSucceeded)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) writeGitHubOAuthServerError(w http.ResponseWriter, r *http.Request, phase string, err error) {
+	log.Printf("github oauth %s failed correlation_id=%q error_type=%T", phase, correlationIDFromContext(r.Context()), err)
+	writeError(w, http.StatusInternalServerError, errors.New("github oauth request failed"))
 }
 
 func desktopCodeChallenge(verifier string) string {

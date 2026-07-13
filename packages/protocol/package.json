@@ -4,11 +4,12 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "generate": "openapi-typescript openapi.yaml -o ../sdk-ts/src/generated/openapi.d.ts",
+    "generate": "node scripts/generate-contract.mjs",
     "typecheck": "node scripts/check-contract.mjs"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.13.0"
+    "openapi-typescript": "^7.13.0",
+    "oxfmt": "^0.58.0"
   },
   "files": [
     "openapi.yaml"

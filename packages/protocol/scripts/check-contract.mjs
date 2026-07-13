@@ -1,18 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repoDir = path.resolve(packageDir, "../..");
-const specPath = path.join(packageDir, "openapi.yaml");
-const generatedPath = path.join(repoDir, "packages/sdk-ts/src/generated/openapi.d.ts");
+import { generateContractDeclaration, generatedPath, specPath } from "./generate-contract.mjs";
+
 const spec = fs.readFileSync(specPath, "utf8");
 const generated = fs.readFileSync(generatedPath, "utf8");
 
-const openapi = await loadOpenAPITypescript();
-const ast = await openapi.default(pathToFileURL(specPath));
-const expectedGenerated = openapi.COMMENT_HEADER + openapi.astToString(ast);
+const expectedGenerated = await generateContractDeclaration();
 assert.equal(
   generated,
   expectedGenerated,
@@ -66,23 +60,6 @@ for (const [operationId, block] of operationBlocks(generated)) {
 
 console.log("OpenAPI contract checks passed");
 
-async function loadOpenAPITypescript() {
-  try {
-    return await import("openapi-typescript");
-  } catch (error) {
-    const pnpmDir = path.join(repoDir, "node_modules/.pnpm");
-    const packageEntry = fs
-      .readdirSync(pnpmDir)
-      .find((entry) => entry.startsWith("openapi-typescript@"));
-    if (!packageEntry) throw error;
-    return import(
-      pathToFileURL(
-        path.join(pnpmDir, packageEntry, "node_modules/openapi-typescript/dist/index.mjs"),
-      ).href
-    );
-  }
-}
-
 function yamlOperationBlock(source, route, method) {
   const lines = source.split("\n");
   const routeIndex = lines.findIndex((line) => line === `  ${route}:`);
@@ -101,7 +78,7 @@ function operationBlocks(source) {
   const interfaceStart = source.indexOf(marker);
   assert.notEqual(interfaceStart, -1, "generated operations interface is missing");
   const blocks = [];
-  const memberPattern = /^    ([A-Za-z0-9_]+): \{$/gm;
+  const memberPattern = /^  ([A-Za-z0-9_]+): \{$/gm;
   memberPattern.lastIndex = interfaceStart + marker.length;
   for (let match = memberPattern.exec(source); match; match = memberPattern.exec(source)) {
     const start = match.index + match[0].lastIndexOf("{");

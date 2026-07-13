@@ -302,10 +302,10 @@
       userAlign = "left";
       otherAlign = "left";
     }
-    applyUserAlign();
+    applyMessageAlignments();
   }
 
-  function applyUserAlign() {
+  function applyMessageAlignments() {
     try {
       document.documentElement.setAttribute("data-user-align", userAlign);
       document.documentElement.setAttribute("data-other-align", otherAlign);
@@ -316,7 +316,7 @@
 
   function setUserAlign(value: "left" | "right") {
     userAlign = value;
-    applyUserAlign();
+    applyMessageAlignments();
     try {
       window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, value);
     } catch {
@@ -326,7 +326,7 @@
 
   function setOtherAlign(value: "left" | "right") {
     otherAlign = value;
-    applyUserAlign();
+    applyMessageAlignments();
     try {
       window.localStorage.setItem(OTHER_ALIGN_STORAGE_KEY, value);
     } catch {

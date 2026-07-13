@@ -840,6 +840,11 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => threadControlSide(agentMessage)).toBe("right");
   await expect(attachmentGrid).toBeVisible();
   await expect(preamble).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => messageSide(selfMessage)).toBe("right");
+  await expect.poll(() => messageSide(humanMessage)).toBe("right");
+  await expect.poll(() => messageSide(agentMessage)).toBe("right");
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {

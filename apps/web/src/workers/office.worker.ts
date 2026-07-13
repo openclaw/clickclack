@@ -1,15 +1,5 @@
 import { parsePresentation, parseSpreadsheet } from "../lib/office-parser";
-import type { OfficeKind, PresentationPreview, SpreadsheetPreview } from "../lib/office";
-
-type OfficeWorkerRequest = {
-  kind: OfficeKind;
-  bytes: Uint8Array<ArrayBuffer>;
-};
-
-type OfficeWorkerResponse =
-  | { kind: "spreadsheet"; preview: SpreadsheetPreview }
-  | { kind: "presentation"; preview: PresentationPreview }
-  | { error: string };
+import type { OfficeWorkerRequest, OfficeWorkerResponse } from "../lib/office-types";
 
 const worker = self as unknown as {
   onmessage: ((event: MessageEvent<OfficeWorkerRequest>) => void) | null;

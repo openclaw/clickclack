@@ -6,7 +6,7 @@ import { parseSpreadsheet } from "../../apps/web/src/lib/office-parser";
 import {
   SPREADSHEET_CELL_TEXT_LIMIT,
   SPREADSHEET_TOTAL_TEXT_LIMIT,
-} from "../../apps/web/src/lib/office";
+} from "../../apps/web/src/lib/office-types";
 import {
   assertSafePDFCanvas,
   PDF_CANVAS_DIMENSION_LIMIT,

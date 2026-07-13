@@ -28,7 +28,7 @@ import {
   type SpreadsheetCell,
   type SpreadsheetPreview,
   type SpreadsheetSheet,
-} from "./office";
+} from "./office-types";
 
 type XMLParts = Map<string, Uint8Array<ArrayBuffer>>;
 type ParseBudget = { elements: number };

@@ -3,11 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,9 +53,7 @@ func TestEventDeliveryQueueIsolatesWorkspacesAndSchedulesFairly(t *testing.T) {
 
 func TestEventDeliveryCloseDrainsAndRecordsAttempts(t *testing.T) {
 	t.Parallel()
-	st, serverState, ownerID, subscription, events := newEventDeliveryTestState(t, 5)
-
-	started := make(chan struct{}, len(events))
+	started := make(chan struct{}, 5)
 	release := make(chan struct{})
 	defer func() {
 		select {
@@ -68,9 +68,9 @@ func TestEventDeliveryCloseDrainsAndRecordsAttempts(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	t.Cleanup(callback.Close)
+	st, serverState, ownerID, subscription, events := newEventDeliveryTestState(t, 5, localCallbackURL(callback.URL))
 	t.Cleanup(serverState.Close)
 	configureLocalCallbackPolicy(serverState)
-	subscription.CallbackURL = localCallbackURL(callback.URL)
 
 	for _, event := range events {
 		if !serverState.eventDeliveries.enqueue(eventDeliveryTestJobForSubscription(t, subscription, event)) {
@@ -115,10 +115,10 @@ func TestEventDeliveryCloseDrainsAndRecordsAttempts(t *testing.T) {
 	}
 }
 
-func TestEventDeliveryCloseBoundsOverdueCallbacksAndRecordsAttempts(t *testing.T) {
+func TestEventDeliveryCloseAbortsOverdueCallbacksWithinDeadline(t *testing.T) {
 	t.Parallel()
-	st, serverState, ownerID, subscription, events := newEventDeliveryTestState(t, 1)
-	callbackStarted := make(chan struct{})
+	st, serverState, ownerID, subscription, events := newEventDeliveryTestState(t, 5, "https://example.com/callback")
+	callbackStarted := make(chan struct{}, eventDeliveryWorkerCount)
 	release := make(chan struct{})
 	defer func() {
 		select {
@@ -127,43 +127,186 @@ func TestEventDeliveryCloseBoundsOverdueCallbacksAndRecordsAttempts(t *testing.T
 			close(release)
 		}
 	}()
-	callback := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		close(callbackStarted)
+	var callbackCount atomic.Int32
+	serverState.callbackClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callbackCount.Add(1)
+		callbackStarted <- struct{}{}
 		<-release
-	}))
-	t.Cleanup(callback.Close)
+		return &http.Response{
+			StatusCode: http.StatusAccepted,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    req,
+		}, nil
+	})}
 	t.Cleanup(serverState.Close)
-	configureLocalCallbackPolicy(serverState)
-	subscription.CallbackURL = localCallbackURL(callback.URL)
 	serverState.eventDeliveries.drainTimeout = 50 * time.Millisecond
 
-	if !serverState.eventDeliveries.enqueue(eventDeliveryTestJobForSubscription(t, subscription, events[0])) {
-		t.Fatal("event delivery queue rejected timeout test job")
+	for _, event := range events {
+		if !serverState.eventDeliveries.enqueue(eventDeliveryTestJobForSubscription(t, subscription, event)) {
+			t.Fatal("event delivery queue rejected timeout test job")
+		}
 	}
-	select {
-	case <-callbackStarted:
-	case <-time.After(time.Second):
-		t.Fatal("event callback did not start")
+	for range eventDeliveryWorkerCount {
+		select {
+		case <-callbackStarted:
+		case <-time.After(time.Second):
+			t.Fatal("event callback did not start")
+		}
 	}
 
 	startedAt := time.Now()
-	serverState.Close()
-	close(release)
-	if elapsed := time.Since(startedAt); elapsed > time.Second {
+	closed := make(chan struct{})
+	go func() {
+		serverState.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(250 * time.Millisecond):
+		close(release)
+		t.Fatal("dispatcher close exceeded its drain timeout")
+	}
+	if elapsed := time.Since(startedAt); elapsed > 250*time.Millisecond {
 		t.Fatalf("dispatcher close exceeded its bound: %s", elapsed)
+	}
+	close(release)
+	if got := callbackCount.Load(); got != eventDeliveryWorkerCount {
+		t.Fatalf("expected queued callback to be abandoned after timeout, got %d callbacks", got)
+	}
+	time.Sleep(10 * time.Millisecond)
+	attempts, err := st.ListEventDeliveryAttempts(context.Background(), subscription.ID, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 0 {
+		t.Fatalf("shutdown deadline allowed post-close attempt writes: %#v", attempts)
+	}
+}
+
+func TestEventDeliveryRevalidatesSubscriptionBeforeDispatch(t *testing.T) {
+	t.Parallel()
+	testEventDeliveryRevocation(t, false, func(
+		ctx context.Context,
+		st *sqlitestore.Store,
+		ownerID string,
+		subscription store.EventSubscription,
+	) error {
+		_, err := st.RevokeEventSubscription(ctx, subscription.ID, ownerID)
+		return err
+	})
+}
+
+func TestEventDeliveryRevalidatesAppInstallationBeforeDispatch(t *testing.T) {
+	t.Parallel()
+	testEventDeliveryRevocation(t, true, func(
+		ctx context.Context,
+		st *sqlitestore.Store,
+		ownerID string,
+		subscription store.EventSubscription,
+	) error {
+		_, err := st.RevokeAppInstallation(ctx, subscription.AppInstallationID, ownerID)
+		return err
+	})
+}
+
+func testEventDeliveryRevocation(
+	t *testing.T,
+	appBacked bool,
+	revoke func(context.Context, *sqlitestore.Store, string, store.EventSubscription) error,
+) {
+	t.Helper()
+	started := make(chan struct{}, eventDeliveryWorkerCount)
+	release := make(chan struct{})
+	callback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		started <- struct{}{}
+		<-release
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(callback.Close)
+	st, serverState, ownerID, subscription, events := newEventDeliveryTestState(t, 5, localCallbackURL(callback.URL))
+	t.Cleanup(serverState.Close)
+	configureLocalCallbackPolicy(serverState)
+
+	if appBacked {
+		bot, _, err := st.CreateBot(context.Background(), store.CreateBotInput{
+			WorkspaceID: subscription.WorkspaceID,
+			DisplayName: "Delivery App Bot",
+			CreatedBy:   ownerID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		installation, err := st.CreateAppInstallation(context.Background(), store.CreateAppInstallationInput{
+			WorkspaceID: subscription.WorkspaceID,
+			AppSlug:     "delivery-app",
+			DisplayName: "Delivery App",
+			BotUserID:   bot.ID,
+			CreatedBy:   ownerID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		subscription, err = st.CreateEventSubscription(context.Background(), store.CreateEventSubscriptionInput{
+			WorkspaceID:       subscription.WorkspaceID,
+			AppInstallationID: installation.ID,
+			EventTypes:        []string{"message.created"},
+			CallbackURL:       localCallbackURL(callback.URL),
+			CreatedBy:         ownerID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, event := range events[:eventDeliveryWorkerCount] {
+		if !serverState.eventDeliveries.enqueue(eventDeliveryTestJobForSubscription(t, subscription, event)) {
+			t.Fatal("event delivery queue rejected blocker job")
+		}
+	}
+	for range eventDeliveryWorkerCount {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("event delivery workers did not start")
+		}
+	}
+	if !serverState.eventDeliveries.enqueue(eventDeliveryTestJobForSubscription(t, subscription, events[eventDeliveryWorkerCount])) {
+		t.Fatal("event delivery queue rejected queued revocation job")
+	}
+	if err := revoke(context.Background(), st, ownerID, subscription); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	serverState.Close()
+
+	select {
+	case <-started:
+		t.Fatal("queued event callback ran after revocation")
+	default:
 	}
 	attempts, err := st.ListEventDeliveryAttempts(context.Background(), subscription.ID, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(attempts) != 1 || attempts[0].Error == "" {
-		t.Fatalf("expected one terminal cancellation attempt, got %#v", attempts)
+	if len(attempts) != len(events) {
+		t.Fatalf("expected %d terminal attempts, got %#v", len(events), attempts)
+	}
+	inactiveAttempts := 0
+	for _, attempt := range attempts {
+		if attempt.Error == errEventDeliverySubscriptionInactive.Error() {
+			inactiveAttempts++
+		}
+	}
+	if inactiveAttempts != 1 {
+		t.Fatalf("expected one inactive-subscription attempt, got %#v", attempts)
 	}
 }
 
 func newEventDeliveryTestState(
 	t *testing.T,
 	eventCount int,
+	callbackURL string,
 ) (*sqlitestore.Store, *Server, string, store.EventSubscription, []store.Event) {
 	t.Helper()
 	ctx := context.Background()
@@ -190,7 +333,7 @@ func newEventDeliveryTestState(
 	subscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
 		WorkspaceID: workspaces[0].ID,
 		EventTypes:  []string{"message.created"},
-		CallbackURL: "https://example.com/callback",
+		CallbackURL: callbackURL,
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
@@ -215,7 +358,7 @@ func newEventDeliveryTestState(
 
 func eventDeliveryTestJob(workspaceID string, index int) eventDeliveryJob {
 	return eventDeliveryJob{
-		subscription: store.EventSubscription{WorkspaceID: workspaceID},
+		workspaceID: workspaceID,
 		event: store.Event{
 			ID:          workspaceID + "-event-" + strconv.Itoa(index),
 			WorkspaceID: workspaceID,
@@ -247,5 +390,10 @@ func eventDeliveryTestJobForSubscription(t *testing.T, subscription store.EventS
 	if err != nil {
 		t.Fatal(err)
 	}
-	return eventDeliveryJob{subscription: subscription, event: event, payload: payload}
+	return eventDeliveryJob{
+		subscriptionID: subscription.ID,
+		workspaceID:    subscription.WorkspaceID,
+		event:          event,
+		payload:        payload,
+	}
 }

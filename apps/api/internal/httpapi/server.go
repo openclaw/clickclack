@@ -387,64 +387,24 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	profileSupplied := body.DisplayName != nil || body.Handle != nil || body.AvatarURL != nil
-	displayName := act.user.DisplayName
-	handle := act.user.Handle
-	avatarURL := act.user.AvatarURL
-	if body.DisplayName != nil {
-		displayName = *body.DisplayName
-	}
-	if body.Handle != nil {
-		handle = *body.Handle
-	}
-	if body.AvatarURL != nil {
-		avatarURL = *body.AvatarURL
+	if body.DisplayName == nil && body.Handle == nil && body.AvatarURL == nil && body.NotificationSettings == nil {
+		writeResult(w, map[string]any{"user": act.user}, nil)
+		return
 	}
 
-	var notificationSettings *store.NotificationSettings
+	patch := store.PatchUserInput{
+		UserID:      act.user.ID,
+		DisplayName: body.DisplayName,
+		Handle:      body.Handle,
+		AvatarURL:   body.AvatarURL,
+	}
 	if body.NotificationSettings != nil {
-		current := store.NotificationSettings{}
-		if act.user.NotificationSettings != nil {
-			current = *act.user.NotificationSettings
+		patch.NotificationSettings = &store.PatchNotificationSettingsInput{
+			PushoverEnabled: body.NotificationSettings.PushoverEnabled,
+			PushoverUserKey: body.NotificationSettings.PushoverUserKey,
 		}
-		if body.NotificationSettings.PushoverEnabled != nil {
-			current.PushoverEnabled = *body.NotificationSettings.PushoverEnabled
-		}
-		if body.NotificationSettings.PushoverUserKey != nil {
-			current.PushoverUserKey = *body.NotificationSettings.PushoverUserKey
-		}
-		notificationSettings = &current
 	}
-
-	var updated store.User
-	switch {
-	case profileSupplied && notificationSettings != nil:
-		updated, err = s.store.UpdateUserProfileAndNotificationSettings(r.Context(), store.UpdateUserProfileAndNotificationSettingsInput{
-			UserID:               act.user.ID,
-			DisplayName:          displayName,
-			Handle:               handle,
-			AvatarURL:            avatarURL,
-			NotificationSettings: notificationSettings,
-		})
-	case profileSupplied:
-		updated, err = s.store.UpdateUserProfile(r.Context(), store.UpdateUserProfileInput{
-			UserID:      act.user.ID,
-			DisplayName: displayName,
-			Handle:      handle,
-			AvatarURL:   avatarURL,
-		})
-	case notificationSettings != nil:
-		_, err = s.store.UpdateNotificationSettings(r.Context(), store.UpdateNotificationSettingsInput{
-			UserID:          act.user.ID,
-			PushoverEnabled: notificationSettings.PushoverEnabled,
-			PushoverUserKey: notificationSettings.PushoverUserKey,
-		})
-		if err == nil {
-			updated, err = s.store.GetUser(r.Context(), act.user.ID)
-		}
-	default:
-		updated = act.user
-	}
+	updated, err := s.store.PatchUser(r.Context(), patch)
 	writeResult(w, map[string]any{"user": updated}, err)
 }
 
@@ -1482,11 +1442,13 @@ func writeEventMutationResult(w http.ResponseWriter, changedStatus int, event st
 		writeStoreError(w, err)
 		return
 	}
+	body := map[string]any{}
 	status := http.StatusOK
 	if event.ID != "" {
+		body["event"] = event
 		status = changedStatus
 	}
-	writeJSON(w, status, map[string]any{"event": event})
+	writeJSON(w, status, body)
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

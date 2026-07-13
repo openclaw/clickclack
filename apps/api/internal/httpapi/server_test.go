@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -216,11 +217,16 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if reaction.Event.Type != "reaction.added" {
 		t.Fatalf("unexpected reaction event: %s", reaction.Event.Type)
 	}
-	duplicateReaction, duplicateStatus := postJSONWithStatus[struct {
-		Event store.Event `json:"event"`
-	}](t, server.URL+"/api/messages/"+created.Message.ID+"/reactions", map[string]string{"emoji": "lobster"})
-	if duplicateStatus != http.StatusOK || duplicateReaction.Event.ID != "" {
-		t.Fatalf("expected duplicate reaction no-op, status=%d event=%#v", duplicateStatus, duplicateReaction.Event)
+	duplicateReaction, duplicateStatus := postJSONWithStatus[map[string]json.RawMessage](
+		t,
+		server.URL+"/api/messages/"+created.Message.ID+"/reactions",
+		map[string]string{"emoji": "lobster"},
+	)
+	if duplicateStatus != http.StatusOK {
+		t.Fatalf("expected duplicate reaction no-op, status=%d", duplicateStatus)
+	}
+	if _, exists := duplicateReaction["event"]; exists {
+		t.Fatalf("duplicate reaction returned a synthetic event: %#v", duplicateReaction)
 	}
 	deleteJSON(t, server.URL+"/api/messages/"+created.Message.ID+"/reactions/lobster")
 
@@ -306,6 +312,90 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	}](t, server.URL+"/api/realtime/events?workspace_id="+url.QueryEscape(workspace.ID)+"&after_cursor="+url.QueryEscape(created.Event.Cursor))
 	if len(events.Events) == 0 {
 		t.Fatal("expected recoverable events after cursor")
+	}
+}
+
+func TestUpdateMeConcurrentPartialPatchesPreserveDisjointFields(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(t.TempDir(), "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "profile-race@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raceStore := &profilePatchRaceStore{
+		Store:       st,
+		authReady:   make(chan struct{}),
+		authRelease: make(chan struct{}),
+	}
+	serverStates := []*Server{
+		New(raceStore, realtime.NewHub(), Options{}),
+		New(raceStore, realtime.NewHub(), Options{}),
+	}
+	servers := []*httptest.Server{
+		httptest.NewServer(serverStates[0].Handler()),
+		httptest.NewServer(serverStates[1].Handler()),
+	}
+	for index := range serverStates {
+		t.Cleanup(serverStates[index].Close)
+		t.Cleanup(servers[index].Close)
+	}
+
+	type patchResult struct {
+		status int
+		err    error
+	}
+	results := make(chan patchResult, 2)
+	patch := func(serverURL, body string) {
+		req, err := http.NewRequest(http.MethodPatch, serverURL+"/api/me", strings.NewReader(body))
+		if err != nil {
+			results <- patchResult{err: err}
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-ClickClack-User", owner.ID)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			results <- patchResult{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		_, err = io.Copy(io.Discard, resp.Body)
+		results <- patchResult{status: resp.StatusCode, err: err}
+	}
+	go patch(servers[0].URL, `{"display_name":"Concurrent Owner"}`)
+	go patch(servers[1].URL, `{"avatar_url":"https://example.com/concurrent-owner.png"}`)
+
+	select {
+	case <-raceStore.authReady:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent profile requests did not reach authentication")
+	}
+	close(raceStore.authRelease)
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if result.status != http.StatusOK {
+			t.Fatalf("profile patch returned status %d", result.status)
+		}
+	}
+
+	updated, err := st.GetUser(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayName != "Concurrent Owner" || updated.AvatarURL != "https://example.com/concurrent-owner.png" {
+		t.Fatalf("concurrent partial patches clobbered a disjoint field: %#v", updated)
 	}
 }
 
@@ -1413,9 +1503,17 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		if err := json.Unmarshal(body, &callbackPayload); err != nil {
 			t.Fatal(err)
 		}
+		text := strings.TrimSpace(callbackPayload["text"].(string))
+		if text == "silent" {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"response_type": "ephemeral",
+				"text":          "visible only to you",
+			})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{
 			"response_type": "in_channel",
-			"text":          "deployed " + strings.TrimSpace(callbackPayload["text"].(string)),
+			"text":          "deployed " + text,
 		})
 	}))
 	defer callbackServer.Close()
@@ -1444,6 +1542,17 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	}](t, server.URL+"/api/hooks/slash/"+channel.ID, url.Values{"command": {"/deploy"}, "text": {"prod"}})
 	if signedSlash.Text != "deployed prod" || signedSlash.Message.AuthorID != createdBot.Bot.ID {
 		t.Fatalf("unexpected registered slash response: %#v", signedSlash)
+	}
+	ephemeralSlash := postForm[map[string]json.RawMessage](
+		t,
+		server.URL+"/api/hooks/slash/"+channel.ID,
+		url.Values{"command": {"/deploy"}, "text": {"silent"}},
+	)
+	if _, exists := ephemeralSlash["message"]; exists {
+		t.Fatalf("ephemeral slash response returned a synthetic message: %#v", ephemeralSlash)
+	}
+	if _, exists := ephemeralSlash["event"]; exists {
+		t.Fatalf("ephemeral slash response returned a synthetic event: %#v", ephemeralSlash)
 	}
 	if callbackPayload["trigger_id"] == "" || callbackPayload["channel_id"] != channel.ID {
 		t.Fatalf("unexpected callback payload: %#v", callbackPayload)
@@ -2888,6 +2997,33 @@ type faultInjectedUploadStore struct {
 	failDeletes bool
 	failPaths   map[string]bool
 	err         error
+}
+
+type profilePatchRaceStore struct {
+	store.Store
+
+	mu          sync.Mutex
+	authReads   int
+	authReady   chan struct{}
+	authRelease chan struct{}
+}
+
+func (s *profilePatchRaceStore) GetUser(ctx context.Context, userID string) (store.User, error) {
+	s.mu.Lock()
+	s.authReads++
+	authRead := s.authReads <= 2
+	if s.authReads == 2 {
+		close(s.authReady)
+	}
+	s.mu.Unlock()
+	if authRead {
+		select {
+		case <-s.authRelease:
+		case <-ctx.Done():
+			return store.User{}, ctx.Err()
+		}
+	}
+	return s.Store.GetUser(ctx, userID)
 }
 
 func (s *faultInjectedUploadStore) Save(ctx context.Context, body io.Reader, options uploadstore.SaveOptions) (uploadstore.SavedObject, error) {

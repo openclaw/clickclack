@@ -1152,13 +1152,18 @@ func (s *Server) invokeRegisteredSlashCommand(w http.ResponseWriter, r *http.Req
 		s.publishEvent(r.Context(), event)
 		s.notifyMessageCreated(r.Context(), message)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	result := map[string]any{
 		"response_type": callback.ResponseType,
 		"text":          callback.Text,
-		"message":       message,
-		"event":         event,
 		"invocation":    invocation,
-	})
+	}
+	if message.ID != "" {
+		result["message"] = message
+	}
+	if event.ID != "" {
+		result["event"] = event
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) publishEvent(ctx context.Context, event store.Event) {

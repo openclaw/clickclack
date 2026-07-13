@@ -19,11 +19,13 @@ const (
 )
 
 var errEventDeliveryQueueFull = errors.New("event delivery queue is full")
+var errEventDeliverySubscriptionInactive = errors.New("event delivery subscription is no longer active")
 
 type eventDeliveryJob struct {
-	subscription store.EventSubscription
-	event        store.Event
-	payload      []byte
+	subscriptionID string
+	workspaceID    string
+	event          store.Event
+	payload        []byte
 }
 
 type eventDeliveryDispatcher struct {
@@ -41,6 +43,7 @@ type eventDeliveryDispatcher struct {
 	ready   []string
 	wake    chan struct{}
 	closing bool
+	aborted bool
 }
 
 func newEventDeliveryDispatcher(server *Server) *eventDeliveryDispatcher {
@@ -117,13 +120,17 @@ func eventDeliveryWorkspaceID(job eventDeliveryJob) string {
 	if job.event.WorkspaceID != "" {
 		return job.event.WorkspaceID
 	}
-	return job.subscription.WorkspaceID
+	return job.workspaceID
 }
 
 func (d *eventDeliveryDispatcher) nextJob() (eventDeliveryJob, bool) {
 	for {
 		d.mu.Lock()
 		d.initLocked()
+		if d.aborted {
+			d.mu.Unlock()
+			return eventDeliveryJob{}, false
+		}
 		if len(d.ready) > 0 {
 			workspaceID := d.ready[0]
 			d.ready = d.ready[1:]
@@ -162,8 +169,20 @@ func (d *eventDeliveryDispatcher) worker() {
 
 func (d *eventDeliveryDispatcher) deliver(job eventDeliveryJob) {
 	ctx, cancel := context.WithTimeout(d.ctx, callbackTimeout)
-	status, responseBody, deliveryErr := d.server.postEventCallback(ctx, job.subscription, job.event, job.payload)
+	subscription, deliveryErr := d.server.activeEventDeliverySubscription(ctx, job)
+	if deliveryErr != nil {
+		cancel()
+		if d.ctx.Err() != nil {
+			return
+		}
+		d.server.recordEventDeliveryAttempt(context.Background(), job, 0, "", deliveryErr)
+		return
+	}
+	status, responseBody, deliveryErr := d.server.postEventCallback(ctx, subscription, job.event, job.payload)
 	cancel()
+	if d.ctx.Err() != nil {
+		return
+	}
 	d.server.recordEventDeliveryAttempt(context.Background(), job, status, responseBody, deliveryErr)
 }
 
@@ -188,10 +207,31 @@ func (d *eventDeliveryDispatcher) close() {
 		case <-done:
 			d.cancel()
 		case <-timer.C:
+			d.mu.Lock()
+			d.aborted = true
+			d.pending = make(map[string][]eventDeliveryJob)
+			d.ready = nil
+			for len(d.queue) > 0 {
+				<-d.queue
+			}
+			d.signalLocked()
+			d.mu.Unlock()
 			d.cancel()
-			<-done
 		}
 	})
+}
+
+func (s *Server) activeEventDeliverySubscription(ctx context.Context, job eventDeliveryJob) (store.EventSubscription, error) {
+	subscriptions, err := s.store.ListEventSubscriptionsForEvent(ctx, job.event)
+	if err != nil {
+		return store.EventSubscription{}, err
+	}
+	for _, subscription := range subscriptions {
+		if subscription.ID == job.subscriptionID {
+			return subscription, nil
+		}
+	}
+	return store.EventSubscription{}, errEventDeliverySubscriptionInactive
 }
 
 func (s *Server) enqueueEventDeliveries(ctx context.Context, event store.Event) {
@@ -207,7 +247,12 @@ func (s *Server) enqueueEventDeliveries(ctx context.Context, event store.Event) 
 		if err != nil {
 			continue
 		}
-		job := eventDeliveryJob{subscription: subscription, event: event, payload: payload}
+		job := eventDeliveryJob{
+			subscriptionID: subscription.ID,
+			workspaceID:    subscription.WorkspaceID,
+			event:          event,
+			payload:        payload,
+		}
 		if !s.eventDeliveries.enqueue(job) {
 			s.recordEventDeliveryAttempt(ctx, job, 0, "", errEventDeliveryQueueFull)
 		}
@@ -222,7 +267,7 @@ func (s *Server) recordEventDeliveryAttempt(ctx context.Context, job eventDelive
 	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), eventDeliveryAttemptTimeout)
 	defer cancel()
 	_, _ = s.store.CreateEventDeliveryAttempt(recordCtx, store.CreateEventDeliveryAttemptInput{
-		SubscriptionID: job.subscription.ID,
+		SubscriptionID: job.subscriptionID,
 		EventID:        job.event.ID,
 		WorkspaceID:    job.event.WorkspaceID,
 		EventType:      job.event.Type,

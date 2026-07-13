@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2216,35 +2217,10 @@ func uploadFileAsUserWithContentType(t *testing.T, userID, endpoint, workspaceID
 
 func uploadFileWithNonceStatus(t *testing.T, endpoint, workspaceID, nonce, filename, content string) (store.Upload, int) {
 	t.Helper()
-	endpointURL, err := url.Parse(endpoint)
+	req, err := newUploadWithNonceRequest(endpoint, workspaceID, nonce, filename, content)
 	if err != nil {
 		t.Fatal(err)
 	}
-	query := endpointURL.Query()
-	query.Set("workspace_id", workspaceID)
-	query.Set("nonce", nonce)
-	endpointURL.RawQuery = query.Encode()
-
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("workspace_id", workspaceID); err != nil {
-		t.Fatal(err)
-	}
-	part, err := writer.CreateFormFile("file", filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := part.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	req, err := http.NewRequest(http.MethodPost, endpointURL.String(), &body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -2257,6 +2233,39 @@ func uploadFileWithNonceStatus(t *testing.T, endpoint, workspaceID, nonce, filen
 		t.Fatal(err)
 	}
 	return out.Upload, resp.StatusCode
+}
+
+func newUploadWithNonceRequest(endpoint, workspaceID, nonce, filename, content string) (*http.Request, error) {
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	query := endpointURL.Query()
+	query.Set("workspace_id", workspaceID)
+	query.Set("nonce", nonce)
+	endpointURL.RawQuery = query.Encode()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("workspace_id", workspaceID); err != nil {
+		return nil, err
+	}
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, endpointURL.String(), &body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req, nil
 }
 
 func uploadFileWithoutPartContentType(t *testing.T, endpoint, workspaceID string) store.Upload {
@@ -2839,13 +2848,30 @@ func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
 	if firstStatus != http.StatusCreated || first.Nonce != nonce {
 		t.Fatalf("unexpected initial upload: status=%d upload=%#v", firstStatus, first)
 	}
-	lookup := getJSON[struct {
-		Upload store.Upload `json:"upload"`
-	}](t, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(workspace.ID)+"&nonce="+url.QueryEscape(nonce))
-	if lookup.Upload.ID != first.ID {
-		t.Fatalf("upload nonce lookup returned %#v, want %s", lookup.Upload, first.ID)
+	lookupResponse, err := http.Get(server.URL + "/api/uploads/by-nonce?workspace_id=" + url.QueryEscape(workspace.ID) + "&nonce=" + url.QueryEscape(nonce))
+	if err != nil {
+		t.Fatal(err)
 	}
-	expectStatus(t, http.MethodGet, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(workspace.ID)+"&nonce=missing", nil, http.StatusNotFound)
+	defer lookupResponse.Body.Close()
+	var lookup struct {
+		Upload store.Upload `json:"upload"`
+	}
+	if err := json.NewDecoder(lookupResponse.Body).Decode(&lookup); err != nil {
+		t.Fatal(err)
+	}
+	if lookupResponse.StatusCode != http.StatusOK ||
+		lookupResponse.Header.Get("X-ClickClack-Upload-Nonce") != "supported" ||
+		lookup.Upload.ID != first.ID {
+		t.Fatalf("unexpected upload nonce lookup: status=%s headers=%v upload=%#v", lookupResponse.Status, lookupResponse.Header, lookup.Upload)
+	}
+	missingResponse, err := http.Get(server.URL + "/api/uploads/by-nonce?workspace_id=" + url.QueryEscape(workspace.ID) + "&nonce=missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingResponse.Body.Close()
+	if missingResponse.StatusCode != http.StatusNotFound || missingResponse.Header.Get("X-ClickClack-Upload-Nonce") != "supported" {
+		t.Fatalf("unexpected missing nonce response: status=%s headers=%v", missingResponse.Status, missingResponse.Header)
+	}
 	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
 		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
@@ -2894,6 +2920,108 @@ func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
 	expectStatus(t, http.MethodGet, server.URL+"/api/uploads/by-nonce?workspace_id="+url.QueryEscape(otherWorkspace.ID)+"&nonce="+url.QueryEscape(nonce), nil, http.StatusConflict)
 	if _, status := uploadFileWithNonceStatus(t, server.URL+"/api/uploads", workspace.ID, strings.Repeat("n", 129), "long.txt", "long body"); status != http.StatusBadRequest {
 		t.Fatalf("expected overlong nonce rejection, got %d", status)
+	}
+}
+
+func TestConcurrentUploadNonceReplayCleansLosingObjectAndReservation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "upload-race-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	storage := newConcurrentUploadStore()
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadStorage: storage}).Handler())
+	t.Cleanup(server.Close)
+
+	type result struct {
+		upload store.Upload
+		status int
+		err    error
+	}
+	results := make(chan result, 2)
+	client := &http.Client{Timeout: 5 * time.Second}
+	for i := range 2 {
+		go func() {
+			req, err := newUploadWithNonceRequest(
+				server.URL+"/api/uploads",
+				workspace.ID,
+				"concurrent-upload",
+				fmt.Sprintf("race-%d.txt", i),
+				"same body",
+			)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+			var body struct {
+				Upload store.Upload `json:"upload"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				results <- result{status: resp.StatusCode, err: err}
+				return
+			}
+			results <- result{upload: body.Upload, status: resp.StatusCode}
+		}()
+	}
+
+	readResult := func() result {
+		select {
+		case value := <-results:
+			return value
+		case <-time.After(10 * time.Second):
+			return result{err: errors.New("timed out waiting for concurrent upload")}
+		}
+	}
+	first := readResult()
+	second := readResult()
+	if first.err != nil || second.err != nil {
+		t.Fatalf("concurrent uploads failed: first=%v second=%v", first.err, second.err)
+	}
+	statuses := map[int]int{first.status: 1}
+	statuses[second.status]++
+	if statuses[http.StatusCreated] != 1 || statuses[http.StatusOK] != 1 {
+		t.Fatalf("unexpected concurrent statuses: first=%d second=%d", first.status, second.status)
+	}
+	if first.upload.ID == "" || first.upload.ID != second.upload.ID {
+		t.Fatalf("concurrent replay returned different uploads: first=%#v second=%#v", first.upload, second.upload)
+	}
+	select {
+	case <-storage.deleted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("losing upload object was not deleted")
+	}
+	select {
+	case path := <-storage.deleted:
+		t.Fatalf("deleted more than one upload object: %s", path)
+	default:
+	}
+	quota, err := st.UploadQuota(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quota.UsedCount != 1 || quota.UsedBytes != int64(len("same body")) {
+		t.Fatalf("losing reservation was not released: %#v", quota)
 	}
 }
 
@@ -3081,6 +3209,52 @@ func (s *quotaObservingUploadStore) Delete(context.Context, string) error {
 }
 
 func (s *quotaObservingUploadStore) ServeHTTP(http.ResponseWriter, *http.Request, uploadstore.Object) error {
+	return uploadstore.ErrNotFound
+}
+
+type concurrentUploadStore struct {
+	mu      sync.Mutex
+	saves   int
+	release chan struct{}
+	deleted chan string
+}
+
+func newConcurrentUploadStore() *concurrentUploadStore {
+	return &concurrentUploadStore{
+		release: make(chan struct{}),
+		deleted: make(chan string, 2),
+	}
+}
+
+func (s *concurrentUploadStore) Save(ctx context.Context, body io.Reader, _ uploadstore.SaveOptions) (uploadstore.SavedObject, error) {
+	size, err := io.Copy(io.Discard, body)
+	if err != nil {
+		return uploadstore.SavedObject{}, err
+	}
+	s.mu.Lock()
+	s.saves++
+	saveID := s.saves
+	if s.saves == 2 {
+		close(s.release)
+	}
+	s.mu.Unlock()
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return uploadstore.SavedObject{}, ctx.Err()
+	}
+	return uploadstore.SavedObject{
+		Path:     fmt.Sprintf("memory://concurrent-upload-%d", saveID),
+		ByteSize: size,
+	}, nil
+}
+
+func (s *concurrentUploadStore) Delete(_ context.Context, path string) error {
+	s.deleted <- path
+	return nil
+}
+
+func (s *concurrentUploadStore) ServeHTTP(http.ResponseWriter, *http.Request, uploadstore.Object) error {
 	return uploadstore.ErrNotFound
 }
 

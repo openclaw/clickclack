@@ -366,6 +366,7 @@ func writeUploadBodyError(w http.ResponseWriter, err error, fallbackStatus int) 
 }
 
 func (s *Server) getUploadByNonce(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-ClickClack-Upload-Nonce", "supported")
 	act, err := s.currentActor(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err)

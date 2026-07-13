@@ -172,6 +172,80 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestLegacyDesktopOAuthFlow(t *testing.T) {
+	t.Parallel()
+	st := newEmptyHTTPStore(t)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "legacy-token"})
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 78, "login": "legacy", "email": "legacy@example.com"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      provider.URL + "/authorize",
+		TokenURL:     provider.URL + "/token",
+		UserURL:      provider.URL + "/user",
+		EmailsURL:    provider.URL + "/emails",
+	}}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+
+	verifier := strings.Repeat("l", 43)
+	challenge := desktopCodeChallenge(verifier)
+	resp, err := client.Get(server.URL + "/api/auth/github/desktop/start?code_challenge=" + challenge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, bindingCookie, _ := oauthStartResponse(t, resp)
+	resp.Body.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(bindingCookie)
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantCode := callback.Query().Get("code")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || callback.Scheme != "clickclack" || callback.Host != "auth" || callback.Path != "/callback" || len(grantCode) != 32 || !validOAuthGrantCode(grantCode) {
+		t.Fatalf("unexpected legacy desktop callback: %s %s", resp.Status, callback.String())
+	}
+
+	body, err := json.Marshal(map[string]string{"code": grantCode, "code_verifier": verifier})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err = http.NewRequest(http.MethodPost, server.URL+"/api/auth/github/desktop/consume", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionCookie := findCookie(resp.Cookies(), "cc_session")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatalf("legacy desktop consume did not create a session: %s %#v", resp.Status, sessionCookie)
+	}
+}
+
 func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
 	t.Parallel()
 	st := newEmptyHTTPStore(t)

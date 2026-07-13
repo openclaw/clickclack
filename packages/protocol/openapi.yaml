@@ -1170,13 +1170,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EventMutationResponse"
+                $ref: "#/components/schemas/ReactionMutationResponse"
         "201":
           description: Added reaction
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EventMutationResponse"
+                $ref: "#/components/schemas/ReactionMutationResponse"
   /api/messages/{message_id}/attachments:
     post:
       operationId: attachUpload
@@ -1219,7 +1219,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EventMutationResponse"
+                $ref: "#/components/schemas/ReactionMutationResponse"
   /api/realtime/events:
     get:
       operationId: listEvents
@@ -1894,6 +1894,13 @@ components:
       properties:
         event:
           $ref: "#/components/schemas/Event"
+    ReactionMutationResponse:
+      type: object
+      properties:
+        event:
+          allOf:
+            - $ref: "#/components/schemas/Event"
+          nullable: true
     ReadReceiptResponse:
       type: object
       required: [receipt]
@@ -1940,16 +1947,20 @@ components:
           $ref: "#/components/schemas/DirectConversation"
     SlashCommandCallbackResponse:
       type: object
-      required: [response_type, text, message, event]
+      required: [response_type, text]
       properties:
         response_type:
           type: string
         text:
           type: string
         message:
-          $ref: "#/components/schemas/Message"
+          allOf:
+            - $ref: "#/components/schemas/Message"
+          nullable: true
         event:
-          $ref: "#/components/schemas/Event"
+          allOf:
+            - $ref: "#/components/schemas/Event"
+          nullable: true
         invocation:
           $ref: "#/components/schemas/SlashCommandInvocation"
     CreateWorkspaceRequest:
@@ -2456,8 +2467,8 @@ components:
           type: boolean
         pushover_user_key:
           type: string
-          description: Current user's Pushover user key. Must be set when Pushover notifications are enabled.
-          pattern: "^[A-Za-z0-9]{30}$"
+          description: Current user's Pushover user key. An empty string clears the key; a key must be set when Pushover notifications are enabled.
+          pattern: "^$|^[A-Za-z0-9]{30}$"
     CreateChannelRequest:
       type: object
       required: [name]

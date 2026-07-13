@@ -1039,6 +1039,9 @@ export interface components {
     EventMutationResponse: {
       event: components["schemas"]["Event"];
     };
+    ReactionMutationResponse: {
+      event?: components["schemas"]["Event"] | null;
+    };
     ReadReceiptResponse: {
       receipt: components["schemas"]["ReadReceipt"];
     };
@@ -1061,8 +1064,8 @@ export interface components {
     SlashCommandCallbackResponse: {
       response_type: string;
       text: string;
-      message: components["schemas"]["Message"];
-      event: components["schemas"]["Event"];
+      message?: components["schemas"]["Message"] | null;
+      event?: components["schemas"]["Event"] | null;
       invocation?: components["schemas"]["SlashCommandInvocation"];
     };
     CreateWorkspaceRequest: {
@@ -1331,7 +1334,7 @@ export interface components {
     };
     NotificationSettingsPatch: {
       pushover_enabled?: boolean;
-      /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
+      /** @description Current user's Pushover user key. An empty string clears the key; a key must be set when Pushover notifications are enabled. */
       pushover_user_key?: string;
     };
     CreateChannelRequest: {
@@ -3209,7 +3212,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["EventMutationResponse"];
+          "application/json": components["schemas"]["ReactionMutationResponse"];
         };
       };
       /** @description Added reaction */
@@ -3218,7 +3221,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["EventMutationResponse"];
+          "application/json": components["schemas"]["ReactionMutationResponse"];
         };
       };
     };
@@ -3267,7 +3270,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["EventMutationResponse"];
+          "application/json": components["schemas"]["ReactionMutationResponse"];
         };
       };
     };

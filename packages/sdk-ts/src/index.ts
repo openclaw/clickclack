@@ -220,10 +220,20 @@ export type ThreadState = {
 };
 
 export type MessageListOptions = {
-  afterSeq?: number;
-  beforeSeq?: number;
-  aroundSeq?: number;
   limit?: number;
+} & (
+  | { afterSeq?: never; beforeSeq?: never; aroundSeq?: never }
+  | { afterSeq: number; beforeSeq?: never; aroundSeq?: never }
+  | { afterSeq?: never; beforeSeq: number; aroundSeq?: never }
+  | { afterSeq?: never; beforeSeq?: never; aroundSeq: number }
+);
+
+export type MessagePage = {
+  messages: Message[];
+  oldest_seq: number;
+  newest_seq: number;
+  has_older: boolean;
+  has_newer: boolean;
 };
 
 export type Thread = {
@@ -715,10 +725,17 @@ export class ClickClackClient {
       options: number | MessageListOptions = 0,
     ): Promise<Message[]> => {
       const params = messageListParams(options);
-      const data = await this.request<{ messages: Message[] }>(
+      const data = await this.request<MessagePage>(
         `/api/channels/${channelId}/messages?${params.toString()}`,
       );
       return data.messages;
+    },
+    messagesPage: async (
+      channelId: string,
+      options: number | MessageListOptions = 0,
+    ): Promise<MessagePage> => {
+      const params = messageListParams(options);
+      return this.request<MessagePage>(`/api/channels/${channelId}/messages?${params.toString()}`);
     },
     sendMessage: async (
       channelId: string,
@@ -848,10 +865,17 @@ export class ClickClackClient {
       options: number | MessageListOptions = 0,
     ): Promise<Message[]> => {
       const params = messageListParams(options);
-      const data = await this.request<{ messages: Message[] }>(
+      const data = await this.request<MessagePage>(
         `/api/dms/${conversationId}/messages?${params.toString()}`,
       );
       return data.messages;
+    },
+    messagesPage: async (
+      conversationId: string,
+      options: number | MessageListOptions = 0,
+    ): Promise<MessagePage> => {
+      const params = messageListParams(options);
+      return this.request<MessagePage>(`/api/dms/${conversationId}/messages?${params.toString()}`);
     },
     sendMessage: async (conversationId: string, input: MessageInput): Promise<Message> => {
       const data = await this.request<{ message: Message }>(`/api/dms/${conversationId}/messages`, {

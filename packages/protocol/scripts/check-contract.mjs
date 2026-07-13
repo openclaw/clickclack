@@ -45,6 +45,12 @@ assert.equal(
   "only documented public operations may opt out of authentication",
 );
 
+const notificationSettingsPatch = yamlComponentSchemaBlock(spec, "NotificationSettingsPatch");
+assert.ok(
+  notificationSettingsPatch.includes('pattern: "^$|^[A-Za-z0-9]{30}$"'),
+  "NotificationSettingsPatch.pushover_user_key must accept an empty string to clear the key",
+);
+
 const mutationSecurity =
   "      security:\n" +
   "        - bearerAuth: []\n" +
@@ -119,6 +125,15 @@ function yamlOperationBlocks(source) {
     index = end - 1;
   }
   return blocks;
+}
+
+function yamlComponentSchemaBlock(source, schema) {
+  const lines = source.split("\n");
+  const schemaIndex = lines.findIndex((line) => line === `    ${schema}:`);
+  assert.notEqual(schemaIndex, -1, `missing OpenAPI schema ${schema}`);
+  let end = schemaIndex + 1;
+  while (end < lines.length && !/^    [A-Za-z0-9_]+:$/.test(lines[end])) end += 1;
+  return lines.slice(schemaIndex, end).join("\n");
 }
 
 function operationBlocks(source) {

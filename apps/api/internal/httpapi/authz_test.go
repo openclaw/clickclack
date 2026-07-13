@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -482,6 +483,33 @@ func TestCookieSessionMutationsRequireCSRF(t *testing.T) {
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected bearer mutation to bypass cookie csrf, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCanonicalOriginNormalizesAndValidatesPorts(t *testing.T) {
+	t.Parallel()
+	for input, expected := range map[string]string{
+		"https://chat.example.com:0443":  "https://chat.example.com",
+		"https://chat.example.com:08443": "https://chat.example.com:8443",
+		"http://127.0.0.1:080":           "http://127.0.0.1",
+	} {
+		value, err := url.Parse(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := canonicalOrigin(value)
+		if !ok || got != expected {
+			t.Fatalf("canonical origin %q: got %q, %v; want %q", input, got, ok, expected)
+		}
+	}
+	for _, input := range []string{"https://chat.example.com:0", "https://chat.example.com:65536"} {
+		value, err := url.Parse(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := canonicalOrigin(value); ok {
+			t.Fatalf("expected invalid origin %q to fail, got %q", input, got)
+		}
 	}
 }
 

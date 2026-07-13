@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -120,6 +121,13 @@ func canonicalOrigin(value *url.URL) (string, bool) {
 		return "", false
 	}
 	port := value.Port()
+	if port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return "", false
+		}
+		port = strconv.Itoa(number)
+	}
 	if port == defaultPort(scheme) {
 		port = ""
 	}

@@ -16,7 +16,7 @@ The server resolves callers in this order (see
 [../features/auth.md](../features/auth.md)):
 
 1. `Authorization: Bearer <token>` (session token, magic-link result).
-2. `cc_session` cookie.
+2. Session cookie (`cc_session` by default, or the configured namespaced name).
 3. `X-ClickClack-User: usr_...` header (local/dev impersonation for tests).
 4. Dev fallback to the first user in the DB (only with
 `--dev-bootstrap=true`).

@@ -63,9 +63,14 @@ session and remains scoped to the selected origin.
 
 GitHub sign-in opens in the system browser, where existing GitHub sessions,
 passkeys, password managers, and two-factor authentication already work. After
-GitHub approves the login, `clickclack://auth/callback` returns a one-time grant
-to the running app. The app redeems it against the exact server that initiated
-the flow and reloads itself as the signed-in workspace.
+GitHub approves the login, `chat.clickclack.desktop:/auth/callback` returns a
+one-time grant to the running app. The app redeems it against the exact server
+that initiated the flow, verifies the resulting session through `/api/me`, and
+then reloads itself as the signed-in workspace. The app also accepts the legacy
+`clickclack://auth/callback` format when connecting to an older server.
+
+Servers using namespaced cookies require desktop OAuth protocol 2. They return
+an update-required page before sending an older desktop client to GitHub.
 
 ## Security model
 
@@ -79,10 +84,10 @@ Navigation stays on the configured ClickClack origin. GitHub OAuth and other
 HTTP(S) and mail links open in the system browser. The callback carries only an
 opaque, short-lived grant: GitHub access tokens and ClickClack session tokens
 never appear in the callback URL. Redemption requires the verifier held by the
-initiating app, is single-use, and expires after five minutes. Permission
-requests from remote content are denied. Server configuration is accepted only
-from the bundled local settings window and is written atomically with user-only
-permissions.
+initiating app, is single-use, survives server restart or replica handoff, and
+expires after five minutes. Permission requests from remote content are denied.
+Server configuration is accepted only from the bundled local settings window
+and is written atomically with user-only permissions.
 
 ## Build locally
 

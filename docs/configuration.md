@@ -29,7 +29,8 @@ hook in `cmd/clickclack/main.go`.
 | `--metrics-enabled`   | `CLICKCLACK_METRICS_ENABLED`     | `false`     | Expose metadata-only Prometheus metrics at `/metrics`; keep private. |
 | `--config`            | —                                | unset       | JSON config file. |
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
-| —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | External URL. Used to build the GitHub OAuth callback. |
+| —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
+| —                     | `CLICKCLACK_COOKIE_NAMESPACE`    | unset       | Stable lowercase cookie namespace for multiple trusted ClickClack instances on one hostname. |
 | —                     | `CLICKCLACK_GITHUB_CLIENT_ID`    | unset       | GitHub OAuth app client ID. |
 | —                     | `CLICKCLACK_GITHUB_CLIENT_SECRET`| unset       | GitHub OAuth app client secret. |
 | —                     | `CLICKCLACK_GITHUB_ALLOWED_ORG`  | unset       | Optional GitHub org login gate. Requires `read:org` scope. |
@@ -52,6 +53,7 @@ hook in `cmd/clickclack/main.go`.
   "metrics_enabled": false,
   "dev_bootstrap": false,
   "public_url": "https://chat.example.com",
+  "cookie_namespace": "production",
   "github_client_id": "Iv1.xxxxxxxxxxxx",
   "github_client_secret": "...",
   "github_allowed_org": "openclaw",
@@ -65,6 +67,46 @@ hook in `cmd/clickclack/main.go`.
 
 Pass with `--config /etc/clickclack/config.json`. Values from the file
 override env vars; CLI flags override the file if explicitly set.
+
+## Public origin and cookie namespace
+
+`CLICKCLACK_PUBLIC_URL` is an origin, not an application base path. It must:
+
+- use HTTPS for every non-loopback host
+- contain a host and optional non-default port
+- contain no credentials, path, query, fragment, or trailing-dot hostname
+
+For example, `https://chat.example.com` and `http://127.0.0.1:8080` are valid.
+`http://chat.example.com`, `https://chat.example.com/clickclack`, and
+`https://user@chat.example.com` fail startup validation. GitHub OAuth
+credentials also fail startup validation unless the public URL is set.
+
+The default cookie names remain `cc_session` and `cc_oauth_binding`. Set
+`CLICKCLACK_COOKIE_NAMESPACE` only when multiple trusted ClickClack instances
+must share one hostname:
+
+```sh
+CLICKCLACK_PUBLIC_URL=https://chat.example.com:8443
+CLICKCLACK_COOKIE_NAMESPACE=production
+```
+
+The namespace must be at most 32 characters and contain lowercase letters,
+digits, and interior hyphens. HTTPS deployments receive `__Host-` cookie names,
+such as `__Host-cc-production-session`; loopback HTTP uses
+`cc-production-session`.
+
+Treat the namespace as durable deployment identity:
+
+- Every replica serving the same public origin and database must use the same
+  namespace.
+- Different instances on the same hostname must use different namespaces.
+- Changing it signs browsers out and strands in-progress OAuth browser state
+  until that state expires.
+
+Cookies are scoped to hostnames, not ports. Namespaces prevent accidental
+same-name collisions; they are not a security boundary between mutually
+untrusted services. Put untrusted instances on separate hostnames. Use separate
+registrable domains when compromise of one deployment must not affect another.
 
 ## DB URL
 

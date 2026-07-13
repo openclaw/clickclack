@@ -136,13 +136,16 @@ Create bot tokens with `clickclack admin bot create`. See
 
 ## Auth
 
-ClickClack accepts, in order: an `Authorization: Bearer` session or bot token, the
-`cc_session` cookie, an `X-ClickClack-User` header, or a dev fallback to the
-first user in the DB. Magic-link tokens are mintable from the CLI today; the
-HTTP endpoint also exists. GitHub OAuth is opt-in via:
+ClickClack accepts, in order: an `Authorization: Bearer` session or bot token,
+the configured session cookie (`cc_session` by default), an
+`X-ClickClack-User` header, or a dev fallback to the first user in the DB.
+Magic-link tokens are mintable from the CLI today; the HTTP endpoint also
+exists. GitHub OAuth is opt-in via:
 
 ```sh
 CLICKCLACK_PUBLIC_URL=https://chat.example.com
+# Optional for multiple trusted instances on one hostname:
+# CLICKCLACK_COOKIE_NAMESPACE=production
 CLICKCLACK_GITHUB_CLIENT_ID=...
 CLICKCLACK_GITHUB_CLIENT_SECRET=...
 # Optional org gate:

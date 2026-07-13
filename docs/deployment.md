@@ -160,6 +160,12 @@ Required for TLS and request size limits. The WebSocket endpoint enforces the
 request host by default and also allows `CLICKCLACK_PUBLIC_URL` as an origin
 when configured.
 
+Terminate TLS only at infrastructure you trust, redirect HTTP to HTTPS, and
+send HSTS from the public HTTPS origin after confirming every subdomain covered
+by the policy is HTTPS-ready. Rate-limit the public GitHub OAuth start endpoints
+at this edge. ClickClack intentionally does not trust arbitrary
+`X-Forwarded-For` values for security decisions.
+
 A minimal nginx block:
 
 ```nginx
@@ -179,6 +185,8 @@ If you want GitHub login, set:
 
 ```sh
 CLICKCLACK_PUBLIC_URL=https://chat.example.com
+# Optional only when trusted ClickClack instances share this hostname:
+# CLICKCLACK_COOKIE_NAMESPACE=production
 CLICKCLACK_GITHUB_CLIENT_ID=...
 CLICKCLACK_GITHUB_CLIENT_SECRET=...
 # Optional org gate:
@@ -196,6 +204,35 @@ post-limited guests until approved. When the org gate is set, ClickClack asks
 GitHub for `read:org` and only accepts active members of that org. See
 [features/auth.md](features/auth.md) and
 [features/moderation.md](features/moderation.md).
+
+`CLICKCLACK_PUBLIC_URL` is startup-validated as an exact origin. Non-loopback
+origins must use HTTPS and cannot contain a path, credentials, query, or
+fragment. GitHub OAuth credentials are rejected without it.
+
+GitHub OAuth apps have one configured callback URL. Each ClickClack public
+origin, including a distinct non-default port, therefore needs matching OAuth
+app configuration. Never point multiple unrelated public origins at one
+instance and rely on the request `Host` header to choose a callback.
+
+HTTP cookies do not include ports in their scope. When multiple trusted
+ClickClack instances share one hostname, assign each a unique, stable
+`CLICKCLACK_COOKIE_NAMESPACE`; all replicas of one instance must use the same
+value. This avoids accidental cookie-name collisions but does not isolate
+mutually untrusted services. Use separate hostnames, or separate registrable
+domains for stronger isolation.
+
+OAuth state and desktop grants are stored in the configured database, so
+callbacks can land on a different replica and survive process restarts.
+Internet-facing proxies should rate-limit:
+
+```text
+GET  /api/auth/github/start
+GET  /api/auth/github/desktop/start
+POST /api/auth/github/desktop/consume
+```
+
+Use limits appropriate to expected sign-in traffic and alert on sustained
+`429`, `503`, or `clickclack_github_oauth_events_total` rejection events.
 
 ## Migrations
 

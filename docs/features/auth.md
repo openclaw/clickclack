@@ -12,8 +12,8 @@ resolver lives in `apps/api/internal/httpapi/server.go` (`currentActor`).
 
 1. `Authorization: Bearer <token>` — bearer session token or `ccb_...` bot
    token. Bot tokens resolve to the bot user plus token workspace/scopes.
-2. `cc_session` cookie — HTTP-only session cookie set by magic-link consume and
-   GitHub OAuth callback.
+2. Session cookie — `cc_session` by default, or the configured namespaced
+   cookie. It is HTTP-only and set by magic-link consume and GitHub OAuth.
 3. `X-ClickClack-User: usr_...` header — explicit user impersonation for local
    development and tests, accepted only from loopback clients using local
    request hosts.
@@ -83,10 +83,12 @@ CLI will not send a stored bearer token to a different `--server`, and it skips
 stored bearer tokens when `--user` / `CLICKCLACK_USER_ID` is set without an
 explicit `--token`.
 
-`ConsumeMagicLink` returns `{user, session, token}` and sets `cc_session` as an
-HTTP-only cookie. Browsers can drop the body; non-browser clients should hold
-the `session.token` for the `Authorization` header. Session cookies default to
-`Secure` outside local dev HTTP, even if a reverse proxy omits HTTPS headers.
+`ConsumeMagicLink` returns `{user, session, token}` and sets the configured
+HTTP-only session cookie. Browsers can drop the body; non-browser clients
+should hold the `session.token` for the `Authorization` header. Session cookies
+default to `Secure` outside local dev HTTP, even if a reverse proxy omits HTTPS
+headers. Duplicate cookies with the active session-cookie name are rejected
+instead of relying on cookie ordering.
 
 ## GitHub OAuth (optional)
 
@@ -95,6 +97,8 @@ the equivalent config keys) before serving:
 
 ```sh
 CLICKCLACK_PUBLIC_URL=https://chat.example.com
+# Optional only when trusted instances share one hostname:
+# CLICKCLACK_COOKIE_NAMESPACE=production
 CLICKCLACK_GITHUB_CLIENT_ID=...
 CLICKCLACK_GITHUB_CLIENT_SECRET=...
 # Optional org gate:
@@ -107,35 +111,65 @@ Without a client ID and client secret, `GET /api/auth/github/start` returns `501
 
 Flow:
 
-1. `GET /api/auth/github/start` sets a state cookie and redirects to GitHub.
+1. `GET /api/auth/github/start` creates a database-backed, ten-minute OAuth
+   transaction, sets an HTTP-only browser-binding cookie, and redirects to
+   GitHub with a SHA-256 PKCE challenge.
 2. GitHub redirects back to `GET /api/auth/github/callback?code&state`.
-3. The handler exchanges the code, fetches `/user` and primary `/user/emails`,
-   checks org membership when `CLICKCLACK_GITHUB_ALLOWED_ORG` is set, checks
-   moderator org membership when configured, upserts a user keyed by
-   `(provider="github", provider_subject=<github id>)`, joins the org-gated
-   default workspace or the open `Guests` workspace, creates a session, sets
-   `cc_session`, redirects to `/`.
+3. The handler atomically consumes the state only when the browser binding
+   matches, exchanges the code with the stored PKCE verifier and exact redirect
+   URI, fetches `/user` and primary `/user/emails`, checks configured org
+   membership, and upserts the GitHub identity.
+4. The handler joins the appropriate workspace, creates a session, sets the
+   configured session cookie, and redirects to `/`.
+
+The server stores hashes of state and browser-binding values. The short-lived
+PKCE verifier is stored because the callback must send it to GitHub. State is
+single-use, survives process restarts and multiple replicas, and permits up to
+eight concurrent starts for one browser. Expired rows are removed during new
+starts. Global pending-row limits bound abandoned or hostile starts.
 
 The desktop app uses the same GitHub callback through a system-browser handoff:
 
 1. The app creates a high-entropy verifier and opens
-   `GET /api/auth/github/desktop/start?code_challenge=<SHA-256 challenge>` in the
-   default browser.
+   `GET /api/auth/github/desktop/start?code_challenge=<SHA-256 challenge>&desktop_protocol=2`
+   in the default browser.
 2. After the normal GitHub callback succeeds, the server redirects to
-   `clickclack://auth/callback?code=<opaque one-time grant>`. No GitHub or
-   ClickClack session token is placed in the URL.
+   `chat.clickclack.desktop:/auth/callback?code=<opaque one-time grant>`. No
+   GitHub or ClickClack session token is placed in the URL.
 3. The app posts the grant and its verifier to
-   `POST /api/auth/github/desktop/consume`. The exact initiating server sets the
-   Electron session cookie, invalidates the grant, and the app reloads `/app`.
+   `POST /api/auth/github/desktop/consume`. The exact initiating server
+   atomically invalidates the grant, creates a session, and sets the configured
+   cookie in Electron's persistent session.
+4. The app calls `/api/me` through that same Electron session and loads `/app`
+   only after the server confirms the authenticated user. The desktop client
+   never depends on a particular cookie name.
 
-Desktop state expires after ten minutes; completed grants expire after five.
-The verifier binding prevents another local application from redeeming a custom
-protocol callback it intercepts. Pending challenges live only in the initiating
-browser's HTTP-only state cookies, so abandoned public starts do not consume
-server-side state or block other users from beginning sign-in.
+Desktop transactions expire after ten minutes; completed grants expire after
+five. Grants are persisted so the callback and redemption can hit different
+replicas or a restarted process. The verifier binding prevents another local
+application from redeeming a custom-protocol callback it intercepts. Grant
+codes are stored only as hashes and are single-use.
 
-The redirect URL is derived from `CLICKCLACK_PUBLIC_URL` when set, otherwise
-from the request scheme/host. Configure GitHub with `<public-url>/api/auth/github/callback`.
+Protocol-1 desktop clients remain compatible with deployments using the default
+cookie names and receive the legacy `clickclack://auth/callback` handoff.
+Namespaced deployments return HTTP 426 before redirecting an old client to
+GitHub, because that client cannot verify a namespaced session. Protocol-2
+clients accept both callback formats so they can sign in to old and new
+servers.
+
+The redirect URL is always derived from `CLICKCLACK_PUBLIC_URL` in production.
+Request-host derivation exists only for explicit loopback development. Configure
+GitHub with `<public-url>/api/auth/github/callback`.
+
+OAuth starts are public endpoints. The database enforces global and per-browser
+pending-row bounds, but internet-facing deployments must also rate-limit
+`/api/auth/github/start` and `/api/auth/github/desktop/start` at the trusted
+edge. Do not derive security limits from untrusted forwarded IP headers.
+
+When metrics are enabled, `clickclack_github_oauth_events_total` exposes only a
+fixed event category, including starts, state rejection, provider failure,
+capacity rejection, desktop protocol mismatch, and successful handoff. It never
+labels state, grants, users, cookies, callback parameters, or tokens.
 
 Without `CLICKCLACK_GITHUB_ALLOWED_ORG`, any GitHub account can sign in and is
 automatically joined to an isolated `Guests` workspace. When

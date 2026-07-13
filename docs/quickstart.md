@@ -49,8 +49,8 @@ SESSION=$(go run ./apps/api/cmd/clickclack login \
 ```
 
 That `ses_...` is what bots and CLIs put in `Authorization: Bearer`. The
-browser already has it as the `cc_session` cookie if you ran consume from the
-SPA.
+browser already has it as the default `cc_session` cookie if you ran consume
+from the SPA. Production deployments can select a stable namespaced cookie.
 
 To store the session for future CLI commands, omit `--no-store`.
 

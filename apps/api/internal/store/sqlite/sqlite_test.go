@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -743,6 +744,71 @@ func TestOpenRejectsBadDirectory(t *testing.T) {
 	}
 	if _, err := Open("sqlite://" + filepath.Join(path, "db.sqlite")); err == nil {
 		t.Fatal("expected bad directory error")
+	}
+}
+
+func TestOpenSupportsSQLitePathsWithURICharacters(t *testing.T) {
+	t.Parallel()
+	filename := "clickclack #%.db"
+	if runtime.GOOS != "windows" {
+		filename = "clickclack ?#%.db"
+	}
+	path := filepath.Join(t.TempDir(), filename)
+	st, err := Open("sqlite://" + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected SQLite database at the configured path: %v", err)
+	}
+}
+
+func TestOpenConfiguresReplacementConnections(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	st.db.SetMaxIdleConns(0)
+	for attempt := 1; attempt <= 2; attempt++ {
+		conn, err := st.db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var busyTimeout int
+		var foreignKeys int
+		var journalMode string
+		if err := conn.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&busyTimeout); err != nil {
+			_ = conn.Close()
+			t.Fatal(err)
+		}
+		if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+			_ = conn.Close()
+			t.Fatal(err)
+		}
+		if err := conn.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
+			_ = conn.Close()
+			t.Fatal(err)
+		}
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if busyTimeout != 5000 || foreignKeys != 1 || !strings.EqualFold(journalMode, "wal") {
+			t.Fatalf(
+				"replacement connection %d configuration: busy_timeout=%d foreign_keys=%d journal_mode=%q",
+				attempt,
+				busyTimeout,
+				foreignKeys,
+				journalMode,
+			)
+		}
 	}
 }
 

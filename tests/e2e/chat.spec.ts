@@ -1135,7 +1135,7 @@ test("closes direct messages without deleting history", async ({ page }) => {
     workspaces: { id: string; route_id: string }[];
   };
   const workspace = workspaces.workspaces[0];
-  const name = `Close User ${Date.now()}`;
+  const name = `Close User ${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const otherUserId = clickclack([
     "admin",
     "user",
@@ -1160,12 +1160,12 @@ test("closes direct messages without deleting history", async ({ page }) => {
   await page.goto("/app");
   await waitForAppReady(page);
   const dmSection = page.locator(".nav-section", { hasText: "Direct messages" });
-  const dmLink = dmSection.getByRole("link", { name: new RegExp(name) });
+  const dmRow = dmSection.locator(".dm-row").filter({ hasText: name });
+  const dmLink = dmRow.getByRole("link", { name: new RegExp(name) });
   const closeDirectMessage = async () => {
-    await dmSection
-      .getByRole("button", { name: `Direct message actions for ${name}` })
-      .click({ force: true });
-    await dmSection.getByRole("menuitem", { name: "Close direct message" }).click();
+    await dmRow.hover();
+    await dmRow.getByRole("button", { name: `Direct message actions for ${name}` }).click();
+    await dmRow.getByRole("menuitem", { name: "Close direct message" }).click();
   };
   await expect(dmLink).toBeVisible();
   await closeDirectMessage();

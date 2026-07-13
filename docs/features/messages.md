@@ -50,7 +50,9 @@ DELETE /api/messages/{message_id}
 - `PATCH` accepts `{body}` and only the original author can edit. Sets
   `edited_at`.
 - `DELETE` is a soft delete — sets `deleted_at`, keeps the row and the
-  `channel_seq` slot so cursors stay valid.
+  `channel_seq` slot so cursors stay valid. Authors can delete their own
+  messages. Workspace owners can also delete messages in workspace channels,
+  while direct messages remain author-only.
 
 Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
@@ -142,4 +144,5 @@ clients don't need a second round-trip. Avatar URLs are passed through as-is.
 
 - Hard delete. The soft-delete row stays for cursor stability.
 - Pinning and bookmarks.
-- Per-message permissions beyond "the author can edit/delete".
+- Per-message permissions beyond author edit/delete and workspace-owner channel
+  deletion.

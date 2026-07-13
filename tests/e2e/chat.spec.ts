@@ -1394,6 +1394,46 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
 });
 
+test("confirms message deletion in the app modal", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `delete-modal-${Date.now()}`, kind: "public" },
+  });
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+  const body = `delete modal message ${Date.now()}`;
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await page.getByLabel("Message body").fill(body);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const row = page.locator(".message-row:not(.is-pending)", {
+    has: page.locator(".markdown").filter({ hasText: body }),
+  });
+  await expect(row).toBeVisible();
+  await row.hover();
+  await row.getByRole("button", { name: "Delete message" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Delete message" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(body, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row.getByText(body, { exact: true })).toBeVisible();
+
+  await row.hover();
+  await row.getByRole("button", { name: "Delete message" }).click();
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("This message was deleted.", { exact: true })).toBeVisible();
+  await expect(page.getByText(body, { exact: true })).toBeHidden();
+});
+
 test("closes direct messages without deleting history", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as {
@@ -1705,15 +1745,26 @@ test("browser notifications announce incoming messages outside the active conver
   }, storageKey);
 
   const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
+  const workspaces = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces.workspaces[0];
+  const activeChannelResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/channels`,
+    {
+      data: { name: `notify-active-${randomUUID()}`, kind: "public" },
+    },
+  );
+  const activeChannel = (await activeChannelResponse.json()) as {
+    channel: { route_id: string; name: string };
+  };
 
-  await page.goto("/app");
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page.goto(`/app/${workspace.route_id}/${activeChannel.channel.route_id}`);
+  await expect(page.getByRole("heading", { name: `#${activeChannel.channel.name}` })).toBeVisible();
   await expect(page.locator('.shell[data-connected="true"]')).toBeVisible();
 
   const channelName = `notify-${randomUUID()}`;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: channelName, kind: "public" },
   });
   const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
@@ -1726,7 +1777,7 @@ test("browser notifications announce incoming messages outside the active conver
     "--data",
     "./data/e2e",
     "--workspace",
-    workspaceId,
+    workspace.id,
     "--name",
     "Notification Sender",
     "--email",

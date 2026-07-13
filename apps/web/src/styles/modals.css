@@ -241,7 +241,8 @@
 
 /* Modal actions are keycaps: hard edge, pressed flat on click. */
 .profile-actions .ghost-action,
-.profile-actions .primary-action {
+.profile-actions .primary-action,
+.profile-actions .danger-action {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -272,6 +273,12 @@
   color: var(--accent-contrast);
 }
 
+.profile-actions .danger-action {
+  border: 1px solid color-mix(in srgb, var(--danger) 76%, var(--text-strong));
+  background: var(--danger);
+  color: #fff;
+}
+
 .ghost-action:hover {
   background: var(--hover);
 }
@@ -280,10 +287,128 @@
   background: var(--accent-hover);
 }
 
+.profile-actions .danger-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 86%, #000);
+}
+
+.profile-actions .ghost-action:disabled,
+.profile-actions .primary-action:disabled,
+.profile-actions .danger-action:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .profile-actions .ghost-action:active,
-.profile-actions .primary-action:active {
+.profile-actions .primary-action:active,
+.profile-actions .danger-action:active {
   transform: translateY(1px);
   box-shadow: var(--key-edge-pressed);
+}
+
+/* ---------- DELETE MESSAGE ---------- */
+
+.delete-message-scrim {
+  padding: 20px;
+}
+
+.delete-message-modal {
+  width: min(520px, 100%);
+}
+
+.delete-message-modal > header {
+  padding-bottom: 10px;
+}
+
+.delete-message-content {
+  display: grid;
+  gap: 18px;
+  padding: 4px 20px 20px;
+}
+
+.delete-message-content > p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.delete-message-preview {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.delete-message-preview__content {
+  min-width: 0;
+}
+
+.delete-message-preview > .avatar {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+.delete-message-preview__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.delete-message-preview__meta strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delete-message-preview__meta time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.delete-message-preview__body {
+  max-height: 128px;
+  margin-top: 4px;
+  overflow: auto;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.delete-message-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 0;
+}
+
+.delete-message-actions button {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .delete-message-modal {
+    width: 100%;
+  }
+
+  .delete-message-content {
+    padding-inline: 16px;
+  }
+
+  .delete-message-modal > header {
+    padding-inline: 16px;
+  }
 }
 
 /* ---------- IMAGE VIEWER ---------- */

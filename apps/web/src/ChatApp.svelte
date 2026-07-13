@@ -28,6 +28,7 @@
     type MessageListState,
     type MessageListViewportState,
   } from "./components/messages/MessageList.svelte";
+  import DeleteMessageModal from "./components/messages/DeleteMessageModal.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
   import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
   import AgentResponding from "./components/messages/AgentResponding.svelte";
@@ -154,6 +155,8 @@
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
   let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
   let deletingMessageIDs = new Set<string>();
+  let pendingDeleteMessage: Message | null = null;
+  let deleteMessageError = "";
 
   type MessageWindow = Omit<MessagePage, "messages"> & {
     messages: Message[];
@@ -1874,10 +1877,17 @@
     setActiveMessages(messages.filter((m) => m.id !== message.id));
   }
 
-  async function deleteMessage(message: Message) {
+  function requestMessageDelete(message: Message) {
     if (!message.id || message.deleted_at || deletingMessageIDs.has(message.id)) return;
-    if (!window.confirm("Delete this message?")) return;
+    pendingDeleteMessage = message;
+    deleteMessageError = "";
+  }
+
+  async function confirmMessageDelete() {
+    const message = pendingDeleteMessage;
+    if (!message || deletingMessageIDs.has(message.id)) return;
     deletingMessageIDs = new Set([...deletingMessageIDs, message.id]);
+    deleteMessageError = "";
     try {
       const data = await api<{ message: Message }>(`/api/messages/${message.id}`, { method: "DELETE" });
       const deleted = data.message;
@@ -1886,8 +1896,9 @@
       if (selectedThread?.id === deleted.id) selectedThread = { ...selectedThread, ...deleted };
       if (replyTarget?.id === deleted.id) clearReplyTarget();
       status = "";
+      pendingDeleteMessage = null;
     } catch (error) {
-      status = error instanceof Error ? error.message : "Could not delete message";
+      deleteMessageError = error instanceof Error ? error.message : "Could not delete message";
     } finally {
       const next = new Set(deletingMessageIDs);
       next.delete(message.id);
@@ -1959,7 +1970,7 @@
   }
 
   function isModalOpen(): boolean {
-    return selectedImage !== null || settingsModalOpen || showCreateChannel || showCreateDirect;
+    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || showCreateChannel || showCreateDirect;
   }
 
   function activeComposerTarget(): HTMLTextAreaElement | null {
@@ -2751,6 +2762,9 @@
   }
 
   function closeModal() {
+    if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
+    pendingDeleteMessage = null;
+    deleteMessageError = "";
     selectedImage = null;
     settingsModalOpen = false;
     showCreateChannel = false;
@@ -2964,7 +2978,7 @@
       }}
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
-      onDeleteMessage={(message) => void deleteMessage(message)}
+      onDeleteMessage={requestMessageDelete}
     />
 
     <AgentProgress turns={agentProgressTurns} />
@@ -3050,7 +3064,7 @@
         onClearReply={clearReplyTarget}
         canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
         {deletingMessageIDs}
-        onDeleteMessage={(message) => void deleteMessage(message)}
+        onDeleteMessage={requestMessageDelete}
         onActivateThreadComposer={() => (activeComposerContext = "thread")}
         onInlineImagePointerUp={handleInlineImagePointerUp}
         onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
@@ -3114,6 +3128,15 @@
     onMemberID={(value) => (directMemberID = value)}
     onClose={closeModal}
     onStart={(memberID) => void startDirectFromModal(memberID)}
+  />
+{/if}
+{#if pendingDeleteMessage}
+  <DeleteMessageModal
+    message={pendingDeleteMessage}
+    deleting={deletingMessageIDs.has(pendingDeleteMessage.id)}
+    error={deleteMessageError}
+    onClose={closeModal}
+    onConfirm={() => void confirmMessageDelete()}
   />
 {/if}
 {#if selectedImage}

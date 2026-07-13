@@ -14,7 +14,8 @@ authenticated workspace members and serves common safe preview types inline.
 ## Endpoints
 
 ```http
-POST /api/uploads?workspace_id=...                 # multipart: file; form workspace_id also supported
+POST /api/uploads?workspace_id=...&nonce=...       # multipart: file; nonce is optional
+GET  /api/uploads/by-nonce?workspace_id=...&nonce=...
 GET  /api/uploads/{upload_id}                      # streams the file
 POST /api/messages/{message_id}/attachments        # { upload_id }
 ```
@@ -25,6 +26,12 @@ POST /api/messages/{message_id}/attachments        # { upload_id }
   not used as the storage key.
 - `Content-Type` falls back to `application/octet-stream` when the client
   doesn't send one.
+- Clients that may retry an upload can send a nonce of up to 128 characters.
+  The `workspace_id` query parameter is required when a nonce is present. The
+  first request returns `201`; later requests from the same uploader return the
+  original upload with `200` without reading or storing the multipart body.
+  The nonce lookup endpoint returns the same metadata without downloading the
+  file. Reusing the nonce for another workspace returns `409`.
 - Guests cannot upload or attach files while they are still in the waiting
   room. Timed-out and blocked users are also upload-restricted.
 

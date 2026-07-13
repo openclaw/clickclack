@@ -477,6 +477,32 @@ test("coalesces durable agent activity and applies activity preferences", async 
   expect(botResponse.ok()).toBe(true);
   const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
   const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
+  const selfMessage = "Alignment proof from the current user.";
+  const humanMessage = "Alignment proof from a human teammate.";
+  const agentMessage = "Deployment boundary is healthy.";
+  const selfMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: selfMessage },
+  });
+  expect(selfMessageResponse.ok()).toBe(true);
+  const humanName = `Alignment Human ${Date.now()}`;
+  const humanUserId = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspaceId,
+    "--name",
+    humanName,
+    "--email",
+    `${humanName.toLowerCase().replaceAll(" ", ".")}@example.com`,
+  ]);
+  const humanMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: { "X-ClickClack-User": humanUserId },
+    data: { body: humanMessage },
+  });
+  expect(humanMessageResponse.ok()).toBe(true);
   const turnId = `turn-${Date.now()}`;
   for (const data of [
     { body: "Checking the deployment boundary.", kind: "agent_commentary", turn_id: turnId },
@@ -520,7 +546,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
     "aria-expanded",
     "false",
   );
-  await expect(page.getByText("Deployment boundary is healthy.")).toBeVisible();
+  await expect(page.getByText(agentMessage)).toBeVisible();
 
   await preamble.getByRole("button", { name: "Show preamble" }).click();
   await expect(preamble.getByText("Checking the deployment boundary.")).toBeVisible();
@@ -644,8 +670,49 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preamble.getByText("Checking the deployment boundary.")).toHaveCount(0);
   await settings.getByLabel("Hide tool calls").check();
   await expect(preambles).toHaveCount(0);
-  await settings.getByLabel("Your message alignment").selectOption("right");
-  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+  const userAlign = settings.getByLabel("Your message alignment");
+  const otherAlign = settings.getByLabel("Other message alignment");
+  const messageSide = async (message: string) =>
+    page
+      .locator(".message-group", { has: page.getByText(message, { exact: true }) })
+      .evaluate((group) => {
+        const avatar = group.querySelector<HTMLElement>(":scope > .avatar");
+        const body = group.querySelector<HTMLElement>(":scope > .group-body");
+        if (!avatar || !body) return "missing";
+        return avatar.getBoundingClientRect().left < body.getBoundingClientRect().left
+          ? "left"
+          : "right";
+      });
+  const threadControlSide = async (message: string) =>
+    page
+      .locator(".message-group", { has: page.getByText(message, { exact: true }) })
+      .evaluate((group) => {
+        const body = group.querySelector<HTMLElement>(":scope > .group-body");
+        const threadHint = group.querySelector<HTMLElement>(".thread-hint");
+        if (!body || !threadHint) return "missing";
+        const bodyRect = body.getBoundingClientRect();
+        const hintRect = threadHint.getBoundingClientRect();
+        return hintRect.left + hintRect.width / 2 < bodyRect.left + bodyRect.width / 2
+          ? "left"
+          : "right";
+      });
+  const expectLayout = async (selfSide: "left" | "right", otherSide: "left" | "right") => {
+    await userAlign.selectOption(selfSide);
+    await otherAlign.selectOption(otherSide);
+    await expect(page.locator("html")).toHaveAttribute("data-user-align", selfSide);
+    await expect(page.locator("html")).toHaveAttribute("data-other-align", otherSide);
+    await expect.poll(() => messageSide(selfMessage)).toBe(selfSide);
+    await expect.poll(() => messageSide(humanMessage)).toBe(otherSide);
+    await expect.poll(() => messageSide(agentMessage)).toBe(otherSide);
+    await expect.poll(() => threadControlSide(selfMessage)).toBe(selfSide);
+    await expect.poll(() => threadControlSide(humanMessage)).toBe(otherSide);
+    await expect.poll(() => threadControlSide(agentMessage)).toBe(otherSide);
+  };
+
+  await expectLayout("left", "left");
+  await expectLayout("left", "right");
+  await expectLayout("right", "left");
+  await expectLayout("right", "right");
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {

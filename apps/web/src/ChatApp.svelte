@@ -53,6 +53,7 @@
   const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
   const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
   const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
+  const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
 
@@ -108,6 +109,7 @@
   // "right". Persisted client-side and applied as a root data attribute so the
   // messages.css mirror rules can flip the self group without prop drilling.
   let userAlign: "left" | "right" = "left";
+  let otherAlign: "left" | "right" = "left";
   let status = "loading";
   let authRequired = false;
   let desktopAuthStatus = "";
@@ -293,10 +295,12 @@
       hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
       hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
       userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
+      otherAlign = window.localStorage.getItem(OTHER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     } catch {
       hideCommentary = false;
       hideToolCalls = false;
       userAlign = "left";
+      otherAlign = "left";
     }
     applyUserAlign();
   }
@@ -304,6 +308,7 @@
   function applyUserAlign() {
     try {
       document.documentElement.setAttribute("data-user-align", userAlign);
+      document.documentElement.setAttribute("data-other-align", otherAlign);
     } catch {
       // Non-DOM context (SSR/tests); the in-memory pref still applies on mount.
     }
@@ -314,6 +319,16 @@
     applyUserAlign();
     try {
       window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, value);
+    } catch {
+      // Ignore unavailable storage; the in-memory pref still applies this session.
+    }
+  }
+
+  function setOtherAlign(value: "left" | "right") {
+    otherAlign = value;
+    applyUserAlign();
+    try {
+      window.localStorage.setItem(OTHER_ALIGN_STORAGE_KEY, value);
     } catch {
       // Ignore unavailable storage; the in-memory pref still applies this session.
     }
@@ -3041,11 +3056,13 @@
     {hideCommentary}
     {hideToolCalls}
     {userAlign}
+    {otherAlign}
     isDesktop={desktop != null}
     onUserUpdated={handleSettingsUserUpdated}
     onHideCommentary={setHideCommentary}
     onHideToolCalls={setHideToolCalls}
     onUserAlign={setUserAlign}
+    onOtherAlign={setOtherAlign}
     onBrowserNotificationsChanged={(value) => (browserNotificationsEnabled = value)}
     onClose={closeModal}
   />

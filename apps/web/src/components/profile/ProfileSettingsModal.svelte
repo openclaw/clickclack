@@ -13,6 +13,7 @@
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
+    otherAlign: "left" | "right";
     browserNotificationsSupported: boolean;
     browserNotificationsEnabled: boolean;
     browserNotificationPermission: NotificationPermission | "unsupported";
@@ -27,6 +28,7 @@
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
     onUserAlign: (value: "left" | "right") => void;
+    onOtherAlign: (value: "left" | "right") => void;
     onBrowserNotificationsEnabled: (value: boolean) => void;
     onClose: () => void;
     onSave: () => void;
@@ -42,6 +44,7 @@
     hideCommentary,
     hideToolCalls,
     userAlign,
+    otherAlign,
     browserNotificationsSupported,
     browserNotificationsEnabled,
     browserNotificationPermission,
@@ -56,6 +59,7 @@
     onHideCommentary,
     onHideToolCalls,
     onUserAlign,
+    onOtherAlign,
     onBrowserNotificationsEnabled,
     onClose,
     onSave,
@@ -168,6 +172,17 @@
           aria-label="Your message alignment"
           value={userAlign}
           onchange={(event) => onUserAlign(event.currentTarget.value === "right" ? "right" : "left")}
+        >
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Other message alignment</span>
+        <select
+          aria-label="Other message alignment"
+          value={otherAlign}
+          onchange={(event) => onOtherAlign(event.currentTarget.value === "right" ? "right" : "left")}
         >
           <option value="left">Left</option>
           <option value="right">Right</option>

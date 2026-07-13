@@ -24,12 +24,14 @@
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
+    otherAlign: "left" | "right";
     isDesktop?: boolean;
     onClose: () => void;
     onUserUpdated?: (user: User) => void;
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
     onUserAlign: (value: "left" | "right") => void;
+    onOtherAlign: (value: "left" | "right") => void;
     onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
@@ -40,12 +42,14 @@
     hideCommentary,
     hideToolCalls,
     userAlign,
+    otherAlign,
     isDesktop = false,
     onClose,
     onUserUpdated,
     onHideCommentary,
     onHideToolCalls,
     onUserAlign,
+    onOtherAlign,
     onBrowserNotificationsChanged,
   }: Props = $props();
 
@@ -224,12 +228,14 @@
           {hideCommentary}
           {hideToolCalls}
           {userAlign}
+          {otherAlign}
           {isDesktop}
           onUserUpdated={handleUserUpdated}
           onSaved={onClose}
           {onHideCommentary}
           {onHideToolCalls}
           {onUserAlign}
+          {onOtherAlign}
           {onBrowserNotificationsChanged}
         />
       {:else if activeSection === "appearance"}

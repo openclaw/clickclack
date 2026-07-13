@@ -805,36 +805,46 @@
   box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-/* Right-adjusted self messages: mirror the whole group so the avatar sits in
-   the right gutter, the header right-aligns, and the bubble pushes to the
-   right edge of the content column. Gated on the root data-user-align pref so
-   the default (left) layout is byte-for-byte the existing behavior. */
-:root[data-user-align="right"] .message-group.is-self {
+/* The current user and every other participant have independent alignment
+   preferences. "Other" includes both human teammates and agents. */
+:root[data-user-align="right"] .message-group.is-self,
+:root[data-other-align="right"] .message-group:not(.is-self) {
   grid-template-columns: minmax(0, 1fr) 56px;
 }
 
-:root[data-user-align="right"] .message-group.is-self > .avatar {
+:root[data-user-align="right"] .message-group.is-self > .avatar,
+:root[data-other-align="right"] .message-group:not(.is-self) > .avatar {
   grid-column: 2;
   grid-row: 1;
   justify-self: end;
 }
 
-:root[data-user-align="right"] .message-group.is-self > .group-body {
+:root[data-user-align="right"] .message-group.is-self > .group-body,
+:root[data-other-align="right"] .message-group:not(.is-self) > .group-body {
   grid-column: 1;
   grid-row: 1;
   min-width: 0;
 }
 
-:root[data-user-align="right"] .message-group.is-self .group-body > header {
+:root[data-user-align="right"] .message-group.is-self .group-body > header,
+:root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
   justify-content: flex-end;
 }
 
-:root[data-user-align="right"] .message-group.is-self .message-content {
+:root[data-user-align="right"] .message-group.is-self .message-content,
+:root[data-other-align="right"] .message-group:not(.is-self) .message-content {
   margin-left: auto;
+  text-align: right;
 }
 
-:root[data-user-align="right"] .message-group.is-self .markdown {
+:root[data-user-align="right"] .message-group.is-self .markdown,
+:root[data-other-align="right"] .message-group:not(.is-self) .markdown {
   text-align: right;
+}
+
+:root[data-user-align="right"] .message-group.is-self .attachment-grid,
+:root[data-other-align="right"] .message-group:not(.is-self) .attachment-grid {
+  margin-left: auto;
 }
 
 .preamble-contract {
@@ -1737,7 +1747,8 @@
 
   /* Keep the right-adjusted self layout aligned to the same 44px avatar gutter
      the rest of the mobile list uses, instead of the desktop 56px column. */
-  :root[data-user-align="right"] .message-group.is-self {
+  :root[data-user-align="right"] .message-group.is-self,
+  :root[data-other-align="right"] .message-group:not(.is-self) {
     grid-template-columns: minmax(0, 1fr) 44px;
   }
 

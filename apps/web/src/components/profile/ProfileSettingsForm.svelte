@@ -9,12 +9,14 @@
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
+    otherAlign: "left" | "right";
     isDesktop?: boolean;
     onUserUpdated?: (user: User) => void;
     onSaved?: () => void;
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
     onUserAlign: (value: "left" | "right") => void;
+    onOtherAlign: (value: "left" | "right") => void;
     onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
@@ -23,12 +25,14 @@
     hideCommentary,
     hideToolCalls,
     userAlign,
+    otherAlign,
     isDesktop = false,
     onUserUpdated,
     onSaved,
     onHideCommentary,
     onHideToolCalls,
     onUserAlign,
+    onOtherAlign,
     onBrowserNotificationsChanged,
   }: Props = $props();
 
@@ -222,6 +226,24 @@
           class="settings-input"
           value={userAlign}
           onchange={(event) => onUserAlign(event.currentTarget.value === "right" ? "right" : "left")}
+        >
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-row2">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="profile-other-align">Other message alignment</label>
+        <p class="settings-row2__hint">Choose which side of the timeline shows messages from other people and agents.</p>
+      </div>
+      <div class="settings-row2__control">
+        <select
+          id="profile-other-align"
+          class="settings-input"
+          value={otherAlign}
+          onchange={(event) => onOtherAlign(event.currentTarget.value === "right" ? "right" : "left")}
         >
           <option value="left">Left</option>
           <option value="right">Right</option>

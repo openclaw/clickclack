@@ -284,9 +284,9 @@
 .artifact-viewer__office-toolbar { flex-wrap: wrap; }
 
 .artifact-viewer__spreadsheet { min-height: 0; overflow: auto; background: var(--panel); }
-.artifact-viewer__spreadsheet table { width: max-content; min-width: 100%; table-layout: fixed; border-spacing: 0; border-collapse: separate; color: var(--text); font-size: 12px; }
+.artifact-viewer__spreadsheet table { width: max-content; table-layout: fixed; border-spacing: 0; border-collapse: separate; color: var(--text); font-size: 12px; }
 .artifact-viewer__spreadsheet th,
-.artifact-viewer__spreadsheet td { width: 160px; min-width: 160px; max-width: 160px; height: 30px; padding: 5px 8px; overflow: hidden; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-viewer__spreadsheet td { box-sizing: border-box; width: 160px; min-width: 160px; max-width: 160px; height: 30px; padding: 5px 8px; overflow: hidden; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .artifact-viewer__spreadsheet thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-2); color: var(--muted); text-align: center; }
 .artifact-viewer__spreadsheet .row-heading { position: sticky; left: 0; z-index: 1; min-width: 44px; width: 44px; background: var(--panel-2); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .artifact-viewer__spreadsheet thead .row-heading { z-index: 3; }

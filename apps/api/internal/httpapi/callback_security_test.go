@@ -58,9 +58,11 @@ func localCallbackURL(rawURL string) string {
 func TestCallbackNetworkPolicyBlocksNonPublicDestinationsAndPinsDial(t *testing.T) {
 	t.Parallel()
 	resolver := staticCallbackResolver{
-		"public.example":  {netip.MustParseAddr("93.184.216.34")},
-		"mixed.example":   {netip.MustParseAddr("93.184.216.34"), netip.MustParseAddr("10.0.0.1")},
-		"private.example": {netip.MustParseAddr("192.168.1.10")},
+		"public.example":    {netip.MustParseAddr("93.184.216.34")},
+		"mixed.example":     {netip.MustParseAddr("93.184.216.34"), netip.MustParseAddr("10.0.0.1")},
+		"private.example":   {netip.MustParseAddr("192.168.1.10")},
+		"azure.example":     {netip.MustParseAddr("168.63.129.16")},
+		"benchmark.example": {netip.MustParseAddr("198.18.0.1")},
 	}
 	var dialed string
 	policy := &callbackNetworkPolicy{
@@ -74,10 +76,15 @@ func TestCallbackNetworkPolicyBlocksNonPublicDestinationsAndPinsDial(t *testing.
 		"http://127.0.0.1/hook",
 		"http://[::1]/hook",
 		"http://169.254.169.254/latest/meta-data",
+		"http://168.63.129.16/metadata/instance",
+		"http://198.18.0.1/hook",
+		"http://198.19.255.254/hook",
 		"http://10.0.0.1/hook",
 		"http://192.168.1.10/hook",
 		"http://metadata.google.internal/computeMetadata/v1",
 		"http://private.example/hook",
+		"http://azure.example/hook",
+		"http://benchmark.example/hook",
 		"http://mixed.example/hook",
 	} {
 		if err := policy.validateURL(context.Background(), rawURL); err == nil {
@@ -92,6 +99,33 @@ func TestCallbackNetworkPolicyBlocksNonPublicDestinationsAndPinsDial(t *testing.
 	}
 	if dialed != "93.184.216.34:443" {
 		t.Fatalf("callback dial was not pinned to resolved IP: %q", dialed)
+	}
+}
+
+func TestPublicCallbackIPPolicy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		ip   string
+		want bool
+	}{
+		{name: "public IPv4", ip: "93.184.216.34", want: true},
+		{name: "public IPv6", ip: "2606:4700:4700::1111", want: true},
+		{name: "Azure platform virtual IP", ip: "168.63.129.16", want: false},
+		{name: "benchmark range start", ip: "198.18.0.0", want: false},
+		{name: "benchmark range end", ip: "198.19.255.255", want: false},
+		{name: "IPv4 documentation", ip: "203.0.113.10", want: false},
+		{name: "IPv4 protocol assignment", ip: "192.0.0.9", want: false},
+		{name: "IPv6 translation", ip: "64:ff9b::1", want: false},
+		{name: "IPv6 documentation", ip: "2001:db8::1", want: false},
+		{name: "IPv6 AS112", ip: "2620:4f:8000::1", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isPublicCallbackIP(netip.MustParseAddr(tt.ip)); got != tt.want {
+				t.Fatalf("isPublicCallbackIP(%s) = %v, want %v", tt.ip, got, tt.want)
+			}
+		})
 	}
 }
 

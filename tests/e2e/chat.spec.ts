@@ -477,32 +477,6 @@ test("coalesces durable agent activity and applies activity preferences", async 
   expect(botResponse.ok()).toBe(true);
   const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
   const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
-  const selfMessage = "Alignment proof from the current user.";
-  const humanMessage = "Alignment proof from a human teammate.";
-  const agentMessage = "Deployment boundary is healthy.";
-  const selfMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    data: { body: selfMessage },
-  });
-  expect(selfMessageResponse.ok()).toBe(true);
-  const humanName = `Alignment Human ${Date.now()}`;
-  const humanUserId = clickclack([
-    "admin",
-    "user",
-    "create",
-    "--data",
-    "./data/e2e",
-    "--workspace",
-    workspaceId,
-    "--name",
-    humanName,
-    "--email",
-    `${humanName.toLowerCase().replaceAll(" ", ".")}@example.com`,
-  ]);
-  const humanMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    headers: { "X-ClickClack-User": humanUserId },
-    data: { body: humanMessage },
-  });
-  expect(humanMessageResponse.ok()).toBe(true);
   const turnId = `turn-${Date.now()}`;
   for (const data of [
     { body: "Checking the deployment boundary.", kind: "agent_commentary", turn_id: turnId },
@@ -546,7 +520,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
     "aria-expanded",
     "false",
   );
-  await expect(page.getByText(agentMessage)).toBeVisible();
+  await expect(page.getByText("Deployment boundary is healthy.")).toBeVisible();
 
   await preamble.getByRole("button", { name: "Show preamble" }).click();
   await expect(preamble.getByText("Checking the deployment boundary.")).toBeVisible();
@@ -670,6 +644,72 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preamble.getByText("Checking the deployment boundary.")).toHaveCount(0);
   await settings.getByLabel("Hide tool calls").check();
   await expect(preambles).toHaveCount(0);
+  await settings.getByLabel("Your message alignment").selectOption("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+});
+
+test("aligns self and other messages independently", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `zz-message-alignment-${Date.now()}`, kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+
+  const selfMessage = "Alignment proof from the current user.";
+  const humanMessage = "Alignment proof from a human teammate.";
+  const agentMessage = "Alignment proof from an agent.";
+  const selfMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: selfMessage },
+  });
+  expect(selfMessageResponse.ok()).toBe(true);
+
+  const humanName = `Alignment Human ${Date.now()}`;
+  const humanUserId = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspaceId,
+    "--name",
+    humanName,
+    "--email",
+    `${humanName.toLowerCase().replaceAll(" ", ".")}@example.com`,
+  ]);
+  const humanMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: { "X-ClickClack-User": humanUserId },
+    data: { body: humanMessage },
+  });
+  expect(humanMessageResponse.ok()).toBe(true);
+
+  const botResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
+    data: {
+      display_name: "Alignment Bot",
+      handle: `alignment-bot-${Date.now()}`,
+      token_name: "e2e",
+      scopes: ["bot:write"],
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
+  const createdBot = (await botResponse.json()) as { bot_token: { token: string } };
+  const agentMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: { Authorization: `Bearer ${createdBot.bot_token.token}` },
+    data: { body: agentMessage },
+  });
+  expect(agentMessageResponse.ok()).toBe(true);
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+  await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
+  const settings = page.getByLabel("Account settings");
   const userAlign = settings.getByLabel("Your message alignment");
   const otherAlign = settings.getByLabel("Other message alignment");
   const messageSide = async (message: string) =>

@@ -47,6 +47,22 @@ const (
 	oauthEncodedSecretLength      = 43
 )
 
+const (
+	githubOAuthEventBrowserStart            = "browser_start"
+	githubOAuthEventDesktopStart            = "desktop_start"
+	githubOAuthEventStartRejected           = "start_rejected"
+	githubOAuthEventCapacityRejected        = "capacity_rejected"
+	githubOAuthEventStateRejected           = "state_rejected"
+	githubOAuthEventProviderFailed          = "provider_failed"
+	githubOAuthEventOrgDenied               = "org_denied"
+	githubOAuthEventBrowserSucceeded        = "browser_succeeded"
+	githubOAuthEventDesktopGrantCreated     = "desktop_grant_created"
+	githubOAuthEventDesktopProtocolRejected = "desktop_protocol_rejected"
+	githubOAuthEventDesktopUpgradeRequired  = "desktop_upgrade_required"
+	githubOAuthEventDesktopConsumeRejected  = "desktop_consume_rejected"
+	githubOAuthEventDesktopConsumeSucceeded = "desktop_consume_succeeded"
+)
+
 func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 	if c.AuthURL == "" {
 		c.AuthURL = "https://github.com/login/oauth/authorize"
@@ -70,21 +86,26 @@ func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 }
 
 func (s *Server) githubStart(w http.ResponseWriter, r *http.Request) {
+	s.recordGitHubOAuthEvent(githubOAuthEventBrowserStart)
 	s.startGitHubOAuth(w, r, "", 0)
 }
 
 func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
+	s.recordGitHubOAuthEvent(githubOAuthEventDesktopStart)
 	challenge := strings.TrimSpace(r.URL.Query().Get("code_challenge"))
 	if !validDesktopCode(challenge, 43, 43) {
+		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
 		writeError(w, http.StatusBadRequest, errors.New("valid desktop oauth code challenge is required"))
 		return
 	}
 	protocol, err := desktopProtocolVersion(r.URL.Query().Get("desktop_protocol"))
 	if err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventDesktopProtocolRejected)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	if s.cookies.Session != "cc_session" && protocol < 2 {
+		s.recordGitHubOAuthEvent(githubOAuthEventDesktopUpgradeRequired)
 		writeDesktopUpgradeRequired(w)
 		return
 	}
@@ -93,16 +114,19 @@ func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, desktopChallenge string, desktopProtocol int64) {
 	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
+		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
 		writeError(w, http.StatusNotImplemented, errors.New("github oauth is not configured"))
 		return
 	}
 	redirectURL, err := s.githubRedirectURL(r)
 	if err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
 	browserBinding, err := s.oauthBrowserBinding(w, r)
 	if err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
 		if errors.Is(err, errAmbiguousCookie) {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -136,9 +160,11 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 		ExpiresAt:          now.Add(oauthTransactionTTL),
 	}); err != nil {
 		if errors.Is(err, store.ErrOAuthCapacityExceeded) {
+			s.recordGitHubOAuthEvent(githubOAuthEventCapacityRejected)
 			writeError(w, http.StatusServiceUnavailable, err)
 			return
 		}
+		s.recordGitHubOAuthEvent(githubOAuthEventStartRejected)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -148,17 +174,20 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	state := strings.TrimSpace(r.URL.Query().Get("state"))
 	if !validDesktopCode(state, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+		s.recordGitHubOAuthEvent(githubOAuthEventStateRejected)
 		writeError(w, http.StatusBadRequest, errors.New("invalid github oauth state"))
 		return
 	}
 	bindingCookie, err := requestCookie(r, s.cookies.OAuthBinding)
 	if err != nil || !validDesktopCode(bindingCookie.Value, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+		s.recordGitHubOAuthEvent(githubOAuthEventStateRejected)
 		writeError(w, http.StatusBadRequest, errors.New("invalid github oauth state"))
 		return
 	}
 	transaction, err := s.store.ConsumeOAuthTransaction(r.Context(), secretHash(state), secretHash(bindingCookie.Value), time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrOAuthTransactionInvalid) {
+			s.recordGitHubOAuthEvent(githubOAuthEventStateRejected)
 			writeError(w, http.StatusBadRequest, errors.New("invalid github oauth state"))
 			return
 		}
@@ -177,19 +206,23 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := s.exchangeGitHubCode(r.Context(), code, transaction.PKCEVerifier, redirectURL)
 	if err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
 	profile, err := s.fetchGitHubProfile(r.Context(), token)
 	if err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
 	if err := s.ensureGitHubAllowedOrgMembership(r.Context(), token); err != nil {
 		if errors.Is(err, errGitHubOrgDenied) {
+			s.recordGitHubOAuthEvent(githubOAuthEventOrgDenied)
 			writeError(w, http.StatusForbidden, err)
 			return
 		}
+		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
@@ -215,6 +248,7 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setSessionCookie(w, r, session)
+		s.recordGitHubOAuthEvent(githubOAuthEventBrowserSucceeded)
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -236,12 +270,14 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:        now.Add(desktopOAuthGrantTTL),
 	}); err != nil {
 		if errors.Is(err, store.ErrOAuthCapacityExceeded) {
+			s.recordGitHubOAuthEvent(githubOAuthEventCapacityRejected)
 			writeError(w, http.StatusServiceUnavailable, err)
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.recordGitHubOAuthEvent(githubOAuthEventDesktopGrantCreated)
 	http.Redirect(w, r, desktopOAuthCallback(transaction.DesktopProtocol, grantCode), http.StatusFound)
 }
 
@@ -268,6 +304,7 @@ func writeDesktopUpgradeRequired(w http.ResponseWriter) {
 
 func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSameOriginJSON(w, r) {
+		s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeRejected)
 		return
 	}
 	var body struct {
@@ -275,16 +312,19 @@ func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 		Verifier string `json:"code_verifier"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
+		s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeRejected)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	if !validOAuthGrantCode(body.Code) || !validDesktopCode(body.Verifier, 43, 128) {
+		s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeRejected)
 		writeError(w, http.StatusBadRequest, errors.New("invalid desktop oauth grant"))
 		return
 	}
 	session, err := s.store.ConsumeDesktopOAuthGrant(r.Context(), secretHash(body.Code), desktopCodeChallenge(body.Verifier), time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrDesktopOAuthGrantInvalid) {
+			s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeRejected)
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -292,6 +332,7 @@ func (s *Server) githubDesktopConsume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSessionCookie(w, r, session)
+	s.recordGitHubOAuthEvent(githubOAuthEventDesktopConsumeSucceeded)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

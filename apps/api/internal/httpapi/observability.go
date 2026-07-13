@@ -65,14 +65,18 @@ type metricValue struct {
 }
 
 type metricsRegistry struct {
-	mu      sync.Mutex
-	values  map[metricKey]metricValue
-	ready   bool
-	readyMu sync.RWMutex
+	mu                sync.Mutex
+	values            map[metricKey]metricValue
+	githubOAuthEvents map[string]uint64
+	ready             bool
+	readyMu           sync.RWMutex
 }
 
 func newMetricsRegistry() *metricsRegistry {
-	return &metricsRegistry{values: make(map[metricKey]metricValue)}
+	return &metricsRegistry{
+		values:            make(map[metricKey]metricValue),
+		githubOAuthEvents: make(map[string]uint64),
+	}
 }
 
 func (m *metricsRegistry) middleware(next http.Handler) http.Handler {
@@ -108,6 +112,15 @@ func (m *metricsRegistry) readiness() bool {
 	m.readyMu.RLock()
 	defer m.readyMu.RUnlock()
 	return m.ready
+}
+
+func (s *Server) recordGitHubOAuthEvent(event string) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.mu.Lock()
+	s.metrics.githubOAuthEvents[event]++
+	s.metrics.mu.Unlock()
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -147,6 +160,12 @@ func (m *metricsRegistry) render(build buildMetadata) string {
 		keys = append(keys, key)
 		values[key] = value
 	}
+	oauthEvents := make([]string, 0, len(m.githubOAuthEvents))
+	oauthEventValues := make(map[string]uint64, len(m.githubOAuthEvents))
+	for event, value := range m.githubOAuthEvents {
+		oauthEvents = append(oauthEvents, event)
+		oauthEventValues[event] = value
+	}
 	m.mu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].Method != keys[j].Method {
@@ -157,6 +176,7 @@ func (m *metricsRegistry) render(build buildMetadata) string {
 		}
 		return keys[i].StatusClass < keys[j].StatusClass
 	})
+	sort.Strings(oauthEvents)
 	var out strings.Builder
 	out.WriteString("# HELP clickclack_build_info ClickClack build metadata.\n")
 	out.WriteString("# TYPE clickclack_build_info gauge\n")
@@ -178,6 +198,11 @@ func (m *metricsRegistry) render(build buildMetadata) string {
 		fmt.Fprintf(&out, "clickclack_http_requests_total{%s} %d\n", labels, value.Count)
 		fmt.Fprintf(&out, "clickclack_http_request_duration_seconds_sum{%s} %g\n", labels, value.DurationSeconds)
 		fmt.Fprintf(&out, "clickclack_http_request_duration_seconds_count{%s} %d\n", labels, value.Count)
+	}
+	out.WriteString("# HELP clickclack_github_oauth_events_total GitHub OAuth lifecycle events by bounded event category.\n")
+	out.WriteString("# TYPE clickclack_github_oauth_events_total counter\n")
+	for _, event := range oauthEvents {
+		fmt.Fprintf(&out, "clickclack_github_oauth_events_total{event=\"%s\"} %d\n", metricLabel(event), oauthEventValues[event])
 	}
 	return out.String()
 }

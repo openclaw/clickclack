@@ -193,7 +193,7 @@ func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	namespacedServer := New(st, realtime.NewHub(), Options{
+	namespacedAPI := New(st, realtime.NewHub(), Options{
 		CookieNames: names,
 		GitHubOAuth: GitHubOAuthConfig{
 			ClientID:     "client",
@@ -201,7 +201,9 @@ func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
 			PublicURL:    "https://chat.example.com",
 			AuthURL:      "https://github.example/authorize",
 		},
-	}).Handler()
+		MetricsEnabled: true,
+	})
+	namespacedServer := namespacedAPI.Handler()
 	oldRequest := httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/auth/github/desktop/start?code_challenge="+challenge, nil)
 	oldRecorder := httptest.NewRecorder()
 	namespacedServer.ServeHTTP(oldRecorder, oldRequest)
@@ -224,6 +226,16 @@ func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
 	namespacedServer.ServeHTTP(invalidRecorder, invalidRequest)
 	if invalidRecorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected unsupported protocol rejection, got %d", invalidRecorder.Code)
+	}
+	metrics := namespacedAPI.metrics.render(buildMetadata{})
+	for _, expected := range []string{
+		`clickclack_github_oauth_events_total{event="desktop_start"} 3`,
+		`clickclack_github_oauth_events_total{event="desktop_upgrade_required"} 1`,
+		`clickclack_github_oauth_events_total{event="desktop_protocol_rejected"} 1`,
+	} {
+		if !strings.Contains(metrics, expected) {
+			t.Fatalf("OAuth metrics missing %q:\n%s", expected, metrics)
+		}
 	}
 
 	legacyGrant, err := newDesktopOAuthGrantCode(1)

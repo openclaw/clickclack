@@ -64,11 +64,10 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 	}
 	appInstallationID := strings.TrimSpace(input.AppInstallationID)
 	if appInstallationID != "" {
-		var one int
 		if err := tx.QueryRowContext(ctx, `
-			SELECT 1
+			SELECT bot_user_id
 			FROM app_installations
-			WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL`, appInstallationID, workspaceID).Scan(&one); err != nil {
+			WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL`, appInstallationID, workspaceID).Scan(&createdBy); err != nil {
 			return store.EventSubscription{}, err
 		}
 	}

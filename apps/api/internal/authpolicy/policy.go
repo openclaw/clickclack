@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -99,6 +100,12 @@ func CanonicalPublicURL(input string) (string, error) {
 		return "", errors.New("non-loopback public URLs must use https")
 	}
 	port := value.Port()
+	if port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return "", errors.New("public URL has an invalid port")
+		}
+	}
 	if port == defaultPort(value.Scheme) {
 		port = ""
 	}

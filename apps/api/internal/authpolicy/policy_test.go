@@ -44,6 +44,8 @@ func TestCanonicalPublicURL(t *testing.T) {
 		"https://chat.example.com#fragment",
 		"http://chat.example.com",
 		"https://chat.example.com.",
+		"https://chat.example.com:0",
+		"https://chat.example.com:65536",
 	} {
 		if _, err := CanonicalPublicURL(value); err == nil {
 			t.Fatalf("expected %q to be invalid", value)

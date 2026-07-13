@@ -79,11 +79,19 @@ server continues to serve it as a hardened download.
   time, embedded-image pixels, worker canvas bytes, each DPR-scaled backing
   dimension, and total backing pixels are capped. Files or pages outside those
   limits fall back to the authenticated download.
-- XLSX-family workbooks render bounded cell values in a scrollable grid with
-  worksheet tabs. PPTX-family decks render bounded slide text with previous and
-  next controls. Formulas are shown through their cached values; macros are
-  never executed. Both formats cap compressed bytes, archive entries, expanded
-  bytes, cells, slides, and slide text before rendering.
+- XLSX-family workbooks render bounded raw cached cell values in a scrollable
+  grid with worksheet tabs. Number, currency, and date formatting is not
+  reconstructed, and hidden worksheets are omitted. Formulas use their cached
+  values; macros are never executed.
+- PPTX-family decks render a text outline with previous and next controls.
+  Visuals, layout, animations, speaker notes, and hidden slides are omitted.
+  The original remains available for download when visual fidelity matters.
+- Office parsing runs in a terminable worker with a five-second timeout. ZIP
+  paths and relationships are validated, document parts are streamed through
+  bounded decompression and namespace-aware XML parsing, and limits apply per
+  entry and across the whole document. The preview caps archive entries,
+  expanded bytes, XML elements, cell text, total spreadsheet text, worksheets,
+  cells, slides, paragraphs, and total slide text before rendering.
 - DOCX files never enter a browser parser. Normal, malformed, compressed-bomb,
   and oversized DOCX uploads all use the same authenticated download-only path.
 - Uploaded HTML is parsed only in an inert template; scripts, forms, frames,

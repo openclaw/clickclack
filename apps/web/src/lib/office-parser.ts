@@ -46,6 +46,7 @@ type XMLHandlers = {
 };
 
 const RELATIONSHIP_ID_URI = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const STRICT_RELATIONSHIP_ID_URI = "http://purl.oclc.org/ooxml/officeDocument/relationships";
 const ZIP_INPUT_CHUNK_SIZE = 4 * 1024;
 
 class OfficePreviewError extends Error {}
@@ -245,6 +246,12 @@ function attribute(tag: QualifiedTag, local: string, uri?: string): string {
   return "";
 }
 
+function relationshipID(tag: QualifiedTag): string {
+  return (
+    attribute(tag, "id", RELATIONSHIP_ID_URI) || attribute(tag, "id", STRICT_RELATIONSHIP_ID_URI)
+  );
+}
+
 function parseRelationships(source: string, part: string, budget: ParseBudget): Relationship[] {
   const relationships: Relationship[] = [];
   parseXML(source, part, budget, {
@@ -415,7 +422,7 @@ function parseSheetDescriptors(
         hiddenSheets += 1;
         return;
       }
-      const relationID = attribute(tag, "id", RELATIONSHIP_ID_URI) || attribute(tag, "id");
+      const relationID = relationshipID(tag);
       if (!relationID) throw previewError("This workbook contains a malformed worksheet.");
       const name = attribute(tag, "name") || `Sheet ${sheets.length + 1}`;
       if (name.length > SPREADSHEET_SHEET_NAME_LIMIT) {
@@ -621,7 +628,7 @@ function parseSlideDescriptors(
         truncated = true;
         return;
       }
-      const relationID = attribute(tag, "id", RELATIONSHIP_ID_URI) || attribute(tag, "id");
+      const relationID = relationshipID(tag);
       if (!relationID) throw previewError("This presentation contains a malformed slide.");
       slides.push({ relationID });
     },

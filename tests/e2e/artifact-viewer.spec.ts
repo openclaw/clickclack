@@ -20,6 +20,7 @@ type ZipCompression = 0 | 8;
 const RELATIONSHIPS_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_RELATIONSHIP_NS =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const STRICT_OFFICE_RELATIONSHIP_NS = "http://purl.oclc.org/ooxml/officeDocument/relationships";
 
 function zip(files: Record<string, string | Buffer>, compression: ZipCompression): Buffer {
   const contents = Object.fromEntries(
@@ -95,6 +96,44 @@ function deflatedPresentationFixture(): Buffer {
     },
     8,
   );
+}
+
+function strictWorkbookFixture(): Buffer {
+  return zip(
+    {
+      "_rels/.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdOffice" Type="${STRICT_OFFICE_RELATIONSHIP_NS}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+      "xl/workbook.xml": `<workbook xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main" xmlns:r="${STRICT_OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Strict" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${STRICT_OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+      "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Strict workbook relationship</t></is></c></row></sheetData></worksheet>`,
+    },
+    8,
+  );
+}
+
+function strictPresentationFixture(): Buffer {
+  return zip(
+    {
+      "_rels/.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdOffice" Type="${STRICT_OFFICE_RELATIONSHIP_NS}/officeDocument" Target="ppt/presentation.xml"/></Relationships>`,
+      "ppt/presentation.xml": `<p:presentation xmlns:p="http://purl.oclc.org/ooxml/presentationml/main" xmlns:r="${STRICT_OFFICE_RELATIONSHIP_NS}"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+      "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${STRICT_OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
+      "ppt/slides/slide1.xml": `<p:sld xmlns:p="http://purl.oclc.org/ooxml/presentationml/main" xmlns:a="http://purl.oclc.org/ooxml/drawingml/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Strict presentation relationship</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`,
+    },
+    8,
+  );
+}
+
+function densePresentationFixture(): Buffer {
+  const paragraphs = [
+    "Dense outline",
+    ...Array.from({ length: 24 }, (_, index) => `Detail ${index + 1}`),
+  ]
+    .map((text) => `<p><r><t>${text}</t></r></p>`)
+    .join("");
+  return presentationPackage({
+    "ppt/presentation.xml": `<presentation xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sldIdLst><sldId r:id="rId1"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld><sp><txBody>${paragraphs}</txBody></sp></sld>`,
+  });
 }
 
 function absoluteRelationshipWorkbook(): Buffer {
@@ -502,6 +541,21 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       body: deflatedPresentationFixture(),
     },
     {
+      filename: "strict.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: strictWorkbookFixture(),
+    },
+    {
+      filename: "strict.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: strictPresentationFixture(),
+    },
+    {
+      filename: "dense.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: densePresentationFixture(),
+    },
+    {
       filename: "sparse.xlsx",
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       body: sparseWorkbookFixture(),
@@ -581,6 +635,39 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
 
   await page.getByRole("button", { name: "Open namespaced.pptx" }).click();
   await expect(viewer.getByText("Deflated namespaced slide")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open strict.xlsx" }).click();
+  await expect(viewer.getByText("Strict workbook relationship")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open strict.pptx" }).click();
+  await expect(viewer.getByText("Strict presentation relationship")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open dense.pptx" }).click();
+  const denseSlide = viewer.getByLabel("Slide 1: Dense outline");
+  const denseLastParagraph = denseSlide.locator("p").last();
+  await expect(denseLastParagraph).toContainText("Detail 24");
+  const denseMetrics = await denseSlide.evaluate((slide) => ({
+    clientHeight: slide.clientHeight,
+    overflowY: getComputedStyle(slide).overflowY,
+    scrollHeight: slide.scrollHeight,
+  }));
+  expect(denseMetrics.overflowY).toBe("auto");
+  expect(denseMetrics.scrollHeight).toBeGreaterThan(denseMetrics.clientHeight);
+  await denseSlide.evaluate((slide) => {
+    slide.scrollTop = slide.scrollHeight;
+  });
+  await expect
+    .poll(() =>
+      denseLastParagraph.evaluate((paragraph) => {
+        const paragraphBounds = paragraph.getBoundingClientRect();
+        const slideBounds = paragraph.parentElement!.getBoundingClientRect();
+        return paragraphBounds.bottom <= slideBounds.bottom;
+      }),
+    )
+    .toBe(true);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await page.getByRole("button", { name: "Open absolute.xlsx" }).click();

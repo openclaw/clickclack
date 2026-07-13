@@ -295,7 +295,7 @@
 .artifact-viewer__sheet-tabs button { flex: none; }
 
 .artifact-viewer__slide-stage { min-height: 0; overflow: auto; display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; }
-.artifact-viewer__slide { display: flex; aspect-ratio: 16 / 9; width: min(100%, 860px); padding: 48px; flex-direction: column; justify-content: center; overflow: hidden; background: #fff; color: #172033; box-shadow: 0 16px 48px -24px rgba(0, 0, 0, 0.65); }
+.artifact-viewer__slide { display: flex; aspect-ratio: 16 / 9; width: min(100%, 860px); padding: 48px; flex-direction: column; justify-content: safe center; overflow: auto; background: #fff; color: #172033; box-shadow: 0 16px 48px -24px rgba(0, 0, 0, 0.65); }
 .artifact-viewer__slide h2 { margin: 0 0 0.7em; font-size: 36px; line-height: 1.15; letter-spacing: 0; }
 .artifact-viewer__slide p { margin: 0.35em 0; font-size: 20px; line-height: 1.4; }
 .artifact-viewer__office-note { margin: 0; color: var(--muted); font-size: 12px; }

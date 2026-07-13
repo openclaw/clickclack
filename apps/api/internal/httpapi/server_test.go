@@ -2817,6 +2817,12 @@ func TestNormalizeClientNonceCountsCharacters(t *testing.T) {
 	if _, err := normalizeClientNonce(strings.Repeat("é", 129)); err == nil {
 		t.Fatal("expected 129-character nonce rejection")
 	}
+	if _, err := normalizeClientNonce(string([]byte{0xff})); err == nil {
+		t.Fatal("expected invalid UTF-8 nonce rejection")
+	}
+	if _, err := normalizeClientNonce("invalid\x00nonce"); err == nil {
+		t.Fatal("expected NUL nonce rejection")
+	}
 }
 
 func TestUploadReservesQuotaBeforeObjectStorage(t *testing.T) {
@@ -3134,7 +3140,12 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	message, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: bot.ID, Body: "bot dm"})
+	message, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: dm.ID,
+		AuthorID:       bot.ID,
+		Body:           "bot dm",
+		Nonce:          "bot-dm-nonce",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3161,6 +3172,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/messages/" + message.ID, ""},
+		{http.MethodGet, "/api/messages/by-nonce?workspace_id=" + workspace.ID + "&nonce=bot-dm-nonce", ""},
 		{http.MethodPatch, "/api/messages/" + message.ID, `{"body":"blocked"}`},
 		{http.MethodDelete, "/api/messages/" + message.ID, ""},
 		{http.MethodGet, "/api/messages/" + message.ID + "/thread", ""},

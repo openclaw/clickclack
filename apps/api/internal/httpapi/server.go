@@ -1008,6 +1008,9 @@ func (s *Server) getMessageByNonce(w http.ResponseWriter, r *http.Request) {
 	case err == nil && message.WorkspaceID != workspaceID:
 		writeStoreError(w, store.ErrClientNonceConflict)
 	case err == nil:
+		if !requireBotMessageDirectScope(w, act, message, "dms:write") {
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"message": message})
 	case errors.Is(err, sql.ErrNoRows):
 		writeError(w, http.StatusNotFound, err)

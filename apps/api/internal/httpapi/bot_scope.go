@@ -24,13 +24,20 @@ func (s *Server) requireBotMessageResource(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return store.Message{}, false
 	}
+	if !requireBotMessageDirectScope(w, act, message, directScope) {
+		return store.Message{}, false
+	}
+	return message, true
+}
+
+func requireBotMessageDirectScope(w http.ResponseWriter, act actor, message store.Message, directScope string) bool {
 	if act.botTokenID != "" && message.DirectConversationID != "" {
 		if err := act.requireScope(directScope); err != nil {
 			writeError(w, http.StatusForbidden, err)
-			return store.Message{}, false
+			return false
 		}
 	}
-	return message, true
+	return true
 }
 
 func (s *Server) requireBotUploadResource(w http.ResponseWriter, r *http.Request, act actor, upload store.Upload, sameMessageID string) bool {

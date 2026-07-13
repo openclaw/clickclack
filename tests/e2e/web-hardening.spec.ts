@@ -279,7 +279,7 @@ function delayedUploadRoute() {
   };
 }
 
-test("message send waits for its upload to finish", async ({ page }) => {
+test("message send stays blocked while its upload is pending", async ({ page }) => {
   const { workspace, channel } = await createWorkspaceWithChannel(page, "Upload wait");
   const upload = delayedUploadRoute();
   let messagePosts = 0;
@@ -293,6 +293,10 @@ test("message send waits for its upload to finish", async ({ page }) => {
   });
   await page.route("**/api/uploads", upload.handler);
   await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect(page.getByLabel("Message body")).toHaveAttribute(
+    "placeholder",
+    `Message #${channel.name}`,
+  );
 
   const selectFile = page.getByLabel("Upload file").setInputFiles({
     name: "blocked-send.txt",
@@ -323,6 +327,10 @@ test("workspace changes discard uploads that finish for the previous workspace",
   const upload = delayedUploadRoute();
   await page.route("**/api/uploads", upload.handler);
   await page.goto(`/app/${first.workspace.route_id}/${first.channel.route_id}`);
+  await expect(page.getByLabel("Message body")).toHaveAttribute(
+    "placeholder",
+    `Message #${first.channel.name}`,
+  );
 
   const selectFile = page.getByLabel("Upload file").setInputFiles({
     name: "stale-workspace.txt",

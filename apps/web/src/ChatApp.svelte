@@ -2975,7 +2975,7 @@
       submitLabel="Send"
       pendingUpload={pendingUpload}
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
-      showUpload
+      showUpload={Boolean(selectedWorkspaceID && (selectedChannelID || selectedDirectID))}
       showToolbar
       showGifPicker={showGifPicker}
       gifQuery={gifQuery}

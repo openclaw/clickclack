@@ -385,8 +385,13 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   const mobilePage = await mobileContext.newPage();
   await mobilePage.goto(`/app/${workspace.route_id}`);
   await waitForAppReady(mobilePage);
-  await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
-  await mobilePage.getByRole("button", { name: `Move #${names[1]}` }).click();
+  await expect(mobilePage.getByRole("heading", { name: `#${names[0]}` })).toBeVisible();
+  const mobileNavigationToggle = mobilePage.getByRole("button", { name: "Toggle navigation" });
+  await mobileNavigationToggle.click();
+  await expect(mobileNavigationToggle).toHaveAttribute("aria-expanded", "true");
+  const mobileMoveButton = mobilePage.getByRole("button", { name: `Move #${names[1]}` });
+  await expect(mobileMoveButton).toBeInViewport();
+  await mobileMoveButton.click();
   await mobilePage
     .getByRole("menu", { name: `Move #${names[1]}` })
     .getByRole("menuitem", { name: "Move up" })
@@ -396,7 +401,9 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     .toEqual([names[0], names[1], addedName, names[2]]);
   await mobilePage.reload();
   await waitForAppReady(mobilePage);
-  await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(mobilePage.getByRole("heading", { name: `#${names[0]}` })).toBeVisible();
+  await mobileNavigationToggle.click();
+  await expect(mobileNavigationToggle).toHaveAttribute("aria-expanded", "true");
   await expect
     .poll(() => channelNames(mobilePage))
     .toEqual([names[0], names[1], addedName, names[2]]);
@@ -1499,6 +1506,16 @@ test("browser notifications announce incoming messages outside the active conver
     "--email",
     `${channelName}@example.com`,
   ]);
+  const tailResponse = await page.request.get(
+    `/api/realtime/events?workspace_id=${workspaceId}&limit=1&include_tail=true`,
+  );
+  expect(tailResponse.ok()).toBe(true);
+  const { tail_cursor: tailCursor } = (await tailResponse.json()) as { tail_cursor: string };
+  expect(tailCursor).toBeTruthy();
+  await page.addInitScript(({ key, cursor }) => localStorage.setItem(key, cursor), {
+    key: `clickclack:${workspaceId}:cursor`,
+    cursor: tailCursor,
+  });
 
   await page.goto("/app");
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();

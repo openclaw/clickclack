@@ -62,14 +62,14 @@ func TestNewCookieNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if secure.Session != "__Host-cc-prod-2-session" || secure.OAuthBinding != "__Host-cc-prod-2-oauth-binding" {
+	if secure.Session != "__Host-cc-prod-2-session" || secure.OAuthBinding != "__Host-cc-prod-2-oauth-binding" || !secure.Namespaced {
 		t.Fatalf("unexpected secure names: %#v", secure)
 	}
 	loopback, err := NewCookieNames("dev", "http://localhost:8080")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loopback.Session != "cc-dev-session" || loopback.OAuthBinding != "cc-dev-oauth-binding" {
+	if loopback.Session != "cc-dev-session" || loopback.OAuthBinding != "cc-dev-oauth-binding" || !loopback.Namespaced {
 		t.Fatalf("unexpected loopback names: %#v", loopback)
 	}
 	if _, err := NewCookieNames("prod", ""); err == nil {

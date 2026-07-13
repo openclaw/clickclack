@@ -104,7 +104,7 @@ func (s *Server) githubDesktopStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if s.cookies.Session != "cc_session" && protocol < 2 {
+	if s.cookies.Namespaced && protocol < 2 {
 		s.recordGitHubOAuthEvent(githubOAuthEventDesktopUpgradeRequired)
 		writeDesktopUpgradeRequired(w)
 		return

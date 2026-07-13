@@ -14,6 +14,7 @@ const MaxCookieNamespaceLength = 32
 type CookieNames struct {
 	Session      string
 	OAuthBinding string
+	Namespaced   bool
 }
 
 func DefaultCookieNames() CookieNames {
@@ -65,6 +66,7 @@ func NewCookieNames(namespace, publicURL string) (CookieNames, error) {
 	return CookieNames{
 		Session:      prefix + "session",
 		OAuthBinding: prefix + "oauth-binding",
+		Namespaced:   true,
 	}, nil
 }
 

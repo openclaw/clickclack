@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { connectRealtime } from "../../apps/web/src/lib/realtime.svelte";
 import type { RealtimeEvent, User } from "../../apps/web/src/lib/types";
+import { waitForAppReady } from "./app-ready";
 
 type SocketListener = (event: { data?: unknown }) => void;
 
@@ -240,6 +241,7 @@ test("account settings trap focus, inert the app, restore focus, and PATCH owned
   });
 
   await page.goto("/app");
+  await waitForAppReady(page);
   const trigger = page.getByRole("button", { name: /Account settings for/ });
   await trigger.click();
 

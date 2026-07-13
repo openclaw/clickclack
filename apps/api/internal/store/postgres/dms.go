@@ -81,6 +81,9 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	if err := lockMemberWriteAuthorizationsTx(ctx, tx, input.WorkspaceID, memberIDs); err != nil {
+		return store.DirectConversation{}, err
+	}
 	if err := requireCanSendDirectTx(ctx, tx, input.WorkspaceID, input.UserID); err != nil {
 		return store.DirectConversation{}, err
 	}
@@ -247,10 +250,10 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
-	if err := requireDirectMembershipTx(ctx, tx, input.ConversationID, input.AuthorID); err != nil {
+	if err := requireCanSendDirectTx(ctx, tx, workspaceID, input.AuthorID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
-	if err := requireCanSendDirectTx(ctx, tx, workspaceID, input.AuthorID); err != nil {
+	if err := requireDirectMembershipTx(ctx, tx, input.ConversationID, input.AuthorID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	if err := lockMessageSequenceTx(ctx, tx, "direct", input.ConversationID); err != nil {
@@ -294,7 +297,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		quotedSnapshot = snap
 		quotedAuthorID = authorID
 	}
-	if err := qtx.InsertDirectMessage(ctx, storedb.InsertDirectMessageParams{
+	inserted, err := qtx.InsertDirectMessage(ctx, storedb.InsertDirectMessageParams{
 		ID:                   id,
 		WorkspaceID:          workspaceID,
 		DirectConversationID: sqlText(input.ConversationID),
@@ -309,14 +312,22 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		ClientNonce:          nonce,
 		Kind:                 kind,
 		TurnID:               sqlOptionalText(input.TurnID),
-	}); err != nil {
-		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
+	})
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if inserted == 0 {
+		existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce)
+		if lookupErr == nil {
 			if existing.DirectConversationID == input.ConversationID && existing.ChannelID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.Kind == kind && existing.TurnID == input.TurnID && sameQuotedMessageID(existing, quotedID) {
 				return existing, store.Event{}, nil
 			}
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
-		return store.Message{}, store.Event{}, err
+		if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return store.Message{}, store.Event{}, lookupErr
+		}
+		return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 	}
 	if err := qtx.InsertThreadState(ctx, id); err != nil {
 		return store.Message{}, store.Event{}, err

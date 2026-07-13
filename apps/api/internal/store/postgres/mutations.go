@@ -256,6 +256,16 @@ func (s *Store) UpdateMessage(ctx context.Context, input store.UpdateMessageInpu
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := s.q.WithTx(tx).LockMessageForUpdate(ctx, msg.ID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	msg, err = getMessageTx(ctx, tx, input.MessageID)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if err := requireMessageAccessTx(ctx, tx, msg, input.UserID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -301,6 +311,16 @@ func (s *Store) DeleteMessage(ctx context.Context, input store.DeleteMessageInpu
 	}
 	defer tx.Rollback()
 	msg, err := getMessageTx(ctx, tx, input.MessageID)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := s.q.WithTx(tx).LockMessageForUpdate(ctx, msg.ID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	msg, err = getMessageTx(ctx, tx, input.MessageID)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}

@@ -18,6 +18,9 @@ func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput)
 		return store.Upload{}, err
 	}
 	defer tx.Rollback()
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {
+		return store.Upload{}, err
+	}
 	if err := lockUploadQuotaTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {
 		return store.Upload{}, err
 	}
@@ -61,6 +64,9 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID stri
 		return store.UploadQuotaReservation{}, err
 	}
 	defer tx.Rollback()
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
+		return store.UploadQuotaReservation{}, err
+	}
 	if err := lockUploadQuotaTx(ctx, tx, workspaceID, userID); err != nil {
 		return store.UploadQuotaReservation{}, err
 	}
@@ -112,6 +118,9 @@ func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, 
 		return store.Upload{}, err
 	}
 	defer tx.Rollback()
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {
+		return store.Upload{}, err
+	}
 	if err := lockUploadQuotaTx(ctx, tx, input.WorkspaceID, input.OwnerID); err != nil {
 		return store.Upload{}, err
 	}
@@ -205,6 +214,9 @@ func (s *Store) CanCreateUpload(ctx context.Context, workspaceID, userID string,
 		return err
 	}
 	defer tx.Rollback()
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
+		return err
+	}
 	if err := lockUploadQuotaTx(ctx, tx, workspaceID, userID); err != nil {
 		return err
 	}
@@ -310,6 +322,16 @@ func (s *Store) AttachUpload(ctx context.Context, input store.AttachUploadInput)
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
 	msg, err := getMessageTx(ctx, tx, input.MessageID)
+	if err != nil {
+		return store.Event{}, err
+	}
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
+		return store.Event{}, err
+	}
+	if err := qtx.LockMessageForUpdate(ctx, msg.ID); err != nil {
+		return store.Event{}, err
+	}
+	msg, err = getMessageTx(ctx, tx, input.MessageID)
 	if err != nil {
 		return store.Event{}, err
 	}

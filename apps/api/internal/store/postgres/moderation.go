@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -148,6 +149,9 @@ func requireNoModerationBlockTx(ctx context.Context, tx *sql.Tx, workspaceID, us
 }
 
 func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, userID string) error {
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
+		return err
+	}
 	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return err
@@ -185,6 +189,9 @@ func lockGuestPostBudgetTx(ctx context.Context, tx *sql.Tx, workspaceID, userID 
 }
 
 func requireCanSendDirectTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, workspaceID, userID); err != nil {
+		return err
+	}
 	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return err
@@ -194,6 +201,58 @@ func requireCanSendDirectTx(ctx context.Context, tx *sql.Tx, workspaceID, userID
 	}
 	if role == store.WorkspaceRoleGuest {
 		return store.ErrModerationRestricted
+	}
+	return nil
+}
+
+type memberAuthorizationLock struct {
+	userID    string
+	exclusive bool
+}
+
+func lockMemberWriteAuthorizationTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
+	return lockMemberAuthorizationsTx(ctx, tx, workspaceID, []memberAuthorizationLock{{userID: userID}})
+}
+
+func lockMemberWriteAuthorizationsTx(ctx context.Context, tx *sql.Tx, workspaceID string, userIDs []string) error {
+	locks := make([]memberAuthorizationLock, 0, len(userIDs))
+	for _, userID := range userIDs {
+		locks = append(locks, memberAuthorizationLock{userID: userID})
+	}
+	return lockMemberAuthorizationsTx(ctx, tx, workspaceID, locks)
+}
+
+func lockMemberModerationTx(ctx context.Context, tx *sql.Tx, workspaceID, actorUserID, targetUserID string) error {
+	return lockMemberAuthorizationsTx(ctx, tx, workspaceID, []memberAuthorizationLock{
+		{userID: actorUserID},
+		{userID: targetUserID, exclusive: true},
+	})
+}
+
+func lockMemberAuthorizationsTx(ctx context.Context, tx *sql.Tx, workspaceID string, locks []memberAuthorizationLock) error {
+	byUserID := make(map[string]bool, len(locks))
+	for _, lock := range locks {
+		if lock.userID == "" {
+			continue
+		}
+		byUserID[lock.userID] = byUserID[lock.userID] || lock.exclusive
+	}
+	userIDs := make([]string, 0, len(byUserID))
+	for userID := range byUserID {
+		userIDs = append(userIDs, userID)
+	}
+	sort.Strings(userIDs)
+	for _, userID := range userIDs {
+		lockFunction := "pg_advisory_xact_lock_shared"
+		if byUserID[userID] {
+			lockFunction = "pg_advisory_xact_lock"
+		}
+		if _, err := tx.ExecContext(ctx,
+			`SELECT `+lockFunction+`(hashtext($1), hashtext($2))`,
+			"clickclack.member-write."+workspaceID, userID,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -273,6 +332,9 @@ func (s *Store) UpdateMemberModeration(ctx context.Context, input store.UpdateMe
 	}
 	defer tx.Rollback()
 	qtx := storedb.New(tx)
+	if err := lockMemberModerationTx(ctx, tx, input.WorkspaceID, input.ActorUserID, input.TargetUserID); err != nil {
+		return store.MemberModeration{}, store.Event{}, err
+	}
 	roleRows, err := qtx.MembershipRolesForUpdate(ctx, storedb.MembershipRolesForUpdateParams{WorkspaceID: input.WorkspaceID, ActorUserID: input.ActorUserID, TargetUserID: input.TargetUserID})
 	if err != nil {
 		return store.MemberModeration{}, store.Event{}, err

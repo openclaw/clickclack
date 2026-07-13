@@ -511,17 +511,10 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
-	if err := requireMembershipTx(ctx, tx, workspaceID, input.AuthorID); err != nil {
+	if err := requireCanPostTx(ctx, tx, workspaceID, input.ChannelID, input.AuthorID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	if err := requireTopicTx(ctx, tx, workspaceID, input.ChannelID, input.TopicID); err != nil {
-		return store.Message{}, store.Event{}, err
-	}
-	if err := lockMessageSequenceTx(ctx, tx, "channel", input.ChannelID); err != nil {
-		return store.Message{}, store.Event{}, err
-	}
-	seq, err := qtx.ChannelNextSeq(ctx, input.ChannelID)
-	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	id := newID("msg")
@@ -553,7 +546,11 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.Message{}, store.Event{}, err
 	}
-	if err := requireCanPostTx(ctx, tx, workspaceID, input.ChannelID, input.AuthorID); err != nil {
+	if err := lockMessageSequenceTx(ctx, tx, "channel", input.ChannelID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	seq, err := qtx.ChannelNextSeq(ctx, input.ChannelID)
+	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	if quotedID != "" {
@@ -564,7 +561,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		quotedSnapshot = snap
 		quotedAuthorID = authorID
 	}
-	if err := qtx.InsertChannelMessage(ctx, storedb.InsertChannelMessageParams{
+	inserted, err := qtx.InsertChannelMessage(ctx, storedb.InsertChannelMessageParams{
 		ID:                 id,
 		WorkspaceID:        workspaceID,
 		ChannelID:          sqlText(input.ChannelID),
@@ -580,8 +577,13 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		ClientNonce:        nonce,
 		Kind:               kind,
 		TurnID:             sqlOptionalText(input.TurnID),
-	}); err != nil {
-		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
+	})
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if inserted == 0 {
+		existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce)
+		if lookupErr == nil {
 			if existing.ChannelID == input.ChannelID && existing.DirectConversationID == "" && existing.ParentMessageID == nil && existing.Body == body && existing.TopicID == input.TopicID && existing.Kind == kind && existing.TurnID == input.TurnID && sameQuotedMessageID(existing, quotedID) {
 				if err := requireMessageAccessTx(ctx, tx, existing, input.AuthorID); err != nil {
 					return store.Message{}, store.Event{}, err
@@ -590,7 +592,10 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 			}
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
-		return store.Message{}, store.Event{}, err
+		if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return store.Message{}, store.Event{}, lookupErr
+		}
+		return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 	}
 	if err := qtx.InsertThreadState(ctx, id); err != nil {
 		return store.Message{}, store.Event{}, err
@@ -676,15 +681,11 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err := requireMessageAccessTx(ctx, tx, root, input.AuthorID); err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
-	root, err = ensureThreadRouteIDTx(ctx, tx, root)
-	if err != nil {
-		return store.Message{}, store.ThreadState{}, nil, err
-	}
-	if err := lockMessageSequenceTx(ctx, tx, "thread", root.ID); err != nil {
-		return store.Message{}, store.ThreadState{}, nil, err
-	}
-	seq, err := qtx.ThreadNextSeq(ctx, storedb.ThreadNextSeqParams{ThreadRootID: root.ID, ParentMessageID: sqlText(root.ID)})
-	if err != nil {
+	if root.DirectConversationID != "" {
+		if err := requireCanSendDirectTx(ctx, tx, root.WorkspaceID, input.AuthorID); err != nil {
+			return store.Message{}, store.ThreadState{}, nil, err
+		}
+	} else if err := requireCanPostTx(ctx, tx, root.WorkspaceID, root.ChannelID, input.AuthorID); err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
 	id := newID("msg")
@@ -713,11 +714,15 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
-	if root.DirectConversationID != "" {
-		if err := requireCanSendDirectTx(ctx, tx, root.WorkspaceID, input.AuthorID); err != nil {
-			return store.Message{}, store.ThreadState{}, nil, err
-		}
-	} else if err := requireCanPostTx(ctx, tx, root.WorkspaceID, root.ChannelID, input.AuthorID); err != nil {
+	root, err = ensureThreadRouteIDTx(ctx, tx, root)
+	if err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	if err := lockMessageSequenceTx(ctx, tx, "thread", root.ID); err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	seq, err := qtx.ThreadNextSeq(ctx, storedb.ThreadNextSeqParams{ThreadRootID: root.ID, ParentMessageID: sqlText(root.ID)})
+	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
 	if quotedID != "" {
@@ -735,7 +740,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	} else {
 		channelID = sqlText(root.ChannelID)
 	}
-	if err := qtx.InsertThreadReply(ctx, storedb.InsertThreadReplyParams{
+	inserted, err := qtx.InsertThreadReply(ctx, storedb.InsertThreadReplyParams{
 		ID:                   id,
 		WorkspaceID:          root.WorkspaceID,
 		ChannelID:            channelID,
@@ -750,8 +755,13 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		QuotedBodySnapshot:   quotedSnapshot,
 		QuotedAuthorID:       sqlOptionalText(quotedAuthorID),
 		ClientNonce:          nonce,
-	}); err != nil {
-		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
+	})
+	if err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	if inserted == 0 {
+		existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce)
+		if lookupErr == nil {
 			if existing.ThreadRootID == root.ID && existing.ParentMessageID != nil && *existing.ParentMessageID == root.ID && existing.Body == body && sameQuotedMessageID(existing, quotedID) {
 				stateRow, stateErr := qtx.GetThreadState(ctx, root.ID)
 				if stateErr != nil {
@@ -761,7 +771,10 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 			}
 			return store.Message{}, store.ThreadState{}, nil, store.ErrClientNonceConflict
 		}
-		return store.Message{}, store.ThreadState{}, nil, err
+		if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return store.Message{}, store.ThreadState{}, nil, lookupErr
+		}
+		return store.Message{}, store.ThreadState{}, nil, store.ErrClientNonceConflict
 	}
 	state, err := updateThreadState(ctx, tx, root.ID, input.AuthorID, createdAt)
 	if err != nil {
@@ -866,6 +879,9 @@ func (s *Store) reaction(ctx context.Context, input store.CreateReactionInput, a
 	defer tx.Rollback()
 	msg, err := getMessageTx(ctx, tx, input.MessageID)
 	if err != nil {
+		return store.Event{}, err
+	}
+	if err := lockMemberWriteAuthorizationTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
 		return store.Event{}, err
 	}
 	if err := requireMessageAccessTx(ctx, tx, msg, input.UserID); err != nil {

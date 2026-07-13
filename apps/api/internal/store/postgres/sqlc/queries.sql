@@ -616,6 +616,12 @@ INSERT INTO message_attachments (message_id, upload_id, created_at)
 VALUES (sqlc.arg(message_id), sqlc.arg(upload_id), sqlc.arg(created_at))
 ON CONFLICT DO NOTHING;
 
+-- name: LockMessageForUpdate :exec
+SELECT id
+FROM messages
+WHERE id = sqlc.arg(id)
+FOR UPDATE;
+
 -- name: GetChannelWorkspace :one
 SELECT workspace_id
 FROM channels
@@ -795,13 +801,15 @@ JOIN direct_conversation_members dcm ON dcm.user_id = u.id
 WHERE dcm.conversation_id = sqlc.arg(conversation_id)
 ORDER BY u.display_name;
 
--- name: InsertChannelMessage :exec
+-- name: InsertChannelMessage :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), NULL, sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(topic_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id));
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), NULL, sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(topic_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id))
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING;
 
--- name: InsertDirectMessage :exec
+-- name: InsertDirectMessage :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), NULL, sqlc.arg(direct_conversation_id), sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id));
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), NULL, sqlc.arg(direct_conversation_id), sqlc.arg(author_id), NULL, sqlc.arg(thread_root_id), sqlc.arg(channel_seq), NULL, sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce), sqlc.arg(kind), sqlc.arg(turn_id))
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING;
 
 -- name: InsertThreadState :exec
 INSERT INTO thread_state (root_message_id)
@@ -830,9 +838,10 @@ SET reply_count = reply_count + 1,
     last_reply_author_ids_json = sqlc.arg(last_reply_author_ids_json)
 WHERE root_message_id = sqlc.arg(root_message_id);
 
--- name: InsertThreadReply :exec
+-- name: InsertThreadReply :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(direct_conversation_id), sqlc.arg(author_id), sqlc.arg(parent_message_id), sqlc.arg(thread_root_id), NULL, sqlc.arg(thread_seq), sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce));
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(direct_conversation_id), sqlc.arg(author_id), sqlc.arg(parent_message_id), sqlc.arg(thread_root_id), NULL, sqlc.arg(thread_seq), sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce))
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING;
 
 -- name: GetChannel :one
 SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, kind, created_at, archived_at

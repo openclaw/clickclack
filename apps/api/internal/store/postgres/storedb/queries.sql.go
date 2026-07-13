@@ -1408,9 +1408,10 @@ func (q *Queries) InsertChannel(ctx context.Context, arg InsertChannelParams) er
 	return err
 }
 
-const insertChannelMessage = `-- name: InsertChannelMessage :exec
+const insertChannelMessage = `-- name: InsertChannelMessage :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
 VALUES ($1, $2, $3, NULL, $4, NULL, $5, $6, $7, NULL, $8, 'markdown', $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING
 `
 
 type InsertChannelMessageParams struct {
@@ -1431,8 +1432,8 @@ type InsertChannelMessageParams struct {
 	TurnID             sql.NullString `json:"turn_id"`
 }
 
-func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMessageParams) error {
-	_, err := q.db.ExecContext(ctx, insertChannelMessage,
+func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertChannelMessage,
 		arg.ID,
 		arg.WorkspaceID,
 		arg.ChannelID,
@@ -1449,7 +1450,10 @@ func (q *Queries) InsertChannelMessage(ctx context.Context, arg InsertChannelMes
 		arg.Kind,
 		arg.TurnID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertDefaultChannel = `-- name: InsertDefaultChannel :exec
@@ -1557,9 +1561,10 @@ func (q *Queries) InsertDirectConversationMember(ctx context.Context, arg Insert
 	return err
 }
 
-const insertDirectMessage = `-- name: InsertDirectMessage :exec
+const insertDirectMessage = `-- name: InsertDirectMessage :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, kind, turn_id)
 VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, NULL, $7, 'markdown', $8, $9, $10, $11, $12, $13, $14)
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING
 `
 
 type InsertDirectMessageParams struct {
@@ -1579,8 +1584,8 @@ type InsertDirectMessageParams struct {
 	TurnID               sql.NullString `json:"turn_id"`
 }
 
-func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessageParams) error {
-	_, err := q.db.ExecContext(ctx, insertDirectMessage,
+func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertDirectMessage,
 		arg.ID,
 		arg.WorkspaceID,
 		arg.DirectConversationID,
@@ -1596,7 +1601,10 @@ func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessa
 		arg.Kind,
 		arg.TurnID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertEvent = `-- name: InsertEvent :exec
@@ -1810,9 +1818,10 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 	return err
 }
 
-const insertThreadReply = `-- name: InsertThreadReply :exec
+const insertThreadReply = `-- name: InsertThreadReply :execrows
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
 VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, 'markdown', $10, $11, $12, $13, $14)
+ON CONFLICT (author_id, client_nonce) WHERE client_nonce <> '' DO NOTHING
 `
 
 type InsertThreadReplyParams struct {
@@ -1832,8 +1841,8 @@ type InsertThreadReplyParams struct {
 	ClientNonce          string         `json:"client_nonce"`
 }
 
-func (q *Queries) InsertThreadReply(ctx context.Context, arg InsertThreadReplyParams) error {
-	_, err := q.db.ExecContext(ctx, insertThreadReply,
+func (q *Queries) InsertThreadReply(ctx context.Context, arg InsertThreadReplyParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertThreadReply,
 		arg.ID,
 		arg.WorkspaceID,
 		arg.ChannelID,
@@ -1849,7 +1858,10 @@ func (q *Queries) InsertThreadReply(ctx context.Context, arg InsertThreadReplyPa
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertThreadState = `-- name: InsertThreadState :exec
@@ -2919,6 +2931,18 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID string) ([]ListWork
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMessageForUpdate = `-- name: LockMessageForUpdate :exec
+SELECT id
+FROM messages
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockMessageForUpdate(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, lockMessageForUpdate, id)
+	return err
 }
 
 const lockWorkspaceForUpdate = `-- name: LockWorkspaceForUpdate :exec

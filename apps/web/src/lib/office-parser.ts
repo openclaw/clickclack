@@ -11,9 +11,15 @@ import {
   PRESENTATION_SLIDE_LIMIT,
   PRESENTATION_TEXT_LIMIT,
   SPREADSHEET_CELL_LIMIT,
+  SPREADSHEET_CELL_TEXT_LIMIT,
+  SPREADSHEET_COLUMN_LIMIT,
+  SPREADSHEET_REFERENCE_LIMIT,
+  SPREADSHEET_ROW_LIMIT,
   SPREADSHEET_SHARED_STRING_LIMIT,
   SPREADSHEET_SHARED_TEXT_LIMIT,
+  SPREADSHEET_SHEET_NAME_LIMIT,
   SPREADSHEET_SHEET_LIMIT,
+  SPREADSHEET_TOTAL_TEXT_LIMIT,
   type PresentationPreview,
   type PresentationSlide,
   type SpreadsheetCell,
@@ -318,13 +324,14 @@ function columnNumber(reference: string): number | null {
   let number = 0;
   for (const character of match[1].toUpperCase()) {
     number = number * 26 + character.charCodeAt(0) - 64;
+    if (number > SPREADSHEET_COLUMN_LIMIT) return null;
   }
   return number || null;
 }
 
 function referenceRow(reference: string): number | null {
   const row = Number(reference.match(/\d+$/)?.[0]);
-  return Number.isSafeInteger(row) && row > 0 ? row : null;
+  return Number.isSafeInteger(row) && row > 0 && row <= SPREADSHEET_ROW_LIMIT ? row : null;
 }
 
 function columnName(column: number): string {
@@ -390,8 +397,12 @@ function parseSheetDescriptors(
       }
       const relationID = attribute(tag, "id", RELATIONSHIP_ID_URI) || attribute(tag, "id");
       if (!relationID) throw previewError("This workbook contains a malformed worksheet.");
+      const name = attribute(tag, "name") || `Sheet ${sheets.length + 1}`;
+      if (name.length > SPREADSHEET_SHEET_NAME_LIMIT) {
+        throw previewError("This workbook contains a worksheet name that is too long.");
+      }
       sheets.push({
-        name: attribute(tag, "name") || `Sheet ${sheets.length + 1}`,
+        name,
         relationID,
       });
     },
@@ -406,6 +417,7 @@ function parseWorksheet(
   sharedStrings: string[],
   budget: ParseBudget,
   remainingCells: { value: number },
+  remainingText: { value: number },
 ): SpreadsheetSheet {
   const cells: SpreadsheetCell[] = [];
   let truncated = false;
@@ -420,6 +432,7 @@ function parseWorksheet(
         type: string;
         raw: string;
         inline: string;
+        textTruncated: boolean;
       }
     | undefined;
 
@@ -444,13 +457,21 @@ function parseWorksheet(
           return;
         }
         const declaredReference = attribute(tag, "r");
+        if (declaredReference.length > SPREADSHEET_REFERENCE_LIMIT) {
+          throw previewError("This workbook contains an invalid cell reference.");
+        }
         const declaredColumn = columnNumber(declaredReference);
-        fallbackRow = referenceRow(declaredReference) ?? fallbackRow;
+        const declaredRow = referenceRow(declaredReference);
+        if (declaredReference && (!declaredColumn || !declaredRow)) {
+          throw previewError("This workbook contains an invalid cell reference.");
+        }
+        fallbackRow = declaredRow ?? fallbackRow;
         current = {
           reference: declaredReference || `${columnName(nextColumn)}${fallbackRow}`,
           type: attribute(tag, "t"),
           raw: "",
           inline: "",
+          textTruncated: false,
         };
         nextColumn = declaredColumn ? declaredColumn + 1 : nextColumn + 1;
       } else if (current && tag.local === "v") {
@@ -461,8 +482,19 @@ function parseWorksheet(
     },
     text: (text) => {
       if (!current) return;
-      if (valueDepth > 0) current.raw += text;
-      if (inlineDepth > 0) current.inline += text;
+      const key = valueDepth > 0 ? "raw" : inlineDepth > 0 ? "inline" : null;
+      if (!key) return;
+      const remaining = SPREADSHEET_CELL_TEXT_LIMIT - current[key].length;
+      if (remaining <= 0) {
+        current.textTruncated = true;
+        truncated = true;
+        return;
+      }
+      current[key] += text.slice(0, remaining);
+      if (text.length > remaining) {
+        current.textTruncated = true;
+        truncated = true;
+      }
     },
     close: (tag) => {
       if (tag.local === "v" && current) {
@@ -480,7 +512,11 @@ function parseWorksheet(
           : current.type === "inlineStr"
             ? current.inline
             : current.raw;
-      cells.push({ reference: current.reference, value });
+      const available = Math.min(SPREADSHEET_CELL_TEXT_LIMIT, Math.max(0, remainingText.value));
+      const boundedValue = value.slice(0, available);
+      remainingText.value -= boundedValue.length;
+      if (boundedValue.length < value.length || current.textTruncated) truncated = true;
+      cells.push({ reference: current.reference, value: boundedValue });
       remainingCells.value -= 1;
       current = undefined;
       valueDepth = 0;
@@ -513,6 +549,7 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
   const descriptors = parseSheetDescriptors(partText(parts, workbookPart), workbookPart, budget);
   const sheets: SpreadsheetSheet[] = [];
   const remainingCells = { value: SPREADSHEET_CELL_LIMIT };
+  const remainingText = { value: SPREADSHEET_TOTAL_TEXT_LIMIT };
   const seenTargets = new Set<string>();
   for (const descriptor of descriptors) {
     const worksheetPart = relatedPart(
@@ -534,6 +571,7 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
         sharedStrings,
         budget,
         remainingCells,
+        remainingText,
       ),
     );
   }

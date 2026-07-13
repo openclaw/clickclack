@@ -3,6 +3,10 @@ import { deflateRawSync } from "node:zlib";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
 import { parseSpreadsheet } from "../../apps/web/src/lib/office-parser";
 import {
+  SPREADSHEET_CELL_TEXT_LIMIT,
+  SPREADSHEET_TOTAL_TEXT_LIMIT,
+} from "../../apps/web/src/lib/office";
+import {
   assertSafePDFCanvas,
   PDF_CANVAS_DIMENSION_LIMIT,
   PDF_CANVAS_PIXEL_LIMIT,
@@ -171,6 +175,27 @@ function sparseWorkbookFixture(): Buffer {
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sparse" r:id="rId1"/></sheets></workbook>`,
     "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><c r="A1" t="inlineStr"><is><t>Origin</t></is></c><c r="CV1000"><v>999</v></c></sheetData></worksheet>`,
+  });
+}
+
+function longCellWorkbook(): Buffer {
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Long value" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>${"x".repeat(SPREADSHEET_CELL_TEXT_LIMIT + 1_000)}</t></is></c></row></sheetData></worksheet>`,
+  });
+}
+
+function cumulativeCellTextWorkbook(): Buffer {
+  const cells = Array.from(
+    { length: Math.ceil(SPREADSHEET_TOTAL_TEXT_LIMIT / SPREADSHEET_CELL_TEXT_LIMIT) + 1 },
+    (_, index) =>
+      `<c r="A${index + 1}" t="inlineStr"><is><t>${"x".repeat(SPREADSHEET_CELL_TEXT_LIMIT)}</t></is></c>`,
+  ).join("");
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Text budget" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData>${cells}</sheetData></worksheet>`,
   });
 }
 
@@ -380,6 +405,20 @@ test("stops Office entries when output exceeds the declared size", () => {
   }
 });
 
+test("bounds spreadsheet cell text and cumulative preview output", () => {
+  const longCell = parseSpreadsheet(new Uint8Array(longCellWorkbook()));
+  expect(longCell.sheets[0].cells[0].value).toHaveLength(SPREADSHEET_CELL_TEXT_LIMIT);
+  expect(longCell.sheets[0].truncated).toBe(true);
+
+  const cumulative = parseSpreadsheet(new Uint8Array(cumulativeCellTextWorkbook()));
+  const outputLength = cumulative.sheets[0].cells.reduce(
+    (total, cell) => total + cell.value.length,
+    0,
+  );
+  expect(outputLength).toBe(SPREADSHEET_TOTAL_TEXT_LIMIT);
+  expect(cumulative.sheets[0].truncated).toBe(true);
+});
+
 test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
   const { channel } = await seedArtifacts(page, [
     {
@@ -396,6 +435,11 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       filename: "sparse.xlsx",
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       body: sparseWorkbookFixture(),
+    },
+    {
+      filename: "long-cell.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: longCellWorkbook(),
     },
     {
       filename: "absolute.xlsx",
@@ -494,6 +538,18 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
   await page.getByRole("button", { name: "Open sparse.xlsx" }).click();
   await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
   await expect(viewer.locator("tbody td")).toHaveCount(10_000);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open long-cell.xlsx" }).click();
+  await expect(viewer.getByText("Preview is limited to 10,000 cells")).toBeVisible();
+  await expect
+    .poll(() =>
+      viewer
+        .locator("tbody td")
+        .first()
+        .evaluate((cell) => cell.getBoundingClientRect().width),
+    )
+    .toBeLessThanOrEqual(160);
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await page.getByRole("button", { name: "Open launch.pptx" }).click();

@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	maxPendingOAuthTransactions        = 8192
-	maxPendingOAuthTransactionsPerUser = 8
-	maxPendingDesktopOAuthGrants       = 4096
+	maxPendingOAuthTransactions           = 8192
+	maxPendingOAuthTransactionsPerBinding = 8
+	maxPendingDesktopOAuthGrants          = 4096
 )
 
 func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OAuthTransaction) error {
@@ -42,7 +42,7 @@ func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OA
 	if err != nil {
 		return err
 	}
-	if count >= maxPendingOAuthTransactionsPerUser {
+	if count >= maxPendingOAuthTransactionsPerBinding {
 		return store.ErrOAuthCapacityExceeded
 	}
 	if transaction.ID == "" {

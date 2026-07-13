@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	maxPendingOAuthTransactions        = 8192
-	maxPendingOAuthTransactionsPerUser = 8
-	maxPendingDesktopOAuthGrants       = 4096
+	maxPendingOAuthTransactions           = 8192
+	maxPendingOAuthTransactionsPerBinding = 8
+	maxPendingDesktopOAuthGrants          = 4096
+
+	postgresOAuthTransactionCapacityLockKey int64 = 0x63636f6175746874
+	postgresDesktopGrantCapacityLockKey     int64 = 0x63636f6175746867
 )
 
 func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OAuthTransaction) error {
@@ -27,6 +30,9 @@ func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OA
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, postgresOAuthTransactionCapacityLockKey); err != nil {
+		return err
+	}
 	qtx := s.q.WithTx(tx)
 	if _, err := qtx.DeleteExpiredOAuthTransactions(ctx, transaction.CreatedAt.Unix()); err != nil {
 		return err
@@ -42,7 +48,7 @@ func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OA
 	if err != nil {
 		return err
 	}
-	if count >= maxPendingOAuthTransactionsPerUser {
+	if count >= maxPendingOAuthTransactionsPerBinding {
 		return store.ErrOAuthCapacityExceeded
 	}
 	if transaction.ID == "" {
@@ -112,6 +118,9 @@ func (s *Store) CreateDesktopOAuthGrant(ctx context.Context, grant store.Desktop
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, postgresDesktopGrantCapacityLockKey); err != nil {
+		return err
+	}
 	qtx := s.q.WithTx(tx)
 	if _, err := qtx.DeleteExpiredDesktopOAuthGrants(ctx, grant.CreatedAt.Unix()); err != nil {
 		return err

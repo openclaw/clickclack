@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,6 +70,61 @@ func TestPostgresOAuthTransactionsAndDesktopGrants(t *testing.T) {
 	}
 	if _, err := st.ConsumeDesktopOAuthGrant(ctx, grant.GrantHash, grant.DesktopChallenge, now); !errors.Is(err, store.ErrDesktopOAuthGrantInvalid) {
 		t.Fatalf("expected grant replay rejection, got %v", err)
+	}
+}
+
+func TestPostgresOAuthTransactionCapacityIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	bindingHash := postgresOAuthHash("shared-binding")
+	newTransaction := func(index int) store.OAuthTransaction {
+		return store.OAuthTransaction{
+			StateHash:          postgresOAuthHash(fmt.Sprintf("state-%d", index)),
+			BrowserBindingHash: bindingHash,
+			Mode:               store.OAuthModeBrowser,
+			PKCEVerifier:       fmt.Sprintf("verifier-%d", index),
+			CreatedAt:          now,
+			ExpiresAt:          now.Add(10 * time.Minute),
+		}
+	}
+	for index := 0; index < maxPendingOAuthTransactionsPerBinding-1; index++ {
+		if err := st.CreateOAuthTransaction(ctx, newTransaction(index)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const contenders = 16
+	start := make(chan struct{})
+	var successes atomic.Int64
+	var wg sync.WaitGroup
+	errs := make(chan error, contenders)
+	for index := 0; index < contenders; index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			err := st.CreateOAuthTransaction(ctx, newTransaction(100+index))
+			if err == nil {
+				successes.Add(1)
+				return
+			}
+			if !errors.Is(err, store.ErrOAuthCapacityExceeded) {
+				errs <- err
+			}
+		}(index)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("unexpected concurrent create error: %v", err)
+	}
+	if successes.Load() != 1 {
+		t.Fatalf("expected exactly one final transaction, got %d", successes.Load())
 	}
 }
 

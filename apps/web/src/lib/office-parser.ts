@@ -367,6 +367,7 @@ function parseSharedStrings(source: string, part: string, budget: ParseBudget): 
   const values: string[] = [];
   let current: string | null = null;
   let textDepth = 0;
+  let phoneticDepth = 0;
   let characters = 0;
   parseXML(source, part, budget, {
     open: (tag) => {
@@ -375,7 +376,9 @@ function parseSharedStrings(source: string, part: string, budget: ParseBudget): 
           throw previewError("This workbook has too many shared strings to preview safely.");
         }
         current = "";
-      } else if (tag.local === "t" && current !== null) {
+      } else if (tag.local === "rPh" && current !== null) {
+        phoneticDepth += 1;
+      } else if (tag.local === "t" && current !== null && phoneticDepth === 0) {
         textDepth += 1;
       }
     },
@@ -388,12 +391,15 @@ function parseSharedStrings(source: string, part: string, budget: ParseBudget): 
       current += text;
     },
     close: (tag) => {
-      if (tag.local === "t" && current !== null) {
+      if (tag.local === "t" && current !== null && textDepth > 0) {
         textDepth -= 1;
+      } else if (tag.local === "rPh" && current !== null) {
+        phoneticDepth -= 1;
       } else if (tag.local === "si" && current !== null) {
         values.push(current);
         current = null;
         textDepth = 0;
+        phoneticDepth = 0;
       }
     },
   });
@@ -453,6 +459,7 @@ function parseWorksheet(
   let seenRow = false;
   let valueDepth = 0;
   let inlineDepth = 0;
+  let phoneticDepth = 0;
   let current:
     | {
         reference: string;
@@ -501,9 +508,11 @@ function parseWorksheet(
           textTruncated: false,
         };
         nextColumn = declaredColumn ? declaredColumn + 1 : nextColumn + 1;
+      } else if (current && tag.local === "rPh") {
+        phoneticDepth += 1;
       } else if (current && tag.local === "v") {
         valueDepth += 1;
-      } else if (current && tag.local === "t") {
+      } else if (current && tag.local === "t" && phoneticDepth === 0) {
         inlineDepth += 1;
       }
     },
@@ -528,8 +537,12 @@ function parseWorksheet(
         valueDepth -= 1;
         return;
       }
-      if (tag.local === "t" && current) {
+      if (tag.local === "t" && current && inlineDepth > 0) {
         inlineDepth -= 1;
+        return;
+      }
+      if (tag.local === "rPh" && current) {
+        phoneticDepth -= 1;
         return;
       }
       if (tag.local !== "c" || !current) return;
@@ -554,6 +567,7 @@ function parseWorksheet(
       current = undefined;
       valueDepth = 0;
       inlineDepth = 0;
+      phoneticDepth = 0;
     },
   });
   return { name, cells, truncated };
@@ -584,14 +598,31 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
   const remainingCells = { value: SPREADSHEET_CELL_LIMIT };
   const remainingText = { value: SPREADSHEET_TOTAL_TEXT_LIMIT };
   const seenTargets = new Set<string>();
+  let unsupportedSheets = 0;
   for (const descriptor of descriptors.sheets) {
-    const worksheetPart = relatedPart(
-      workbookPart,
-      relationships,
-      descriptor.relationID,
-      "/worksheet",
+    const matchingRelationships = relationships.filter(
+      (relationship) => relationship.id === descriptor.relationID,
     );
-    if (!worksheetPart) throw previewError("This workbook contains a malformed worksheet.");
+    if (matchingRelationships.length !== 1) {
+      throw previewError("This workbook contains a malformed worksheet.");
+    }
+    const relationship = matchingRelationships[0];
+    const relationshipType = relationship.type.toLowerCase();
+    if (!relationshipType.endsWith("/worksheet")) {
+      const supportedOmission = [
+        "/chartsheet",
+        "/dialogsheet",
+        "/macrosheet",
+        "/xlmacrosheet",
+        "/xlintlmacrosheet",
+      ].some((suffix) => relationshipType.endsWith(suffix));
+      if (!supportedOmission) {
+        throw previewError("This workbook contains a malformed worksheet.");
+      }
+      unsupportedSheets += 1;
+      continue;
+    }
+    const worksheetPart = resolvePart(workbookPart, relationship.target);
     if (seenTargets.has(worksheetPart)) {
       throw previewError("This workbook contains duplicate worksheet relationships.");
     }
@@ -609,7 +640,11 @@ export function parseSpreadsheet(bytes: Uint8Array): SpreadsheetPreview {
     );
   }
   if (!sheets.length) throw previewError("This workbook has no readable worksheets.");
-  return { sheets, hiddenSheets: descriptors.hiddenSheets };
+  return {
+    sheets,
+    hiddenSheets: descriptors.hiddenSheets,
+    unsupportedSheets,
+  };
 }
 
 type SlideDescriptor = { relationID: string };
@@ -673,22 +708,25 @@ function parseSlide(
     },
     text: (text) => {
       if (hidden || current === null || textDepth === 0) return;
-      const available = Math.min(
-        PRESENTATION_TEXT_LIMIT - characters,
-        PRESENTATION_TOTAL_TEXT_LIMIT - outputBudget.text,
-      );
-      if (available <= 0) {
+      const slideAvailable = PRESENTATION_TEXT_LIMIT - characters;
+      const totalAvailable = PRESENTATION_TOTAL_TEXT_LIMIT - outputBudget.text;
+      if (totalAvailable <= 0) {
         outputBudget.exhausted = true;
         outputBudget.truncated = true;
         return;
       }
+      if (slideAvailable <= 0) {
+        outputBudget.truncated = true;
+        return;
+      }
+      const available = Math.min(slideAvailable, totalAvailable);
       const boundedText = text.slice(0, available);
       current += boundedText;
       characters += boundedText.length;
       outputBudget.text += boundedText.length;
       if (boundedText.length < text.length) {
-        outputBudget.exhausted = true;
         outputBudget.truncated = true;
+        if (available === totalAvailable) outputBudget.exhausted = true;
       }
     },
     close: (tag) => {

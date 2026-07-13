@@ -610,6 +610,7 @@
       <span>{spreadsheet.sheets.length} {spreadsheet.sheets.length === 1 ? "sheet" : "sheets"}</span>
       <span>Raw cached values; number and date formatting omitted</span>
       {#if spreadsheet.hiddenSheets > 0}<span>{spreadsheet.hiddenSheets} hidden {spreadsheet.hiddenSheets === 1 ? "sheet" : "sheets"} omitted</span>{/if}
+      {#if spreadsheet.unsupportedSheets > 0}<span>{spreadsheet.unsupportedSheets} non-worksheet {spreadsheet.unsupportedSheets === 1 ? "sheet" : "sheets"} omitted</span>{/if}
     </div>
     <div class="artifact-viewer__spreadsheet" role="region" aria-label={`${spreadsheet.sheets[activeSheet].name} worksheet`} tabindex="0">
       <table>

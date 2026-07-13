@@ -65,6 +65,22 @@ const CODE_CONTENT_TYPES = new Set([
   "text/yaml",
 ]);
 
+const SPREADSHEET_CONTENT_TYPES = new Set([
+  "application/vnd.ms-excel.sheet.macroenabled.12",
+  "application/vnd.ms-excel.template.macroenabled.12",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+]);
+
+const PRESENTATION_CONTENT_TYPES = new Set([
+  "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+  "application/vnd.ms-powerpoint.slideshow.macroenabled.12",
+  "application/vnd.ms-powerpoint.template.macroenabled.12",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+  "application/vnd.openxmlformats-officedocument.presentationml.template",
+]);
+
 export function artifactExtension(filename: string): string {
   const basename = filename.toLowerCase().split(/[\\/]/).pop() || "";
   const dot = basename.lastIndexOf(".");
@@ -87,14 +103,12 @@ export function classifyArtifact(upload: Upload): ArtifactKind {
   }
   if (
     ["xlsx", "xlsm", "xltx", "xltm"].includes(extension) ||
-    contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-    contentType === "application/vnd.ms-excel.sheet.macroenabled.12"
+    SPREADSHEET_CONTENT_TYPES.has(contentType)
   )
     return "spreadsheet";
   if (
     ["pptx", "pptm", "potx", "potm", "ppsx", "ppsm"].includes(extension) ||
-    contentType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    contentType === "application/vnd.ms-powerpoint.presentation.macroenabled.12"
+    PRESENTATION_CONTENT_TYPES.has(contentType)
   )
     return "presentation";
   if (extension === "md" || extension === "markdown" || contentType === "text/markdown")

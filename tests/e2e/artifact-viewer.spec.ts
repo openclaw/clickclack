@@ -136,6 +136,35 @@ function densePresentationFixture(): Buffer {
   });
 }
 
+function phoneticWorkbookFixture(): Buffer {
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Phonetic text" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rIdShared" Type="${OFFICE_RELATIONSHIP_NS}/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst><si><t>Tokyo</t><rPh sb="0" eb="5"><t>とうきょう</t></rPh></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>Kyoto</t><rPh sb="0" eb="5"><t>きょうと</t></rPh></is></c></row></sheetData></worksheet>`,
+  });
+}
+
+function mixedSheetTypesWorkbook(): Buffer {
+  return workbookPackage({
+    "xl/workbook.xml": `<workbook xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sheets><sheet name="Data" r:id="rIdData"/><sheet name="Chart" r:id="rIdChart"/><sheet name="Dialog" r:id="rIdDialog"/><sheet name="Macro" r:id="rIdMacro"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdData" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rIdChart" Type="${OFFICE_RELATIONSHIP_NS}/chartsheet" Target="chartsheets/sheet1.xml"/><Relationship Id="rIdDialog" Type="${OFFICE_RELATIONSHIP_NS}/dialogsheet" Target="dialogsheets/sheet1.xml"/><Relationship Id="rIdMacro" Type="${OFFICE_RELATIONSHIP_NS}/macrosheet" Target="macrosheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Visible worksheet data</t></is></c></row></sheetData></worksheet>`,
+    "xl/chartsheets/sheet1.xml": `<chartsheet/>`,
+    "xl/dialogsheets/sheet1.xml": `<dialogsheet/>`,
+    "xl/macrosheets/sheet1.xml": `<macrosheet/>`,
+  });
+}
+
+function perSlideTextLimitPresentation(): Buffer {
+  return presentationPackage({
+    "ppt/presentation.xml": `<presentation xmlns:r="${OFFICE_RELATIONSHIP_NS}"><sldIdLst><sldId r:id="rId1"/><sldId r:id="rId2"/></sldIdLst></presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide2.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Oversized slide</t></r></p><p><r><t>${"x".repeat(70 * 1024)}</t></r></p></txBody></sp></sld>`,
+    "ppt/slides/slide2.xml": `<sld><sp><txBody><p><r><t>Later slide remains available</t></r></p></txBody></sp></sld>`,
+  });
+}
+
 function absoluteRelationshipWorkbook(): Buffer {
   return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Root relative" r:id="rId1"/></sheets></workbook>`,
@@ -467,12 +496,36 @@ test("classifies artifacts by filename and original MIME metadata", () => {
       uploadShape("forecast.xlsm", "application/vnd.ms-excel.sheet.macroenabled.12"),
     ),
   ).toBe("spreadsheet");
+  expect(
+    classifyArtifact(
+      uploadShape(
+        "template",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+      ),
+    ),
+  ).toBe("spreadsheet");
+  expect(
+    classifyArtifact(uploadShape("template", "application/vnd.ms-excel.template.macroenabled.12")),
+  ).toBe("spreadsheet");
   expect(classifyArtifact(uploadShape("launch.pptx", "application/octet-stream"))).toBe(
     "presentation",
   );
   expect(
     classifyArtifact(
       uploadShape("launch.pptm", "application/vnd.ms-powerpoint.presentation.macroenabled.12"),
+    ),
+  ).toBe("presentation");
+  expect(
+    classifyArtifact(
+      uploadShape(
+        "template",
+        "application/vnd.openxmlformats-officedocument.presentationml.template",
+      ),
+    ),
+  ).toBe("presentation");
+  expect(
+    classifyArtifact(
+      uploadShape("slideshow", "application/vnd.ms-powerpoint.slideshow.macroenabled.12"),
     ),
   ).toBe("presentation");
   expect(classifyArtifact(uploadShape("brief.docx", "application/octet-stream"))).toBe("docx");
@@ -554,6 +607,21 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       filename: "dense.pptx",
       contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       body: densePresentationFixture(),
+    },
+    {
+      filename: "phonetic.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: phoneticWorkbookFixture(),
+    },
+    {
+      filename: "mixed-sheets.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body: mixedSheetTypesWorkbook(),
+    },
+    {
+      filename: "per-slide-limit.pptx",
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      body: perSlideTextLimitPresentation(),
     },
     {
       filename: "sparse.xlsx",
@@ -668,6 +736,25 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
       }),
     )
     .toBe(true);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open phonetic.xlsx" }).click();
+  await expect(viewer.getByText("Tokyo", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("Kyoto", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("とうきょう")).toHaveCount(0);
+  await expect(viewer.getByText("きょうと")).toHaveCount(0);
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open mixed-sheets.xlsx" }).click();
+  await expect(viewer.getByText("Visible worksheet data")).toBeVisible();
+  await expect(viewer.getByText("3 non-worksheet sheets omitted")).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await page.getByRole("button", { name: "Open per-slide-limit.pptx" }).click();
+  await expect(viewer.getByLabel("Slide 1: Oversized slide")).toBeVisible();
+  await viewer.getByRole("button", { name: "Next" }).click();
+  await expect(viewer.getByLabel("Slide 2: Later slide remains available")).toBeVisible();
+  await expect(viewer.getByText("Some slide content was omitted by preview limits.")).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
   await page.getByRole("button", { name: "Open absolute.xlsx" }).click();

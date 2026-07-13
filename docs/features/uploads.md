@@ -81,8 +81,8 @@ server continues to serve it as a hardened download.
   limits fall back to the authenticated download.
 - XLSX-family workbooks render bounded raw cached cell values in a scrollable
   grid with worksheet tabs. Number, currency, and date formatting is not
-  reconstructed, and hidden worksheets are omitted. Formulas use their cached
-  values; macros are never executed.
+  reconstructed, and hidden or non-worksheet sheets are omitted. Formulas use
+  their cached values; macros are never executed.
 - PPTX-family decks render a text outline with previous and next controls.
   Visuals, layout, animations, speaker notes, and hidden slides are omitted.
   The original remains available for download when visual fidelity matters.

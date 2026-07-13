@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
@@ -46,9 +48,19 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tokenRequests := make(chan oauthTokenRequest, 4)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
+			if err := r.ParseForm(); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			tokenRequests <- oauthTokenRequest{
+				RedirectURL: r.FormValue("redirect_uri"),
+				Verifier:    r.FormValue("code_verifier"),
+			}
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "d-token"})
 		case "/user":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 77, "login": "desktop", "email": "desktop@example.com"})
@@ -78,21 +90,17 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), provider.URL+"/authorize?") {
 		t.Fatalf("unexpected desktop start response: %s %s", resp.Status, resp.Header.Get("Location"))
 	}
-	stateCookie := findCookie(resp.Cookies(), "cc_github_state")
-	desktopCookie := findCookie(resp.Cookies(), "cc_github_desktop_state")
-	challengeCookie := findCookie(resp.Cookies(), "cc_github_desktop_challenge")
+	state, bindingCookie, authorizationURL := oauthStartResponse(t, resp)
 	resp.Body.Close()
-	if stateCookie == nil || desktopCookie == nil || desktopCookie.Value != stateCookie.Value || challengeCookie == nil || challengeCookie.Value != challenge {
-		t.Fatalf("expected matching desktop state and challenge cookies, got %#v %#v %#v", stateCookie, desktopCookie, challengeCookie)
+	if authorizationURL.Query().Get("code_challenge_method") != "S256" || authorizationURL.Query().Get("code_challenge") == "" {
+		t.Fatalf("expected GitHub PKCE challenge, got %s", authorizationURL.String())
 	}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+stateCookie.Value, nil)
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(stateCookie)
-	req.AddCookie(desktopCookie)
-	req.AddCookie(challengeCookie)
+	req.AddCookie(bindingCookie)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -102,16 +110,23 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	grantCode := callback.Query().Get("code")
-	if resp.StatusCode != http.StatusFound || callback.Scheme != "clickclack" || callback.Host != "auth" || callback.Path != "/callback" || !validDesktopCode(grantCode, 32, 32) {
+	if resp.StatusCode != http.StatusFound || callback.Scheme != "clickclack" || callback.Host != "auth" || callback.Path != "/callback" || !validDesktopCode(grantCode, oauthEncodedSecretLength, oauthEncodedSecretLength) {
 		t.Fatalf("unexpected desktop callback: %s %s", resp.Status, callback.String())
 	}
 	if cookie := findCookie(resp.Cookies(), "cc_session"); cookie != nil {
 		t.Fatalf("desktop callback leaked a browser session cookie: %#v", cookie)
 	}
-	if cookie := findCookie(resp.Cookies(), "cc_github_desktop_challenge"); cookie == nil || cookie.MaxAge >= 0 {
-		t.Fatalf("expected desktop challenge cookie to be cleared, got %#v", cookie)
-	}
 	resp.Body.Close()
+	tokenRequest := <-tokenRequests
+	if tokenRequest.RedirectURL != server.URL+"/api/auth/github/callback" {
+		t.Fatalf("unexpected token redirect URI %q", tokenRequest.RedirectURL)
+	}
+	if desktopCodeChallenge(tokenRequest.Verifier) != authorizationURL.Query().Get("code_challenge") {
+		t.Fatal("token exchange verifier did not match the authorization PKCE challenge")
+	}
+
+	consumeServer := httptest.NewServer(New(st, realtime.NewHub(), Options{}).Handler())
+	t.Cleanup(consumeServer.Close)
 
 	consume := func(origin, candidateVerifier string) *http.Response {
 		t.Helper()
@@ -119,7 +134,7 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req, err := http.NewRequest(http.MethodPost, server.URL+"/api/auth/github/desktop/consume", bytes.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, consumeServer.URL+"/api/auth/github/desktop/consume", bytes.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,18 +154,18 @@ func TestGitHubDesktopOAuthFlow(t *testing.T) {
 		t.Fatalf("expected cross-site consume rejection, got %s", resp.Status)
 	}
 	resp.Body.Close()
-	resp = consume(server.URL, strings.Repeat("x", 43))
+	resp = consume(consumeServer.URL, strings.Repeat("x", 43))
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected wrong verifier rejection, got %s", resp.Status)
 	}
 	resp.Body.Close()
-	resp = consume(server.URL, verifier)
+	resp = consume(consumeServer.URL, verifier)
 	sessionCookie := findCookie(resp.Cookies(), "cc_session")
 	if resp.StatusCode != http.StatusOK || sessionCookie == nil || sessionCookie.Value == "" {
 		t.Fatalf("expected desktop session cookie, got %s %#v", resp.Status, sessionCookie)
 	}
 	resp.Body.Close()
-	resp = consume(server.URL, verifier)
+	resp = consume(consumeServer.URL, verifier)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected one-time grant rejection, got %s", resp.Status)
 	}
@@ -170,11 +185,17 @@ func TestGitHubOAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tokenRequests := make(chan oauthTokenRequest, 16)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
+			w.Header().Set("Content-Type", "application/json")
 			if err := r.ParseForm(); err != nil {
 				t.Fatal(err)
+			}
+			tokenRequests <- oauthTokenRequest{
+				RedirectURL: r.FormValue("redirect_uri"),
+				Verifier:    r.FormValue("code_verifier"),
 			}
 			switch r.FormValue("code") {
 			case "ok":
@@ -223,22 +244,31 @@ func TestGitHubOAuthFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), provider.URL+"/authorize?") {
 		t.Fatalf("unexpected start response: %s %s", resp.Status, resp.Header.Get("Location"))
 	}
-	var stateCookie *http.Cookie
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "cc_github_state" {
-			stateCookie = cookie
-		}
-	}
+	state, bindingCookie, authorizationURL := oauthStartResponse(t, resp)
 	resp.Body.Close()
-	if stateCookie == nil || stateCookie.Value == "" {
-		t.Fatal("expected github state cookie")
+	if authorizationURL.Query().Get("code_challenge_method") != "S256" || authorizationURL.Query().Get("code_challenge") == "" {
+		t.Fatalf("expected GitHub PKCE challenge, got %s", authorizationURL.String())
 	}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+stateCookie.Value, nil)
+	wrongBindingRequest, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(stateCookie)
+	wrongBindingRequest.AddCookie(&http.Cookie{Name: bindingCookie.Name, Value: strings.Repeat("x", oauthEncodedSecretLength)})
+	wrongBindingResponse, err := client.Do(wrongBindingRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongBindingResponse.Body.Close()
+	if wrongBindingResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected wrong browser binding rejection, got %s", wrongBindingResponse.Status)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(bindingCookie)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -256,11 +286,13 @@ func TestGitHubOAuthFlow(t *testing.T) {
 	if sessionCookie == nil || sessionCookie.Value == "" {
 		t.Fatal("expected session cookie")
 	}
-	clearedStateCookie := findCookie(resp.Cookies(), "cc_github_state")
-	if clearedStateCookie == nil || clearedStateCookie.MaxAge >= 0 {
-		t.Fatalf("expected github state cookie to be cleared, got %#v", clearedStateCookie)
+	tokenRequest := <-tokenRequests
+	if tokenRequest.RedirectURL != server.URL+"/api/auth/github/callback" {
+		t.Fatalf("unexpected token redirect URI %q", tokenRequest.RedirectURL)
 	}
-
+	if desktopCodeChallenge(tokenRequest.Verifier) != authorizationURL.Query().Get("code_challenge") {
+		t.Fatal("token exchange verifier did not match the authorization PKCE challenge")
+	}
 	req, err = http.NewRequest(http.MethodGet, server.URL+"/api/me", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +369,13 @@ func TestGitHubOAuthFlow(t *testing.T) {
 		{"missing profile id", "missing-id", http.StatusBadGateway},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			path := server.URL + "/api/auth/github/callback?state=" + stateCookie.Value
+			startResp, err := client.Get(server.URL + "/api/auth/github/start")
+			if err != nil {
+				t.Fatal(err)
+			}
+			testState, testBinding, _ := oauthStartResponse(t, startResp)
+			startResp.Body.Close()
+			path := server.URL + "/api/auth/github/callback?state=" + testState
 			if tc.code != "" {
 				path += "&code=" + tc.code
 			}
@@ -345,7 +383,7 @@ func TestGitHubOAuthFlow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.AddCookie(stateCookie)
+			req.AddCookie(testBinding)
 			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatal(err)
@@ -368,8 +406,180 @@ func TestGitHubOAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "https://public.example"}})
-	if got := srv.githubRedirectURL(req); got != "https://public.example/api/auth/github/callback" {
+	if got, err := srv.githubRedirectURL(req); err != nil || got != "https://public.example/api/auth/github/callback" {
 		t.Fatalf("unexpected public redirect url %q", got)
+	}
+}
+
+func TestNamespacedOAuthSessionsCoexistAcrossSameHostPorts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "shared-token"})
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 91, "login": "shared", "email": "shared@example.com"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+
+	newInstance := func(namespace string) (*httptest.Server, *sqlitestore.Store, authpolicy.CookieNames) {
+		t.Helper()
+		st, err := sqlitestore.Open("sqlite://" + filepath.Join(t.TempDir(), namespace+".db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = st.Close() })
+		if err := st.Migrate(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var handler http.Handler
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler.ServeHTTP(w, r)
+		}))
+		t.Cleanup(server.Close)
+		names, err := authpolicy.NewCookieNames(namespace, server.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler = New(st, realtime.NewHub(), Options{
+			CookieNames:    names,
+			DisableDevAuth: true,
+			GitHubOAuth: GitHubOAuthConfig{
+				ClientID:     "client",
+				ClientSecret: "secret",
+				PublicURL:    server.URL,
+				AuthURL:      provider.URL + "/authorize",
+				TokenURL:     provider.URL + "/token",
+				UserURL:      provider.URL + "/user",
+				EmailsURL:    provider.URL + "/emails",
+			},
+		}).Handler()
+		return server, st, names
+	}
+
+	first, _, firstNames := newInstance("first")
+	second, _, secondNames := newInstance("second")
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+		Jar:           jar,
+		Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+	}
+	signIn := func(server *httptest.Server, names authpolicy.CookieNames) {
+		t.Helper()
+		resp, err := client.Get(server.URL + "/api/auth/github/start")
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, _, _ := oauthStartResponseWithCookieName(t, resp, names.OAuthBinding)
+		resp.Body.Close()
+		resp, err = client.Get(server.URL + "/api/auth/github/callback?code=ok&state=" + state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusFound || findCookie(resp.Cookies(), names.Session) == nil {
+			t.Fatalf("expected namespaced session from %s, got %s %#v", server.URL, resp.Status, resp.Cookies())
+		}
+	}
+	signIn(first, firstNames)
+	signIn(second, secondNames)
+
+	for _, server := range []*httptest.Server{first, second} {
+		resp, err := client.Get(server.URL + "/api/me")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected independent session at %s, got %s", server.URL, resp.Status)
+		}
+	}
+	firstURL, _ := url.Parse(first.URL)
+	cookies := jar.Cookies(firstURL)
+	if findCookie(cookies, firstNames.Session) == nil || findCookie(cookies, secondNames.Session) == nil {
+		t.Fatalf("expected both port-shared cookies to coexist, got %#v", cookies)
+	}
+}
+
+func TestGitHubOAuthAllowsConcurrentStartsForOneBrowser(t *testing.T) {
+	t.Parallel()
+	st := newEmptyHTTPStore(t)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			if err := r.ParseForm(); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": r.FormValue("code")})
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 92, "login": "concurrent", "email": "concurrent@example.com"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      provider.URL + "/authorize",
+		TokenURL:     provider.URL + "/token",
+		UserURL:      provider.URL + "/user",
+		EmailsURL:    provider.URL + "/emails",
+	}}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+
+	firstResponse, err := client.Get(server.URL + "/api/auth/github/start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstState, bindingCookie, _ := oauthStartResponse(t, firstResponse)
+	firstResponse.Body.Close()
+
+	secondRequest, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/start", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondRequest.AddCookie(bindingCookie)
+	secondResponse, err := client.Do(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondURL, err := url.Parse(secondResponse.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondState := secondURL.Query().Get("state")
+	secondResponse.Body.Close()
+	if !validDesktopCode(secondState, oauthEncodedSecretLength, oauthEncodedSecretLength) || secondState == firstState {
+		t.Fatalf("unexpected concurrent state values %q and %q", firstState, secondState)
+	}
+
+	for _, state := range []string{firstState, secondState} {
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code="+state+"&state="+state, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.AddCookie(bindingCookie)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("expected concurrent callback success, got %s", resp.Status)
+		}
 	}
 }
 
@@ -388,6 +598,7 @@ func TestGitHubOAuthModeratorOrgJoinsGuestWorkspaceAsModerator(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "mod-token"})
 		case "/user":
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 43, "login": "mod", "email": "mod@example.com"})
@@ -423,17 +634,14 @@ func TestGitHubOAuthModeratorOrgJoinsGuestWorkspaceAsModerator(t *testing.T) {
 	if scope := location.Query().Get("scope"); scope != "read:user user:email read:org" {
 		t.Fatalf("unexpected scope %q", scope)
 	}
-	stateCookie := findCookie(resp.Cookies(), "cc_github_state")
+	state, bindingCookie, _ := oauthStartResponse(t, resp)
 	resp.Body.Close()
-	if stateCookie == nil {
-		t.Fatal("expected state cookie")
-	}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+stateCookie.Value, nil)
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=ok&state="+state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(stateCookie)
+	req.AddCookie(bindingCookie)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -545,6 +753,7 @@ func TestGitHubOAuthAllowedOrg(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
+			w.Header().Set("Content-Type", "application/json")
 			if err := r.ParseForm(); err != nil {
 				t.Fatal(err)
 			}
@@ -597,17 +806,14 @@ func TestGitHubOAuthAllowedOrg(t *testing.T) {
 	if scope := location.Query().Get("scope"); scope != "read:user user:email read:org" {
 		t.Fatalf("unexpected scope %q", scope)
 	}
-	stateCookie := findCookie(resp.Cookies(), "cc_github_state")
+	state, bindingCookie, _ := oauthStartResponse(t, resp)
 	resp.Body.Close()
-	if stateCookie == nil {
-		t.Fatal("expected state cookie")
-	}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=member&state="+stateCookie.Value, nil)
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=member&state="+state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(stateCookie)
+	req.AddCookie(bindingCookie)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -642,11 +848,17 @@ func TestGitHubOAuthAllowedOrg(t *testing.T) {
 		t.Fatalf("expected default workspace membership, got %s %#v", resp.Status, workspaces.Workspaces)
 	}
 
-	req, err = http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=denied&state="+stateCookie.Value, nil)
+	resp, err = client.Get(server.URL + "/api/auth/github/start")
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(stateCookie)
+	deniedState, deniedBinding, _ := oauthStartResponse(t, resp)
+	resp.Body.Close()
+	req, err = http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code=denied&state="+deniedState, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(deniedBinding)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -761,13 +973,29 @@ func TestGitHubOAuthErrors(t *testing.T) {
 	expectStatus(t, http.MethodGet, server.URL+"/api/auth/github/start", nil, http.StatusNotImplemented)
 	expectStatus(t, http.MethodGet, server.URL+"/api/auth/github/callback?code=x&state=bad", nil, http.StatusBadRequest)
 
-	srv := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{ClientID: "c", ClientSecret: "s", TokenURL: "://bad", UserURL: "://bad"}})
+	duplicateBindingServer := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "c",
+		ClientSecret: "s",
+		AuthURL:      "https://github.example/authorize",
+	}}).Handler()
+	duplicateBindingRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/github/start", nil)
+	duplicateBindingRequest.RemoteAddr = "127.0.0.1:12345"
+	duplicateBindingRequest.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: strings.Repeat("a", oauthEncodedSecretLength)})
+	duplicateBindingRequest.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: strings.Repeat("b", oauthEncodedSecretLength)})
+	duplicateBindingRecorder := httptest.NewRecorder()
+	duplicateBindingServer.ServeHTTP(duplicateBindingRecorder, duplicateBindingRequest)
+	if duplicateBindingRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected duplicate OAuth binding rejection, got %d", duplicateBindingRecorder.Code)
+	}
+
+	srv := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{ClientID: "c", ClientSecret: "s", PublicURL: "https://example.test", TokenURL: "://bad", UserURL: "://bad"}})
 	req := httptest.NewRequest(http.MethodGet, "https://example.test/callback", nil)
 	req.TLS = &tls.ConnectionState{}
-	if got := srv.githubRedirectURL(req); got != "https://example.test/api/auth/github/callback" {
-		t.Fatalf("unexpected tls redirect %q", got)
+	redirectURL, err := srv.githubRedirectURL(req)
+	if err != nil || redirectURL != "https://example.test/api/auth/github/callback" {
+		t.Fatalf("unexpected tls redirect %q: %v", redirectURL, err)
 	}
-	if _, err := srv.exchangeGitHubCode(context.Background(), req, "x"); err == nil {
+	if _, err := srv.exchangeGitHubCode(context.Background(), "x", strings.Repeat("v", 43), redirectURL); err == nil {
 		t.Fatal("expected bad token url error")
 	}
 	if err := srv.githubGetJSON(context.Background(), "://bad", "token", &struct{}{}); err == nil {
@@ -782,4 +1010,33 @@ func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+type oauthTokenRequest struct {
+	RedirectURL string
+	Verifier    string
+}
+
+func oauthStartResponse(t *testing.T, response *http.Response) (string, *http.Cookie, *url.URL) {
+	return oauthStartResponseWithCookieName(t, response, "cc_oauth_binding")
+}
+
+func oauthStartResponseWithCookieName(t *testing.T, response *http.Response, bindingCookieName string) (string, *http.Cookie, *url.URL) {
+	t.Helper()
+	authorizationURL, err := url.Parse(response.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := authorizationURL.Query().Get("state")
+	if !validDesktopCode(state, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+		t.Fatalf("invalid OAuth state in authorization URL: %q", state)
+	}
+	bindingCookie := findCookie(response.Cookies(), bindingCookieName)
+	if bindingCookie == nil || !validDesktopCode(bindingCookie.Value, oauthEncodedSecretLength, oauthEncodedSecretLength) {
+		t.Fatalf("missing OAuth browser binding cookie: %#v", bindingCookie)
+	}
+	if !bindingCookie.HttpOnly || bindingCookie.Path != "/" || bindingCookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("unsafe OAuth browser binding cookie: %#v", bindingCookie)
+	}
+	return state, bindingCookie, authorizationURL
 }

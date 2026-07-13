@@ -31,7 +31,6 @@ type Server struct {
 	uploadStorage  uploadstore.Store
 	githubOAuth    GitHubOAuthConfig
 	cookies        authpolicy.CookieNames
-	desktopOAuth   *desktopOAuthBroker
 	disableDevAuth bool
 	pushNotifier   PushNotifier
 	metrics        *metricsRegistry
@@ -47,6 +46,8 @@ const (
 	idleTimeout                   = 120 * time.Second
 	uploadCleanupSweepLimit       = 100
 )
+
+var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
 
 type actor struct {
 	user        store.User
@@ -88,7 +89,6 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		uploadStorage:  uploadStorage,
 		githubOAuth:    options.GitHubOAuth.withDefaults(),
 		cookies:        cookieNames,
-		desktopOAuth:   newDesktopOAuthBroker(),
 		disableDevAuth: options.DisableDevAuth,
 		pushNotifier:   options.PushNotifier,
 		metrics:        metrics,
@@ -224,8 +224,23 @@ func hasBearerAuth(r *http.Request) bool {
 }
 
 func (s *Server) hasSessionCookie(r *http.Request) bool {
-	cookie, err := r.Cookie(s.cookies.Session)
-	return err == nil && cookie.Value != ""
+	cookies := r.CookiesNamed(s.cookies.Session)
+	if len(cookies) > 1 {
+		return true
+	}
+	return len(cookies) == 1 && cookies[0].Value != ""
+}
+
+func requestCookie(r *http.Request, name string) (*http.Cookie, error) {
+	cookies := r.CookiesNamed(name)
+	switch len(cookies) {
+	case 0:
+		return nil, http.ErrNoCookie
+	case 1:
+		return cookies[0], nil
+	default:
+		return nil, errAmbiguousCookie
+	}
 }
 
 type pathOnlyLogFormatter struct {
@@ -1263,7 +1278,7 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 		user, err := s.store.GetSessionUser(r.Context(), token)
 		return actor{user: user}, err
 	}
-	if cookie, err := r.Cookie(s.cookies.Session); err == nil && cookie.Value != "" {
+	if cookie, err := requestCookie(r, s.cookies.Session); err == nil && cookie.Value != "" {
 		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
 		return actor{user: user}, err
 	}

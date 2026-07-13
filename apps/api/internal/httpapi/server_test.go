@@ -2514,6 +2514,15 @@ func TestNamespacedSessionCookiePolicy(t *testing.T) {
 		t.Fatalf("expected namespaced cookie authentication, got %d", recorder.Code)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "https://chat.example.com/api/me", nil)
+	req.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: session.Token})
+	req.AddCookie(&http.Cookie{Name: cookieNames.Session, Value: "shadowed"})
+	recorder = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected duplicate session cookies to be rejected, got %d", recorder.Code)
+	}
+
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})

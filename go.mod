@@ -8,6 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/lib/pq v1.12.3
 	github.com/oklog/ulid/v2 v2.1.1
+	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.53.0
 )
 

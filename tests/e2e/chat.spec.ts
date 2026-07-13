@@ -515,6 +515,65 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await preamble.getByRole("button", { name: /bash/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
 
+  // A live turn is one synthetic row anchored at its first activity message.
+  // Later same-turn rows grow that existing virtual item without changing the
+  // list length. Keep the timeline pinned through those resizes.
+  const fillerResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: botHeaders,
+    data: {
+      body: Array.from({ length: 48 }, (_, index) => `Scrollable history line ${index + 1}.`).join(
+        "\n\n",
+      ),
+    },
+  });
+  expect(fillerResponse.ok()).toBe(true);
+  await expect(page.getByText("Scrollable history line 48.")).toBeVisible();
+  await expectScrollAtMessageEnd(page);
+
+  const liveTurnId = `live-turn-${Date.now()}`;
+  const firstLiveBody = "First live activity row.";
+  const firstLiveResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: botHeaders,
+    data: { body: firstLiveBody, kind: "agent_commentary", turn_id: liveTurnId },
+  });
+  expect(firstLiveResponse.ok()).toBe(true);
+  const livePreamble = page.getByLabel("Agent preamble").filter({ hasText: firstLiveBody });
+  await expect(livePreamble).toHaveCount(1);
+  await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(1);
+  await expectScrollAtMessageEnd(page);
+
+  const otherPage = await page.context().newPage();
+  await otherPage.goto("about:blank");
+  await otherPage.bringToFront();
+  for (const data of [
+    {
+      body: "**bash inspect**\n\nchecked the virtualized timeline measurement",
+      kind: "agent_tool",
+      turn_id: liveTurnId,
+    },
+    {
+      body: "Third live activity row grows the preamble during the realtime burst.",
+      kind: "agent_commentary",
+      turn_id: liveTurnId,
+    },
+    {
+      body: "**read timeline**\n\nconfirmed the live edge remains visible",
+      kind: "agent_tool",
+      turn_id: liveTurnId,
+    },
+  ]) {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+      headers: botHeaders,
+      data,
+    });
+    expect(response.ok()).toBe(true);
+  }
+  await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(4);
+  await expect(livePreamble).toContainText("Third live activity row grows the preamble");
+  await expectScrollAtMessageEnd(page);
+  await page.bringToFront();
+  await otherPage.close();
+
   // Ignore any replayed events from the initial realtime subscription; this
   // assertion begins with the background activity posted below.
   await page.evaluate(() => {

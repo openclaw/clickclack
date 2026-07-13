@@ -113,6 +113,7 @@
   let desktopAuthStatus = "";
   let connected = false;
   let socket: RealtimeConnection | null = null;
+  let realtimeMessageLoadQueue: Promise<void> = Promise.resolve();
   let messageList: MessageListHandle | null = null;
   let scrollMemory = new Map<string, MessageListState>();
   let messageWindows = new Map<string, MessageWindow>();
@@ -1168,6 +1169,58 @@
     }
   }
 
+  function loadNewerMessagesFromRealtime(): Promise<void> {
+    const targetWorkspaceID = selectedWorkspaceID;
+    const targetKey = currentConversationKey();
+    if (!targetWorkspaceID || !targetKey) return Promise.resolve();
+
+    // Serialize only the active message-window fetch. Rendering and scrolling
+    // stay outside this queue because animation frames can pause while the app
+    // is unfocused.
+    const load = realtimeMessageLoadQueue
+      .catch(() => undefined)
+      .then(async () => {
+        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+          return;
+        }
+        const window = messageWindows.get(targetKey);
+        if (!window || window.newest_seq <= 0) {
+          await loadMessages();
+          return;
+        }
+        const data = await api<MessagePage>(
+          messagePagePath(
+            `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
+          ),
+        );
+        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+          return;
+        }
+        const currentWindow = messageWindows.get(targetKey);
+        if (!currentWindow) return;
+        const responseNewestSeq = data.newest_seq || window.newest_seq;
+        const hasNewer =
+          responseNewestSeq > currentWindow.newest_seq
+            ? data.has_newer
+            : responseNewestSeq < currentWindow.newest_seq
+              ? currentWindow.has_newer
+              : currentWindow.has_newer || data.has_newer;
+        commitMessageWindow(
+          targetKey,
+          {
+            messages: mergeMessageWindows(messages, data.messages),
+            oldest_seq: currentWindow.oldest_seq,
+            newest_seq: Math.max(currentWindow.newest_seq, responseNewestSeq),
+            has_older: currentWindow.has_older,
+            has_newer: hasNewer,
+          },
+          "append",
+        );
+      });
+    realtimeMessageLoadQueue = load;
+    return load;
+  }
+
   function handleHistorySettled(state: MessageListViewportState) {
     const shouldLoadOlder =
       olderPageState === "settling" && pendingOlderPageIntent && state.nearOlder && activeHasOlder;
@@ -2132,7 +2185,11 @@
     if (!selectedWorkspaceID) return;
     socket = connectRealtime({
       workspaceID: selectedWorkspaceID,
-      onEvent: (event) => void handleEvent(event),
+      onEvent: (event) => {
+        void handleEvent(event).catch((error) => {
+          status = error instanceof Error ? error.message : "Could not process realtime event";
+        });
+      },
       onStatusChange: (next) => (connected = next),
     });
   }
@@ -2204,7 +2261,7 @@
         suppressAutoReadUntil = Date.now() + 1200;
         markMessageWindowHasNewer(currentConversationKey());
       } else if (event.type === "message.created") {
-        await loadNewerMessages();
+        await loadNewerMessagesFromRealtime();
       } else {
         await loadMessages();
       }

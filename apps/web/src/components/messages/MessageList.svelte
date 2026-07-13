@@ -247,11 +247,32 @@
   // reads this flag, so appends preserve the previous user-driven value instead
   // of guessing from post-mutation layout.
   let shouldStickToBottom = true;
+  // Same-turn agent activity folds into one keyed synthetic row. Appending an
+  // activity row changes that row's height without changing items.length, so
+  // keep a separate revision for layout-affecting preamble content.
+  let preambleLayoutRevision = $derived.by(() =>
+    messages
+      .map((message) => {
+        const block = message.preamble_block;
+        if (!block) return "";
+        const content = block.items
+          .map((item) =>
+            item.type === "commentary"
+              ? `${item.id}\u0000${item.body}`
+              : `${item.id}\u0000${item.name}\u0000${item.detail || ""}\u0000${item.full}`,
+          )
+          .join("\u0001");
+        return `${message.id}\u0000${block.final ? "final" : "live"}\u0000${content}`;
+      })
+      .filter(Boolean)
+      .join("\u0002"),
+  );
   // Reactive mirror for the FAB visibility only. Never gates programmatic scroll.
   let atBottom = $state(true);
   let revealed = $state(false);
   let lastViewKey: string | undefined;
   let lastItemCount = 0;
+  let lastPreambleLayoutRevision = "";
   let lastRestoreState: MessageListState | undefined;
   let pendingRestore = false;
   let suppressPagination = false;
@@ -345,12 +366,24 @@
     if (!virtualizer || items.length === 0) return;
     const key = viewKey;
     if (document.activeElement === scrollEl) scrollEl.blur();
-    shouldStickToBottom = !hasNewer;
-    suppressProgrammaticPagination(2);
-    virtualizer.scrollToIndex(items.length - 1, { align: "end" });
-    await tick();
-    await nextFrame();
-    if (!isCurrentScrollCommand(key, generation)) return;
+    let previousScrollSize = -1;
+    // A keyed virtual item can resize after its Svelte update, when virtua's
+    // ResizeObserver publishes the new measurement. Re-pin until that size is
+    // stable instead of trusting the first scrollToIndex calculation.
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
+      shouldStickToBottom = !hasNewer;
+      suppressProgrammaticPagination(2);
+      virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+      await tick();
+      await nextFrame();
+      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
+      const scrollSize = virtualizer.getScrollSize();
+      const measurementStable =
+        previousScrollSize >= 0 && Math.abs(scrollSize - previousScrollSize) <= ANCHOR_THRESHOLD_PX;
+      previousScrollSize = scrollSize;
+      if (measurementStable && checkAtBottom()) break;
+    }
     revealed = true;
     shouldStickToBottom = !hasNewer;
     if (checkAtBottom()) {
@@ -620,10 +653,12 @@
   $effect(() => {
     const key = viewKey;
     const count = items.length;
+    const layoutRevision = preambleLayoutRevision;
 
     if (key !== lastViewKey) {
       lastViewKey = key;
       lastItemCount = count;
+      lastPreambleLayoutRevision = layoutRevision;
       lastRestoreState = restoreState;
       shouldStickToBottom = true;
       atBottom = true;
@@ -639,24 +674,29 @@
       lastRestoreState = target;
       if (target.atBottom) {
         lastItemCount = count;
+        lastPreambleLayoutRevision = layoutRevision;
         pendingRestore = true;
         void runRestore(key, target, true);
         return;
       }
       if (target.anchorMessageID) {
         lastItemCount = count;
+        lastPreambleLayoutRevision = layoutRevision;
         pendingRestore = true;
         void runRestore(key, target, false);
         return;
       }
     }
 
-    if (count !== lastItemCount && shouldStickToBottom && !hasNewer && !pendingRestore) {
+    const dataChanged =
+      count !== lastItemCount || layoutRevision !== lastPreambleLayoutRevision;
+    if (dataChanged && shouldStickToBottom && !hasNewer && !pendingRestore) {
       void scrollLastItemIntoView();
-    } else if (count !== lastItemCount && !pendingRestore) {
+    } else if (dataChanged && !pendingRestore) {
       void emitSettledAfterFrames(key);
     }
     lastItemCount = count;
+    lastPreambleLayoutRevision = layoutRevision;
   });
 
   async function emitSettledAfterFrames(key: string) {

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Decluttered the shell chrome like Slack: the desktop title bar now holds only the sidebar toggle and centered search (app settings stay on the native menu and Cmd/Ctrl+,), the sidebar workspace name became a menu button with a chevron that opens workspace settings, and the always-on "Connected" labels are gone — a pulsing "Connecting…" line appears under the workspace name only while the realtime link is down.
+- Fixed live agent-activity bursts so same-turn preambles grow in place without dropping realtime rows or pulling a bottom-pinned timeline away from the live edge.
 - Softened message bubbles: hairline accent-tint borders replace the heavier outlines, gentler keycap under-edges, and roomier padding.
 - Added Appearance settings with a light/dark/system color mode and four full-app board themes (Signal, the heritage Ember, Moss, Iris) — each tuned for both modes via a light-dark() token refactor, applied instantly with live swatch previews, persisted per device, and flash-free on load.
 - Redesigned the product site around the "Switchboard" keycap identity: cool porcelain/night-board themes over a dot-grid plate, electric cyan accent with indigo bot/thread tones, keycap buttons and step markers with press states, Bricolage Grotesque display type, and mono kickers/labels.

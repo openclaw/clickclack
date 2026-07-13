@@ -326,6 +326,45 @@ func TestUploadNonceLookupSurvivesWorkspaceMembershipRemoval(t *testing.T) {
 	}
 }
 
+func TestUploadNonceValidationCountsCharacters(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "unicode-upload-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	valid := strings.Repeat("é", 128)
+	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Nonce:       valid,
+		Filename:    "valid.txt",
+		ContentType: "text/plain",
+		ByteSize:    1,
+		StoragePath: "/tmp/valid.txt",
+	}); err != nil {
+		t.Fatalf("expected 128-character nonce to remain valid: %v", err)
+	}
+	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Nonce:       strings.Repeat("é", 129),
+		Filename:    "invalid.txt",
+		ContentType: "text/plain",
+		ByteSize:    1,
+		StoragePath: "/tmp/invalid.txt",
+	}); err == nil || !strings.Contains(err.Error(), "nonce is too long") {
+		t.Fatalf("expected 129-character nonce rejection, got %v", err)
+	}
+}
+
 func TestReservedUploadRechecksModerationOnFinalize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -346,7 +347,7 @@ func (s *Server) authorizeUploadWorkspaceAccess(w http.ResponseWriter, r *http.R
 
 func normalizeUploadNonce(value string) (string, error) {
 	nonce := strings.TrimSpace(value)
-	if len(nonce) > 128 {
+	if utf8.RuneCountInString(nonce) > 128 {
 		return "", errors.New("nonce is too long")
 	}
 	return nonce, nil

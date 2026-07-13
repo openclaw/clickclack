@@ -2772,6 +2772,18 @@ func TestUploadQuotaReaderStopsOverBudget(t *testing.T) {
 	}
 }
 
+func TestNormalizeUploadNonceCountsCharacters(t *testing.T) {
+	t.Parallel()
+
+	valid := strings.Repeat("é", 128)
+	if normalized, err := normalizeUploadNonce(valid); err != nil || normalized != valid {
+		t.Fatalf("expected 128-character nonce to remain valid: normalized=%q err=%v", normalized, err)
+	}
+	if _, err := normalizeUploadNonce(strings.Repeat("é", 129)); err == nil {
+		t.Fatal("expected 129-character nonce rejection")
+	}
+}
+
 func TestUploadReservesQuotaBeforeObjectStorage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

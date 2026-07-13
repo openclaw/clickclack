@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
@@ -120,7 +121,7 @@ func scanMessage(row scanner) (store.Message, error) {
 
 func normalizeClientNonce(value string) (string, error) {
 	nonce := strings.TrimSpace(value)
-	if len(nonce) > 128 {
+	if utf8.RuneCountInString(nonce) > 128 {
 		return "", errors.New("nonce is too long")
 	}
 	return nonce, nil

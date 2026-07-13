@@ -291,13 +291,9 @@ jobs:
           response="$RUNNER_TEMP/release.json"
           error="$RUNNER_TEMP/release.error"
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$response" 2>"$error"; then
-            jq -e '.draft == true' "$response" >/dev/null || {
+            jq -e --arg tag "$RELEASE_TAG" \
+              '.draft == true and .tag_name == $tag' "$response" >/dev/null || {
               printf 'Release %s became published before upload; refusing mutation.\n' "$RELEASE_TAG" >&2
-              exit 1
-            }
-            jq -rj '.body // ""' "$response" >"$RUNNER_TEMP/existing-release-notes.md"
-            cmp -s server-release/CHANGELOG.md "$RUNNER_TEMP/existing-release-notes.md" || {
-              printf 'Draft release notes differ from the verified candidate; refusing replacement.\n' >&2
               exit 1
             }
           elif grep -q 'HTTP 404' "$error"; then
@@ -312,8 +308,18 @@ jobs:
             cat "$error" >&2
             exit 1
           fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$response"
+          jq -e --arg tag "$RELEASE_TAG" \
+            '.draft == true and .tag_name == $tag and (.id | type == "number")' \
+            "$response" >/dev/null
+          jq -rj '.body // ""' "$response" >"$RUNNER_TEMP/existing-release-notes.md"
+          cmp -s server-release/CHANGELOG.md "$RUNNER_TEMP/existing-release-notes.md" || {
+            printf 'Draft release notes differ from the verified candidate; refusing replacement.\n' >&2
+            exit 1
+          }
+          jq -r '.id' "$response" >"$RUNNER_TEMP/release-id"
 
-      - name: Upload only missing or byte-identical draft assets
+      - name: Replace the draft staging set and verify uploaded bytes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.verify-tag.outputs.tag }}
@@ -322,40 +328,67 @@ jobs:
           set -euo pipefail
           release_json="$RUNNER_TEMP/release.json"
           verify_dir="$RUNNER_TEMP/verified-assets"
+          expected_release_id="$(<"$RUNNER_TEMP/release-id")"
+          [[ "$expected_release_id" =~ ^[0-9]+$ ]]
           mkdir -p "$verify_dir"
 
           refresh_release() {
             gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
-            jq -e '.draft == true' "$release_json" >/dev/null || {
-              printf 'Release %s is published; refusing asset mutation.\n' "$RELEASE_TAG" >&2
+            jq -e \
+              --arg tag "$RELEASE_TAG" \
+              --argjson release_id "$expected_release_id" \
+              '.draft == true and .tag_name == $tag and .id == $release_id' \
+              "$release_json" >/dev/null || {
+              printf 'Release %s is published or its verified draft changed; refusing asset mutation.\n' \
+                "$RELEASE_TAG" >&2
               exit 1
             }
           }
 
-          upload_asset() {
-            local candidate=$1
-            local name="${candidate##*/}"
-            local count asset_id existing
+          refresh_release
+          mapfile -t stale_asset_ids < <(jq -r '.assets[].id' "$release_json")
+          for asset_id in "${stale_asset_ids[@]}"; do
+            [[ "$asset_id" =~ ^[0-9]+$ ]]
             refresh_release
-            count="$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' "$release_json")"
-            [[ "$count" == "0" || "$count" == "1" ]]
-            if [[ "$count" == "1" ]]; then
-              asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' "$release_json")"
-              existing="$verify_dir/$name"
-              gh api \
-                -H 'Accept: application/octet-stream' \
-                "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" >"$existing"
-              cmp -s "$candidate" "$existing" || {
-                printf 'Draft asset %s exists with different bytes; refusing replacement.\n' "$name" >&2
-                exit 1
-              }
-            else
-              gh release upload "$RELEASE_TAG" "$candidate" --repo "$GITHUB_REPOSITORY"
-            fi
+            jq -e --argjson asset_id "$asset_id" \
+              'any(.assets[]; .id == $asset_id)' "$release_json" >/dev/null
+            gh api --method DELETE \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+          done
+          refresh_release
+          jq -e '.assets | length == 0' "$release_json" >/dev/null || {
+            printf 'Draft asset reset was incomplete; refusing a mixed retry set.\n' >&2
+            exit 1
           }
 
           while IFS= read -r -d '' candidate; do
-            upload_asset "$candidate"
+            gh release upload "$RELEASE_TAG" "$candidate" --repo "$GITHUB_REPOSITORY"
+          done < <(
+            find server-release desktop-release -maxdepth 1 -type f \
+              ! -name CHANGELOG.md -print0
+          )
+
+          verify_asset() {
+            local candidate=$1
+            local name="${candidate##*/}"
+            local count asset_id uploaded
+            refresh_release
+            count="$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' "$release_json")"
+            [[ "$count" == "1" ]]
+            asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' "$release_json")"
+            [[ "$asset_id" =~ ^[0-9]+$ ]]
+            uploaded="$verify_dir/$name"
+            gh api \
+              -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" >"$uploaded"
+            cmp -s "$candidate" "$uploaded" || {
+              printf 'Uploaded draft asset %s differs from the verified candidate.\n' "$name" >&2
+              exit 1
+            }
+          }
+
+          while IFS= read -r -d '' candidate; do
+            verify_asset "$candidate"
           done < <(
             find server-release desktop-release -maxdepth 1 -type f \
               ! -name CHANGELOG.md -print0
@@ -387,6 +420,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
-            --jq 'select(.draft == true) | .id' | grep -Eq '^[0-9]+$'
+          expected_release_id="$(<"$RUNNER_TEMP/release-id")"
+          [[ "$expected_release_id" =~ ^[0-9]+$ ]]
+          release_json="$RUNNER_TEMP/release-before-publish.json"
+          verify_dir="$RUNNER_TEMP/final-verified-assets"
+          mkdir -p "$verify_dir"
+
+          refresh_release() {
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
+            jq -e \
+              --arg tag "$RELEASE_TAG" \
+              --argjson release_id "$expected_release_id" \
+              '.draft == true and .tag_name == $tag and .id == $release_id' \
+              "$release_json" >/dev/null
+          }
+
+          refresh_release
+          while IFS= read -r -d '' candidate; do
+            name="${candidate##*/}"
+            count="$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' "$release_json")"
+            [[ "$count" == "1" ]]
+            asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' "$release_json")"
+            [[ "$asset_id" =~ ^[0-9]+$ ]]
+            uploaded="$verify_dir/$name"
+            gh api \
+              -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" >"$uploaded"
+            cmp -s "$candidate" "$uploaded" || {
+              printf 'Draft asset %s changed before publication; refusing release.\n' "$name" >&2
+              exit 1
+            }
+          done < <(
+            find server-release desktop-release -maxdepth 1 -type f \
+              ! -name CHANGELOG.md -print0
+          )
+          refresh_release
           gh release edit "$RELEASE_TAG" --draft=false --repo "$GITHUB_REPOSITORY"

@@ -26,6 +26,7 @@ const ciWorkflowPath = path.join(repositoryRoot, ".github/workflows/ci.yml");
 const fakecoComposePath = path.join(repositoryRoot, "deploy/fakeco/compose.yaml");
 const fakecoComposeWrapperPath = path.join(repositoryRoot, "deploy/fakeco/compose.sh");
 const dockerignorePath = path.join(repositoryRoot, ".dockerignore");
+const gitignorePath = path.join(repositoryRoot, ".gitignore");
 
 function runGit(cwd, args, env = process.env) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8", env });
@@ -42,6 +43,7 @@ async function createMetadataRepository(t, prefix) {
   await copyFile(dockerBuildPath, path.join(temporary, "scripts/docker-build.sh"));
   await copyFile(fakecoComposeWrapperPath, path.join(temporary, "deploy/fakeco/compose.sh"));
   await copyFile(fakecoComposePath, path.join(temporary, "deploy/fakeco/compose.yaml"));
+  await copyFile(gitignorePath, path.join(temporary, ".gitignore"));
   await chmod(path.join(temporary, "scripts/docker-build-metadata.sh"), 0o755);
   await chmod(path.join(temporary, "scripts/docker-build.sh"), 0o755);
   await chmod(path.join(temporary, "deploy/fakeco/compose.sh"), 0o755);
@@ -79,9 +81,11 @@ test("release verifies the tag before every build and checks out the verified co
   );
   assert.ok(workflow.indexOf("verify-tag:") < workflow.indexOf("Set up Go"));
   assert.ok(workflow.indexOf("verify-tag:") < workflow.indexOf("Set up pnpm"));
+  const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+  assert.match(ciWorkflow, /pnpm test:release/u);
 });
 
-test("published releases are immutable and draft retries compare bytes", async () => {
+test("published releases are immutable and draft retries replace one verified staging set", async () => {
   const [workflow, goreleaser] = await Promise.all([
     readFile(releaseWorkflowPath, "utf8"),
     readFile(goreleaserPath, "utf8"),
@@ -89,16 +93,22 @@ test("published releases are immutable and draft retries compare bytes", async (
   assert.match(workflow, /release --clean --skip=publish/u);
   assert.match(workflow, /\.draft == true/u);
   assert.match(workflow, /already published and immutable/u);
-  assert.match(workflow, /cmp -s "\$candidate" "\$existing"/u);
   assert.match(
     workflow,
     /cmp -s server-release\/CHANGELOG\.md "\$RUNNER_TEMP\/existing-release-notes\.md"/u,
   );
-  assert.match(workflow, /exists with different bytes; refusing replacement/u);
+  assert.match(workflow, /jq -r '\.id' "\$response" >"\$RUNNER_TEMP\/release-id"/u);
+  assert.match(workflow, /gh api --method DELETE/u);
+  assert.match(workflow, /Draft asset reset was incomplete; refusing a mixed retry set/u);
+  assert.match(workflow, /cmp -s "\$candidate" "\$uploaded"/u);
+  assert.match(workflow, /Uploaded draft asset %s differs from the verified candidate/u);
+  assert.match(workflow, /Draft asset %s changed before publication; refusing release/u);
+  assert.equal((workflow.match(/cmp -s "\$candidate" "\$uploaded"/gu) ?? []).length, 2);
   assert.match(workflow, /Draft release asset set differs from the verified candidate manifest/u);
   assert.match(workflow, /jq -r '\.assets\[\]\.name'/u);
   assert.match(workflow, /comm -13 "\$expected_assets" "\$actual_assets"/u);
   assert.doesNotMatch(workflow, /--clobber/u);
+  assert.doesNotMatch(workflow, /exists with different bytes; refusing replacement/u);
   assert.match(goreleaser, /replace_existing_artifacts: false/u);
   assert.match(goreleaser, /mode: keep-existing/u);
   assert.match(goreleaser, /mod_timestamp: "\{\{ \.CommitTimestamp \}\}"/u);
@@ -107,7 +117,7 @@ test("published releases are immutable and draft retries compare bytes", async (
   assert.doesNotMatch(goreleaser, /replace_existing_artifacts: true|mode: replace/u);
 });
 
-test("production Docker builds require and verify linker metadata", async () => {
+test("Docker defaults preserve raw builds while production paths verify metadata", async () => {
   const [dockerfile, cloudflareDockerfile] = await Promise.all([
     readFile(dockerfilePath, "utf8"),
     readFile(cloudflareDockerfilePath, "utf8"),
@@ -121,6 +131,13 @@ test("production Docker builds require and verify linker metadata", async () => 
       /clickclack \$CLICKCLACK_VERSION \(\$CLICKCLACK_COMMIT, \$CLICKCLACK_BUILD_DATE\)/u,
     );
   }
+  for (const variable of ["CLICKCLACK_VERSION", "CLICKCLACK_COMMIT", "CLICKCLACK_BUILD_DATE"]) {
+    assert.match(dockerfile, new RegExp(`^ARG ${variable}=\\S+`, "mu"));
+  }
+  assert.match(
+    dockerfile,
+    /CLICKCLACK_WEB_VERSION="\$\{CLICKCLACK_WEB_VERSION:-\$CLICKCLACK_VERSION\}"/u,
+  );
   assert.match(dockerfile, /org\.opencontainers\.image\.version/u);
   assert.match(dockerfile, /org\.opencontainers\.image\.revision/u);
   assert.match(dockerfile, /org\.opencontainers\.image\.created/u);
@@ -282,10 +299,14 @@ test("repository Docker callsites derive and forward complete metadata", async (
 });
 
 test("Cloudflare disables workers.dev and derives metadata from a clean commit", async (t) => {
-  const wrangler = JSON.parse(await readFile(wranglerPath, "utf8"));
+  const [wrangler, gitignore] = await Promise.all([
+    readFile(wranglerPath, "utf8").then(JSON.parse),
+    readFile(gitignorePath, "utf8"),
+  ]);
   assert.equal(wrangler.workers_dev, false);
   assert.match(wrangler.build.command, /CLICKCLACK_BUILD_FLAVOR=cloudflare/u);
   assert.match(wrangler.build.command, /source scripts\/docker-build-metadata\.sh/u);
+  assert.match(gitignore, /^\.wrangler\/$/mu);
 
   const temporary = await createMetadataRepository(t, "clickclack-cloudflare-metadata-");
 
@@ -302,6 +323,14 @@ test("Cloudflare disables workers.dev and derives metadata from a clean commit",
       `CLICKCLACK_COMMIT=${head}\n` +
       `CLICKCLACK_BUILD_DATE=${committedDate}\n`,
   );
+
+  await mkdir(path.join(temporary, ".wrangler/state"), { recursive: true });
+  await writeFile(path.join(temporary, ".wrangler/state/deploy.json"), "{}\n");
+  const repeated = spawnSync("sh", ["-c", wrangler.build.command], {
+    cwd: temporary,
+    encoding: "utf8",
+  });
+  assert.equal(repeated.status, 0, repeated.stderr);
 
   await writeFile(path.join(temporary, "tracked.txt"), "dirty\n");
   const dirty = spawnSync("sh", ["-c", wrangler.build.command], {

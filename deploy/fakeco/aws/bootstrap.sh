@@ -81,6 +81,7 @@ captured_backup_sha=
 captured_backup_size=
 captured_backup_key=
 captured_backup_head=
+pre_update_backup_path=
 readonly aws_cli_version=2.35.20
 readonly aws_cli_archive_sha256=58799ce9276d4e8815fd19e4dc35649626c6b4fbd4d0e3df7433af9cfde41882
 readonly max_single_put_bytes=5000000000
@@ -95,13 +96,16 @@ failure() {
   local code=$?
   local failed_stage="$stage"
   local rollback_status=not-needed
+  local rollback_code
   trap - ERR
   set +e
   if [[ "$action" == "bootstrap" &&
     "$rollback_available" == "true" &&
     ("$candidate_configured" == "true" || "$candidate_start_attempted" == "true") ]]; then
     rollback_status=failed
-    if rollback_previous_runtime; then
+    (set -euo pipefail; rollback_previous_runtime)
+    rollback_code=$?
+    if ((rollback_code == 0)); then
       rollback_status=succeeded
     fi
   fi
@@ -468,6 +472,7 @@ probe_service() {
 cleanup_success() {
   local backup_path="$1"
   local candidate name stale_image_list
+  local -a backup_paths=("$backup_path")
   stage=cleanup-success
   if [[ "$action" != "backup" ]]; then
     docker container prune --force \
@@ -503,7 +508,10 @@ cleanup_success() {
       fi
     done
   fi
-  rm -f -- "$backup_path"
+  if [[ -n "${pre_update_backup_path:-}" && "$pre_update_backup_path" != "$backup_path" ]]; then
+    backup_paths+=("$pre_update_backup_path")
+  fi
+  rm -f -- "${backup_paths[@]}"
 }
 
 cleanup_run_files() {
@@ -656,6 +664,11 @@ create_pre_update_backup() {
      .ServerSideEncryption == "aws:kms" and
      .SSEKMSKeyId == $kms_key and
      .ContentLength == $size' "$evidence_head" >/dev/null
+  pre_update_backup_path="$state_root/pre-update-$run_id.db"
+  [[ ! -e "$pre_update_backup_path" && ! -L "$pre_update_backup_path" ]]
+  cp -a -- "$captured_backup_path" "$pre_update_backup_path"
+  printf '%s  %s\n' "$captured_backup_sha" "$pre_update_backup_path" |
+    sha256sum --check --status
   rm -f -- "$captured_backup_path" "$captured_backup_head" "$evidence_file" "$evidence_head"
 }
 
@@ -791,25 +804,50 @@ prepare_pre_update_backup() {
 }
 
 rollback_previous_runtime() {
+  local mount_path restore_candidate failed_data integrity file
   [[ "$rollback_available" == "true" ]] || return 1
   [[ "$previous_runtime_source_commit" =~ ^[0-9a-f]{40}$ ]] || return 1
   [[ "$previous_runtime_source_sha256" =~ ^[0-9a-f]{64}$ ]] || return 1
   [[ -f "$rollback_runtime_env" && ! -L "$rollback_runtime_env" ]] || return 1
   [[ -f "$rollback_runtime_override" && ! -L "$rollback_runtime_override" ]] || return 1
+  [[ "$pre_update_backup_path" == "$state_root/pre-update-$run_id.db" ]] || return 1
+  [[ -f "$pre_update_backup_path" && ! -L "$pre_update_backup_path" ]] || return 1
   rollback_in_progress=true
   stage=rollback-config
-  install -m 0640 "$rollback_runtime_env" "$runtime_env" || return 1
-  install -m 0640 "$rollback_runtime_override" "$runtime_override" || return 1
+  install -m 0640 "$rollback_runtime_env" "$runtime_env"
+  install -m 0640 "$rollback_runtime_override" "$runtime_override"
   runtime_source_commit="$previous_runtime_source_commit"
   runtime_source_sha256="$previous_runtime_source_sha256"
   runtime_build_version="$previous_runtime_build_version"
   runtime_build_date="$previous_runtime_build_date"
   compose_override="$runtime_override"
   set_runtime_paths
+  stage=rollback-stop
+  compose stop app
+  stage=rollback-data
+  mount_path="$(docker volume inspect clickclack-fakeco-data --format '{{.Mountpoint}}')"
+  [[ -d "$mount_path" && ! -L "$mount_path" ]]
+  restore_candidate="$mount_path/.clickclack.db.rollback-$run_id"
+  failed_data="$mount_path/backups/candidate-$run_id"
+  [[ ! -e "$restore_candidate" && ! -L "$restore_candidate" ]]
+  [[ ! -e "$failed_data" && ! -L "$failed_data" ]]
+  cp -a -- "$pre_update_backup_path" "$restore_candidate"
+  integrity="$(sqlite3 "$restore_candidate" 'PRAGMA integrity_check;')"
+  [[ "$integrity" == "ok" ]]
+  install -d -m 0700 "$failed_data"
+  for file in clickclack.db clickclack.db-wal clickclack.db-shm; do
+    [[ ! -L "$mount_path/$file" ]]
+    if [[ -e "$mount_path/$file" ]]; then
+      mv -- "$mount_path/$file" "$failed_data/$file"
+    fi
+  done
+  mv -- "$restore_candidate" "$mount_path/clickclack.db"
   stage=rollback-start
-  compose up -d app || return 1
-  verify_running_image || return 1
-  probe_service || return 1
+  compose up -d app
+  verify_running_image
+  probe_service
+  rm -f -- "$pre_update_backup_path"
+  rm -rf -- "$failed_data"
   rollback_in_progress=false
   stage=rollback-complete
 }

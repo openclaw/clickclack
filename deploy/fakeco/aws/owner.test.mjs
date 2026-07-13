@@ -1236,19 +1236,29 @@ test("failed candidate rollback restores and verifies the previous runtime", asy
   const rollbackOverride = path.join(temporary, "compose.rollback.yaml");
   const backupOverride = path.join(temporary, "compose.backup.yaml");
   const tracePath = path.join(temporary, "trace.log");
-  await writeFile(
-    runtimeEnv,
+  const mountPath = path.join(temporary, "volume");
+  const preUpdateBackup = path.join(temporary, "state/pre-update-test-run.db");
+  const expectedRuntimeEnv =
     "CLICKCLACK_PUBLIC_URL=http://10.0.0.10:8080\n" +
-      "CLICKCLACK_WEB_VERSION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-      `CLICKCLACK_VERSION=${previousVersion}\n` +
-      `CLICKCLACK_COMMIT=${previous}\n` +
-      `CLICKCLACK_BUILD_DATE=${previousDate}\n`,
-  );
-  await writeFile(runtimeOverride, "candidate override\n");
-  await writeFile(
-    backupOverride,
-    `services:\n  app:\n    image: "clickclack:fakeco-${previous}"\n  seed:\n    image: "clickclack:fakeco-${previous}"\n`,
-  );
+    `CLICKCLACK_WEB_VERSION=${previous}\n` +
+    `CLICKCLACK_VERSION=${previousVersion}\n` +
+    `CLICKCLACK_COMMIT=${previous}\n` +
+    `CLICKCLACK_BUILD_DATE=${previousDate}\n`;
+  const prepareRollback = async () => {
+    await mkdir(path.dirname(preUpdateBackup), { recursive: true });
+    await mkdir(path.join(mountPath, "backups"), { recursive: true });
+    await writeFile(runtimeEnv, expectedRuntimeEnv);
+    await writeFile(runtimeOverride, "candidate override\n");
+    await writeFile(
+      backupOverride,
+      `services:\n  app:\n    image: "clickclack:fakeco-${previous}"\n  seed:\n    image: "clickclack:fakeco-${previous}"\n`,
+    );
+    await writeFile(preUpdateBackup, "pre-update sqlite\n");
+    await writeFile(path.join(mountPath, "clickclack.db"), "candidate migrated sqlite\n");
+    await writeFile(path.join(mountPath, "clickclack.db-wal"), "candidate wal\n");
+    await writeFile(path.join(mountPath, "clickclack.db-shm"), "candidate shm\n");
+    await writeFile(tracePath, "");
+  };
   const scriptPath = path.join(temporary, "rollback.sh");
   await writeFile(
     scriptPath,
@@ -1264,13 +1274,28 @@ set_runtime_paths() {
   trace paths
 }
 compose() { trace "compose:$*"; }
+docker() {
+  trace "docker:$*"
+  [[ "$1 $2" == "volume inspect" ]]
+  printf '%s\n' "$MOUNT_PATH"
+}
+sqlite3() {
+  trace sqlite
+  printf '%s\n' ok
+}
 verify_running_image() {
   trace verify
   [[ "$runtime_source_commit" == "$PREVIOUS_COMMIT" ]]
   [[ "$runtime_build_version" == "$PREVIOUS_VERSION" ]]
   [[ "$runtime_build_date" == "$PREVIOUS_DATE" ]]
 }
-probe_service() { trace probe; }
+probe_service() {
+  trace probe
+  if [[ "\${FAIL_PROBE:-false}" == true ]]; then
+    false
+    trace probe-after-failure
+  fi
+}
 rollback_available=true
 rollback_in_progress=false
 previous_runtime_source_commit="$PREVIOUS_COMMIT"
@@ -1289,6 +1314,8 @@ runtime_build_date="$PREVIOUS_DATE"
 compose_override="$runtime_override"
 release_root="$TEST_ROOT/releases"
 state_root="$TEST_ROOT/state"
+run_id=test-run
+pre_update_backup_path="$PRE_UPDATE_BACKUP"
 stage=service-probes
 capture_rollback_runtime
 runtime_source_commit="$CANDIDATE_COMMIT"
@@ -1297,52 +1324,75 @@ runtime_build_version="$CANDIDATE_VERSION"
 runtime_build_date="$CANDIDATE_DATE"
 printf '%s\n' 'candidate env' >"$runtime_env"
 printf '%s\n' 'candidate override' >"$runtime_override"
-rollback_previous_runtime
-printf 'commit=%s\nversion=%s\ndate=%s\nstage=%s\n' \
-  "$runtime_source_commit" "$runtime_build_version" "$runtime_build_date" "$stage"
+set +e
+(set -euo pipefail; rollback_previous_runtime)
+rollback_status=$?
+set -e
+printf 'rollback_status=%s\n' "$rollback_status"
+exit "$rollback_status"
 `,
     { mode: 0o755 },
   );
+  const environment = {
+    ...process.env,
+    TEST_ROOT: temporary,
+    TRACE_PATH: tracePath,
+    RUNTIME_ENV: runtimeEnv,
+    RUNTIME_OVERRIDE: runtimeOverride,
+    ROLLBACK_ENV: rollbackEnv,
+    ROLLBACK_OVERRIDE: rollbackOverride,
+    BACKUP_OVERRIDE: backupOverride,
+    MOUNT_PATH: mountPath,
+    PRE_UPDATE_BACKUP: preUpdateBackup,
+    PREVIOUS_COMMIT: previous,
+    PREVIOUS_DIGEST: previousDigest,
+    PREVIOUS_VERSION: previousVersion,
+    PREVIOUS_DATE: previousDate,
+    CANDIDATE_COMMIT: "a".repeat(40),
+    CANDIDATE_DIGEST: "d".repeat(64),
+    CANDIDATE_VERSION: "0.0.0-fakeco.aaaaaaaaaaaa",
+    CANDIDATE_DATE: "2026-07-13T00:00:00+00:00",
+  };
+  await prepareRollback();
   const result = spawnSync("bash", [scriptPath], {
     encoding: "utf8",
-    env: {
-      ...process.env,
-      TEST_ROOT: temporary,
-      TRACE_PATH: tracePath,
-      RUNTIME_ENV: runtimeEnv,
-      RUNTIME_OVERRIDE: runtimeOverride,
-      ROLLBACK_ENV: rollbackEnv,
-      ROLLBACK_OVERRIDE: rollbackOverride,
-      BACKUP_OVERRIDE: backupOverride,
-      PREVIOUS_COMMIT: previous,
-      PREVIOUS_DIGEST: previousDigest,
-      PREVIOUS_VERSION: previousVersion,
-      PREVIOUS_DATE: previousDate,
-      CANDIDATE_COMMIT: "a".repeat(40),
-      CANDIDATE_DIGEST: "d".repeat(64),
-      CANDIDATE_VERSION: "0.0.0-fakeco.aaaaaaaaaaaa",
-      CANDIDATE_DATE: "2026-07-13T00:00:00+00:00",
-    },
+    env: environment,
   });
   assert.equal(result.status, 0, result.stderr);
-  const expectedRuntimeEnv =
-    "CLICKCLACK_PUBLIC_URL=http://10.0.0.10:8080\n" +
-    `CLICKCLACK_WEB_VERSION=${previous}\n` +
-    `CLICKCLACK_VERSION=${previousVersion}\n` +
-    `CLICKCLACK_COMMIT=${previous}\n` +
-    `CLICKCLACK_BUILD_DATE=${previousDate}\n`;
   assert.equal(await readFile(rollbackEnv, "utf8"), expectedRuntimeEnv);
   assert.equal(await readFile(runtimeEnv, "utf8"), expectedRuntimeEnv);
   assert.equal(await readFile(runtimeOverride, "utf8"), await readFile(backupOverride, "utf8"));
+  assert.equal(
+    await readFile(path.join(mountPath, "clickclack.db"), "utf8"),
+    "pre-update sqlite\n",
+  );
+  await assert.rejects(stat(path.join(mountPath, "clickclack.db-wal")), { code: "ENOENT" });
+  await assert.rejects(stat(path.join(mountPath, "clickclack.db-shm")), { code: "ENOENT" });
+  await assert.rejects(stat(preUpdateBackup), { code: "ENOENT" });
+  await assert.rejects(stat(path.join(mountPath, "backups/candidate-test-run")), {
+    code: "ENOENT",
+  });
   assert.deepEqual((await readFile(tracePath, "utf8")).trim().split("\n"), [
     "paths",
+    "compose:stop app",
+    "docker:volume inspect clickclack-fakeco-data --format {{.Mountpoint}}",
+    "sqlite",
     "compose:up -d app",
     "verify",
     "probe",
   ]);
-  assert.match(result.stdout, new RegExp(`commit=${previous}`, "u"));
-  assert.match(result.stdout, new RegExp(`version=${previousVersion}`, "u"));
-  assert.match(result.stdout, /stage=rollback-complete/u);
+  assert.match(result.stdout, /rollback_status=0/u);
+
+  await prepareRollback();
+  const failedProbe = spawnSync("bash", [scriptPath], {
+    encoding: "utf8",
+    env: { ...environment, FAIL_PROBE: "true" },
+  });
+  assert.notEqual(failedProbe.status, 0);
+  assert.match(failedProbe.stdout, /rollback_status=[1-9][0-9]*/u);
+  assert.doesNotMatch(await readFile(tracePath, "utf8"), /probe-after-failure/u);
+  await stat(preUpdateBackup);
+  await stat(path.join(mountPath, "backups/candidate-test-run/clickclack.db"));
 });
 
 test("successful cleanup retains the active release and removes stale build artifacts", async (t) => {
@@ -1512,7 +1562,7 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /aws s3api head-object/u);
   assert.match(bootstrap, /\.ContentLength == \$size/u);
   assert.match(bootstrap, /cleanup_success "\$captured_backup_path"/u);
-  assert.match(bootstrap, /rm -f -- "\$backup_path"/u);
+  assert.match(bootstrap, /rm -f -- "\$\{backup_paths\[@\]\}"/u);
   assert.match(bootstrap, /reference=clickclack:fakeco-\*/u);
   assert.match(bootstrap, /docker image prune --force/u);
   assert.match(bootstrap, /docker builder prune --force/u);
@@ -1546,6 +1596,18 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(bootstrap, /pre-update-upload-evidence/u);
   assert.match(bootstrap, /rollback_previous_runtime/u);
   assert.match(bootstrap, /rollback_status=succeeded/u);
+  assert.match(bootstrap, /\(set -euo pipefail; rollback_previous_runtime\)/u);
+  assert.match(bootstrap, /pre_update_backup_path="\$state_root\/pre-update-\$run_id\.db"/u);
+  assert.match(bootstrap, /cp -a -- "\$captured_backup_path" "\$pre_update_backup_path"/u);
+  assert.match(bootstrap, /compose stop app/u);
+  assert.match(bootstrap, /mv -- "\$restore_candidate" "\$mount_path\/clickclack\.db"/u);
+  assert.ok(
+    bootstrap.indexOf('cp -a -- "$captured_backup_path" "$pre_update_backup_path"') <
+      bootstrap.indexOf(
+        'rm -f -- "$captured_backup_path" "$captured_backup_head" "$evidence_file"',
+      ),
+    "the rollback copy must be retained outside the writable volume before local cleanup",
+  );
   assert.ok(
     bootstrap.indexOf(
       "  capture_rollback_runtime",

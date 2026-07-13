@@ -12,6 +12,7 @@ coverage.out
 coverage.filtered.out
 coverage.txt
 .pnpm-store/
+.wrangler/
 test-results/
 playwright-report/
 *.db

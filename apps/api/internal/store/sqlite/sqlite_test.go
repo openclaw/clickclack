@@ -404,6 +404,44 @@ func TestUploadReservationClaimsOwnerNonceBeforeQuota(t *testing.T) {
 	}
 }
 
+func TestUploadReservationReclaimsExpiredNonceClaim(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "expired-reservation-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO upload_quota_reservations
+			(id, workspace_id, owner_id, client_nonce, byte_size, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"uqr_expired",
+		workspace.ID,
+		owner.ID,
+		"expired-claim",
+		10,
+		"2000-01-01T00:00:00.000000000Z",
+		"2000-01-01T00:01:00.000000000Z",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "expired-claim", 10)
+	if err != nil {
+		t.Fatalf("expired nonce claim was not reclaimed: %v", err)
+	}
+	if reservation.ID == "uqr_expired" || reservation.Nonce != "expired-claim" {
+		t.Fatalf("unexpected replacement reservation: %#v", reservation)
+	}
+}
+
 func TestReservedUploadRechecksModerationOnFinalize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

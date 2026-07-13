@@ -81,6 +81,8 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, non
 	}
 	qtx := s.q.WithTx(tx)
 	reservationNow := time.Now().UTC()
+	// Reclaim expired nonce claims before lookup so a crashed uploader cannot
+	// strand its nonce after the reservation TTL.
 	if err := qtx.DeleteExpiredUploadQuotaReservations(ctx, uploadReservationTime(reservationNow)); err != nil {
 		return store.UploadQuotaReservation{}, err
 	}

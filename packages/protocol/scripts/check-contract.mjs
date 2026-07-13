@@ -28,6 +28,10 @@ const publicOperations = [
 assert.match(spec, /^security:\n  - bearerAuth: \[\]\n  - cookieAuth: \[\]$/m);
 assert.match(spec, /^  securitySchemes:\n    bearerAuth:/m);
 assert.match(spec, /^    cookieAuth:/m);
+assert.match(
+  spec,
+  /^    csrfHeader:\n      type: apiKey\n      in: header\n      name: X-ClickClack-CSRF\n      description: .*value 1\./m,
+);
 for (const [route, method] of publicOperations) {
   assert.match(
     yamlOperationBlock(spec, route, method),
@@ -39,6 +43,30 @@ assert.equal(
   spec.match(/^      security: \[\]$/gm)?.length ?? 0,
   publicOperations.length,
   "only documented public operations may opt out of authentication",
+);
+
+const mutationSecurity =
+  "      security:\n" +
+  "        - bearerAuth: []\n" +
+  "        - cookieAuth: []\n" +
+  "          csrfHeader: []";
+const publicOperationKeys = new Set(
+  publicOperations.map(([route, method]) => `${method} ${route}`),
+);
+let protectedMutationCount = 0;
+for (const [route, method, block] of yamlOperationBlocks(spec)) {
+  if (["get", "head", "options", "trace"].includes(method)) continue;
+  if (publicOperationKeys.has(`${method} ${route}`)) continue;
+  protectedMutationCount += 1;
+  assert.ok(
+    block.includes(mutationSecurity),
+    `${method.toUpperCase()} ${route} must allow bearer auth or cookie auth with X-ClickClack-CSRF`,
+  );
+}
+assert.equal(
+  spec.match(/^          csrfHeader: \[\]$/gm)?.length ?? 0,
+  protectedMutationCount,
+  "CSRF security requirements must appear on every protected mutation and nowhere else",
 );
 
 const nonJSONSuccessOperations = new Set([
@@ -71,6 +99,26 @@ function yamlOperationBlock(source, route, method) {
   let end = methodIndex + 1;
   while (end < lines.length && !/^( {0,4}\S|  \/)/.test(lines[end])) end += 1;
   return lines.slice(methodIndex, end).join("\n");
+}
+
+function yamlOperationBlocks(source) {
+  const lines = source.split("\n");
+  const blocks = [];
+  let route = "";
+  for (let index = 0; index < lines.length; index += 1) {
+    const routeMatch = /^  (\/\S+):$/.exec(lines[index]);
+    if (routeMatch) {
+      route = routeMatch[1];
+      continue;
+    }
+    const methodMatch = /^    (get|post|put|patch|delete|head|options|trace):$/.exec(lines[index]);
+    if (!route || !methodMatch) continue;
+    let end = index + 1;
+    while (end < lines.length && !/^( {0,4}\S|  \/)/.test(lines[end])) end += 1;
+    blocks.push([route, methodMatch[1], lines.slice(index, end).join("\n")]);
+    index = end - 1;
+  }
+  return blocks;
 }
 
 function operationBlocks(source) {

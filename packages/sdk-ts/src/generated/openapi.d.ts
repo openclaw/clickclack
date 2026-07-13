@@ -1092,12 +1092,12 @@ export interface components {
       code_verifier: string;
     };
     UpdateMeRequest: {
-      display_name: string;
+      display_name?: string;
       /** @description Unique user handle. Accepts an optional leading @ and stores the normalized value without it. */
       handle?: string;
       /** Format: uri */
       avatar_url?: string;
-      notification_settings?: components["schemas"]["NotificationSettings"];
+      notification_settings?: components["schemas"]["NotificationSettingsPatch"];
     };
     User: {
       id: string;
@@ -1328,6 +1328,11 @@ export interface components {
       pushover_enabled: boolean;
       /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
       pushover_user_key: string;
+    };
+    NotificationSettingsPatch: {
+      pushover_enabled?: boolean;
+      /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
+      pushover_user_key?: string;
     };
     CreateChannelRequest: {
       name: string;

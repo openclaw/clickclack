@@ -50,6 +50,24 @@ type _AuthSessionResponse = Expect<
   >
 >;
 
+type UpdateMeBody = operations["updateMe"]["requestBody"]["content"]["application/json"];
+type UpdateMeInput = Parameters<ClickClackClient["updateMe"]>[0];
+type _UpdateMeRequest = Expect<Equal<UpdateMeBody, components["schemas"]["UpdateMeRequest"]>>;
+type _UpdateMeDisplayName = Expect<Equal<UpdateMeBody["display_name"], string | undefined>>;
+type _UpdateMeNotificationSettings = Expect<
+  Equal<
+    UpdateMeBody["notification_settings"],
+    components["schemas"]["NotificationSettingsPatch"] | undefined
+  >
+>;
+type _NotificationSettingsPatch = Expect<
+  Equal<components["schemas"]["NotificationSettingsPatch"], Partial<NotificationSettings>>
+>;
+type _SDKUpdateMeDisplayName = Expect<Equal<UpdateMeInput["display_name"], string | undefined>>;
+type _SDKUpdateMeNotificationSettings = Expect<
+  Equal<UpdateMeInput["notification_settings"], Partial<NotificationSettings> | undefined>
+>;
+
 type _NotificationSettings = Expect<
   Equal<NonNullable<User["notification_settings"]>, NotificationSettings>
 >;

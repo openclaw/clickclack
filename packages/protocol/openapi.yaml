@@ -193,6 +193,10 @@ paths:
                     $ref: "#/components/schemas/User"
     patch:
       operationId: updateMe
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       requestBody:
         required: true
         content:
@@ -240,6 +244,10 @@ paths:
                 $ref: "#/components/schemas/WorkspaceListResponse"
     post:
       operationId: createWorkspace
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       requestBody:
         required: true
         content:
@@ -290,6 +298,10 @@ paths:
                     $ref: "#/components/schemas/Workspace"
     patch:
       operationId: updateWorkspace
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -315,6 +327,10 @@ paths:
           description: Workspace manager permission required
     delete:
       operationId: deleteWorkspace
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       responses:
@@ -325,6 +341,10 @@ paths:
   /api/workspaces/{workspace_id}/transfer-ownership:
     post:
       operationId: transferWorkspaceOwnership
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -401,6 +421,10 @@ paths:
   /api/workspaces/{workspace_id}/moderation/members/{user_id}:
     patch:
       operationId: updateWorkspaceMemberModeration
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
         - name: user_id
@@ -441,6 +465,10 @@ paths:
                 $ref: "#/components/schemas/ChannelListResponse"
     post:
       operationId: createChannel
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -470,6 +498,10 @@ paths:
                 $ref: "#/components/schemas/TopicListResponse"
     post:
       operationId: createTopic
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -505,6 +537,10 @@ paths:
                       $ref: "#/components/schemas/BotWithTokens"
     post:
       operationId: createBot
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -525,6 +561,10 @@ paths:
   /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership:
     delete:
       operationId: removeBotFromWorkspace
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
         - name: bot_user_id
@@ -566,6 +606,10 @@ paths:
           description: Workspace membership required
     post:
       operationId: createWorkspaceBotToken
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
         - name: bot_user_id
@@ -608,6 +652,10 @@ paths:
           description: Workspace membership required
     post:
       operationId: createBotToken
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: bot_user_id
           in: path
@@ -632,6 +680,10 @@ paths:
   /api/bot-tokens/{token_id}/revoke:
     post:
       operationId: revokeBotToken
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: token_id
           in: path
@@ -661,6 +713,10 @@ paths:
                 $ref: "#/components/schemas/AppInstallationListResponse"
     post:
       operationId: createAppInstallation
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -679,6 +735,10 @@ paths:
   /api/app-installations/{installation_id}/revoke:
     post:
       operationId: revokeAppInstallation
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: installation_id
           in: path
@@ -706,6 +766,10 @@ paths:
                 $ref: "#/components/schemas/SlashCommandListResponse"
     post:
       operationId: createSlashCommand
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -724,6 +788,10 @@ paths:
   /api/slash-commands/{command_id}/revoke:
     post:
       operationId: revokeSlashCommand
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: command_id
           in: path
@@ -751,6 +819,10 @@ paths:
                 $ref: "#/components/schemas/EventSubscriptionListResponse"
     post:
       operationId: createEventSubscription
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -769,6 +841,10 @@ paths:
   /api/event-subscriptions/{subscription_id}/revoke:
     post:
       operationId: revokeEventSubscription
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: subscription_id
           in: path
@@ -831,6 +907,10 @@ paths:
                 $ref: "#/components/schemas/ConnectedAccountListResponse"
     post:
       operationId: createConnectedAccount
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -849,6 +929,10 @@ paths:
   /api/connected-accounts/{account_id}/revoke:
     post:
       operationId: revokeConnectedAccount
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: account_id
           in: path
@@ -865,6 +949,10 @@ paths:
   /api/channels/{channel_id}:
     patch:
       operationId: updateChannel
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/channel_id"
       requestBody:
@@ -919,6 +1007,10 @@ paths:
                 $ref: "#/components/schemas/MessagePage"
     post:
       operationId: createMessage
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/channel_id"
       requestBody:
@@ -943,6 +1035,10 @@ paths:
   /api/channels/{channel_id}/read:
     post:
       operationId: markChannelRead
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/channel_id"
       requestBody:
@@ -972,6 +1068,10 @@ paths:
                 $ref: "#/components/schemas/MessageResponse"
     patch:
       operationId: updateMessage
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
       requestBody:
@@ -989,6 +1089,10 @@ paths:
                 $ref: "#/components/schemas/MessageMutationResponse"
     delete:
       operationId: deleteMessage
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
       responses:
@@ -1020,6 +1124,10 @@ paths:
   /api/messages/{message_id}/thread/replies:
     post:
       operationId: createThreadReply
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
       requestBody:
@@ -1044,6 +1152,10 @@ paths:
   /api/messages/{message_id}/reactions:
     post:
       operationId: addReaction
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
       requestBody:
@@ -1068,6 +1180,10 @@ paths:
   /api/messages/{message_id}/attachments:
     post:
       operationId: attachUpload
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
       requestBody:
@@ -1086,6 +1202,10 @@ paths:
   /api/messages/{message_id}/reactions/{emoji}:
     delete:
       operationId: removeReaction
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/message_id"
         - name: emoji
@@ -1135,6 +1255,10 @@ paths:
   /api/realtime/ephemeral:
     post:
       operationId: publishEphemeral
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       requestBody:
         required: true
         content:
@@ -1200,6 +1324,10 @@ paths:
   /api/uploads:
     post:
       operationId: createUpload
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - name: workspace_id
           in: query
@@ -1266,6 +1394,10 @@ paths:
                 $ref: "#/components/schemas/DirectConversationListResponse"
     post:
       operationId: createDirectConversation
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       requestBody:
         required: true
         content:
@@ -1293,6 +1425,10 @@ paths:
                 $ref: "#/components/schemas/DirectConversationResponse"
     delete:
       operationId: hideDirectConversation
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/conversation_id"
       responses:
@@ -1305,6 +1441,10 @@ paths:
   /api/dms/{conversation_id}/open:
     post:
       operationId: reopenDirectConversation
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/conversation_id"
       responses:
@@ -1353,6 +1493,10 @@ paths:
                 $ref: "#/components/schemas/MessagePage"
     post:
       operationId: createDirectMessage
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/conversation_id"
       requestBody:
@@ -1377,6 +1521,10 @@ paths:
   /api/dms/{conversation_id}/read:
     post:
       operationId: markDirectRead
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/conversation_id"
       requestBody:
@@ -1395,6 +1543,10 @@ paths:
   /api/hooks/mattermost/{channel_id}:
     post:
       operationId: mattermostIncomingWebhook
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/channel_id"
       requestBody:
@@ -1413,6 +1565,10 @@ paths:
   /api/hooks/slash/{channel_id}:
     post:
       operationId: slashCommand
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+          csrfHeader: []
       parameters:
         - $ref: "#/components/parameters/channel_id"
       requestBody:
@@ -1446,6 +1602,11 @@ components:
       in: cookie
       name: cc_session
       description: Browser session cookie set by magic-link or GitHub OAuth login.
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-ClickClack-CSRF
+      description: Cookie-authenticated mutation requests must send this header with the value 1. Bearer-authenticated requests do not require it.
   parameters:
     workspace_id:
       name: workspace_id
@@ -1847,7 +2008,6 @@ components:
           pattern: "^[A-Za-z0-9_-]+$"
     UpdateMeRequest:
       type: object
-      required: [display_name]
       properties:
         display_name:
           type: string
@@ -1860,7 +2020,7 @@ components:
           type: string
           format: uri
         notification_settings:
-          $ref: "#/components/schemas/NotificationSettings"
+          $ref: "#/components/schemas/NotificationSettingsPatch"
     User:
       type: object
       required: [id, kind, display_name, handle, avatar_url, created_at]
@@ -2282,6 +2442,15 @@ components:
     NotificationSettings:
       type: object
       required: [pushover_enabled, pushover_user_key]
+      properties:
+        pushover_enabled:
+          type: boolean
+        pushover_user_key:
+          type: string
+          description: Current user's Pushover user key. Must be set when Pushover notifications are enabled.
+          pattern: "^[A-Za-z0-9]{30}$"
+    NotificationSettingsPatch:
+      type: object
       properties:
         pushover_enabled:
           type: boolean

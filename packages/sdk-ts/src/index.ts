@@ -358,10 +358,10 @@ export class ClickClackClient {
   }
 
   async updateMe(input: {
-    display_name: string;
+    display_name?: string;
     handle?: string;
     avatar_url?: string;
-    notification_settings?: NotificationSettings;
+    notification_settings?: Partial<NotificationSettings>;
   }): Promise<User> {
     const data = await this.request<{ user: User }>("/api/me", {
       method: "PATCH",

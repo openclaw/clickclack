@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForAppReady } from "./app-ready";
 
 // Appearance prefs are device-local: the settings modal writes localStorage
 // and data attributes on <html>; base.css maps those to color-scheme and
@@ -7,9 +8,19 @@ import { expect, test } from "@playwright/test";
 
 async function openAppearanceSettings(page: import("@playwright/test").Page) {
   await page.goto("/app");
-  await page.getByRole("button", { name: /account settings/i }).click();
-  await page.getByRole("button", { name: "Appearance" }).click();
-  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+  await waitForAppReady(page);
+  const accountSettings = page.getByRole("button", { name: /account settings/i });
+  const modal = page.getByRole("dialog", { name: "Account settings" });
+  const appearanceHeading = modal.getByRole("heading", { name: "Appearance" });
+  await expect(async () => {
+    if (await appearanceHeading.isVisible()) return;
+    if (!(await modal.isVisible())) await accountSettings.click();
+    await expect(modal.getByRole("heading", { name: "Profile settings" })).toBeVisible({
+      timeout: 750,
+    });
+    await modal.getByRole("button", { name: "Appearance" }).click();
+    await expect(appearanceHeading).toBeVisible({ timeout: 750 });
+  }).toPass({ timeout: 5_000 });
 }
 
 test("forced color mode applies instantly and survives reload", async ({ page }) => {

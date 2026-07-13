@@ -11,6 +11,7 @@ import {
   openClawWorkspaceIdentifier,
 } from "../../apps/web/src/lib/bots";
 import { productAppURLForHost } from "../../apps/web/src/productLinks";
+import { waitForAppReady } from "./app-ready";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -259,6 +260,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   }
 
   await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
   const channelNames = (targetPage: Page) =>
     targetPage
       .locator("#sidebar-channels-list")
@@ -269,6 +271,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
 
   const peer = await page.context().newPage();
   await peer.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(peer);
   await expect.poll(() => channelNames(peer)).toEqual(names);
 
   const source = page.getByRole("button", { name: `Move #${names[2]}` });
@@ -279,6 +282,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await expect.poll(() => channelNames(peer)).toEqual([names[2], names[0], names[1]]);
 
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
 
   await page.getByRole("button", { name: "Channels", exact: true }).click();
@@ -290,6 +294,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await expect(page.getByRole("button", { name: `Move #${names[0]}` })).toHaveCount(0);
   await expect(page.getByRole("link", { name: `# ${names[0]}` })).toHaveCSS("flex-grow", "1");
   await page.reload();
+  await waitForAppReady(page);
   await expect(page.getByRole("button", { name: "Channels", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
@@ -310,6 +315,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   });
   expect(addedResponse.ok()).toBe(true);
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
 
   const secondWorkspaceResponse = await page.request.post("/api/workspaces", {
@@ -326,8 +332,10 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     expect(response.ok()).toBe(true);
   }
   await page.goto(`/app/${secondWorkspace.route_id}`);
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([`aa-other-${suffix}`, `zz-other-${suffix}`]);
   await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
 
   const storageKey = await page.evaluate(() =>
@@ -336,6 +344,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   expect(storageKey).toBeTruthy();
   await page.evaluate((key) => localStorage.setItem(key, "not-json"), storageKey!);
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
 
   await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
@@ -343,6 +352,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     value: "x".repeat(1_000_001),
   });
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
 
   await page.addInitScript(() => {
@@ -359,6 +369,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     };
   });
   await page.reload();
+  await waitForAppReady(page);
   await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
   await page.keyboard.press("ArrowUp");
   await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[2], names[1]]);
@@ -373,6 +384,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   });
   const mobilePage = await mobileContext.newPage();
   await mobilePage.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(mobilePage);
   await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
   await mobilePage.getByRole("button", { name: `Move #${names[1]}` }).click();
   await mobilePage
@@ -383,6 +395,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     .poll(() => channelNames(mobilePage))
     .toEqual([names[0], names[1], addedName, names[2]]);
   await mobilePage.reload();
+  await waitForAppReady(mobilePage);
   await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
   await expect
     .poll(() => channelNames(mobilePage))
@@ -965,6 +978,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   ).trim();
 
   await page.goto("/app");
+  await waitForAppReady(page);
   await expect(page).toHaveURL(/\/app\/[^/]+\/[^/]+$/);
 
   await page
@@ -1144,6 +1158,7 @@ test("closes direct messages without deleting history", async ({ page }) => {
   };
 
   await page.goto("/app");
+  await waitForAppReady(page);
   const dmSection = page.locator(".nav-section", { hasText: "Direct messages" });
   const dmLink = dmSection.getByRole("link", { name: new RegExp(name) });
   const closeDirectMessage = async () => {
@@ -1164,6 +1179,7 @@ test("closes direct messages without deleting history", async ({ page }) => {
   const hiddenGet = await page.request.get(`/api/dms/${conversation.id}`);
   expect(hiddenGet.ok()).toBe(true);
   await page.goto(`/app/${workspace.route_id}/${conversation.route_id}`);
+  await waitForAppReady(page);
   await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
 
   await closeDirectMessage();
@@ -1175,6 +1191,7 @@ test("closes direct messages without deleting history", async ({ page }) => {
   const reopenedBody = (await reopened.json()) as { conversation: { id: string } };
   expect(reopenedBody.conversation.id).toBe(conversation.id);
   await page.reload();
+  await waitForAppReady(page);
   await expect(dmLink).toBeVisible();
 
   await closeDirectMessage();

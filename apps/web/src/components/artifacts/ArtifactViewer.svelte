@@ -19,8 +19,7 @@
   import { markdown } from "../../lib/format";
   import { highlightCodeInWorker } from "../../lib/highlight";
   import {
-    parsePresentation,
-    parseSpreadsheet,
+    parseOfficeInWorker,
     type PresentationPreview,
     type SpreadsheetPreview,
   } from "../../lib/office";
@@ -342,11 +341,11 @@
         const bytes = await responseBytes(signal, limit!);
         if (signal.aborted) return;
         if (kind === "spreadsheet") {
-          const preview = await parseSpreadsheet(bytes, signal);
+          const preview = await parseOfficeInWorker(kind, bytes, signal);
           if (signal.aborted) return;
           spreadsheet = preview;
         } else {
-          const preview = await parsePresentation(bytes, signal);
+          const preview = await parseOfficeInWorker(kind, bytes, signal);
           if (signal.aborted) return;
           presentation = preview;
         }

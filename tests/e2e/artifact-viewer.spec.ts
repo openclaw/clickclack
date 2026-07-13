@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { deflateRawSync } from "node:zlib";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
-import { parseSpreadsheet } from "../../apps/web/src/lib/office";
+import { parseSpreadsheet } from "../../apps/web/src/lib/office-parser";
 import {
   assertSafePDFCanvas,
   PDF_CANVAS_DIMENSION_LIMIT,
@@ -10,6 +10,10 @@ import {
 import type { Upload } from "../../apps/web/src/lib/types";
 
 type Fixture = { filename: string; contentType: string; body: Buffer };
+
+const RELATIONSHIPS_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const OFFICE_RELATIONSHIP_NS =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 function storedZip(files: Record<string, string | Buffer>): Buffer {
   const local: Buffer[] = [];
@@ -46,10 +50,28 @@ function storedZip(files: Record<string, string | Buffer>): Buffer {
   return Buffer.concat([...local, ...central, end]);
 }
 
-function workbookFixture(): Buffer {
+function officePackage(
+  documentTarget: "xl/workbook.xml" | "ppt/presentation.xml",
+  files: Record<string, string | Buffer>,
+): Buffer {
   return storedZip({
+    "_rels/.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rIdOffice" Type="${OFFICE_RELATIONSHIP_NS}/officeDocument" Target="${documentTarget}"/></Relationships>`,
+    ...files,
+  });
+}
+
+function workbookPackage(files: Record<string, string | Buffer>): Buffer {
+  return officePackage("xl/workbook.xml", files);
+}
+
+function presentationPackage(files: Record<string, string | Buffer>): Buffer {
+  return officePackage("ppt/presentation.xml", files);
+}
+
+function workbookFixture(): Buffer {
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Forecast" r:id="rId1"/><sheet name="Assumptions" r:id="rId2"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rIdShared" Type="${OFFICE_RELATIONSHIP_NS}/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
     "xl/sharedStrings.xml": `<sst><si><t>Quarter</t></si><si><t>Revenue</t></si><si><t>Q1</t></si><si><t>Growth rate</t></si></sst>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row><c r="A2" t="s"><v>2</v></c><c r="B2"><v>125000</v></c></row></sheetData></worksheet>`,
     "xl/worksheets/sheet2.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>3</v></c><c r="B1"><v>0.18</v></c></row></sheetData></worksheet>`,
@@ -57,18 +79,18 @@ function workbookFixture(): Buffer {
 }
 
 function presentationFixture(): Buffer {
-  return storedZip({
+  return presentationPackage({
     "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/><sldId r:id="rId2"/></sldIdLst></presentation>`,
-    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/><Relationship Id="rId2" Target="slides/slide2.xml"/></Relationships>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide2.xml"/></Relationships>`,
     "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Launch plan</t></r></p><p><r><t>Three milestones for a calm rollout</t></r></p></txBody></sp></sld>`,
     "ppt/slides/slide2.xml": `<sld><sp><txBody><p><r><t>Next steps</t></r></p><p><r><t>Invite the pilot team</t></r></p></txBody></sp></sld>`,
   });
 }
 
 function absoluteRelationshipWorkbook(): Buffer {
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Root relative" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="/xl/worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="/xl/worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Resolved from package root</t></is></c></row></sheetData></worksheet>`,
   });
 }
@@ -78,35 +100,35 @@ function worksheetFloodWorkbook(): Buffer {
     { length: 101 },
     (_, index) => `<sheet name="Sheet ${index + 1}" r:id="rId1"/>`,
   ).join("");
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets}</sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData/></worksheet>`,
   });
 }
 
 function xmlElementFloodWorkbook(): Buffer {
   const elements = "<x/>".repeat(25_001);
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Structural flood" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData>${elements}</sheetData></worksheet>`,
   });
 }
 
 function omittedReferencesWorkbook(): Buffer {
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Derived coordinates" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row r="3"><c t="inlineStr"><is><t>Derived A3</t></is></c><c t="inlineStr"><is><t>Derived B3</t></is></c></row></sheetData></worksheet>`,
   });
 }
 
 function sharedStringFloodWorkbook(): Buffer {
   const strings = "<si><t>x</t></si>".repeat(10_001);
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Flood" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rIdShared" Type="${OFFICE_RELATIONSHIP_NS}/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
     "xl/sharedStrings.xml": `<sst>${strings}</sst>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>`,
   });
@@ -114,9 +136,9 @@ function sharedStringFloodWorkbook(): Buffer {
 
 function paragraphFloodPresentation(): Buffer {
   const paragraphs = "<p><r><t>x</t></r></p>".repeat(2_001);
-  return storedZip({
+  return presentationPackage({
     "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/></sldIdLst></presentation>`,
-    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
     "ppt/slides/slide1.xml": `<sld><sp><txBody>${paragraphs}</txBody></sp></sld>`,
   });
 }
@@ -127,27 +149,27 @@ function workbookWithCellsPerSheet(count: number): Buffer {
       { length: count },
       (_, index) => `<c r="${column}${index + 1}"><v>${index}</v></c>`,
     ).join("");
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="First" r:id="rId1"/><sheet name="Second" r:id="rId2"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData>${cells("A")}</sheetData></worksheet>`,
     "xl/worksheets/sheet2.xml": `<worksheet><sheetData>${cells("B")}</sheetData></worksheet>`,
   });
 }
 
 function presentationWithUnusedLargeMedia(): Buffer {
-  return storedZip({
+  return presentationPackage({
     "ppt/presentation.xml": `<presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sldIdLst><sldId r:id="rId1"/></sldIdLst></presentation>`,
-    "ppt/_rels/presentation.xml.rels": `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
     "ppt/slides/slide1.xml": `<sld><sp><txBody><p><r><t>Text-only preview survives media</t></r></p></txBody></sp></sld>`,
     "ppt/media/unused-video.bin": Buffer.alloc(4 * 1024 * 1024 + 1, 0x61),
   });
 }
 
 function sparseWorkbookFixture(): Buffer {
-  return storedZip({
+  return workbookPackage({
     "xl/workbook.xml": `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sparse" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${OFFICE_RELATIONSHIP_NS}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
     "xl/worksheets/sheet1.xml": `<worksheet><sheetData><c r="A1" t="inlineStr"><is><t>Origin</t></is></c><c r="CV1000"><v>999</v></c></sheetData></worksheet>`,
   });
 }
@@ -350,14 +372,11 @@ test("classifies artifacts by filename and original MIME metadata", () => {
   expect(classifyArtifact(uploadShape("archive.zip", "application/zip"))).toBe("unsupported");
 });
 
-test("stops Office entries when output exceeds the declared size", async () => {
+test("stops Office entries when output exceeds the declared size", () => {
   for (const compression of [0, 8] as const) {
-    await expect(
-      parseSpreadsheet(
-        new Uint8Array(lyingWorkbookEntry(compression)),
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("exceeded its declared safe size");
+    expect(() => parseSpreadsheet(new Uint8Array(lyingWorkbookEntry(compression)))).toThrow(
+      "exceeded its declared safe size",
+    );
   }
 });
 

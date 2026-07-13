@@ -65,6 +65,9 @@ importers:
       dompurify:
         specifier: ^3.4.11
         version: 3.4.11
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
@@ -74,6 +77,9 @@ importers:
       pdfjs-dist:
         specifier: ^6.1.200
         version: 6.1.200
+      sax:
+        specifier: ^1.6.0
+        version: 1.6.0
       svelte:
         specifier: ^5.56.4
         version: 5.56.4
@@ -93,6 +99,9 @@ importers:
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
+      '@types/sax':
+        specifier: ^1.2.7
+        version: 1.2.7
       '@typescript/native':
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
@@ -1152,6 +1161,9 @@ packages:
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
 
+  '@types/sax@1.2.7':
+    resolution: {integrity: sha512-rO73L89PJxeYM3s3pPPjiPgVVcymqU490g0YO5n5By0k2Erzj6tay/4lr1CHAAU4JyOWd1rpQ8bCf6cZfHU96A==}
+
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
 
@@ -1655,6 +1667,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   filelist@1.0.6:
     resolution: {integrity: sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==}
@@ -3383,6 +3398,10 @@ snapshots:
     dependencies:
       '@types/node': 26.1.1
 
+  '@types/sax@1.2.7':
+    dependencies:
+      '@types/node': 26.1.1
+
   '@types/trusted-types@2.0.7': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
@@ -3892,6 +3911,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
+
+  fflate@0.8.3: {}
 
   filelist@1.0.6:
     dependencies:

@@ -363,6 +363,19 @@ func TestUploadNonceValidationCountsCharacters(t *testing.T) {
 	}); err == nil || !strings.Contains(err.Error(), "nonce is too long") {
 		t.Fatalf("expected 129-character nonce rejection, got %v", err)
 	}
+	for _, nonce := range []string{string([]byte{0xff}), "invalid\x00nonce"} {
+		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+			WorkspaceID: workspace.ID,
+			OwnerID:     owner.ID,
+			Nonce:       nonce,
+			Filename:    "invalid.txt",
+			ContentType: "text/plain",
+			ByteSize:    1,
+			StoragePath: "/tmp/invalid.txt",
+		}); err == nil {
+			t.Fatalf("expected database-invalid nonce rejection for %q", nonce)
+		}
+	}
 }
 
 func TestUploadReservationClaimsOwnerNonceBeforeQuota(t *testing.T) {

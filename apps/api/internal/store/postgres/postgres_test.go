@@ -318,6 +318,16 @@ func TestCreateReservedUploadSerializesWithNonceRetries(t *testing.T) {
 	}
 }
 
+func TestNormalizeClientNonceRejectsDatabaseInvalidText(t *testing.T) {
+	t.Parallel()
+
+	for _, nonce := range []string{string([]byte{0xff}), "invalid\x00nonce"} {
+		if _, err := normalizeClientNonce(nonce); err == nil {
+			t.Fatalf("expected database-invalid nonce rejection for %q", nonce)
+		}
+	}
+}
+
 func applyPostgresMigrationsBefore(t *testing.T, ctx context.Context, st *Store, cutoff string) {
 	t.Helper()
 	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {

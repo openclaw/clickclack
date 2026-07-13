@@ -95,6 +95,9 @@ test("published releases are immutable and draft retries compare bytes", async (
     /cmp -s server-release\/CHANGELOG\.md "\$RUNNER_TEMP\/existing-release-notes\.md"/u,
   );
   assert.match(workflow, /exists with different bytes; refusing replacement/u);
+  assert.match(workflow, /Draft release asset set differs from the verified candidate manifest/u);
+  assert.match(workflow, /jq -r '\.assets\[\]\.name'/u);
+  assert.match(workflow, /comm -13 "\$expected_assets" "\$actual_assets"/u);
   assert.doesNotMatch(workflow, /--clobber/u);
   assert.match(goreleaser, /replace_existing_artifacts: false/u);
   assert.match(goreleaser, /mode: keep-existing/u);
@@ -216,6 +219,19 @@ test("repository Docker callsites derive and forward complete metadata", async (
     ".",
   ]);
 
+  for (const override of [
+    ["--build-arg", "CLICKCLACK_COMMIT=attacker"],
+    ["--build-arg=CLICKCLACK_VERSION=attacker"],
+  ]) {
+    const rejected = spawnSync("scripts/docker-build.sh", [...override, "."], {
+      cwd: temporary,
+      encoding: "utf8",
+      env: cleanEnvironment,
+    });
+    assert.equal(rejected.status, 64);
+    assert.match(rejected.stderr, /cannot be overridden/u);
+  }
+
   const composeArgsPath = path.join(fakeDockerDirectory, "compose-args.txt");
   await writeFile(
     path.join(fakeDockerDirectory, "docker"),
@@ -255,6 +271,14 @@ test("repository Docker callsites derive and forward complete metadata", async (
   });
   assert.notEqual(dirty.status, 0);
   assert.match(dirty.stderr, /require a clean Git worktree/u);
+
+  const inspected = spawnSync("deploy/fakeco/compose.sh", ["ps"], {
+    cwd: temporary,
+    encoding: "utf8",
+    env: fakecoEnvironment,
+  });
+  assert.equal(inspected.status, 0, inspected.stderr);
+  assert.match(await readFile(composeArgsPath, "utf8"), /\nps\n?$/u);
 });
 
 test("Cloudflare disables workers.dev and derives metadata from a clean commit", async (t) => {

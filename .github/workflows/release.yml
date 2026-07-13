@@ -361,6 +361,25 @@ jobs:
               ! -name CHANGELOG.md -print0
           )
 
+          expected_assets="$RUNNER_TEMP/expected-release-assets.txt"
+          actual_assets="$RUNNER_TEMP/actual-release-assets.txt"
+          while IFS= read -r -d '' candidate; do
+            printf '%s\n' "${candidate##*/}"
+          done < <(
+            find server-release desktop-release -maxdepth 1 -type f \
+              ! -name CHANGELOG.md -print0
+          ) | LC_ALL=C sort >"$expected_assets"
+          refresh_release
+          jq -r '.assets[].name' "$release_json" | LC_ALL=C sort >"$actual_assets"
+          cmp -s "$expected_assets" "$actual_assets" || {
+            printf 'Draft release asset set differs from the verified candidate manifest.\n' >&2
+            printf 'Unexpected assets:\n' >&2
+            comm -13 "$expected_assets" "$actual_assets" >&2
+            printf 'Missing assets:\n' >&2
+            comm -23 "$expected_assets" "$actual_assets" >&2
+            exit 1
+          }
+
       - name: Publish verified GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

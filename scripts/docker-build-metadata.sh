@@ -4,13 +4,20 @@ set -euo pipefail
 
 repository_root="$(git rev-parse --show-toplevel)"
 build_flavor="${CLICKCLACK_BUILD_FLAVOR:-local}"
+require_clean_tree="${CLICKCLACK_REQUIRE_CLEAN_TREE:-1}"
 
 if [[ ! "$build_flavor" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
   echo "invalid CLICKCLACK_BUILD_FLAVOR: $build_flavor" >&2
   return 1 2>/dev/null || exit 1
 fi
 
-if [[ -n "$(git -C "$repository_root" status --porcelain --untracked-files=normal)" ]]; then
+if [[ "$require_clean_tree" != "0" && "$require_clean_tree" != "1" ]]; then
+  echo "invalid CLICKCLACK_REQUIRE_CLEAN_TREE: $require_clean_tree" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [[ "$require_clean_tree" == "1" ]] &&
+  [[ -n "$(git -C "$repository_root" status --porcelain --untracked-files=normal)" ]]; then
   echo "Docker builds require a clean Git worktree so embedded metadata matches the image." >&2
   return 1 2>/dev/null || exit 1
 fi

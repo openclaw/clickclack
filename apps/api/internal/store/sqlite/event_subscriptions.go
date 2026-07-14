@@ -232,10 +232,25 @@ func (s *Store) ListEventDeliveryAttempts(ctx context.Context, subscriptionID, r
 	if limit > 201 {
 		limit = 201
 	}
+	before = strings.TrimSpace(before)
+	beforeCreatedAt := ""
+	if before != "" {
+		beforeCreatedAt, err = s.q.GetEventDeliveryAttemptCursor(ctx, storedb.GetEventDeliveryAttemptCursorParams{
+			SubscriptionID: subscriptionID,
+			BeforeID:       before,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrInvalidEventDeliveryCursor
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	rows, err := s.q.ListEventDeliveryAttemptsPage(ctx, storedb.ListEventDeliveryAttemptsPageParams{
-		SubscriptionID: subscriptionID,
-		BeforeID:       strings.TrimSpace(before),
-		PageLimit:      int64(limit),
+		SubscriptionID:  subscriptionID,
+		BeforeID:        before,
+		BeforeCreatedAt: beforeCreatedAt,
+		PageLimit:       int64(limit),
 	})
 	if err != nil {
 		return nil, err

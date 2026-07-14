@@ -1060,6 +1060,25 @@ func (q *Queries) GetDirectConversationWorkspace(ctx context.Context, id string)
 	return workspace_id, err
 }
 
+const getEventDeliveryAttemptCursor = `-- name: GetEventDeliveryAttemptCursor :one
+SELECT created_at
+FROM event_delivery_attempts
+WHERE subscription_id = $1
+  AND id = $2
+`
+
+type GetEventDeliveryAttemptCursorParams struct {
+	SubscriptionID string `json:"subscription_id"`
+	BeforeID       string `json:"before_id"`
+}
+
+func (q *Queries) GetEventDeliveryAttemptCursor(ctx context.Context, arg GetEventDeliveryAttemptCursorParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getEventDeliveryAttemptCursor, arg.SubscriptionID, arg.BeforeID)
+	var created_at string
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getMagicLinkByToken = `-- name: GetMagicLinkByToken :one
 SELECT id, token, token_hash, email, display_name, created_at, expires_at, used_at
 FROM auth_magic_links
@@ -2626,12 +2645,6 @@ func (q *Queries) ListDirectPushNotificationRecipients(ctx context.Context, arg 
 }
 
 const listEventDeliveryAttemptsPage = `-- name: ListEventDeliveryAttemptsPage :many
-WITH page_cursor AS (
-  SELECT created_at, id
-  FROM event_delivery_attempts
-  WHERE subscription_id = $1
-    AND id = $2
-)
 SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
        eda.attempt, eda.request_json, eda.response_status, eda.response_body,
        eda.error, eda.created_at, eda.completed_at
@@ -2639,25 +2652,30 @@ FROM event_delivery_attempts eda
 WHERE eda.subscription_id = $1
   AND (
     $2::text = ''
-    OR EXISTS (
-      SELECT 1
-      FROM page_cursor
-      WHERE eda.created_at < page_cursor.created_at
-         OR (eda.created_at = page_cursor.created_at AND eda.id < page_cursor.id)
+    OR eda.created_at < $3::text
+    OR (
+      eda.created_at = $3::text
+      AND eda.id < $2
     )
   )
 ORDER BY eda.created_at DESC, eda.id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type ListEventDeliveryAttemptsPageParams struct {
-	SubscriptionID string `json:"subscription_id"`
-	BeforeID       string `json:"before_id"`
-	PageLimit      int32  `json:"page_limit"`
+	SubscriptionID  string `json:"subscription_id"`
+	BeforeID        string `json:"before_id"`
+	BeforeCreatedAt string `json:"before_created_at"`
+	PageLimit       int32  `json:"page_limit"`
 }
 
 func (q *Queries) ListEventDeliveryAttemptsPage(ctx context.Context, arg ListEventDeliveryAttemptsPageParams) ([]EventDeliveryAttempt, error) {
-	rows, err := q.db.QueryContext(ctx, listEventDeliveryAttemptsPage, arg.SubscriptionID, arg.BeforeID, arg.PageLimit)
+	rows, err := q.db.QueryContext(ctx, listEventDeliveryAttemptsPage,
+		arg.SubscriptionID,
+		arg.BeforeID,
+		arg.BeforeCreatedAt,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

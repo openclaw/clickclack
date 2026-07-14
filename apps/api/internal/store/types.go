@@ -19,6 +19,10 @@ var ErrClientNonceConflict = errors.New("client nonce was already used for a dif
 // mutually exclusive cursors or uses an invalid cursor value.
 var ErrInvalidMessagePage = errors.New("invalid message page request")
 
+// ErrInvalidEventDeliveryCursor is returned when a delivery-attempt cursor
+// does not exist for the requested subscription.
+var ErrInvalidEventDeliveryCursor = errors.New("invalid or stale event delivery cursor")
+
 // ErrModerationRestricted is returned when a workspace moderation rule blocks
 // a write. HTTP callers surface it as a 403 or 429 depending on the rule.
 var ErrModerationRestricted = errors.New("moderation restriction")

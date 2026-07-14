@@ -172,7 +172,9 @@ Behavior:
 - `GET /api/event-subscriptions/{subscription_id}/deliveries` accepts `limit`
   (default `50`, maximum `200`) and a `before` delivery-attempt ID. Results are
   newest first and return `{"deliveries":[...],"next_cursor":"eda_..."}`.
-  `next_cursor` is `null` on the last page.
+  `next_cursor` is `null` on the last page. If retention removes the delivery
+  referenced by `before`, the API returns `400` instead of silently treating
+  the stale cursor as the final page.
 
 The TypeScript SDK exposes this as
 `client.eventSubscriptions.list(workspaceId)`,

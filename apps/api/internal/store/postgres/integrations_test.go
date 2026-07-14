@@ -125,6 +125,12 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if len(firstPage) != 2 || firstPage[0].ID != attemptIDs[0] || firstPage[1].ID != attemptIDs[1] || len(secondPage) != 1 || secondPage[0].ID != attemptIDs[2] {
 		t.Fatalf("unexpected postgres delivery pages: first=%#v second=%#v", firstPage, secondPage)
 	}
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM event_delivery_attempts WHERE id = $1`, firstPage[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ListEventDeliveryAttempts(ctx, subscription.ID, member.ID, 2, firstPage[1].ID); !errors.Is(err, store.ErrInvalidEventDeliveryCursor) {
+		t.Fatalf("expected deleted postgres delivery cursor to be rejected, got %v", err)
+	}
 
 	if _, err := st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
 		WorkspaceID:       workspace.ID,

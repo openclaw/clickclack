@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"testing"
 
@@ -37,6 +38,7 @@ func TestListEventDeliveryAttemptsPaginatesWithStableTiebreak(t *testing.T) {
 	}
 
 	ids := make([]string, 0, 4)
+	eventIDs := make(map[string]string, 4)
 	for i := range 4 {
 		_, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
 			ChannelID: channels[0].ID,
@@ -57,6 +59,7 @@ func TestListEventDeliveryAttemptsPaginatesWithStableTiebreak(t *testing.T) {
 			t.Fatal(err)
 		}
 		ids = append(ids, attempt.ID)
+		eventIDs[attempt.ID] = event.ID
 	}
 	if _, err := st.db.ExecContext(ctx, `
 		UPDATE event_delivery_attempts
@@ -86,5 +89,20 @@ func TestListEventDeliveryAttemptsPaginatesWithStableTiebreak(t *testing.T) {
 	}
 	if len(last) != 0 {
 		t.Fatalf("expected final page to be empty, got %#v", last)
+	}
+
+	staleCursor := first[1].ID
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM events WHERE id = ?`, eventIDs[staleCursor]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ListEventDeliveryAttempts(ctx, subscription.ID, owner.ID, 2, staleCursor); !errors.Is(err, store.ErrInvalidEventDeliveryCursor) {
+		t.Fatalf("expected deleted delivery cursor to be rejected, got %v", err)
+	}
+	remaining, err := st.ListEventDeliveryAttempts(ctx, subscription.ID, owner.ID, 10, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 3 {
+		t.Fatalf("expected older delivery attempts to remain after cursor pruning, got %#v", remaining)
 	}
 }

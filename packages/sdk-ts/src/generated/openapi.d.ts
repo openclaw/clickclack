@@ -3039,6 +3039,13 @@ export interface operations {
           "application/json": components["schemas"]["EventDeliveryAttemptsResponse"];
         };
       };
+      /** @description Invalid or stale delivery cursor */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
     };
   };
   listAuditLogEntries: {

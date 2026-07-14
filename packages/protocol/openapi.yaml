@@ -872,6 +872,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EventDeliveryAttemptsResponse"
+        "400":
+          description: Invalid or stale delivery cursor
   /api/workspaces/{workspace_id}/audit-log:
     get:
       operationId: listAuditLogEntries

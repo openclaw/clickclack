@@ -1596,6 +1596,14 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	if secondDeliveryPage.Deliveries[0].ID == firstDeliveryPage.Deliveries[0].ID || secondDeliveryPage.Deliveries[0].ID == firstDeliveryPage.Deliveries[1].ID {
 		t.Fatalf("delivery pages overlap: first=%#v second=%#v", firstDeliveryPage.Deliveries, secondDeliveryPage.Deliveries)
 	}
+	expectStatusAsUser(
+		t,
+		owner.ID,
+		http.MethodGet,
+		server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries?before=eda_missing",
+		nil,
+		http.StatusBadRequest,
+	)
 	revokedSubscription := postJSONAsUser[struct {
 		EventSubscription store.EventSubscription `json:"event_subscription"`
 	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/revoke", map[string]any{})

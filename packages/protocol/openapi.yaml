@@ -524,6 +524,21 @@ paths:
                 $ref: "#/components/schemas/CreateBotResponse"
         "403":
           description: Service bots require a workspace manager. User-owned bots must be created by their owner.
+  /api/workspaces/{workspace_id}/bot-commands:
+    get:
+      operationId: listBotCommands
+      summary: List active bot-declared command menus for a workspace
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      responses:
+        "200":
+          description: Bot commands sorted by bot handle and command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceBotCommandListResponse"
+        "403":
+          description: Workspace membership required. Bot tokens also require workspaces:read and a matching workspace binding.
   /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership:
     delete:
       operationId: removeBotFromWorkspace
@@ -631,6 +646,27 @@ paths:
                 $ref: "#/components/schemas/BotTokenResponse"
         "403":
           description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+  /api/bots/self/commands:
+    put:
+      operationId: setBotCommands
+      summary: Atomically replace the authenticated bot's command menu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetBotCommandsRequest"
+      responses:
+        "200":
+          description: Replaced bot command menu sorted by command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotCommandListResponse"
+        "400":
+          description: Invalid command menu. The previous menu remains unchanged.
+        "403":
+          description: Bot token with commands:write required. Human sessions are rejected.
   /api/bot-tokens/{token_id}/revoke:
     post:
       operationId: revokeBotToken
@@ -1593,6 +1629,101 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BotToken"
+    BotCommandInput:
+      type: object
+      required: [command, description]
+      properties:
+        command:
+          type: string
+          description: Trimmed, accepted with or without a leading slash, then validated and stored in lowercase canonical form.
+        description:
+          type: string
+          minLength: 1
+          maxLength: 100
+        args_hint:
+          type: string
+          maxLength: 100
+    BotCommand:
+      type: object
+      required: [id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        bot_user_id:
+          type: string
+        command:
+          type: string
+          pattern: "^/[a-z0-9_-]{1,32}$"
+        description:
+          type: string
+        args_hint:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    BotCommandBot:
+      type: object
+      required: [id, handle, display_name, avatar_url]
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+    WorkspaceBotCommand:
+      type: object
+      required: [id, command, description, args_hint, bot, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        command:
+          type: string
+          pattern: "^/[a-z0-9_-]{1,32}$"
+        description:
+          type: string
+        args_hint:
+          type: string
+        bot:
+          $ref: "#/components/schemas/BotCommandBot"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SetBotCommandsRequest:
+      type: object
+      required: [commands]
+      properties:
+        commands:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/BotCommandInput"
+    BotCommandListResponse:
+      type: object
+      required: [bot_commands]
+      properties:
+        bot_commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/BotCommand"
+    WorkspaceBotCommandListResponse:
+      type: object
+      required: [bot_commands]
+      properties:
+        bot_commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceBotCommand"
     CreateBotResponse:
       type: object
       required: [bot, bot_token]

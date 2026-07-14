@@ -359,6 +359,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/bot-commands": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List active bot-declared command menus for a workspace */
+    get: operations["listBotCommands"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces/{workspace_id}/bots/{bot_user_id}/membership": {
     parameters: {
       query?: never;
@@ -401,6 +418,23 @@ export interface paths {
     get: operations["listBotTokens"];
     put?: never;
     post: operations["createBotToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/bots/self/commands": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Atomically replace the authenticated bot's command menu */
+    put: operations["setBotCommands"];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1074,6 +1108,50 @@ export interface components {
     BotWithTokens: {
       bot: components["schemas"]["User"];
       tokens: components["schemas"]["BotToken"][];
+    };
+    BotCommandInput: {
+      /** @description Trimmed, accepted with or without a leading slash, then validated and stored in lowercase canonical form. */
+      command: string;
+      description: string;
+      args_hint?: string;
+    };
+    BotCommand: {
+      id: string;
+      workspace_id: string;
+      bot_user_id: string;
+      command: string;
+      description: string;
+      args_hint: string;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    BotCommandBot: {
+      id: string;
+      handle: string;
+      display_name: string;
+      avatar_url: string;
+    };
+    WorkspaceBotCommand: {
+      id: string;
+      command: string;
+      description: string;
+      args_hint: string;
+      bot: components["schemas"]["BotCommandBot"];
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    SetBotCommandsRequest: {
+      commands: components["schemas"]["BotCommandInput"][];
+    };
+    BotCommandListResponse: {
+      bot_commands: components["schemas"]["BotCommand"][];
+    };
+    WorkspaceBotCommandListResponse: {
+      bot_commands: components["schemas"]["WorkspaceBotCommand"][];
     };
     CreateBotResponse: {
       bot: components["schemas"]["User"];
@@ -2494,6 +2572,35 @@ export interface operations {
       };
     };
   };
+  listBotCommands: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bot commands sorted by bot handle and command */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceBotCommandListResponse"];
+        };
+      };
+      /** @description Workspace membership required. Bot tokens also require workspaces:read and a matching workspace binding. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   removeBotFromWorkspace: {
     parameters: {
       query?: never;
@@ -2649,6 +2756,44 @@ export interface operations {
         };
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  setBotCommands: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetBotCommandsRequest"];
+      };
+    };
+    responses: {
+      /** @description Replaced bot command menu sorted by command */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotCommandListResponse"];
+        };
+      };
+      /** @description Invalid command menu. The previous menu remains unchanged. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bot token with commands:write required. Human sessions are rejected. */
       403: {
         headers: {
           [name: string]: unknown;

@@ -29,6 +29,40 @@ export type BotWithTokens = {
   tokens: BotToken[];
 };
 
+export type BotCommandInput = {
+  command: string;
+  description: string;
+  args_hint?: string;
+};
+
+export type BotCommand = {
+  id: string;
+  workspace_id: string;
+  bot_user_id: string;
+  command: string;
+  description: string;
+  args_hint: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BotCommandBot = {
+  id: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string;
+};
+
+export type WorkspaceBotCommand = {
+  id: string;
+  command: string;
+  description: string;
+  args_hint: string;
+  bot: BotCommandBot;
+  created_at: string;
+  updated_at: string;
+};
+
 export type OwnedBotWorkspace = {
   id: string;
   route_id: string;
@@ -442,6 +476,19 @@ export class ClickClackClient {
         `/api/workspaces/${workspaceId}/bots`,
       );
       return data.bots;
+    },
+    listCommands: async (workspaceId: string): Promise<WorkspaceBotCommand[]> => {
+      const data = await this.request<{ bot_commands: WorkspaceBotCommand[] }>(
+        `/api/workspaces/${workspaceId}/bot-commands`,
+      );
+      return data.bot_commands;
+    },
+    setCommands: async (commands: BotCommandInput[]): Promise<BotCommand[]> => {
+      const data = await this.request<{ bot_commands: BotCommand[] }>("/api/bots/self/commands", {
+        method: "PUT",
+        body: JSON.stringify({ commands }),
+      });
+      return data.bot_commands;
     },
     create: async (
       workspaceId: string,

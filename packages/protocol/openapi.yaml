@@ -1721,13 +1721,16 @@ components:
       properties:
         revoke_slash_commands:
           type: boolean
-          default: true
+          description: Defaults to true when omitted.
+          example: true
         revoke_event_subscriptions:
           type: boolean
-          default: true
+          description: Defaults to true when omitted.
+          example: true
         revoke_bot_tokens:
           type: boolean
-          default: false
+          description: Defaults to false when omitted.
+          example: false
     AppInstallationRevokedCounts:
       type: object
       required: [slash_commands, event_subscriptions, bot_tokens]

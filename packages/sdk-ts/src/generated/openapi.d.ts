@@ -1138,12 +1138,21 @@ export interface components {
       app_installations: components["schemas"]["AppInstallation"][];
     };
     RevokeAppInstallationRequest: {
-      /** @default true */
-      revoke_slash_commands: boolean;
-      /** @default true */
-      revoke_event_subscriptions: boolean;
-      /** @default false */
-      revoke_bot_tokens: boolean;
+      /**
+       * @description Defaults to true when omitted.
+       * @example true
+       */
+      revoke_slash_commands?: boolean;
+      /**
+       * @description Defaults to true when omitted.
+       * @example true
+       */
+      revoke_event_subscriptions?: boolean;
+      /**
+       * @description Defaults to false when omitted.
+       * @example false
+       */
+      revoke_bot_tokens?: boolean;
     };
     AppInstallationRevokedCounts: {
       slash_commands: number;

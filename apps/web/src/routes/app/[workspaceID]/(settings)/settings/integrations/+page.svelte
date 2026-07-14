@@ -44,6 +44,8 @@
   let loaded = $state({ ...untrack(() => data.loaded) });
   let loadError = $state(untrack(() => data.loadError));
   let refreshing = $state(false);
+  let refreshGeneration = 0;
+  let mutationRevision = 0;
   let showWizard = $state(false);
   let expandedID = $state("");
   let actionError = $state("");
@@ -86,6 +88,8 @@
   }
 
   async function refresh() {
+    const generation = ++refreshGeneration;
+    const revision = mutationRevision;
     refreshing = true;
     try {
       const [
@@ -108,6 +112,7 @@
           api<{ user: User }>("/api/me"),
         ]);
 
+      if (generation !== refreshGeneration || revision !== mutationRevision) return;
       if (installationsResult.status === "fulfilled") installations = installationsResult.value;
       if (commandsResult.status === "fulfilled") commands = commandsResult.value;
       if (subscriptionsResult.status === "fulfilled") subscriptions = subscriptionsResult.value;
@@ -138,16 +143,22 @@
         meResult,
       ]);
     } finally {
-      refreshing = false;
+      if (generation === refreshGeneration) refreshing = false;
     }
   }
 
+  function markMutation() {
+    mutationRevision += 1;
+  }
+
   function handleCommandChanged(command: SlashCommand) {
+    markMutation();
     const { signing_secret: _, ...commandMetadata } = command;
     commands = [commandMetadata, ...commands.filter((entry) => entry.id !== command.id)];
   }
 
   function handleSubscriptionChanged(subscription: EventSubscription) {
+    markMutation();
     const { signing_secret: _, ...subscriptionMetadata } = subscription;
     subscriptions = [
       subscriptionMetadata,
@@ -156,6 +167,7 @@
   }
 
   function handleInstalled(installation: AppInstallation, bot: User, token: BotToken) {
+    markMutation();
     const { token: _, ...tokenMetadata } = token;
     const existingBot = bots.find((entry) => entry.bot.id === bot.id);
     const updatedBot = {
@@ -187,6 +199,7 @@
         revoke_event_subscriptions: true,
         revoke_bot_tokens: revokeTokens,
       });
+      markMutation();
       installations = [
         result.installation,
         ...installations.filter((entry) => entry.id !== installation.id),
@@ -229,6 +242,7 @@
     actionError = "";
     try {
       await revokeConnectedAccount(account.id);
+      markMutation();
       connectedAccounts = connectedAccounts.filter((entry) => entry.id !== account.id);
     } catch (err) {
       actionError = integrationsLoadErrorMessage(err);

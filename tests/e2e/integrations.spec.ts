@@ -228,6 +228,52 @@ test("retries lost setup responses without duplicate resources", async ({ page }
   expect(installationsBody.app_installations).toHaveLength(1);
 });
 
+test("does not apply refresh snapshots older than a local install", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "RefreshRace", stamp);
+
+  let captureNextInstallations = false;
+  let releaseSnapshot: (() => void) | undefined;
+  const snapshotReleased = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let snapshotCaptured: (() => void) | undefined;
+  const captured = new Promise<void>((resolve) => {
+    snapshotCaptured = resolve;
+  });
+
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+  await expect(page.getByRole("heading", { name: "Integrations" })).toBeVisible();
+  await page.route(`**/api/workspaces/${workspace.id}/app-installations`, async (route) => {
+    if (route.request().method() !== "GET" || !captureNextInstallations) {
+      await route.continue();
+      return;
+    }
+    captureNextInstallations = false;
+    const response = await route.fetch();
+    snapshotCaptured?.();
+    await snapshotReleased;
+    await route.fulfill({ response });
+  });
+
+  captureNextInstallations = true;
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await captured;
+
+  await page.getByRole("button", { name: "Add app" }).click();
+  await page.locator(".ws-intg__catalog-card", { hasText: "Custom app" }).click();
+  await page.getByRole("textbox", { name: "Display name" }).fill(`Refresh Race ${stamp}`);
+  await page.getByRole("textbox", { name: "Handle" }).fill(`refresh-race-${stamp}`);
+  await page.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(page.getByText("Your new token is ready")).toBeVisible();
+  await expect(page.getByText("1 app installed")).toBeVisible();
+
+  releaseSnapshot?.();
+  await expect(page.locator('button[title="Refresh"]')).toBeEnabled();
+  await expect(page.getByText("1 app installed")).toBeVisible();
+  await expect(page.getByText(`Refresh Race ${stamp}`, { exact: true })).toBeVisible();
+});
+
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "NoChannels", stamp);

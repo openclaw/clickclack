@@ -1160,19 +1160,24 @@ FROM event_delivery_attempts
 WHERE subscription_id = sqlc.arg(subscription_id)
   AND id = sqlc.arg(before_id);
 
+-- name: ListEventDeliveryAttemptsFirstPage :many
+SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
+       eda.attempt, eda.request_json, eda.response_status, eda.response_body,
+       eda.error, eda.created_at, eda.completed_at
+FROM event_delivery_attempts eda
+WHERE eda.subscription_id = sqlc.arg(subscription_id)
+ORDER BY eda.created_at DESC, eda.id DESC
+LIMIT sqlc.arg(page_limit);
+
 -- name: ListEventDeliveryAttemptsPage :many
 SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
        eda.attempt, eda.request_json, eda.response_status, eda.response_body,
        eda.error, eda.created_at, eda.completed_at
 FROM event_delivery_attempts eda
 WHERE eda.subscription_id = sqlc.arg(subscription_id)
-  AND (
-    sqlc.arg(before_id)::text = ''
-    OR eda.created_at < sqlc.arg(before_created_at)::text
-    OR (
-      eda.created_at = sqlc.arg(before_created_at)::text
-      AND eda.id < sqlc.arg(before_id)
-    )
+  AND (eda.created_at, eda.id) < (
+    sqlc.arg(before_created_at)::text,
+    sqlc.arg(before_id)
   )
 ORDER BY eda.created_at DESC, eda.id DESC
 LIMIT sqlc.arg(page_limit);

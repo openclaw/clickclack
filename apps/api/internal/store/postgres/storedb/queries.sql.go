@@ -2644,19 +2644,66 @@ func (q *Queries) ListDirectPushNotificationRecipients(ctx context.Context, arg 
 	return items, nil
 }
 
+const listEventDeliveryAttemptsFirstPage = `-- name: ListEventDeliveryAttemptsFirstPage :many
+SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
+       eda.attempt, eda.request_json, eda.response_status, eda.response_body,
+       eda.error, eda.created_at, eda.completed_at
+FROM event_delivery_attempts eda
+WHERE eda.subscription_id = $1
+ORDER BY eda.created_at DESC, eda.id DESC
+LIMIT $2
+`
+
+type ListEventDeliveryAttemptsFirstPageParams struct {
+	SubscriptionID string `json:"subscription_id"`
+	PageLimit      int32  `json:"page_limit"`
+}
+
+func (q *Queries) ListEventDeliveryAttemptsFirstPage(ctx context.Context, arg ListEventDeliveryAttemptsFirstPageParams) ([]EventDeliveryAttempt, error) {
+	rows, err := q.db.QueryContext(ctx, listEventDeliveryAttemptsFirstPage, arg.SubscriptionID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EventDeliveryAttempt
+	for rows.Next() {
+		var i EventDeliveryAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubscriptionID,
+			&i.EventID,
+			&i.WorkspaceID,
+			&i.EventType,
+			&i.Attempt,
+			&i.RequestJson,
+			&i.ResponseStatus,
+			&i.ResponseBody,
+			&i.Error,
+			&i.CreatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventDeliveryAttemptsPage = `-- name: ListEventDeliveryAttemptsPage :many
 SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
        eda.attempt, eda.request_json, eda.response_status, eda.response_body,
        eda.error, eda.created_at, eda.completed_at
 FROM event_delivery_attempts eda
 WHERE eda.subscription_id = $1
-  AND (
-    $2::text = ''
-    OR eda.created_at < $3::text
-    OR (
-      eda.created_at = $3::text
-      AND eda.id < $2
-    )
+  AND (eda.created_at, eda.id) < (
+    $2::text,
+    $3
   )
 ORDER BY eda.created_at DESC, eda.id DESC
 LIMIT $4
@@ -2664,16 +2711,16 @@ LIMIT $4
 
 type ListEventDeliveryAttemptsPageParams struct {
 	SubscriptionID  string `json:"subscription_id"`
-	BeforeID        string `json:"before_id"`
 	BeforeCreatedAt string `json:"before_created_at"`
+	BeforeID        string `json:"before_id"`
 	PageLimit       int32  `json:"page_limit"`
 }
 
 func (q *Queries) ListEventDeliveryAttemptsPage(ctx context.Context, arg ListEventDeliveryAttemptsPageParams) ([]EventDeliveryAttempt, error) {
 	rows, err := q.db.QueryContext(ctx, listEventDeliveryAttemptsPage,
 		arg.SubscriptionID,
-		arg.BeforeID,
 		arg.BeforeCreatedAt,
+		arg.BeforeID,
 		arg.PageLimit,
 	)
 	if err != nil {

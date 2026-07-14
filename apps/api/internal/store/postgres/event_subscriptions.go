@@ -234,25 +234,30 @@ func (s *Store) ListEventDeliveryAttempts(ctx context.Context, subscriptionID, r
 		limit = 201
 	}
 	before = strings.TrimSpace(before)
-	beforeCreatedAt := ""
-	if before != "" {
-		beforeCreatedAt, err = s.q.GetEventDeliveryAttemptCursor(ctx, storedb.GetEventDeliveryAttemptCursorParams{
+	var rows []storedb.EventDeliveryAttempt
+	if before == "" {
+		rows, err = s.q.ListEventDeliveryAttemptsFirstPage(ctx, storedb.ListEventDeliveryAttemptsFirstPageParams{
+			SubscriptionID: subscriptionID,
+			PageLimit:      int32(limit),
+		})
+	} else {
+		beforeCreatedAt, cursorErr := s.q.GetEventDeliveryAttemptCursor(ctx, storedb.GetEventDeliveryAttemptCursorParams{
 			SubscriptionID: subscriptionID,
 			BeforeID:       before,
 		})
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(cursorErr, sql.ErrNoRows) {
 			return nil, store.ErrInvalidEventDeliveryCursor
 		}
-		if err != nil {
-			return nil, err
+		if cursorErr != nil {
+			return nil, cursorErr
 		}
+		rows, err = s.q.ListEventDeliveryAttemptsPage(ctx, storedb.ListEventDeliveryAttemptsPageParams{
+			SubscriptionID:  subscriptionID,
+			BeforeCreatedAt: beforeCreatedAt,
+			BeforeID:        before,
+			PageLimit:       int32(limit),
+		})
 	}
-	rows, err := s.q.ListEventDeliveryAttemptsPage(ctx, storedb.ListEventDeliveryAttemptsPageParams{
-		SubscriptionID:  subscriptionID,
-		BeforeID:        before,
-		BeforeCreatedAt: beforeCreatedAt,
-		PageLimit:       int32(limit),
-	})
 	if err != nil {
 		return nil, err
 	}

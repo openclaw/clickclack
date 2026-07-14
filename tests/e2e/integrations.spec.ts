@@ -19,6 +19,10 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
 }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "Wizard", stamp);
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "general", kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
 
   await page.goto(`/app/${workspace.route_id}/settings/integrations`);
   await expect(page.getByRole("heading", { name: "Integrations" })).toBeVisible();
@@ -47,18 +51,98 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByRole("button", { name: "Done" }).click();
 
   // Installed row is live.
-  const row = page.locator(".ws-bots__row", { hasText: "OpenClaw" });
+  const row = page.locator(".ws-bots__row", {
+    has: page.locator(".ws-bots__row-name", { hasText: /^OpenClaw$/ }),
+  });
   await expect(row).toBeVisible();
   await expect(page.getByText("1 app installed")).toBeVisible();
 
-  // Uninstall with the cascade confirm. Installing auto-expanded the row.
+  // The manifest remains reusable: install a second independent OpenClaw agent.
+  await page.getByRole("button", { name: "Add app" }).click();
+  await page.locator(".ws-intg__catalog-card", { hasText: "OpenClaw" }).click();
+  await page.getByRole("textbox", { name: "Display name" }).fill("OpenClaw Secondary");
+  await page.getByRole("textbox", { name: "Handle" }).fill(`openclaw-secondary-${stamp}`);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(page.getByText("Your new token is ready")).toBeVisible();
+  await page.getByText("I've copied this token somewhere safe.").click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText("2 apps installed")).toBeVisible();
+  await expect(
+    page.locator(".ws-bots__row", {
+      has: page.locator(".ws-bots__row-name", { hasText: /^OpenClaw Secondary$/ }),
+    }),
+  ).toBeVisible();
+
+  // Uninstall the second install with the cascade confirm. Installing auto-expanded the row.
   await page.getByRole("button", { name: "Uninstall", exact: true }).click();
   await expect(
     page.getByText("Uninstalling revokes 0 slash commands", { exact: false }),
   ).toBeVisible();
   await page.getByText("Also revoke the bot's", { exact: false }).click();
   await page.getByRole("button", { name: "Uninstall app" }).click();
+  await expect(page.getByText("1 app installed")).toBeVisible();
+
+  // The first OpenClaw installation is independent and can be removed separately.
+  await row.locator(".ws-bots__row-main").click();
+  await page.getByRole("button", { name: "Uninstall", exact: true }).click();
+  await page.getByText("Also revoke the bot's", { exact: false }).click();
+  await page.getByRole("button", { name: "Uninstall app" }).click();
   await expect(page.getByText("No apps installed", { exact: false })).toBeVisible();
+});
+
+test("keeps successful integration data when one initial request fails", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Partial", stamp);
+  const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+    data: {
+      display_name: `Partial Bot ${stamp}`,
+      handle: `partial-bot-${stamp}`,
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
+  const { bot } = (await botResponse.json()) as { bot: { id: string } };
+  const installResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/app-installations`,
+    {
+      data: {
+        app_slug: "custom",
+        display_name: `Partial App ${stamp}`,
+        bot_user_id: bot.id,
+        config: {},
+      },
+    },
+  );
+  expect(installResponse.ok()).toBe(true);
+
+  await page.route(`**/api/workspaces/${workspace.id}/connected-accounts`, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "forced account failure" } });
+  });
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+
+  await expect(
+    page.getByText("Some integration data could not be loaded", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText(`Partial App ${stamp}`, { exact: true })).toBeVisible();
+  await expect(page.getByText("1 app installed")).toBeVisible();
+});
+
+test("requires a real active channel for OpenClaw installs", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "NoChannels", stamp);
+  await page.route(`**/api/workspaces/${workspace.id}/channels`, async (route) => {
+    await route.fulfill({ json: { channels: [] } });
+  });
+
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+  await page.getByRole("button", { name: "Add app" }).click();
+  await page.locator(".ws-intg__catalog-card", { hasText: "OpenClaw" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(
+    page.getByText("Create or restore a channel before installing this app."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Install", exact: true })).toBeDisabled();
 });
 
 test("manages slash commands, event subscriptions, and deliveries on an installation", async ({
@@ -94,13 +178,30 @@ test("manages slash commands, event subscriptions, and deliveries on an installa
   const row = page.locator(".ws-bots__row", { hasText: `Hooks App ${stamp}` });
   await row.locator(".ws-bots__row-main").click();
 
+  // Later list failures must not hide successful mutation responses or one-time secrets.
+  await page.route(`**/api/workspaces/${workspace.id}/slash-commands`, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 500, json: { error: "forced command list failure" } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route(`**/api/workspaces/${workspace.id}/event-subscriptions`, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 500, json: { error: "forced subscription list failure" } });
+      return;
+    }
+    await route.continue();
+  });
+
   // Slash command: create, secret reveals once, rotate mints a fresh one.
   await page.getByRole("button", { name: "Add command" }).click();
-  await page.getByRole("textbox", { name: "Command", exact: true }).fill("deploy");
+  await page.getByRole("textbox", { name: "Command", exact: true }).fill("//deploy");
   await page.getByRole("textbox", { name: "Description" }).fill("Deploy from e2e");
   await page.getByRole("textbox", { name: "Callback URL" }).fill("https://example.com/hooks/e2e");
   await page.getByRole("button", { name: "Create command" }).click();
-  await expect(page.getByText("/deploy")).toBeVisible();
+  await expect(page.getByText("/deploy", { exact: true })).toBeVisible();
+  await expect(page.getByText("//deploy", { exact: true })).toHaveCount(0);
   const commandSecret = page.locator(".ws-intg__secret").first();
   await expect(commandSecret).toContainText("visible once");
   const firstSecret = await commandSecret.locator("input").inputValue();
@@ -121,17 +222,57 @@ test("manages slash commands, event subscriptions, and deliveries on an installa
   await page.getByRole("button", { name: "Add subscription" }).click();
   await page.getByRole("textbox", { name: "Callback URL" }).fill("https://example.com/events/e2e");
   await page.getByText("All events", { exact: false }).click();
+  const subscriptionResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/workspaces/${workspace.id}/event-subscriptions`),
+  );
   await page.getByRole("button", { name: "Create subscription" }).click();
+  const subscriptionResponse = await subscriptionResponsePromise;
+  const { event_subscription: subscription } = (await subscriptionResponse.json()) as {
+    event_subscription: { id: string };
+  };
   await expect(page.getByText("https://example.com/events/e2e")).toBeVisible();
   const subscriptionSecret = page.locator(".ws-intg__secret").first();
   await expect(subscriptionSecret).toContainText("visible once");
   await subscriptionSecret.getByRole("button", { name: "Done" }).click();
 
+  let deliveryRequestCount = 0;
+  await page.route(`**/api/event-subscriptions/${subscription.id}/deliveries**`, async (route) => {
+    deliveryRequestCount += 1;
+    if (deliveryRequestCount === 1) {
+      await route.fulfill({
+        json: {
+          deliveries: [
+            {
+              id: "eda_e2e_first",
+              subscription_id: subscription.id,
+              event_id: "evt_e2e_first",
+              workspace_id: workspace.id,
+              event_type: "message.created",
+              attempt: 1,
+              response_status: 204,
+              created_at: "2026-07-14T10:00:00Z",
+              completed_at: "2026-07-14T10:00:01Z",
+            },
+          ],
+          next_cursor: "eda_e2e_first",
+        },
+      });
+      return;
+    }
+    await route.fulfill({ status: 500, json: { error: "forced delivery page failure" } });
+  });
+
   await page.getByRole("button", { name: "Deliveries", exact: true }).click();
-  await expect(page.getByText("No deliveries yet", { exact: false })).toBeVisible();
+  await expect(page.getByText("message.created", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Load older deliveries" }).click();
+  await expect(page.getByText("forced delivery page failure", { exact: false })).toBeVisible();
+  await expect(page.getByText("message.created", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 
   // Revoke the command; it leaves the list.
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Revoke", exact: true }).first().click();
-  await expect(page.getByText("/deploy")).toHaveCount(0);
+  await expect(page.getByText("/deploy", { exact: true })).toHaveCount(0);
 });

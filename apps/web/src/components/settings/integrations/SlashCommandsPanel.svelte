@@ -27,7 +27,7 @@
   let callbackURL = $state("");
   let submitting = $state(false);
   let error = $state("");
-  let busyID = $state("");
+  let busyIDs = $state<Set<string>>(new Set());
   // One-time signing secrets, keyed by command id. Populated from create and
   // rotate responses; never re-fetchable.
   let revealedSecrets = $state<Record<string, string>>({});
@@ -44,6 +44,16 @@
 
   function displayCommand(command: string): string {
     return `/${command.replace(/^\/+/, "")}`;
+  }
+
+  function setBusy(id: string, busy: boolean) {
+    const next = new Set(busyIDs);
+    if (busy) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    busyIDs = next;
   }
 
   async function submitCreate(event: Event) {
@@ -75,6 +85,7 @@
   }
 
   async function revoke(command: SlashCommand) {
+    if (busyIDs.has(command.id)) return;
     if (
       !confirm(
         `Revoke ${displayCommand(command.command)}? It disappears from the composer and its callback stops firing immediately.`,
@@ -82,7 +93,7 @@
     ) {
       return;
     }
-    busyID = command.id;
+    setBusy(command.id, true);
     error = "";
     try {
       const revoked = await revokeSlashCommand(command.id);
@@ -90,11 +101,12 @@
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
-      busyID = "";
+      setBusy(command.id, false);
     }
   }
 
   async function rotate(command: SlashCommand) {
+    if (busyIDs.has(command.id)) return;
     if (
       !confirm(
         `Rotate the signing secret for ${displayCommand(command.command)}? The old secret stops verifying immediately — update the receiver right away.`,
@@ -102,7 +114,7 @@
     ) {
       return;
     }
-    busyID = command.id;
+    setBusy(command.id, true);
     error = "";
     try {
       const rotated = await rotateSlashCommandSecret(command.id);
@@ -113,7 +125,7 @@
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
-      busyID = "";
+      setBusy(command.id, false);
     }
   }
 
@@ -261,7 +273,7 @@
                 type="button"
                 class="ws-btn"
                 onclick={() => rotate(command)}
-                disabled={busyID === command.id}
+                disabled={busyIDs.has(command.id)}
               >
                 Rotate secret
               </button>
@@ -269,7 +281,7 @@
                 type="button"
                 class="ws-btn ws-btn--danger"
                 onclick={() => revoke(command)}
-                disabled={busyID === command.id}
+                disabled={busyIDs.has(command.id)}
               >
                 Revoke
               </button>

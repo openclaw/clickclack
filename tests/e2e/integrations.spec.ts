@@ -274,6 +274,145 @@ test("does not apply refresh snapshots older than a local install", async ({ pag
   await expect(page.getByText(`Refresh Race ${stamp}`, { exact: true })).toBeVisible();
 });
 
+test("keeps each registration busy until its own secret rotation finishes", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "SecretRace", stamp);
+  const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+    data: {
+      display_name: `Secret Race Bot ${stamp}`,
+      handle: `secret-race-bot-${stamp}`,
+      token_name: "e2e",
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
+  const { bot } = (await botResponse.json()) as { bot: { id: string } };
+
+  const installResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/app-installations`,
+    {
+      data: {
+        app_slug: "custom",
+        display_name: `Secret Race App ${stamp}`,
+        bot_user_id: bot.id,
+        config: {},
+      },
+    },
+  );
+  expect(installResponse.ok()).toBe(true);
+  const { app_installation: installation } = (await installResponse.json()) as {
+    app_installation: { id: string };
+  };
+
+  async function createCommand(command: string) {
+    const response = await page.request.post(`/api/workspaces/${workspace.id}/slash-commands`, {
+      data: {
+        app_installation_id: installation.id,
+        command,
+        callback_url: `https://example.com/${command}`,
+        bot_user_id: bot.id,
+      },
+    });
+    expect(response.ok()).toBe(true);
+    return ((await response.json()) as { slash_command: { id: string } }).slash_command;
+  }
+
+  async function createSubscription(suffix: string) {
+    const response = await page.request.post(
+      `/api/workspaces/${workspace.id}/event-subscriptions`,
+      {
+        data: {
+          app_installation_id: installation.id,
+          event_types: ["message.created"],
+          callback_url: `https://example.com/events/${suffix}`,
+        },
+      },
+    );
+    expect(response.ok()).toBe(true);
+    return ((await response.json()) as { event_subscription: { id: string } }).event_subscription;
+  }
+
+  const firstCommand = await createCommand(`first-${stamp}`);
+  await createCommand(`second-${stamp}`);
+  const firstSubscription = await createSubscription(`first-${stamp}`);
+  await createSubscription(`second-${stamp}`);
+
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+  await page
+    .locator(".ws-bots__row", { hasText: `Secret Race App ${stamp}` })
+    .locator(".ws-bots__row-main")
+    .click();
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  const slashPanel = page.locator(".ws-intg__panel", { hasText: "Slash commands" });
+  const firstCommandRow = slashPanel.locator(".ws-intg__item-row", {
+    hasText: `/first-${stamp}`,
+  });
+  const secondCommandRow = slashPanel.locator(".ws-intg__item-row", {
+    hasText: `/second-${stamp}`,
+  });
+  let releaseCommand: (() => void) | undefined;
+  const commandReleased = new Promise<void>((resolve) => {
+    releaseCommand = resolve;
+  });
+  let captureCommand: (() => void) | undefined;
+  const commandCaptured = new Promise<void>((resolve) => {
+    captureCommand = resolve;
+  });
+  await page.route(`**/api/slash-commands/${firstCommand.id}/rotate-secret`, async (route) => {
+    const response = await route.fetch();
+    captureCommand?.();
+    await commandReleased;
+    await route.fulfill({ response });
+  });
+
+  await firstCommandRow.getByRole("button", { name: "Rotate secret" }).click();
+  await commandCaptured;
+  await secondCommandRow.getByRole("button", { name: "Rotate secret" }).click();
+  await expect(secondCommandRow.locator(".ws-intg__secret")).toBeVisible();
+  await expect(firstCommandRow.getByRole("button", { name: "Rotate secret" })).toBeDisabled();
+  await expect(firstCommandRow.getByRole("button", { name: "Revoke" })).toBeDisabled();
+  releaseCommand?.();
+  await expect(firstCommandRow.locator(".ws-intg__secret")).toBeVisible();
+  await expect(firstCommandRow.getByRole("button", { name: "Rotate secret" })).toBeEnabled();
+
+  const subscriptionsPanel = page.locator(".ws-intg__panel", {
+    hasText: "Event subscriptions",
+  });
+  const firstSubscriptionRow = subscriptionsPanel.locator(".ws-intg__item-row", {
+    hasText: `https://example.com/events/first-${stamp}`,
+  });
+  const secondSubscriptionRow = subscriptionsPanel.locator(".ws-intg__item-row", {
+    hasText: `https://example.com/events/second-${stamp}`,
+  });
+  let releaseSubscription: (() => void) | undefined;
+  const subscriptionReleased = new Promise<void>((resolve) => {
+    releaseSubscription = resolve;
+  });
+  let captureSubscription: (() => void) | undefined;
+  const subscriptionCaptured = new Promise<void>((resolve) => {
+    captureSubscription = resolve;
+  });
+  await page.route(
+    `**/api/event-subscriptions/${firstSubscription.id}/rotate-secret`,
+    async (route) => {
+      const response = await route.fetch();
+      captureSubscription?.();
+      await subscriptionReleased;
+      await route.fulfill({ response });
+    },
+  );
+
+  await firstSubscriptionRow.getByRole("button", { name: "Rotate secret" }).click();
+  await subscriptionCaptured;
+  await secondSubscriptionRow.getByRole("button", { name: "Rotate secret" }).click();
+  await expect(secondSubscriptionRow.locator(".ws-intg__secret")).toBeVisible();
+  await expect(firstSubscriptionRow.getByRole("button", { name: "Rotate secret" })).toBeDisabled();
+  await expect(firstSubscriptionRow.getByRole("button", { name: "Revoke" })).toBeDisabled();
+  releaseSubscription?.();
+  await expect(firstSubscriptionRow.locator(".ws-intg__secret")).toBeVisible();
+  await expect(firstSubscriptionRow.getByRole("button", { name: "Rotate secret" })).toBeEnabled();
+});
+
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "NoChannels", stamp);

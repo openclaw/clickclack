@@ -28,7 +28,7 @@
   let selectedTypes = $state<string[]>([]);
   let submitting = $state(false);
   let error = $state("");
-  let busyID = $state("");
+  let busyIDs = $state<Set<string>>(new Set());
   let revealedSecrets = $state<Record<string, string>>({});
   let copiedID = $state("");
   let openDeliveriesID = $state("");
@@ -44,6 +44,16 @@
     selectedTypes = selectedTypes.includes(type)
       ? selectedTypes.filter((t) => t !== type)
       : [...selectedTypes, type];
+  }
+
+  function setBusy(id: string, busy: boolean) {
+    const next = new Set(busyIDs);
+    if (busy) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    busyIDs = next;
   }
 
   async function submitCreate(event: Event) {
@@ -73,6 +83,7 @@
   }
 
   async function revoke(subscription: EventSubscription) {
+    if (busyIDs.has(subscription.id)) return;
     if (
       !confirm(
         "Revoke this event subscription? Deliveries to its callback stop immediately. The delivery history is kept.",
@@ -80,7 +91,7 @@
     ) {
       return;
     }
-    busyID = subscription.id;
+    setBusy(subscription.id, true);
     error = "";
     try {
       const revoked = await revokeEventSubscription(subscription.id);
@@ -88,11 +99,12 @@
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
-      busyID = "";
+      setBusy(subscription.id, false);
     }
   }
 
   async function rotate(subscription: EventSubscription) {
+    if (busyIDs.has(subscription.id)) return;
     if (
       !confirm(
         "Rotate this subscription's signing secret? The old secret stops verifying immediately — update the receiver right away.",
@@ -100,7 +112,7 @@
     ) {
       return;
     }
-    busyID = subscription.id;
+    setBusy(subscription.id, true);
     error = "";
     try {
       const rotated = await rotateEventSubscriptionSecret(subscription.id);
@@ -111,7 +123,7 @@
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
-      busyID = "";
+      setBusy(subscription.id, false);
     }
   }
 
@@ -276,7 +288,7 @@
                   type="button"
                   class="ws-btn"
                   onclick={() => rotate(subscription)}
-                  disabled={busyID === subscription.id}
+                  disabled={busyIDs.has(subscription.id)}
                 >
                   Rotate secret
                 </button>
@@ -284,7 +296,7 @@
                   type="button"
                   class="ws-btn ws-btn--danger"
                   onclick={() => revoke(subscription)}
-                  disabled={busyID === subscription.id}
+                  disabled={busyIDs.has(subscription.id)}
                 >
                   Revoke
                 </button>

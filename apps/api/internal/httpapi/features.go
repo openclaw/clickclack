@@ -860,6 +860,20 @@ func (s *Server) revokeSlashCommand(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"slash_command": command}, err)
 }
 
+func (s *Server) rotateSlashCommandSecret(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot rotate slash command secrets"))
+		return
+	}
+	command, err := s.store.RotateSlashCommandSecret(r.Context(), chi.URLParam(r, "command_id"), act.user.ID)
+	writeResult(w, map[string]any{"slash_command": command}, err)
+}
+
 func (s *Server) listEventSubscriptions(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {
@@ -914,6 +928,20 @@ func (s *Server) revokeEventSubscription(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	subscription, err := s.store.RevokeEventSubscription(r.Context(), chi.URLParam(r, "subscription_id"), act.user.ID)
+	writeResult(w, map[string]any{"event_subscription": subscription}, err)
+}
+
+func (s *Server) rotateEventSubscriptionSecret(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot rotate event subscription secrets"))
+		return
+	}
+	subscription, err := s.store.RotateEventSubscriptionSecret(r.Context(), chi.URLParam(r, "subscription_id"), act.user.ID)
 	writeResult(w, map[string]any{"event_subscription": subscription}, err)
 }
 

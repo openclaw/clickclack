@@ -445,6 +445,13 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 	getJSONAsUser[struct {
 		SlashCommands []store.SlashCommand `json:"slash_commands"`
 	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/slash-commands")
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/slash-commands/"+command.SlashCommand.ID+"/rotate-secret", strings.NewReader(`{}`), http.StatusForbidden)
+	rotatedCommand := postJSONAsUser[struct {
+		SlashCommand store.SlashCommand `json:"slash_command"`
+	}](t, moderator.ID, server.URL+"/api/slash-commands/"+command.SlashCommand.ID+"/rotate-secret", map[string]any{})
+	if rotatedCommand.SlashCommand.ID != command.SlashCommand.ID || rotatedCommand.SlashCommand.SigningSecret == "" || rotatedCommand.SlashCommand.SigningSecret == command.SlashCommand.SigningSecret {
+		t.Fatalf("unexpected rotated slash command: %#v", rotatedCommand.SlashCommand)
+	}
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/slash-commands/"+command.SlashCommand.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
 
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", strings.NewReader(`{"event_types":["message.created"],"callback_url":"https://example.com/events"}`), http.StatusForbidden)
@@ -459,6 +466,13 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 		EventSubscriptions []store.EventSubscription `json:"event_subscriptions"`
 	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions")
 	expectStatusAsUser(t, owner.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", strings.NewReader(`{"event_types":["message.typo"],"callback_url":"https://example.com/events"}`), http.StatusBadRequest)
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/event-subscriptions/"+subscription.EventSubscription.ID+"/rotate-secret", strings.NewReader(`{}`), http.StatusForbidden)
+	rotatedSubscription := postJSONAsUser[struct {
+		EventSubscription store.EventSubscription `json:"event_subscription"`
+	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+subscription.EventSubscription.ID+"/rotate-secret", map[string]any{})
+	if rotatedSubscription.EventSubscription.ID != subscription.EventSubscription.ID || rotatedSubscription.EventSubscription.SigningSecret == "" || rotatedSubscription.EventSubscription.SigningSecret == subscription.EventSubscription.SigningSecret {
+		t.Fatalf("unexpected rotated event subscription: %#v", rotatedSubscription.EventSubscription)
+	}
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/event-subscriptions/"+subscription.EventSubscription.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
 
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts", strings.NewReader(`{"user_id":"`+member.ID+`","provider":"github","provider_account_id":"blocked"}`), http.StatusForbidden)

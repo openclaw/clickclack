@@ -121,6 +121,45 @@ func (s *Store) RevokeSlashCommand(ctx context.Context, commandID, requesterID s
 	return s.getSlashCommand(ctx, commandID, false)
 }
 
+func (s *Store) RotateSlashCommandSecret(ctx context.Context, commandID, requesterID string) (store.SlashCommand, error) {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return store.SlashCommand{}, errors.New("command_id is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	defer tx.Rollback()
+	cmd, err := scanSlashCommand(tx.QueryRowContext(ctx, slashCommandSelect(true)+` WHERE id = $1`, commandID))
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	if cmd.RevokedAt != nil {
+		return store.SlashCommand{}, errors.New("cannot rotate a revoked slash command")
+	}
+	if err := requireWorkspaceManagerTx(ctx, tx, cmd.WorkspaceID, requesterID); err != nil {
+		return store.SlashCommand{}, err
+	}
+	secret := newID("ccs")
+	result, err := tx.ExecContext(ctx, `UPDATE slash_commands SET signing_secret = $1 WHERE id = $2 AND revoked_at IS NULL`, secret, commandID)
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	if affected != 1 {
+		return store.SlashCommand{}, errors.New("cannot rotate a revoked slash command")
+	}
+	cmd.SigningSecret = secret
+	if err := tx.Commit(); err != nil {
+		return store.SlashCommand{}, err
+	}
+	return cmd, nil
+}
+
 func (s *Store) GetSlashCommandForChannel(ctx context.Context, channelID, command, requesterID string) (store.SlashCommand, error) {
 	command = normalizeSlashCommand(command)
 	return scanSlashCommand(s.db.QueryRowContext(ctx, slashCommandSelect(true)+`

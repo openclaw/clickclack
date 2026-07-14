@@ -108,6 +108,45 @@ func (s *Store) RevokeEventSubscription(ctx context.Context, subscriptionID, req
 	return s.getEventSubscription(ctx, subscriptionID, false)
 }
 
+func (s *Store) RotateEventSubscriptionSecret(ctx context.Context, subscriptionID, requesterID string) (store.EventSubscription, error) {
+	subscriptionID = strings.TrimSpace(subscriptionID)
+	if subscriptionID == "" {
+		return store.EventSubscription{}, errors.New("subscription_id is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.EventSubscription{}, err
+	}
+	defer tx.Rollback()
+	subscription, err := scanEventSubscription(tx.QueryRowContext(ctx, eventSubscriptionSelect(true)+` WHERE id = $1`, subscriptionID))
+	if err != nil {
+		return store.EventSubscription{}, err
+	}
+	if subscription.RevokedAt != nil {
+		return store.EventSubscription{}, errors.New("cannot rotate a revoked event subscription")
+	}
+	if err := requireWorkspaceManagerTx(ctx, tx, subscription.WorkspaceID, requesterID); err != nil {
+		return store.EventSubscription{}, err
+	}
+	secret := newID("ccs")
+	result, err := tx.ExecContext(ctx, `UPDATE event_subscriptions SET signing_secret = $1 WHERE id = $2 AND revoked_at IS NULL`, secret, subscriptionID)
+	if err != nil {
+		return store.EventSubscription{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return store.EventSubscription{}, err
+	}
+	if affected != 1 {
+		return store.EventSubscription{}, errors.New("cannot rotate a revoked event subscription")
+	}
+	subscription.SigningSecret = secret
+	if err := tx.Commit(); err != nil {
+		return store.EventSubscription{}, err
+	}
+	return subscription, nil
+}
+
 func (s *Store) ListEventSubscriptionsForEvent(ctx context.Context, event store.Event) ([]store.EventSubscription, error) {
 	if event.ID == "" || event.Cursor == "" {
 		return nil, nil

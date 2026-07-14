@@ -22,5 +22,6 @@ ${o(`          `)}
 ${o(`      `)}
     },
   },
-}`}function y(e){return`export ${e.mode===`single`?`CLICKCLACK_BOT_TOKEN`:g(e.botHandle)}=${_(e.token)}
+}`}function y(e){return`openclaw plugins install @openclaw/clickclack
+export ${e.mode===`single`?`CLICKCLACK_BOT_TOKEN`:g(e.botHandle)}=${_(e.token)}
 openclaw gateway`}export{y as a,d as c,r as d,m as f,p as h,v as i,l,s as m,f as n,i as o,c as p,u as r,o as s,n as t,a as u};

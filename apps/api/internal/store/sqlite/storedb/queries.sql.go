@@ -3508,6 +3508,27 @@ func (q *Queries) ListWorkspaces(ctx context.Context, userID string) ([]ListWork
 	return items, nil
 }
 
+const lockBotCommandSet = `-- name: LockBotCommandSet :one
+SELECT wm.user_id
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id AND u.kind = 'bot'
+WHERE wm.workspace_id = ?1
+  AND wm.user_id = ?2
+  AND wm.role = 'bot'
+`
+
+type LockBotCommandSetParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+}
+
+func (q *Queries) LockBotCommandSet(ctx context.Context, arg LockBotCommandSetParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockBotCommandSet, arg.WorkspaceID, arg.BotUserID)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const markMagicLinkUsed = `-- name: MarkMagicLinkUsed :execrows
 UPDATE auth_magic_links
 SET used_at = ?1

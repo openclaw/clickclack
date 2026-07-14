@@ -35,10 +35,13 @@ func (s *Store) SetBotCommands(ctx context.Context, workspaceID, botUserID strin
 		return nil, err
 	}
 	defer tx.Rollback()
-	if err := requireWorkspaceBotTx(ctx, tx, workspaceID, botUserID); err != nil {
+	qtx := s.q.WithTx(tx)
+	if _, err := qtx.LockBotCommandSet(ctx, storedb.LockBotCommandSetParams{
+		WorkspaceID: workspaceID,
+		BotUserID:   botUserID,
+	}); err != nil {
 		return nil, err
 	}
-	qtx := s.q.WithTx(tx)
 	if err := qtx.DeleteBotCommandsForBot(ctx, storedb.DeleteBotCommandsForBotParams{
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,

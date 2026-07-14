@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -212,6 +213,83 @@ func assertPostgresBotCommandSet(t *testing.T, st *Store, workspaceID, botUserID
 	for i, command := range want {
 		if rows[i].Command != command {
 			t.Fatalf("expected commands %v, got %#v", want, rows)
+		}
+	}
+}
+
+func TestPostgresBotCommandConcurrentOverwrite(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Concurrent Command Owner", "postgres-concurrent-command-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Concurrent Command Bot",
+		Handle:      "concurrent-command-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstSet := []store.BotCommandInput{
+		{Command: "alpha", Description: "Alpha"},
+		{Command: "bravo", Description: "Bravo"},
+	}
+	secondSet := []store.BotCommandInput{
+		{Command: "xray", Description: "Xray"},
+		{Command: "yankee", Description: "Yankee"},
+	}
+	for iteration := 0; iteration < 10; iteration++ {
+		if _, err := st.SetBotCommands(ctx, workspace.ID, bot.ID, []store.BotCommandInput{
+			{Command: "seed", Description: "Seed"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		var wg sync.WaitGroup
+		for _, commands := range [][]store.BotCommandInput{firstSet, secondSet} {
+			commands := commands
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				_, err := st.SetBotCommands(ctx, workspace.ID, bot.ID, commands)
+				errs <- err
+			}()
+		}
+		close(start)
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := st.q.ListBotCommandsForBot(ctx, storedb.ListBotCommandsForBotParams{
+			WorkspaceID: workspace.ID,
+			BotUserID:   bot.ID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("concurrent overwrite produced a mixed set: %#v", rows)
+		}
+		got := []string{rows[0].Command, rows[1].Command}
+		if !slices.Equal(got, []string{"/alpha", "/bravo"}) && !slices.Equal(got, []string{"/xray", "/yankee"}) {
+			t.Fatalf("concurrent overwrite produced a mixed set: %#v", got)
 		}
 	}
 }

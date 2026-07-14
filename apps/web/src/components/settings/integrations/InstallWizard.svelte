@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import {
     BOT_SCOPE_BUNDLES,
     activeTokens,
@@ -69,6 +69,7 @@
   let memberQuery = $state("");
   let memberResults = $state<WorkspaceMember[]>([]);
   let memberSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  let memberSearchGeneration = 0;
   let agentActivity = $state(false);
 
   let submitting = $state(false);
@@ -110,6 +111,9 @@
   });
 
   function pickManifest(next: AppManifest) {
+    if (memberSearchTimer) clearTimeout(memberSearchTimer);
+    memberSearchTimer = null;
+    memberSearchGeneration += 1;
     manifest = next;
     botMode = "create";
     displayName = next.suggestedBotName;
@@ -158,6 +162,7 @@
   function onMemberQueryInput(event: Event) {
     memberQuery = (event.target as HTMLInputElement).value;
     if (memberSearchTimer) clearTimeout(memberSearchTimer);
+    const generation = ++memberSearchGeneration;
     const query = memberQuery.trim();
     if (!query) {
       memberResults = [];
@@ -166,11 +171,13 @@
     memberSearchTimer = setTimeout(async () => {
       try {
         const page = await listWorkspaceMembersPage({ workspaceID, query, limit: 8 });
+        if (generation !== memberSearchGeneration) return;
         const chosen = new Set(allowMembers.map((m) => m.id));
         memberResults = page.members.filter(
           (member) => member.user.kind === "human" && !chosen.has(member.user.id),
         );
       } catch {
+        if (generation !== memberSearchGeneration) return;
         memberResults = [];
       }
     }, 250);
@@ -272,6 +279,11 @@
 
   const stepIndex = $derived(step === "app" ? 1 : step === "bot" ? 2 : step === "config" ? 3 : 4);
   const stepCount = $derived(hasConfigStep || step === "app" ? 4 : 3);
+
+  onDestroy(() => {
+    if (memberSearchTimer) clearTimeout(memberSearchTimer);
+    memberSearchGeneration += 1;
+  });
 </script>
 
 <section class="ws-intg__wizard" aria-label="Add app">

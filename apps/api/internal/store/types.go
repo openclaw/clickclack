@@ -301,6 +301,40 @@ type BotWithTokens struct {
 	Tokens []BotToken `json:"tokens"`
 }
 
+type BotCommandInput struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	ArgsHint    string `json:"args_hint"`
+}
+
+type BotCommand struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	ArgsHint    string `json:"args_hint"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type BotCommandBot struct {
+	ID          string `json:"id"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url"`
+}
+
+type WorkspaceBotCommand struct {
+	ID          string        `json:"id"`
+	Command     string        `json:"command"`
+	Description string        `json:"description"`
+	ArgsHint    string        `json:"args_hint"`
+	Bot         BotCommandBot `json:"bot"`
+	CreatedAt   string        `json:"created_at"`
+	UpdatedAt   string        `json:"updated_at"`
+}
+
 type OwnedBotWorkspace struct {
 	ID      string `json:"id"`
 	RouteID string `json:"route_id"`
@@ -830,6 +864,8 @@ type Store interface {
 	RevokeBotToken(ctx context.Context, tokenID, requesterID string) (BotToken, error)
 	RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) error
 	ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]OwnedBotEntry, error)
+	SetBotCommands(ctx context.Context, workspaceID, botUserID string, commands []BotCommandInput) ([]BotCommand, error)
+	ListBotCommands(ctx context.Context, workspaceID, requesterID string) ([]WorkspaceBotCommand, error)
 	ListAppInstallations(ctx context.Context, workspaceID, requesterID string) ([]AppInstallation, error)
 	CreateAppInstallation(ctx context.Context, input CreateAppInstallationInput) (AppInstallation, error)
 	RevokeAppInstallation(ctx context.Context, installationID, requesterID string, options RevokeAppInstallationOptions) (RevokeAppInstallationResult, error)

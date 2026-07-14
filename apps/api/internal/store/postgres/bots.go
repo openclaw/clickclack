@@ -610,6 +610,13 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 		WHERE wm.workspace_id = $1 AND u.id = $2 AND u.kind = 'bot'`, workspaceID, botUserID)); err != nil {
 		return err
 	}
+	qtx := s.q.WithTx(tx)
+	if err := qtx.DeleteBotCommandsForBot(ctx, storedb.DeleteBotCommandsForBotParams{
+		WorkspaceID: workspaceID,
+		BotUserID:   botUserID,
+	}); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`, workspaceID, botUserID)
 	if err != nil {
 		return err

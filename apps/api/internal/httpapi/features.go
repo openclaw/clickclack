@@ -744,6 +744,16 @@ func (s *Server) listAppInstallations(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"app_installations": installations}, err)
 }
 
+func (s *Server) listEventTypes(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.currentActor(r); err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"event_types": append([]string(nil), store.DurableEventTypes...),
+	})
+}
+
 func (s *Server) createAppInstallation(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {

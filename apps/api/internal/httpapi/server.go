@@ -125,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
 		r.Get("/me/bots", s.listMyBots)
+		r.Get("/event-types", s.listEventTypes)
 		r.Get("/workspaces", s.listWorkspaces)
 		r.Post("/workspaces", s.createWorkspace)
 		r.Get("/routes/{workspace_route_id}/{target_route_id}", s.resolveRoute)

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ func TestHTTPUnauthorizedRoutes(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/me", ""},
+		{http.MethodGet, "/api/event-types", ""},
 		{http.MethodGet, "/api/workspaces", ""},
 		{http.MethodPost, "/api/workspaces", `{"name":"x"}`},
 		{http.MethodGet, "/api/routes/TMISSING/CMISSING", ""},
@@ -399,7 +401,7 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
 	}
-	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+	bot, botToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: "Integration Bot",
 		CreatedBy:   owner.ID,
@@ -410,6 +412,14 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
 	t.Cleanup(server.Close)
+
+	eventTypes := getJSONAsUser[struct {
+		EventTypes []string `json:"event_types"`
+	}](t, member.ID, server.URL+"/api/event-types")
+	if !slices.Equal(eventTypes.EventTypes, store.DurableEventTypes) {
+		t.Fatalf("unexpected durable event types: %#v", eventTypes.EventTypes)
+	}
+	expectStatusWithBearer(t, botToken.Token, http.MethodGet, server.URL+"/api/event-types", nil, http.StatusOK)
 
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", strings.NewReader(`{"app_slug":"blocked","bot_user_id":"`+bot.ID+`"}`), http.StatusForbidden)
 	installation := postJSONAsUser[struct {
@@ -448,6 +458,7 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 	getJSONAsUser[struct {
 		EventSubscriptions []store.EventSubscription `json:"event_subscriptions"`
 	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions")
+	expectStatusAsUser(t, owner.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", strings.NewReader(`{"event_types":["message.typo"],"callback_url":"https://example.com/events"}`), http.StatusBadRequest)
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/event-subscriptions/"+subscription.EventSubscription.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
 
 	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts", strings.NewReader(`{"user_id":"`+member.ID+`","provider":"github","provider_account_id":"blocked"}`), http.StatusForbidden)

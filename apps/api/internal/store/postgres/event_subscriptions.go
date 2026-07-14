@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -207,8 +208,8 @@ func normalizeEventTypes(values []string) ([]string, error) {
 		if value == "" {
 			continue
 		}
-		if value != "*" && !strings.Contains(value, ".") {
-			return nil, errors.New("event type must be '*' or a dotted event type")
+		if value != "*" && !store.IsDurableEventType(value) {
+			return nil, fmt.Errorf("unknown event type %q", value)
 		}
 		if seen[value] {
 			continue

@@ -548,7 +548,8 @@
       defaultTo={hasConfigStep ? defaultToValue : undefined}
       allowFrom={hasConfigStep ? allowFromValue : undefined}
       agentActivity={hasConfigStep ? agentActivity : undefined}
-      showSnippets={manifest.buildConfigSnippet !== null}
+      configSnippetBuilder={manifest.buildConfigSnippet}
+      shellSnippetBuilder={manifest.buildShellSnippet}
       onDismiss={onClose}
     />
   {/if}

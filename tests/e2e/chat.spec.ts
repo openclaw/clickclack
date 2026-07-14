@@ -238,6 +238,7 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
     token: "ccb_test'value",
     mode: "single",
   });
+  expect(shell).toContain("openclaw plugins install @openclaw/clickclack");
   expect(shell).toContain(`export CLICKCLACK_BOT_TOKEN='ccb_test'"'"'value'`);
 });
 

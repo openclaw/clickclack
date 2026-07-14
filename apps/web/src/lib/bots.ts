@@ -266,6 +266,7 @@ export function buildOpenClawShellSnippet(opts: {
 }): string {
   const envName =
     opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(opts.botHandle);
-  return `export ${envName}=${shellQuote(opts.token)}
+  return `openclaw plugins install @openclaw/clickclack
+export ${envName}=${shellQuote(opts.token)}
 openclaw gateway`;
 }

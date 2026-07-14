@@ -5,6 +5,9 @@
     buildOpenClawShellSnippet,
     type OpenClawAccountMode,
   } from "../../../lib/bots";
+  import type { AppSnippetInput } from "../../../lib/app-catalog";
+
+  type SnippetBuilder = (input: AppSnippetInput) => string;
 
   type Props = {
     token: BotToken;
@@ -14,7 +17,8 @@
     defaultTo?: string;
     allowFrom?: string[];
     agentActivity?: boolean;
-    showSnippets?: boolean;
+    configSnippetBuilder?: SnippetBuilder | null;
+    shellSnippetBuilder?: SnippetBuilder | null;
     onDismiss: () => void;
   };
 
@@ -26,7 +30,8 @@
     defaultTo,
     allowFrom,
     agentActivity,
-    showSnippets = true,
+    configSnippetBuilder = (input) => buildOpenClawConfigSnippet(input),
+    shellSnippetBuilder = (input) => buildOpenClawShellSnippet(input),
     onDismiss,
   }: Props = $props();
 
@@ -34,24 +39,18 @@
   let mode = $state<OpenClawAccountMode>("single");
   let copied = $state<"token" | "config" | "shell" | null>(null);
 
-  const configSnippet = $derived(
-    buildOpenClawConfigSnippet({
-      workspace,
-      botHandle,
-      botUserID,
-      mode,
-      defaultTo,
-      allowFrom,
-      agentActivity,
-    }),
-  );
-  const shellSnippet = $derived(
-    buildOpenClawShellSnippet({
-      botHandle,
-      token: token.token ?? "",
-      mode,
-    }),
-  );
+  const snippetInput = $derived<AppSnippetInput>({
+    workspace,
+    botHandle,
+    botUserID,
+    token: token.token ?? "",
+    mode,
+    defaultTo,
+    allowFrom,
+    agentActivity,
+  });
+  const configSnippet = $derived(configSnippetBuilder?.(snippetInput) ?? "");
+  const shellSnippet = $derived(shellSnippetBuilder?.(snippetInput) ?? "");
 
   async function copyTo(value: string, kind: "token" | "config" | "shell") {
     try {
@@ -97,7 +96,7 @@
     </div>
   </div>
 
-  {#if showSnippets}
+  {#if configSnippetBuilder || shellSnippetBuilder}
   <div class="ws-bots__reveal-field">
     <span class="ws-bots__reveal-label">OpenClaw account shape</span>
     <div class="ws-bots__setup-mode" role="group" aria-label="OpenClaw account shape">
@@ -118,33 +117,37 @@
     </div>
   </div>
 
-  <div class="ws-bots__reveal-field">
-    <div class="ws-bots__reveal-snippet-header">
-      <span class="ws-bots__reveal-label">OpenClaw config</span>
-      <button
-        type="button"
-        class="ws-btn"
-        onclick={() => copyTo(configSnippet, "config")}
-      >
-        {copied === "config" ? "Copied" : "Copy config"}
-      </button>
+  {#if configSnippetBuilder}
+    <div class="ws-bots__reveal-field">
+      <div class="ws-bots__reveal-snippet-header">
+        <span class="ws-bots__reveal-label">OpenClaw config</span>
+        <button
+          type="button"
+          class="ws-btn"
+          onclick={() => copyTo(configSnippet, "config")}
+        >
+          {copied === "config" ? "Copied" : "Copy config"}
+        </button>
+      </div>
+      <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
     </div>
-    <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
-  </div>
+  {/if}
 
-  <div class="ws-bots__reveal-field">
-    <div class="ws-bots__reveal-snippet-header">
-      <span class="ws-bots__reveal-label">Export and start</span>
-      <button
-        type="button"
-        class="ws-btn"
-        onclick={() => copyTo(shellSnippet, "shell")}
-      >
-        {copied === "shell" ? "Copied" : "Copy commands"}
-      </button>
+  {#if shellSnippetBuilder}
+    <div class="ws-bots__reveal-field">
+      <div class="ws-bots__reveal-snippet-header">
+        <span class="ws-bots__reveal-label">Install, export, and start</span>
+        <button
+          type="button"
+          class="ws-btn"
+          onclick={() => copyTo(shellSnippet, "shell")}
+        >
+          {copied === "shell" ? "Copied" : "Copy commands"}
+        </button>
+      </div>
+      <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
     </div>
-    <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
-  </div>
+  {/if}
   {/if}
 
   {#if token.scopes?.length}

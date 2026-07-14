@@ -413,6 +413,62 @@ test("keeps each registration busy until its own secret rotation finishes", asyn
   await expect(firstSubscriptionRow.getByRole("button", { name: "Rotate secret" })).toBeEnabled();
 });
 
+test("keeps each connected account busy until its own disconnect finishes", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "AccountRace", stamp);
+  const meResponse = await page.request.get("/api/me");
+  expect(meResponse.ok()).toBe(true);
+  const { user } = (await meResponse.json()) as { user: { id: string } };
+
+  async function createAccount(suffix: string) {
+    const response = await page.request.post(`/api/workspaces/${workspace.id}/connected-accounts`, {
+      data: {
+        user_id: user.id,
+        provider: "github",
+        provider_account_id: `${suffix}-${stamp}`,
+        display_name: `${suffix} Account ${stamp}`,
+      },
+    });
+    expect(response.ok()).toBe(true);
+    return ((await response.json()) as { connected_account: { id: string } }).connected_account;
+  }
+
+  const firstAccount = await createAccount("First");
+  await createAccount("Second");
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  const firstRow = page.locator(".ws-intg__item-row", {
+    hasText: `First Account ${stamp}`,
+  });
+  const secondRow = page.locator(".ws-intg__item-row", {
+    hasText: `Second Account ${stamp}`,
+  });
+  let releaseFirst: (() => void) | undefined;
+  const firstReleased = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let captureFirst: (() => void) | undefined;
+  const firstCaptured = new Promise<void>((resolve) => {
+    captureFirst = resolve;
+  });
+  await page.route(`**/api/connected-accounts/${firstAccount.id}/revoke`, async (route) => {
+    const response = await route.fetch();
+    captureFirst?.();
+    await firstReleased;
+    await route.fulfill({ response });
+  });
+
+  await firstRow.getByRole("button", { name: "Disconnect" }).click();
+  await firstCaptured;
+  await secondRow.getByRole("button", { name: "Disconnect" }).click();
+  await expect(secondRow).toHaveCount(0);
+  await expect(firstRow.getByRole("button", { name: "Disconnect" })).toBeDisabled();
+
+  releaseFirst?.();
+  await expect(firstRow).toHaveCount(0);
+});
+
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "NoChannels", stamp);

@@ -54,7 +54,7 @@
     null,
   );
   let revoking = $state(false);
-  let accountBusyID = $state("");
+  let accountBusyIDs = $state<Set<string>>(new Set());
 
   const workspaceID = $derived(data.workspaceID);
   const workspaceIdentifier = $derived(data.workspaceIdentifier || data.workspaceID);
@@ -151,6 +151,16 @@
     mutationRevision += 1;
   }
 
+  function setAccountBusy(id: string, busy: boolean) {
+    const next = new Set(accountBusyIDs);
+    if (busy) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    accountBusyIDs = next;
+  }
+
   function handleCommandChanged(command: SlashCommand) {
     markMutation();
     const { signing_secret: _, ...commandMetadata } = command;
@@ -231,6 +241,7 @@
   }
 
   async function revokeAccount(account: ConnectedAccount) {
+    if (accountBusyIDs.has(account.id)) return;
     if (
       !confirm(
         `Disconnect ${account.display_name || account.provider_account_id} (${account.provider})? The app loses this account binding immediately.`,
@@ -238,7 +249,7 @@
     ) {
       return;
     }
-    accountBusyID = account.id;
+    setAccountBusy(account.id, true);
     actionError = "";
     try {
       await revokeConnectedAccount(account.id);
@@ -247,7 +258,7 @@
     } catch (err) {
       actionError = integrationsLoadErrorMessage(err);
     } finally {
-      accountBusyID = "";
+      setAccountBusy(account.id, false);
     }
   }
 
@@ -551,7 +562,7 @@
                   type="button"
                   class="ws-btn ws-btn--danger"
                   onclick={() => revokeAccount(account)}
-                  disabled={accountBusyID === account.id}
+                  disabled={accountBusyIDs.has(account.id)}
                 >
                   Disconnect
                 </button>

@@ -29,7 +29,7 @@ export const DEFAULT_ACCOUNT_SETTINGS_SECTION: AccountSettingsSectionId = "profi
 // the item lives under. `managersOnly` hides the item from the rail
 // when the current user is not an owner or moderator (the page itself
 // must still re-check via the backend; this is just a UI gate).
-export type WorkspaceSettingsSectionId = "overview" | "members" | "bots";
+export type WorkspaceSettingsSectionId = "overview" | "members" | "bots" | "integrations";
 
 export type WorkspaceSettingsGroupId = "workspace" | "people" | "automation";
 
@@ -85,6 +85,13 @@ export const WORKSPACE_SETTINGS_SECTIONS: WorkspaceSettingsSection[] = [
       "M15 13v2",
       "M9 13v2",
     ],
+  },
+  {
+    id: "integrations",
+    slug: "integrations",
+    label: "Integrations",
+    group: "automation",
+    icon: ["M9 2v6", "M15 2v6", "M12 17v5", "M5 8h14l-1 7a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4L5 8Z"],
   },
 ];
 

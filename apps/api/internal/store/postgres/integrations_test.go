@@ -75,6 +75,31 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if rotatedSubscription.ID != subscription.ID || rotatedSubscription.SigningSecret == "" || rotatedSubscription.SigningSecret == subscription.SigningSecret {
 		t.Fatalf("unexpected subscription rotation: before=%#v after=%#v", subscription, rotatedSubscription)
 	}
+	publicMatches, err := st.ListEventSubscriptionsForEvent(ctx, store.Event{
+		ID:          "evt_postgres_public",
+		Cursor:      "cur_postgres_public",
+		Type:        "message.created",
+		WorkspaceID: workspace.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(publicMatches) != 1 || publicMatches[0].ID != subscription.ID {
+		t.Fatalf("expected public event to match subscription, got %#v", publicMatches)
+	}
+	privateMatches, err := st.ListEventSubscriptionsForEvent(ctx, store.Event{
+		ID:               "evt_postgres_private",
+		Cursor:           "cur_postgres_private",
+		Type:             "message.created",
+		WorkspaceID:      workspace.ID,
+		RecipientUserIDs: []string{owner.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(privateMatches) != 0 {
+		t.Fatalf("expected recipient-scoped event to match no workspace subscriptions, got %#v", privateMatches)
+	}
 
 	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
 		WorkspaceID: workspace.ID,

@@ -153,6 +153,9 @@ func (s *Store) ListEventSubscriptionsForEvent(ctx context.Context, event store.
 	if event.ID == "" || event.Cursor == "" {
 		return nil, nil
 	}
+	if len(event.RecipientUserIDs) > 0 {
+		return nil, nil
+	}
 	rows, err := s.db.QueryContext(ctx, eventSubscriptionSelect(true)+`
 		WHERE workspace_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at`, event.WorkspaceID)

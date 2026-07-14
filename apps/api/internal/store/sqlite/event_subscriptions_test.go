@@ -9,6 +9,58 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+func TestListEventSubscriptionsForEventExcludesRecipientScopedEvents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "private-event-subscriptions@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	subscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+		WorkspaceID: workspace.ID,
+		EventTypes:  []string{"message.created"},
+		CallbackURL: "https://example.com/events",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	publicMatches, err := st.ListEventSubscriptionsForEvent(ctx, store.Event{
+		ID:          "evt_public",
+		Cursor:      "cur_public",
+		Type:        "message.created",
+		WorkspaceID: workspace.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(publicMatches) != 1 || publicMatches[0].ID != subscription.ID {
+		t.Fatalf("expected public event to match subscription, got %#v", publicMatches)
+	}
+
+	privateMatches, err := st.ListEventSubscriptionsForEvent(ctx, store.Event{
+		ID:               "evt_private",
+		Cursor:           "cur_private",
+		Type:             "message.created",
+		WorkspaceID:      workspace.ID,
+		RecipientUserIDs: []string{owner.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(privateMatches) != 0 {
+		t.Fatalf("expected recipient-scoped event to match no workspace subscriptions, got %#v", privateMatches)
+	}
+}
+
 func TestListEventDeliveryAttemptsPaginatesWithStableTiebreak(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -127,6 +127,18 @@ func (s *Store) RevokeAppInstallation(ctx context.Context, installationID, reque
 		}
 		return result, nil
 	}
+	if options.RevokeBotTokens {
+		bot, err := scanUser(tx.QueryRowContext(ctx, `
+			SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
+			FROM users
+			WHERE id = ?`, installation.BotUserID))
+		if err != nil {
+			return store.RevokeAppInstallationResult{}, err
+		}
+		if err := requireBotTokenManagerTx(ctx, tx, installation.WorkspaceID, bot, requesterID); err != nil {
+			return store.RevokeAppInstallationResult{}, err
+		}
+	}
 	revokedAt := now()
 	count, err := revokeRows(ctx, tx, `UPDATE app_installations SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`, revokedAt, installationID)
 	if err != nil {

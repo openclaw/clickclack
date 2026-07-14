@@ -257,6 +257,32 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if _, err := st.GetBotTokenAuth(ctx, rollbackToken.Token); err != nil {
 		t.Fatalf("postgres cascade failure revoked the bot token: %v", err)
 	}
+
+	userBot, userBotToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: member.ID,
+		DisplayName: "Postgres User-owned Installation Bot",
+		CreatedBy:   member.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userBotInstallation := createPostgresTestAppInstallation(t, st, workspace.ID, userBot.ID, owner.ID, "postgres-user-owned")
+	if _, err := st.RevokeAppInstallation(ctx, userBotInstallation.ID, owner.ID, store.RevokeAppInstallationOptions{
+		RevokeBotTokens: true,
+	}); !errors.Is(err, store.ErrBotOwnerRequired) {
+		t.Fatalf("expected postgres user-owned token cascade to require the bot owner, got %v", err)
+	}
+	installationAfterDeniedCascade, err := st.getAppInstallation(ctx, userBotInstallation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installationAfterDeniedCascade.RevokedAt != nil {
+		t.Fatalf("denied postgres user-owned token cascade revoked the installation: %#v", installationAfterDeniedCascade)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, userBotToken.Token); err != nil {
+		t.Fatalf("denied postgres user-owned token cascade revoked the token: %v", err)
+	}
 }
 
 func TestPostgresRegistrationCreationSerializesWithInstallationRevoke(t *testing.T) {

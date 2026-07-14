@@ -132,6 +132,42 @@ func TestRevokeAppInstallationCascadesAtomically(t *testing.T) {
 	if _, err := st.GetBotTokenAuth(ctx, rollbackToken.Token); err != nil {
 		t.Fatalf("cascade failure revoked the bot token: %v", err)
 	}
+
+	botOwner, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "User Bot Owner",
+		Email:       "installation-user-bot-owner@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, botOwner.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	userBot, userBotToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: botOwner.ID,
+		DisplayName: "User-owned Installation Bot",
+		CreatedBy:   botOwner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userBotInstallation := createTestAppInstallation(t, st, workspace.ID, userBot.ID, owner.ID, "cascade-user-owned")
+	if _, err := st.RevokeAppInstallation(ctx, userBotInstallation.ID, owner.ID, store.RevokeAppInstallationOptions{
+		RevokeBotTokens: true,
+	}); !errors.Is(err, store.ErrBotOwnerRequired) {
+		t.Fatalf("expected user-owned token cascade to require the bot owner, got %v", err)
+	}
+	installationAfterDeniedCascade, err := st.getAppInstallation(ctx, userBotInstallation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installationAfterDeniedCascade.RevokedAt != nil {
+		t.Fatalf("denied user-owned token cascade revoked the installation: %#v", installationAfterDeniedCascade)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, userBotToken.Token); err != nil {
+		t.Fatalf("denied user-owned token cascade revoked the token: %v", err)
+	}
 }
 
 func createTestAppInstallation(t *testing.T, st *Store, workspaceID, botUserID, ownerID, appSlug string) store.AppInstallation {

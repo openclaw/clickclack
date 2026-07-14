@@ -179,6 +179,14 @@ func TestPostgresBotCommandsLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+		WorkspaceID:  workspace.ID,
+		TargetUserID: zetaBot.ID,
+		ActorUserID:  owner.ID,
+		Role:         store.WorkspaceRoleMember,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, zetaBot.ID, owner.ID); err != nil {
 		t.Fatal(err)
 	}

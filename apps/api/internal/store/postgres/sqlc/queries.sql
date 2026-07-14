@@ -1196,6 +1196,14 @@ WHERE wm.workspace_id = sqlc.arg(workspace_id)
   AND wm.role = 'bot'
 FOR UPDATE OF wm;
 
+-- name: LockBotWorkspaceMembership :one
+SELECT wm.user_id
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id AND u.kind = 'bot'
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.user_id = sqlc.arg(bot_user_id)
+FOR UPDATE OF wm;
+
 -- name: InsertBotCommand :exec
 INSERT INTO bot_commands (
   id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at

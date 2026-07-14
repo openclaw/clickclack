@@ -606,15 +606,8 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
 		return err
 	}
-	if _, err := scanUser(tx.QueryRowContext(ctx, `
-		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
-		FROM users u
-		JOIN workspace_members wm ON wm.user_id = u.id
-		WHERE wm.workspace_id = $1 AND u.id = $2 AND u.kind = 'bot'`, workspaceID, botUserID)); err != nil {
-		return err
-	}
 	qtx := s.q.WithTx(tx)
-	if _, err := qtx.LockBotCommandSet(ctx, storedb.LockBotCommandSetParams{
+	if _, err := qtx.LockBotWorkspaceMembership(ctx, storedb.LockBotWorkspaceMembershipParams{
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,
 	}); err != nil {

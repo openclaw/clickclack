@@ -68,9 +68,10 @@ See [features/auth.md](features/auth.md).
 | `workspaces`  | `list`, `create`, `get`, `update`, `transferOwnership`, `delete` |
 | `topics`      | `list`, `create` |
 | `bots`        | `listMine`, `list`, `create`, `removeMembership`, `listWorkspaceTokens`, `createWorkspaceToken`, `listTokens`, `createToken`, `revokeToken` |
-| `apps`        | `list`, `install`, `revoke` |
-| `slashCommands` | `list`, `create`, `revoke` |
-| `eventSubscriptions` | `list`, `create`, `revoke`, `deliveries` |
+| `apps`        | `list`, `install`, `revoke(id, options?)` |
+| `slashCommands` | `list`, `create`, `revoke`, `rotateSecret` |
+| `eventSubscriptions` | `list`, `create`, `revoke`, `rotateSecret`, `deliveries(id, options?)` |
+| `eventTypes`  | `list` |
 | `auditLog`     | `list` |
 | `connectedAccounts` | `list`, `create`, `revoke` |
 | `channels`    | `list`, `create`, `update`, `messages`, `sendMessage`, `markRead` |

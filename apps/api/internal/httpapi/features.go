@@ -795,8 +795,30 @@ func (s *Server) revokeAppInstallation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot revoke app installations"))
 		return
 	}
-	installation, err := s.store.RevokeAppInstallation(r.Context(), chi.URLParam(r, "installation_id"), act.user.ID)
-	writeResult(w, map[string]any{"app_installation": installation}, err)
+	options := store.RevokeAppInstallationOptions{
+		RevokeSlashCommands:      true,
+		RevokeEventSubscriptions: true,
+	}
+	var body struct {
+		RevokeSlashCommands      *bool `json:"revoke_slash_commands"`
+		RevokeEventSubscriptions *bool `json:"revoke_event_subscriptions"`
+		RevokeBotTokens          *bool `json:"revoke_bot_tokens"`
+	}
+	if err := readJSON(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.RevokeSlashCommands != nil {
+		options.RevokeSlashCommands = *body.RevokeSlashCommands
+	}
+	if body.RevokeEventSubscriptions != nil {
+		options.RevokeEventSubscriptions = *body.RevokeEventSubscriptions
+	}
+	if body.RevokeBotTokens != nil {
+		options.RevokeBotTokens = *body.RevokeBotTokens
+	}
+	result, err := s.store.RevokeAppInstallation(r.Context(), chi.URLParam(r, "installation_id"), act.user.ID, options)
+	writeResult(w, result, err)
 }
 
 func (s *Server) listSlashCommands(w http.ResponseWriter, r *http.Request) {

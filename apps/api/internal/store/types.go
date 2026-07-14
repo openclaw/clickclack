@@ -333,6 +333,23 @@ type CreateAppInstallationInput struct {
 	CreatedBy   string
 }
 
+type RevokeAppInstallationOptions struct {
+	RevokeSlashCommands      bool
+	RevokeEventSubscriptions bool
+	RevokeBotTokens          bool
+}
+
+type AppInstallationRevokedCounts struct {
+	SlashCommands      int `json:"slash_commands"`
+	EventSubscriptions int `json:"event_subscriptions"`
+	BotTokens          int `json:"bot_tokens"`
+}
+
+type RevokeAppInstallationResult struct {
+	Installation AppInstallation              `json:"installation"`
+	Revoked      AppInstallationRevokedCounts `json:"revoked"`
+}
+
 type SlashCommand struct {
 	ID                string  `json:"id"`
 	WorkspaceID       string  `json:"workspace_id"`
@@ -804,7 +821,7 @@ type Store interface {
 	ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]OwnedBotEntry, error)
 	ListAppInstallations(ctx context.Context, workspaceID, requesterID string) ([]AppInstallation, error)
 	CreateAppInstallation(ctx context.Context, input CreateAppInstallationInput) (AppInstallation, error)
-	RevokeAppInstallation(ctx context.Context, installationID, requesterID string) (AppInstallation, error)
+	RevokeAppInstallation(ctx context.Context, installationID, requesterID string, options RevokeAppInstallationOptions) (RevokeAppInstallationResult, error)
 	ListSlashCommands(ctx context.Context, workspaceID, requesterID string) ([]SlashCommand, error)
 	CreateSlashCommand(ctx context.Context, input CreateSlashCommandInput) (SlashCommand, error)
 	RevokeSlashCommand(ctx context.Context, commandID, requesterID string) (SlashCommand, error)

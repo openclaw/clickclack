@@ -503,6 +503,115 @@ func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 	}](t, moderator.ID, server.URL+"/api/connected-accounts/"+ownerAccount.ConnectedAccount.ID+"/revoke", map[string]any{})
 }
 
+func TestHTTPAppInstallationRevokeCascade(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "installation-http-cascade@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, initialToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Installation HTTP Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	first := postJSONAsUser[struct {
+		AppInstallation store.AppInstallation `json:"app_installation"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", map[string]any{
+		"app_slug":    "cascade-defaults",
+		"bot_user_id": bot.ID,
+	})
+	postJSONAsUser[struct {
+		SlashCommand store.SlashCommand `json:"slash_command"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/slash-commands", map[string]any{
+		"app_installation_id": first.AppInstallation.ID,
+		"command":             "/cascade-defaults",
+		"callback_url":        "https://example.com/slash",
+		"bot_user_id":         bot.ID,
+	})
+	postJSONAsUser[struct {
+		EventSubscription store.EventSubscription `json:"event_subscription"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", map[string]any{
+		"app_installation_id": first.AppInstallation.ID,
+		"event_types":         []string{"message.created"},
+		"callback_url":        "https://example.com/events",
+	})
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/api/app-installations/"+first.AppInstallation.ID+"/revoke", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-ClickClack-User", owner.ID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected absent-body revoke response: %s %s", resp.Status, string(body))
+	}
+	var defaultResult store.RevokeAppInstallationResult
+	if err := json.NewDecoder(resp.Body).Decode(&defaultResult); err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Installation.RevokedAt == nil || defaultResult.Revoked.SlashCommands != 1 || defaultResult.Revoked.EventSubscriptions != 1 || defaultResult.Revoked.BotTokens != 0 {
+		t.Fatalf("unexpected absent-body cascade result: %#v", defaultResult)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, initialToken.Token); err != nil {
+		t.Fatalf("default cascade revoked the bot token: %v", err)
+	}
+
+	second := postJSONAsUser[struct {
+		AppInstallation store.AppInstallation `json:"app_installation"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", map[string]any{
+		"app_slug":    "cascade-tokens",
+		"bot_user_id": bot.ID,
+	})
+	secondToken, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "second",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenResult := postJSONAsUser[store.RevokeAppInstallationResult](t, owner.ID, server.URL+"/api/app-installations/"+second.AppInstallation.ID+"/revoke", map[string]any{
+		"revoke_slash_commands":      false,
+		"revoke_event_subscriptions": false,
+		"revoke_bot_tokens":          true,
+	})
+	if tokenResult.Revoked.SlashCommands != 0 || tokenResult.Revoked.EventSubscriptions != 0 || tokenResult.Revoked.BotTokens != 2 {
+		t.Fatalf("unexpected token cascade result: %#v", tokenResult)
+	}
+	for _, token := range []string{initialToken.Token, secondToken.Token} {
+		if _, err := st.GetBotTokenAuth(ctx, token); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("expected cascaded bot token to stop authenticating, got %v", err)
+		}
+	}
+	repeated := postJSONAsUser[store.RevokeAppInstallationResult](t, owner.ID, server.URL+"/api/app-installations/"+second.AppInstallation.ID+"/revoke", map[string]any{
+		"revoke_slash_commands":      true,
+		"revoke_event_subscriptions": true,
+		"revoke_bot_tokens":          true,
+	})
+	if repeated.Revoked != (store.AppInstallationRevokedCounts{}) {
+		t.Fatalf("expected repeated revoke counts to be zero, got %#v", repeated.Revoked)
+	}
+}
+
 func TestHTTPUploadNotConfiguredAndCookieAuth(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

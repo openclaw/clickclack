@@ -1634,11 +1634,9 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	if len(auditLog.AuditLogEntries) < 2 || auditLog.AuditLogEntries[0].Action != "connected_account.revoked" {
 		t.Fatalf("expected connected account audit entries, got %#v", auditLog.AuditLogEntries)
 	}
-	revokedInstall := postJSONAsUser[struct {
-		AppInstallation store.AppInstallation `json:"app_installation"`
-	}](t, owner.ID, server.URL+"/api/app-installations/"+createdInstall.AppInstallation.ID+"/revoke", map[string]any{})
-	if revokedInstall.AppInstallation.RevokedAt == nil {
-		t.Fatalf("expected revoked_at on app installation, got %#v", revokedInstall.AppInstallation)
+	revokedInstall := postJSONAsUser[store.RevokeAppInstallationResult](t, owner.ID, server.URL+"/api/app-installations/"+createdInstall.AppInstallation.ID+"/revoke", map[string]any{})
+	if revokedInstall.Installation.RevokedAt == nil {
+		t.Fatalf("expected revoked_at on app installation, got %#v", revokedInstall.Installation)
 	}
 	readOnlyBot, readOnlyToken, err := st.CreateBot(context.Background(), store.CreateBotInput{
 		WorkspaceID: workspace.ID,

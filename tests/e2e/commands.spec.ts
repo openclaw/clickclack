@@ -35,7 +35,7 @@ async function createBot(page: Page, workspaceID: string, stamp: number, suffix:
   });
   expect(response.ok()).toBe(true);
   return (await response.json()) as {
-    bot: { id: string; handle: string };
+    bot: { id: string; handle: string; display_name: string };
     bot_token: { token: string };
   };
 }
@@ -295,6 +295,49 @@ test("does not apply delayed slash callback state after a conversation change", 
     probe.release();
     await probe.close();
   }
+});
+
+test("limits direct message command menus to participating bots", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Direct", stamp);
+  await createChannel(page, workspace.id);
+  const participant = await createBot(page, workspace.id, stamp, "party");
+  const outsider = await createBot(page, workspace.id, stamp, "other");
+  await setBotCommands(page, participant.bot_token.token, [
+    { command: "status", description: "Show participant status" },
+  ]);
+  await setBotCommands(page, outsider.bot_token.token, [
+    { command: "private", description: "Outsider-only command" },
+  ]);
+  await registerSlashCommand(
+    page,
+    workspace.id,
+    participant.bot.id,
+    "/deploy",
+    "https://example.com/slash",
+  );
+  const directResponse = await page.request.post("/api/dms", {
+    data: { workspace_id: workspace.id, member_ids: [participant.bot.id] },
+  });
+  expect(directResponse.ok()).toBe(true);
+  const { conversation } = (await directResponse.json()) as {
+    conversation: { route_id: string };
+  };
+
+  await page.goto(`/app/${workspace.route_id}/${conversation.route_id}`);
+  await waitForAppReady(page);
+  await expect(
+    page.getByRole("heading", { name: new RegExp(participant.bot.display_name) }),
+  ).toBeVisible();
+  await page.getByLabel("Message body").fill("/");
+
+  const suggestions = page.locator(".composer-suggestions button");
+  await expect(suggestions).toHaveCount(1);
+  await expect(suggestions.filter({ hasText: "/status" })).toContainText(
+    `@${participant.bot.handle}`,
+  );
+  await expect(suggestions.filter({ hasText: "/private" })).toHaveCount(0);
+  await expect(suggestions.filter({ hasText: "/deploy" })).toHaveCount(0);
 });
 
 test("merges bot-declared command menus into composer autocomplete", async ({ page }) => {

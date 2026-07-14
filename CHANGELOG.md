@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Tightened integration administration with manager-only registration changes, signing-secret rotation, atomic installation revoke cascades, paginated delivery history, and a discoverable durable event-type vocabulary.
 - Added owner-scoped message nonce lookup so durable clients can distinguish completed sends from interrupted requests and recover attachments safely. Thanks @shakkernerd.
 - Added durable upload idempotency and nonce lookup so retried bot deliveries reuse the original upload without consuming more storage or quota. Thanks @shakkernerd.
 - Allowed disabled Pushover notification settings to clear the stored user key through the public API contract.

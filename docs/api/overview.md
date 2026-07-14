@@ -38,9 +38,10 @@ The value is not stored on message rows or exported as a metrics label.
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
 | Bots          | `/api/workspaces/{id}/bots`, `/api/workspaces/{id}/bots/{bot_id}/{tokens,membership}`, `/api/bots/{id}/tokens`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
+| Event types   | `/api/event-types` | [integrations](../features/integrations.md) |
 | App installs  | `/api/workspaces/{id}/app-installations`, `/api/app-installations/{id}/revoke` | [integrations](../features/integrations.md) |
-| Slash commands | `/api/workspaces/{id}/slash-commands`, `/api/slash-commands/{id}/revoke`, `/api/hooks/slash/{channel}` | [integrations](../features/integrations.md) |
-| Event subscriptions | `/api/workspaces/{id}/event-subscriptions`, `/api/event-subscriptions/{id}/{revoke,deliveries}` | [integrations](../features/integrations.md) |
+| Slash commands | `/api/workspaces/{id}/slash-commands`, `/api/slash-commands/{id}/{revoke,rotate-secret}`, `/api/hooks/slash/{channel}` | [integrations](../features/integrations.md) |
+| Event subscriptions | `/api/workspaces/{id}/event-subscriptions`, `/api/event-subscriptions/{id}/{revoke,rotate-secret,deliveries}` | [integrations](../features/integrations.md) |
 | Audit log     | `/api/workspaces/{id}/audit-log` | [integrations](../features/integrations.md) |
 | Connected accounts | `/api/workspaces/{id}/connected-accounts`, `/api/connected-accounts/{id}/revoke` | [integrations](../features/integrations.md) |
 | Topics        | `/api/workspaces/{id}/topics` | [messages](../features/messages.md) |

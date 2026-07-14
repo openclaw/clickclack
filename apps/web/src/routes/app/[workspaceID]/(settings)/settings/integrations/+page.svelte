@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { api } from "$lib/api";
   import {
     activeOnly,
     attachedTo,
@@ -7,6 +8,7 @@
     listAppInstallations,
     listConnectedAccounts,
     listEventSubscriptions,
+    listEventTypes,
     listSlashCommands,
     revokeAppInstallation,
     revokeConnectedAccount,
@@ -19,6 +21,7 @@
   import { isServiceBot, listWorkspaceBots, type BotWithTokens } from "$lib/bots";
   import { manifestForInstallation } from "$lib/app-catalog";
   import { isWorkspaceManager } from "$lib/permissions";
+  import type { Channel, User } from "$lib/types";
   import InstallWizard from "../../../../../../components/settings/integrations/InstallWizard.svelte";
   import SlashCommandsPanel from "../../../../../../components/settings/integrations/SlashCommandsPanel.svelte";
   import EventSubscriptionsPanel from "../../../../../../components/settings/integrations/EventSubscriptionsPanel.svelte";
@@ -30,6 +33,9 @@
   let subscriptions = $state<EventSubscription[]>(untrack(() => data.subscriptions));
   let connectedAccounts = $state<ConnectedAccount[]>(untrack(() => data.connectedAccounts));
   let bots = $state<BotWithTokens[]>(untrack(() => data.bots));
+  let channels = $state<Channel[]>(untrack(() => data.channels));
+  let eventTypes = $state<string[]>(untrack(() => data.eventTypes));
+  let me = $state<User | null>(untrack(() => data.me));
   let loadError = $state(untrack(() => data.loadError));
   let refreshing = $state(false);
   let showWizard = $state(false);
@@ -42,7 +48,6 @@
   let revoking = $state(false);
   let accountBusyID = $state("");
 
-  const me = $derived(data.me);
   const workspaceID = $derived(data.workspaceID);
   const workspaceIdentifier = $derived(data.workspaceIdentifier || data.workspaceID);
   const canManage = $derived(isWorkspaceManager(data.workspace?.role));
@@ -64,41 +69,69 @@
     return bots.find((entry) => entry.bot.id === installation.bot_user_id)?.bot;
   }
 
+  function settledErrors(results: PromiseSettledResult<unknown>[]): string {
+    const messages = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => integrationsLoadErrorMessage(result.reason));
+    return messages.length > 0
+      ? `Some integration data could not be loaded. ${[...new Set(messages)].join(" ")}`
+      : "";
+  }
+
   async function refresh() {
     refreshing = true;
     try {
-      const [installationsResult, commandsResult, subscriptionsResult, accountsResult, botsResult] =
-        await Promise.all([
+      const [
+        installationsResult,
+        commandsResult,
+        subscriptionsResult,
+        accountsResult,
+        botsResult,
+        channelsResult,
+        eventTypesResult,
+        meResult,
+      ] = await Promise.allSettled([
           listAppInstallations(workspaceID),
           listSlashCommands(workspaceID),
           listEventSubscriptions(workspaceID),
           listConnectedAccounts(workspaceID),
           listWorkspaceBots(workspaceID),
+          api<{ channels: Channel[] }>(`/api/workspaces/${workspaceID}/channels`),
+          listEventTypes(),
+          api<{ user: User }>("/api/me"),
         ]);
-      installations = installationsResult;
-      commands = commandsResult;
-      subscriptions = subscriptionsResult;
-      connectedAccounts = accountsResult;
-      bots = botsResult;
-      loadError = "";
-    } catch (err) {
-      loadError = integrationsLoadErrorMessage(err);
+
+      if (installationsResult.status === "fulfilled") installations = installationsResult.value;
+      if (commandsResult.status === "fulfilled") commands = commandsResult.value;
+      if (subscriptionsResult.status === "fulfilled") subscriptions = subscriptionsResult.value;
+      if (accountsResult.status === "fulfilled") connectedAccounts = accountsResult.value;
+      if (botsResult.status === "fulfilled") bots = botsResult.value;
+      if (channelsResult.status === "fulfilled") channels = channelsResult.value.channels ?? [];
+      if (eventTypesResult.status === "fulfilled") eventTypes = eventTypesResult.value;
+      if (meResult.status === "fulfilled") me = meResult.value.user;
+      loadError = settledErrors([
+        installationsResult,
+        commandsResult,
+        subscriptionsResult,
+        accountsResult,
+        botsResult,
+        channelsResult,
+        eventTypesResult,
+        meResult,
+      ]);
     } finally {
       refreshing = false;
     }
   }
 
   async function refreshHooks() {
-    try {
-      const [commandsResult, subscriptionsResult] = await Promise.all([
-        listSlashCommands(workspaceID),
-        listEventSubscriptions(workspaceID),
-      ]);
-      commands = commandsResult;
-      subscriptions = subscriptionsResult;
-    } catch (err) {
-      actionError = integrationsLoadErrorMessage(err);
-    }
+    const [commandsResult, subscriptionsResult] = await Promise.allSettled([
+      listSlashCommands(workspaceID),
+      listEventSubscriptions(workspaceID),
+    ]);
+    if (commandsResult.status === "fulfilled") commands = commandsResult.value;
+    if (subscriptionsResult.status === "fulfilled") subscriptions = subscriptionsResult.value;
+    actionError = settledErrors([commandsResult, subscriptionsResult]);
   }
 
   function handleInstalled(installation: AppInstallation) {
@@ -228,7 +261,7 @@
       currentUserID={me.id}
       {bots}
       {boundBotIDs}
-      channels={data.channels}
+      {channels}
       onInstalled={handleInstalled}
       onClose={() => (showWizard = false)}
     />
@@ -366,7 +399,7 @@
               <EventSubscriptionsPanel
                 {workspaceID}
                 subscriptions={attachedTo(activeSubscriptions, installation.id)}
-                eventTypes={data.eventTypes}
+                {eventTypes}
                 installationID={installation.id}
                 {canManage}
                 onChanged={refreshHooks}
@@ -397,7 +430,7 @@
         <EventSubscriptionsPanel
           {workspaceID}
           subscriptions={unattachedSubscriptions}
-          eventTypes={data.eventTypes}
+          {eventTypes}
           {canManage}
           onChanged={refreshHooks}
         />

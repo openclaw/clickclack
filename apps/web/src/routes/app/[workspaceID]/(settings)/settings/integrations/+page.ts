@@ -40,36 +40,49 @@ export async function load({
   let me: User | null = null;
   let loadError = "";
 
-  try {
-    const [
-      installationsResult,
-      commandsResult,
-      subscriptionsResult,
-      accountsResult,
-      botsResult,
-      channelsResult,
-      eventTypesResult,
-      meResult,
-    ] = await Promise.all([
-      listAppInstallations(workspaceID),
-      listSlashCommands(workspaceID),
-      listEventSubscriptions(workspaceID),
-      listConnectedAccounts(workspaceID),
-      listWorkspaceBots(workspaceID),
-      api<{ channels: Channel[] }>(`/api/workspaces/${workspaceID}/channels`),
-      listEventTypes(),
-      api<{ user: User }>("/api/me"),
-    ]);
-    installations = installationsResult;
-    commands = commandsResult;
-    subscriptions = subscriptionsResult;
-    connectedAccounts = accountsResult;
-    bots = botsResult;
-    channels = channelsResult.channels ?? [];
-    eventTypes = eventTypesResult;
-    me = meResult.user;
-  } catch (err) {
-    loadError = integrationsLoadErrorMessage(err);
+  const [
+    installationsResult,
+    commandsResult,
+    subscriptionsResult,
+    accountsResult,
+    botsResult,
+    channelsResult,
+    eventTypesResult,
+    meResult,
+  ] = await Promise.allSettled([
+    listAppInstallations(workspaceID),
+    listSlashCommands(workspaceID),
+    listEventSubscriptions(workspaceID),
+    listConnectedAccounts(workspaceID),
+    listWorkspaceBots(workspaceID),
+    api<{ channels: Channel[] }>(`/api/workspaces/${workspaceID}/channels`),
+    listEventTypes(),
+    api<{ user: User }>("/api/me"),
+  ]);
+
+  if (installationsResult.status === "fulfilled") installations = installationsResult.value;
+  if (commandsResult.status === "fulfilled") commands = commandsResult.value;
+  if (subscriptionsResult.status === "fulfilled") subscriptions = subscriptionsResult.value;
+  if (accountsResult.status === "fulfilled") connectedAccounts = accountsResult.value;
+  if (botsResult.status === "fulfilled") bots = botsResult.value;
+  if (channelsResult.status === "fulfilled") channels = channelsResult.value.channels ?? [];
+  if (eventTypesResult.status === "fulfilled") eventTypes = eventTypesResult.value;
+  if (meResult.status === "fulfilled") me = meResult.value.user;
+
+  const failureMessages = [
+    installationsResult,
+    commandsResult,
+    subscriptionsResult,
+    accountsResult,
+    botsResult,
+    channelsResult,
+    eventTypesResult,
+    meResult,
+  ]
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => integrationsLoadErrorMessage(result.reason));
+  if (failureMessages.length > 0) {
+    loadError = `Some integration data could not be loaded. ${[...new Set(failureMessages)].join(" ")}`;
   }
 
   return {

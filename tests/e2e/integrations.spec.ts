@@ -158,6 +158,76 @@ test("requires installation data before adding an app", async ({ page }) => {
   );
 });
 
+test("retries lost setup responses without duplicate resources", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Retry", stamp);
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "general", kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+
+  let botAttempts = 0;
+  await page.route(`**/api/workspaces/${workspace.id}/bots`, async (route) => {
+    if (route.request().method() !== "POST" || botAttempts++ > 0) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.fulfill({ status: 502, json: { error: "lost bot response" } });
+  });
+
+  let installationAttempts = 0;
+  await page.route(`**/api/workspaces/${workspace.id}/app-installations`, async (route) => {
+    if (route.request().method() !== "POST" || installationAttempts++ > 0) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.fulfill({ status: 502, json: { error: "lost installation response" } });
+  });
+
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+  await page.getByRole("button", { name: "Add app" }).click();
+  await page.locator(".ws-intg__catalog-card", { hasText: "OpenClaw" }).click();
+  await page.getByRole("textbox", { name: "Display name" }).fill(`Retry Agent ${stamp}`);
+  await page.getByRole("textbox", { name: "Handle" }).fill(`retry-agent-${stamp}`);
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await page.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(page.getByText("Retrying reuses the same bot and token row.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry install" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Default channel" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Retry install" }).click();
+  await expect(
+    page.getByText("retrying reuses them and the same installation request", { exact: false }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Retry install" }).click();
+  await expect(page.getByText("Your new token is ready")).toBeVisible();
+
+  const botsResponse = await page.request.get(`/api/workspaces/${workspace.id}/bots`);
+  expect(botsResponse.ok()).toBe(true);
+  const botsBody = (await botsResponse.json()) as {
+    bots: Array<{ bot: { handle: string }; tokens: Array<{ revoked_at?: string }> }>;
+  };
+  const retryBots = botsBody.bots.filter((entry) => entry.bot.handle === `retry-agent-${stamp}`);
+  expect(retryBots).toHaveLength(1);
+  expect(retryBots[0]?.tokens).toHaveLength(1);
+  expect(retryBots[0]?.tokens[0]?.revoked_at).toBeUndefined();
+
+  const installationsResponse = await page.request.get(
+    `/api/workspaces/${workspace.id}/app-installations`,
+  );
+  expect(installationsResponse.ok()).toBe(true);
+  const installationsBody = (await installationsResponse.json()) as {
+    app_installations: Array<{ bot_user_id: string }>;
+  };
+  expect(installationsBody.app_installations).toHaveLength(1);
+});
+
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "NoChannels", stamp);

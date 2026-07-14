@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
+  import { APIError } from "../../../lib/api";
   import {
     BOT_SCOPE_BUNDLES,
     activeTokens,
@@ -80,7 +81,11 @@
   let createdBot = $state<User | null>(null);
   let createdToken = $state<BotToken | null>(null);
   let result = $state<{ installation: AppInstallation; bot: User; token: BotToken } | null>(null);
+  let credentialsAttempted = $state(false);
+  let botSetupNonce = $state(crypto.randomUUID());
+  let installationSetupNonce = $state(crypto.randomUUID());
   const hasPartialCredentials = $derived(!!createdBot && !!createdToken);
+  const credentialsLocked = $derived(credentialsAttempted || hasPartialCredentials);
 
   const availableBots = $derived(
     bots.filter(
@@ -105,7 +110,7 @@
   });
 
   $effect(() => {
-    if (!hasPartialCredentials && !channelNames.includes(defaultChannel)) {
+    if (!credentialsLocked && !channelNames.includes(defaultChannel)) {
       defaultChannel = channelNames[0] ?? "";
     }
   });
@@ -131,6 +136,9 @@
     agentActivity = false;
     createdBot = null;
     createdToken = null;
+    credentialsAttempted = false;
+    botSetupNonce = crypto.randomUUID();
+    installationSetupNonce = crypto.randomUUID();
     result = null;
     error = "";
     step = "bot";
@@ -222,6 +230,7 @@
       let bot = createdBot;
       let token = createdToken;
       if (!bot || !token) {
+        credentialsAttempted = true;
         const scopes = [scopeBundle as string];
         if (agentActivity) scopes.push(AGENT_ACTIVITY_SCOPE);
         if (botMode === "create") {
@@ -231,6 +240,7 @@
             owner_user_id: ownership === "user" ? currentUserID : undefined,
             token_name: tokenName.trim() || "default",
             scopes,
+            setup_nonce: botSetupNonce,
           });
           bot = response.bot;
           token = response.bot_token;
@@ -241,6 +251,7 @@
           token = await createWorkspaceBotToken(workspaceID, entry.bot.id, {
             name: tokenName.trim() || "default",
             scopes,
+            setup_nonce: botSetupNonce,
           });
         }
         createdBot = bot;
@@ -258,14 +269,23 @@
         display_name: bot.display_name || manifest.name,
         bot_user_id: bot.id,
         config,
+        setup_nonce: installationSetupNonce,
       });
       result = { installation, bot, token };
       step = "reveal";
       onInstalled(installation, bot, token);
     } catch (err) {
+      const credentialRequestWasRejected =
+        !createdBot && err instanceof APIError && err.status >= 400 && err.status < 500;
+      if (credentialRequestWasRejected) {
+        credentialsAttempted = false;
+        botSetupNonce = crypto.randomUUID();
+      }
       error = createdBot
-        ? `${integrationsLoadErrorMessage(err)} The bot and token were created — retrying will only create the installation.`
-        : botLoadErrorMessage(err);
+        ? `${integrationsLoadErrorMessage(err)} The bot and token are ready — retrying reuses them and the same installation request.`
+        : credentialsAttempted
+          ? `${botLoadErrorMessage(err)} Retrying reuses the same bot and token row.`
+          : botLoadErrorMessage(err);
     } finally {
       submitting = false;
     }
@@ -338,7 +358,7 @@
         advanceFromBot();
       }}
     >
-      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
+      <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
         <legend class="ws-bots__form-label">Bot identity</legend>
         <div class="ws-bots__choices">
           <label class="ws-bots__choice" class:is-active={botMode === "create"}>
@@ -379,7 +399,7 @@
               placeholder={manifest?.suggestedBotName || "My app"}
               maxlength="80"
               required
-              disabled={hasPartialCredentials}
+              disabled={credentialsLocked}
             />
           </label>
           <label class="ws-bots__form-field">
@@ -393,13 +413,13 @@
                 oninput={onHandleInput}
                 placeholder={manifest?.suggestedBotHandle || "my-app"}
                 required
-                disabled={hasPartialCredentials}
+                disabled={credentialsLocked}
               />
             </div>
           </label>
         </div>
 
-        <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
+        <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
           <legend class="ws-bots__form-label">Ownership</legend>
           <div class="ws-bots__choices">
             <label class="ws-bots__choice" class:is-active={ownership === "service"}>
@@ -425,7 +445,7 @@
             class="ws-bots__form-input"
             bind:value={existingBotID}
             required
-            disabled={hasPartialCredentials}
+            disabled={credentialsLocked}
           >
             <option value="" disabled>Pick a bot…</option>
             {#each availableBots as entry (entry.bot.id)}
@@ -439,7 +459,7 @@
         </label>
       {/if}
 
-      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
+      <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
         <legend class="ws-bots__form-label">Token scope</legend>
         <div class="ws-bots__choices">
           {#each BOT_SCOPE_BUNDLES as bundle (bundle.id)}
@@ -461,7 +481,7 @@
           placeholder="production"
           maxlength="80"
           required
-          disabled={hasPartialCredentials}
+          disabled={credentialsLocked}
         />
       </label>
 
@@ -474,7 +494,7 @@
           type="button"
           class="ws-btn"
           onclick={back}
-          disabled={submitting || hasPartialCredentials}
+          disabled={submitting || credentialsLocked}
         >
           Back
         </button>
@@ -500,7 +520,7 @@
         <select
           class="ws-bots__form-input"
           bind:value={defaultChannel}
-          disabled={hasPartialCredentials || channelNames.length === 0}
+          disabled={credentialsLocked || channelNames.length === 0}
         >
           {#each channelNames as name (name)}
             <option value={name}>#{name}</option>
@@ -513,7 +533,7 @@
         </span>
       </label>
 
-      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
+      <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
         <legend class="ws-bots__form-label">Who can talk to this agent</legend>
         <div class="ws-bots__choices">
           <label class="ws-bots__choice" class:is-active={allowMode === "everyone"}>
@@ -544,7 +564,7 @@
                     class="ws-intg__chip-remove"
                     aria-label={`Remove ${member.label}`}
                     onclick={() => removeAllowMember(member.id)}
-                    disabled={hasPartialCredentials}
+                    disabled={credentialsLocked}
                   >
                     ×
                   </button>
@@ -558,7 +578,7 @@
             placeholder="Search members by name or handle"
             value={memberQuery}
             oninput={onMemberQueryInput}
-            disabled={hasPartialCredentials}
+            disabled={credentialsLocked}
           />
           {#if memberResults.length > 0}
             <ul class="ws-intg__member-results">
@@ -568,7 +588,7 @@
                     type="button"
                     class="ws-intg__member-result"
                     onclick={() => addAllowMember(member)}
-                    disabled={hasPartialCredentials}
+                    disabled={credentialsLocked}
                   >
                     {member.user.display_name || member.user.handle}
                     <code class="ws-members__handle">@{member.user.handle}</code>
@@ -581,7 +601,7 @@
       {/if}
 
       <label class="ws-bots__form-field ws-intg__toggle">
-        <input type="checkbox" bind:checked={agentActivity} disabled={hasPartialCredentials} />
+        <input type="checkbox" bind:checked={agentActivity} disabled={credentialsLocked} />
         <span>
           <span class="ws-bots__choice-title">Stream agent activity</span>
           <span class="ws-bots__choice-hint">
@@ -600,7 +620,7 @@
           type="button"
           class="ws-btn"
           onclick={back}
-          disabled={submitting || hasPartialCredentials}
+          disabled={submitting || credentialsLocked}
         >
           Back
         </button>
@@ -609,7 +629,7 @@
           class="ws-btn ws-btn--primary"
           disabled={!configStepValid || submitting}
         >
-          {submitting ? "Installing…" : createdBot ? "Retry install" : "Install"}
+          {submitting ? "Installing…" : credentialsAttempted ? "Retry install" : "Install"}
         </button>
       </div>
     </form>

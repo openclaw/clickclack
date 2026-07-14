@@ -287,10 +287,10 @@
           type="button"
           class="ws-btn ws-btn--primary"
           onclick={() => (showWizard = true)}
-          disabled={showWizard || !loaded.bots || !loaded.channels}
+          disabled={showWizard || !loaded.installations || !loaded.bots || !loaded.channels}
           title={
-            !loaded.bots || !loaded.channels
-              ? "Refresh before adding an app so bot and channel data is current."
+            !loaded.installations || !loaded.bots || !loaded.channels
+              ? "Refresh before adding an app so installation, bot, and channel data is current."
               : undefined
           }
         >

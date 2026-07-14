@@ -138,6 +138,26 @@ test("keeps successful integration data when one initial request fails", async (
   await expect(page.getByRole("button", { name: "Uninstall", exact: true })).toBeDisabled();
 });
 
+test("requires installation data before adding an app", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "InstallData", stamp);
+  await page.route(`**/api/workspaces/${workspace.id}/app-installations`, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "forced installation failure" } });
+  });
+
+  await page.goto(`/app/${workspace.route_id}/settings/integrations`);
+
+  await expect(
+    page.getByText("Some integration data could not be loaded", { exact: false }),
+  ).toBeVisible();
+  const addApp = page.getByRole("button", { name: "Add app" });
+  await expect(addApp).toBeDisabled();
+  await expect(addApp).toHaveAttribute(
+    "title",
+    "Refresh before adding an app so installation, bot, and channel data is current.",
+  );
+});
+
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, "NoChannels", stamp);

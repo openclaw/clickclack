@@ -51,6 +51,18 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	}
 
 	first := createPostgresTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, "postgres-defaults")
+	sameApp, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     first.AppSlug,
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("create second installation for same app slug: %v", err)
+	}
+	if sameApp.ID == first.ID {
+		t.Fatal("expected separate installations for the same app slug")
+	}
 	command, subscription := createPostgresTestInstallationRegistrations(t, st, first.ID, workspace.ID, bot.ID, owner.ID, "/postgres-defaults")
 	if _, err := st.RevokeAppInstallation(ctx, first.ID, member.ID, store.RevokeAppInstallationOptions{}); !errors.Is(err, store.ErrNotWorkspaceManager) {
 		t.Fatalf("expected member installation revoke to require manager, got %v", err)

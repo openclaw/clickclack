@@ -95,9 +95,6 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		installation.CreatedAt,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "idx_app_installations_active_slug") {
-			return store.AppInstallation{}, errors.New("app is already installed")
-		}
 		return store.AppInstallation{}, err
 	}
 	return installation, tx.Commit()

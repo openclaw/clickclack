@@ -340,10 +340,6 @@ CREATE TABLE app_installations (
   revoked_at TEXT
 );
 
-CREATE UNIQUE INDEX idx_app_installations_active_slug
-  ON app_installations(workspace_id, app_slug)
-  WHERE revoked_at IS NULL;
-
 CREATE INDEX idx_app_installations_workspace
   ON app_installations(workspace_id, revoked_at, app_slug);
 

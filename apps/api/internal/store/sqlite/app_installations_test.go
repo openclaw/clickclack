@@ -33,6 +33,18 @@ func TestRevokeAppInstallationCascadesAtomically(t *testing.T) {
 	}
 
 	first := createTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, "cascade-defaults")
+	sameApp, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     first.AppSlug,
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("create second installation for same app slug: %v", err)
+	}
+	if sameApp.ID == first.ID {
+		t.Fatal("expected separate installations for the same app slug")
+	}
 	createTestInstallationRegistrations(t, st, first.ID, workspace.ID, bot.ID, owner.ID, "/cascade-defaults")
 	result, err := st.RevokeAppInstallation(ctx, first.ID, owner.ID, store.RevokeAppInstallationOptions{
 		RevokeSlashCommands:      true,

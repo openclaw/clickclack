@@ -264,11 +264,11 @@ The TypeScript SDK exposes these endpoints as
 `client.bots.setCommands(commands)` and
 `client.bots.listCommands(workspaceId)`.
 
-Bot command menus are discovery metadata only. They do not change dispatch:
-bot-declared and unknown commands continue through normal plain-message
-delivery. If a name also exists as an HTTP-registered slash command, the web
-client dispatches the HTTP registration first. There is no cross-system
-uniqueness constraint.
+Bot command menus are discovery metadata only. This backend contract does not
+change dispatch or implement the web composer merge. The web integration's
+precedence rule is that an HTTP-registered slash command wins when the same name
+exists in both systems; bot-declared and unknown commands continue through
+normal plain-message delivery. There is no cross-system uniqueness constraint.
 
 Workspace owners and moderators can remove any bot from a workspace with
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this

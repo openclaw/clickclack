@@ -136,12 +136,12 @@ filter by command name, then use the arrow keys plus `Enter` or `Tab` to insert
 the selected command. The menu overlays the timeline instead of resizing the
 message list.
 
-Bot-declared command menus share this composer discovery surface without
-creating callback registrations. If the same command name exists in both
-systems, the HTTP-registered slash command wins at web dispatch time.
-Bot-declared and otherwise unknown commands fall through to normal plain-message
-delivery. The two systems intentionally have no cross-system uniqueness
-constraint.
+Bot-declared command menus are a separate backend metadata source for the web
+composer integration. When that integration merges both systems, an
+HTTP-registered slash command wins at dispatch time if the same name exists in
+both. Bot-declared and otherwise unknown commands fall through to normal
+plain-message delivery. The two systems intentionally have no cross-system
+uniqueness constraint.
 
 The same composer menu supports `@` mentions for workspace people and bots.
 Mention suggestions work in channel, DM, and thread composers; selection uses

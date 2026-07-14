@@ -303,7 +303,21 @@ test("merges bot-declared command menus into composer autocomplete", async ({ pa
   const channel = await createChannel(page, workspace.id);
   const { bot, bot_token: token } = await createBot(page, workspace.id, stamp, "menu");
   const probe = await startSlashProbe({ response_type: "in_channel", text: "ok" });
+  let holdNextBotCommandResponse = false;
+  let resolveStaleResponse: (fulfill: () => Promise<void>) => void = () => {};
+  const staleResponse = new Promise<() => Promise<void>>((resolve) => {
+    resolveStaleResponse = resolve;
+  });
   try {
+    await page.route(`**/api/workspaces/${workspace.id}/bot-commands`, async (route) => {
+      if (!holdNextBotCommandResponse) {
+        await route.continue();
+        return;
+      }
+      holdNextBotCommandResponse = false;
+      const response = await route.fetch();
+      resolveStaleResponse(() => route.fulfill({ response }));
+    });
     await registerSlashCommand(
       page,
       workspace.id,
@@ -333,7 +347,11 @@ test("merges bot-declared command menus into composer autocomplete", async ({ pa
     await expect(statusEntry).toContainText("[session]");
     await expect(statusEntry).toContainText(`@${bot.handle}`);
 
-    // Live update: a menu overwrite arrives over realtime without a reload.
+    // Capture an older realtime refresh after the server has returned it, then
+    // let a newer refresh complete before releasing the stale response.
+    holdNextBotCommandResponse = true;
+    await setBotCommands(page, token.token, [{ command: "stale", description: "Stale command" }]);
+    const fulfillStaleResponse = await staleResponse;
     await setBotCommands(page, token.token, [
       { command: "restart", description: "Restart the agent" },
     ]);
@@ -341,8 +359,24 @@ test("merges bot-declared command menus into composer autocomplete", async ({ pa
     await expect(
       page.locator(".composer-suggestions button", { hasText: "/restart" }),
     ).toBeVisible();
-    await composer.fill("/status");
-    await expect(page.locator(".composer-suggestions button")).toHaveCount(0);
+
+    await fulfillStaleResponse();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await composer.fill("/");
+    await expect(
+      page.locator(".composer-suggestions button", { hasText: "/restart" }),
+    ).toBeVisible();
+    await expect(page.locator(".composer-suggestions button", { hasText: "/stale" })).toHaveCount(
+      0,
+    );
+    await expect(page.locator(".composer-suggestions button", { hasText: "/status" })).toHaveCount(
+      0,
+    );
   } finally {
     await probe.close();
   }

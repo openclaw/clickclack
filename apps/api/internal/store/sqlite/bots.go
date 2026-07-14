@@ -604,6 +604,12 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 		return err
 	}
 	qtx := s.q.WithTx(tx)
+	if _, err := qtx.LockBotCommandSet(ctx, storedb.LockBotCommandSetParams{
+		WorkspaceID: workspaceID,
+		BotUserID:   botUserID,
+	}); err != nil {
+		return err
+	}
 	if err := qtx.DeleteBotCommandsForBot(ctx, storedb.DeleteBotCommandsForBotParams{
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,

@@ -35,6 +35,9 @@ Behavior:
 - Creating or revoking requires a human workspace owner or moderator. Bot
   tokens cannot mutate app installations.
 - `bot_user_id` must be a bot member of the same workspace.
+- `app_slug` identifies the app manifest, not a singleton. A workspace may
+  create any number of active installations for the same slug; each
+  installation has its own ID, bot binding, token lifecycle, and config.
 - `GET /api/workspaces/{workspace_id}/app-installations` lists active
   installations.
 - `POST /api/app-installations/{installation_id}/revoke` atomically revokes the

@@ -44,7 +44,8 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
-  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SlashCommand, ThreadState, Upload, User, Workspace } from "./lib/types";
+  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SlashCommand, ThreadState, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
@@ -75,6 +76,11 @@
   let selectedProfile: User | null = null;
   let moderationMembers: MemberModeration[] = [];
   let slashCommands: SlashCommand[] = [];
+  let botCommands: WorkspaceBotCommand[] = [];
+  // Local-only feedback for slash dispatch: Slack-style ephemeral responses
+  // ("only visible to you") and dispatch failures. Never part of the message
+  // stream.
+  let composerNotice: { kind: "ephemeral" | "error"; text: string } | null = null;
   let mentionPeople: User[] = [];
   let selectedImage: { url: string; title: string } | null = null;
   let selectedArtifact: Upload | null = null;
@@ -186,6 +192,15 @@
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
+  // Slash-dispatch notices are scoped to the conversation they fired in.
+  $: clearComposerNoticeFor(activeConversationKey);
+  // Bot-declared menus surface in channels; in DMs only for bots that are
+  // party to the conversation.
+  $: composerBotCommands = selectedChannelID
+    ? botCommands
+    : selectedDirect
+      ? botCommands.filter((command) => selectedDirect?.members?.some((member) => member.id === command.bot.id))
+      : [];
   $: activeUnreadState = selectedDirectID
     ? directConversations.find((conversation) => conversation.id === selectedDirectID) || {}
     : selectedChannelID
@@ -619,7 +634,7 @@
     if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
     if (serial !== routeApplySerial) return;
     if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
-    if (workspaceChanged) await Promise.all([loadModerationMembers(), loadSlashCommands()]);
+    if (workspaceChanged) await Promise.all([loadModerationMembers(), loadSlashCommands(), loadBotCommands()]);
     if (serial !== routeApplySerial) return;
 
     if (routeTarget) {
@@ -824,6 +839,20 @@
     } catch {
       slashCommands = [];
     }
+  }
+
+  async function loadBotCommands() {
+    botCommands = [];
+    if (!selectedWorkspaceID) return;
+    try {
+      botCommands = await listBotCommands(selectedWorkspaceID);
+    } catch {
+      botCommands = [];
+    }
+  }
+
+  function clearComposerNoticeFor(_conversationKey: string) {
+    composerNotice = null;
   }
 
   function collectMentionPeople(
@@ -1766,6 +1795,19 @@
       return;
     }
     stopTyping();
+    composerNotice = null;
+    // Registered HTTP slash commands dispatch through the hook endpoint in
+    // channels (Slack semantics: the invocation itself is never posted).
+    // Bot-declared and unknown commands fall through to a plain message.
+    if (selectedChannelID && !selectedDirectID && !pendingUpload) {
+      const slash = splitSlashDraft(body);
+      const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
+      if (slash && registered) {
+        messageBody = "";
+        await dispatchRegisteredCommand(selectedChannelID, slash.command, slash.text, body);
+        return;
+      }
+    }
     const activeContext: "channel" | "dm" = selectedDirectID ? "dm" : "channel";
     const quote = replyTarget && replyContext === activeContext ? replyTarget : null;
     const draft: OutgoingDraft = {
@@ -1781,6 +1823,35 @@
     if (quote) clearReplyTarget();
     pendingUpload = null;
     await dispatchDraft(draft);
+  }
+
+  async function dispatchRegisteredCommand(channelID: string, command: string, text: string, draftBody: string) {
+    try {
+      const result = await dispatchSlashCommand(channelID, command, text);
+      // `in_channel` responses are posted as the bot server-side and arrive
+      // over realtime like any other bot message; nothing to render here.
+      if (result.text && result.response_type !== "in_channel") {
+        composerNotice = { kind: "ephemeral", text: result.text };
+      }
+    } catch (err) {
+      console.warn("slash dispatch failed", err);
+      composerNotice = {
+        kind: "error",
+        text: err instanceof APIError && err.message ? messageFromAPIError(err) : `${command} failed`,
+      };
+      // Give the draft back so the invocation isn't lost.
+      if (!messageBody.trim()) messageBody = draftBody;
+    }
+  }
+
+  function messageFromAPIError(err: APIError): string {
+    try {
+      const parsed = JSON.parse(err.message) as { error?: string };
+      if (parsed && typeof parsed.error === "string" && parsed.error) return parsed.error;
+    } catch {
+      // Fall through to the raw body.
+    }
+    return err.message;
   }
 
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
@@ -2254,6 +2325,10 @@
     }
     if (event.type === "channel.read" || event.type === "dm.read") {
       handleReadEvent(event);
+      return;
+    }
+    if (event.type === "bot_command.updated") {
+      if (event.workspace_id === selectedWorkspaceID) await loadBotCommands();
       return;
     }
     if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {
@@ -2988,6 +3063,26 @@
     <div class="composer-dock">
     <AgentResponding active={agentResponding} />
 
+    {#if composerNotice}
+      <div
+        class="composer-notice"
+        class:composer-notice--error={composerNotice.kind === "error"}
+        role="status"
+        aria-live="polite"
+      >
+        <span class="composer-notice__label">
+          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Command failed"}
+        </span>
+        <span class="composer-notice__text">{composerNotice.text}</span>
+        <button
+          type="button"
+          class="composer-notice__dismiss"
+          aria-label="Dismiss notice"
+          onclick={() => (composerNotice = null)}
+        >×</button>
+      </div>
+    {/if}
+
     <ChatComposer
       value={messageBody}
       placeholder={selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
@@ -3001,6 +3096,7 @@
       gifQuery={gifQuery}
       filteredGifs={filteredGifs}
       slashCommands={selectedChannelID ? slashCommands : []}
+      botCommands={composerBotCommands}
       {mentionPeople}
       onValue={(value) => {
         const previous = messageBody;

@@ -120,6 +120,66 @@
   text-transform: uppercase;
 }
 
+.suggestion-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.composer-notice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 var(--composer-overlay-inset-x, 0) 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  font-size: 13px;
+}
+
+.composer-notice__label {
+  flex: none;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.composer-notice--error .composer-notice__label {
+  color: var(--danger);
+}
+
+.composer-notice__text {
+  min-width: 0;
+  flex: 1;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.composer-notice__dismiss {
+  flex: none;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.composer-notice__dismiss:hover {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+
 .composer-toolbar {
   display: inline-flex;
   align-items: center;

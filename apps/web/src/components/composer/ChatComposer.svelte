@@ -4,7 +4,7 @@
   import { avatarInitial, handleLabel } from "../../lib/chat/people";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import type { GifItem } from "../../lib/gifs";
-  import type { Message, SlashCommand, Upload, User } from "../../lib/types";
+  import type { Message, SlashCommand, Upload, User, WorkspaceBotCommand } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
@@ -24,6 +24,8 @@
     detail: string;
     insertText: string;
     sortText: string;
+    hint?: string;
+    source?: string;
   };
 
   type Props = {
@@ -40,6 +42,7 @@
     gifQuery?: string;
     filteredGifs?: GifItem[];
     slashCommands?: SlashCommand[];
+    botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
     onValue: (value: string) => void;
     onSubmit: () => void;
@@ -70,6 +73,7 @@
     gifQuery = "",
     filteredGifs = [],
     slashCommands = [],
+    botCommands = [],
     mentionPeople = [],
     onValue,
     onSubmit,
@@ -143,20 +147,39 @@
 
   function slashSuggestions(token: ActiveToken): ComposerSuggestion[] {
     const query = token.query;
-    return slashCommands
+    const registered = slashCommands
       .filter((command) => !command.revoked_at)
       .map((command) => {
         const label = normalizedCommand(command.command);
-        const searchable = label.slice(1).toLowerCase();
         return {
           id: command.id,
           kind: "slash" as const,
           label,
           detail: command.description || "Slash command",
           insertText: `${label} `,
-          sortText: searchable,
+          sortText: label.slice(1).toLowerCase(),
         };
-      })
+      });
+    // Bot-declared menu entries merge in behind HTTP-registered commands:
+    // on a name collision the registered command wins (it is the one the
+    // send path dispatches).
+    const taken = new Set(registered.map((suggestion) => suggestion.label));
+    const declared = botCommands
+      .filter((command) => !taken.has(normalizedCommand(command.command)))
+      .map((command) => {
+        const label = normalizedCommand(command.command);
+        return {
+          id: command.id,
+          kind: "slash" as const,
+          label,
+          detail: command.description,
+          insertText: `${label} `,
+          sortText: label.slice(1).toLowerCase(),
+          hint: command.args_hint || undefined,
+          source: command.bot.handle ? `@${command.bot.handle}` : command.bot.display_name,
+        };
+      });
+    return [...registered, ...declared]
       .filter((suggestion) => !query || suggestion.sortText.includes(query))
       .sort((a, b) => Number(!a.sortText.startsWith(query)) - Number(!b.sortText.startsWith(query)) || a.sortText.localeCompare(b.sortText))
       .slice(0, 6);
@@ -276,10 +299,10 @@
             {/if}
           </span>
           <span class="suggestion-copy">
-            <strong>{suggestion.label}</strong>
+            <strong>{suggestion.label}{#if suggestion.hint}<em class="suggestion-hint"> {suggestion.hint}</em>{/if}</strong>
             <span>{suggestion.detail}</span>
           </span>
-          <span class="suggestion-kind">{suggestion.kind === "slash" ? "command" : "mention"}</span>
+          <span class="suggestion-kind">{suggestion.source ?? (suggestion.kind === "slash" ? "command" : "mention")}</span>
         </button>
       {/each}
     </div>

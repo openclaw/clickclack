@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -37,6 +38,19 @@ func TestIntegrationSetupNoncesAreRetrySafe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	legacyScopes := make([]string, 0, len(firstToken.Scopes))
+	for _, scope := range firstToken.Scopes {
+		if scope != store.BotCommandsWriteScope {
+			legacyScopes = append(legacyScopes, scope)
+		}
+	}
+	legacyScopesJSON, err := json.Marshal(legacyScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = ? WHERE id = ?`, legacyScopesJSON, firstToken.ID); err != nil {
+		t.Fatal(err)
+	}
 	replayedBot, replayedToken, err := st.CreateBot(ctx, botInput)
 	if err != nil {
 		t.Fatal(err)
@@ -63,12 +77,25 @@ func TestIntegrationSetupNoncesAreRetrySafe(t *testing.T) {
 		WorkspaceID: workspace.ID,
 		BotUserID:   bot.ID,
 		Name:        "secondary",
-		Scopes:      []string{"bot:read"},
+		Scopes:      []string{"bot:admin"},
 		SetupNonce:  "token-setup-nonce-0001",
 		CreatedBy:   owner.ID,
 	}
 	secondToken, err := st.CreateBotToken(ctx, tokenInput)
 	if err != nil {
+		t.Fatal(err)
+	}
+	secondaryLegacyScopes := make([]string, 0, len(secondToken.Scopes))
+	for _, scope := range secondToken.Scopes {
+		if scope != store.BotCommandsWriteScope {
+			secondaryLegacyScopes = append(secondaryLegacyScopes, scope)
+		}
+	}
+	secondaryLegacyScopesJSON, err := json.Marshal(secondaryLegacyScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = ? WHERE id = ?`, secondaryLegacyScopesJSON, secondToken.ID); err != nil {
 		t.Fatal(err)
 	}
 	replayedSecondToken, err := st.CreateBotToken(ctx, tokenInput)

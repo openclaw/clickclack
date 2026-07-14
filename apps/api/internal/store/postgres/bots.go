@@ -156,7 +156,7 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		if replayErr == nil {
 			if replayToken.WorkspaceID != workspaceID ||
 				replayToken.Name != tokenName ||
-				!slices.Equal(replayToken.Scopes, scopes) ||
+				!botSetupScopesMatch(input.Scopes, replayToken.Scopes, scopes) ||
 				replayToken.RevokedAt != nil ||
 				replayBot.OwnerUserID != ownerUserID ||
 				replayBot.DisplayName != displayName ||
@@ -373,7 +373,7 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 			if replayToken.WorkspaceID != workspaceID ||
 				replayToken.BotUserID != bot.ID ||
 				replayToken.Name != tokenName ||
-				!slices.Equal(replayToken.Scopes, scopes) ||
+				!botSetupScopesMatch(input.Scopes, replayToken.Scopes, scopes) ||
 				replayToken.RevokedAt != nil ||
 				replayBot.ID != bot.ID {
 				return store.BotToken{}, store.ErrSetupNonceConflict
@@ -763,6 +763,36 @@ func normalizeSetupNonce(value string) (string, error) {
 		return "", errors.New("setup_nonce must be at least 16 characters")
 	}
 	return nonce, nil
+}
+
+func botSetupScopesMatch(values, stored, normalized []string) bool {
+	if slices.Equal(stored, normalized) {
+		return true
+	}
+	usesWriteBundle := false
+	hasScope := false
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			scope := strings.TrimSpace(part)
+			if scope == "" {
+				continue
+			}
+			hasScope = true
+			if scope == "bot:write" || scope == "bot:admin" {
+				usesWriteBundle = true
+			}
+		}
+	}
+	if !hasScope {
+		usesWriteBundle = true
+	}
+	if !usesWriteBundle {
+		return false
+	}
+	legacy := slices.DeleteFunc(slices.Clone(normalized), func(scope string) bool {
+		return scope == store.BotCommandsWriteScope
+	})
+	return slices.Equal(stored, legacy)
 }
 
 func getSetupBotTokenTx(ctx context.Context, tx *sql.Tx, createdBy, setupNonce string) (store.User, store.BotToken, error) {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"sort"
 	"testing"
@@ -53,6 +54,19 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	legacyScopes := make([]string, 0, len(retryToken.Scopes))
+	for _, scope := range retryToken.Scopes {
+		if scope != store.BotCommandsWriteScope {
+			legacyScopes = append(legacyScopes, scope)
+		}
+	}
+	legacyScopesJSON, err := json.Marshal(legacyScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = $1 WHERE id = $2`, legacyScopesJSON, retryToken.ID); err != nil {
+		t.Fatal(err)
+	}
 	replayedBot, replayedToken, err := st.CreateBot(ctx, retryBotInput)
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +76,38 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	}
 	if _, err := st.GetBotTokenAuth(ctx, retryToken.Token); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("postgres response-lost token still authenticates: %v", err)
+	}
+	retryTokenInput := store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   retryBot.ID,
+		Name:        "secondary",
+		Scopes:      []string{"bot:admin"},
+		SetupNonce:  "postgres-token-setup-0001",
+		CreatedBy:   owner.ID,
+	}
+	secondaryToken, err := st.CreateBotToken(ctx, retryTokenInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondaryLegacyScopes := make([]string, 0, len(secondaryToken.Scopes))
+	for _, scope := range secondaryToken.Scopes {
+		if scope != store.BotCommandsWriteScope {
+			secondaryLegacyScopes = append(secondaryLegacyScopes, scope)
+		}
+	}
+	secondaryLegacyScopesJSON, err := json.Marshal(secondaryLegacyScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = $1 WHERE id = $2`, secondaryLegacyScopesJSON, secondaryToken.ID); err != nil {
+		t.Fatal(err)
+	}
+	replayedSecondaryToken, err := st.CreateBotToken(ctx, retryTokenInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedSecondaryToken.ID != secondaryToken.ID || replayedSecondaryToken.Token == secondaryToken.Token {
+		t.Fatalf("postgres token setup replay was not stable across a bundle upgrade: first=%#v replay=%#v", secondaryToken, replayedSecondaryToken)
 	}
 	retryInstallationInput := store.CreateAppInstallationInput{
 		WorkspaceID: workspace.ID,

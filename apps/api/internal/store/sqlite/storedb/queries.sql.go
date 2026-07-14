@@ -340,6 +340,22 @@ func (q *Queries) CountWorkspaceMembersByRole(ctx context.Context, arg CountWork
 	return count, err
 }
 
+const deleteBotCommandsForBot = `-- name: DeleteBotCommandsForBot :exec
+DELETE FROM bot_commands
+WHERE workspace_id = ?1
+  AND bot_user_id = ?2
+`
+
+type DeleteBotCommandsForBotParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+}
+
+func (q *Queries) DeleteBotCommandsForBot(ctx context.Context, arg DeleteBotCommandsForBotParams) error {
+	_, err := q.db.ExecContext(ctx, deleteBotCommandsForBot, arg.WorkspaceID, arg.BotUserID)
+	return err
+}
+
 const deleteDesktopOAuthGrant = `-- name: DeleteDesktopOAuthGrant :execrows
 DELETE FROM desktop_oauth_grants
 WHERE id = ?1 AND grant_hash = ?2
@@ -1558,6 +1574,40 @@ func (q *Queries) HideDirectConversation(ctx context.Context, arg HideDirectConv
 	return err
 }
 
+const insertBotCommand = `-- name: InsertBotCommand :exec
+INSERT INTO bot_commands (
+  id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
+) VALUES (
+  ?1, ?2, ?3, ?4,
+  ?5, ?6, ?7, ?8
+)
+`
+
+type InsertBotCommandParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	ArgsHint    string `json:"args_hint"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+func (q *Queries) InsertBotCommand(ctx context.Context, arg InsertBotCommandParams) error {
+	_, err := q.db.ExecContext(ctx, insertBotCommand,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.BotUserID,
+		arg.Command,
+		arg.Description,
+		arg.ArgsHint,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const insertBotToken = `-- name: InsertBotToken :exec
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, setup_nonce, created_at)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
@@ -2371,6 +2421,51 @@ func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorPa
 	return cursor, err
 }
 
+const listBotCommandsForBot = `-- name: ListBotCommandsForBot :many
+SELECT id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
+FROM bot_commands
+WHERE workspace_id = ?1
+  AND bot_user_id = ?2
+ORDER BY command
+`
+
+type ListBotCommandsForBotParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+}
+
+func (q *Queries) ListBotCommandsForBot(ctx context.Context, arg ListBotCommandsForBotParams) ([]BotCommand, error) {
+	rows, err := q.db.QueryContext(ctx, listBotCommandsForBot, arg.WorkspaceID, arg.BotUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BotCommand
+	for rows.Next() {
+		var i BotCommand
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.BotUserID,
+			&i.Command,
+			&i.Description,
+			&i.ArgsHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBotsOwnedBy = `-- name: ListBotsOwnedBy :many
 SELECT
   u.id,
@@ -2942,6 +3037,69 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 			&i.ReplyCount,
 			&i.LastReplyAt,
 			&i.LastReplyAuthorIdsJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspaceBotCommands = `-- name: ListWorkspaceBotCommands :many
+SELECT bc.id, bc.workspace_id, bc.bot_user_id, bc.command, bc.description, bc.args_hint,
+       bc.created_at, bc.updated_at, u.handle AS bot_handle,
+       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url
+FROM bot_commands bc
+JOIN users u ON u.id = bc.bot_user_id AND u.kind = 'bot'
+JOIN workspace_members wm
+  ON wm.workspace_id = bc.workspace_id
+ AND wm.user_id = bc.bot_user_id
+ AND wm.role = 'bot'
+WHERE bc.workspace_id = ?1
+ORDER BY u.handle, bc.command
+`
+
+type ListWorkspaceBotCommandsRow struct {
+	ID             string `json:"id"`
+	WorkspaceID    string `json:"workspace_id"`
+	BotUserID      string `json:"bot_user_id"`
+	Command        string `json:"command"`
+	Description    string `json:"description"`
+	ArgsHint       string `json:"args_hint"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+	BotHandle      string `json:"bot_handle"`
+	BotDisplayName string `json:"bot_display_name"`
+	BotAvatarUrl   string `json:"bot_avatar_url"`
+}
+
+func (q *Queries) ListWorkspaceBotCommands(ctx context.Context, workspaceID string) ([]ListWorkspaceBotCommandsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceBotCommands, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspaceBotCommandsRow
+	for rows.Next() {
+		var i ListWorkspaceBotCommandsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.BotUserID,
+			&i.Command,
+			&i.Description,
+			&i.ArgsHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.BotHandle,
+			&i.BotDisplayName,
+			&i.BotAvatarUrl,
 		); err != nil {
 			return nil, err
 		}

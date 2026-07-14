@@ -43,6 +43,17 @@ type AuthMagicLink struct {
 	UsedAt      sql.NullString `json:"used_at"`
 }
 
+type BotCommand struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	ArgsHint    string `json:"args_hint"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type BotToken struct {
 	ID          string         `json:"id"`
 	TokenHash   string         `json:"token_hash"`

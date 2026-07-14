@@ -1181,3 +1181,36 @@ WHERE eda.subscription_id = sqlc.arg(subscription_id)
   )
 ORDER BY eda.created_at DESC, eda.id DESC
 LIMIT sqlc.arg(page_limit);
+
+-- name: DeleteBotCommandsForBot :exec
+DELETE FROM bot_commands
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND bot_user_id = sqlc.arg(bot_user_id);
+
+-- name: InsertBotCommand :exec
+INSERT INTO bot_commands (
+  id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
+) VALUES (
+  sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(bot_user_id), sqlc.arg(command),
+  sqlc.arg(description), sqlc.arg(args_hint), sqlc.arg(created_at), sqlc.arg(updated_at)
+);
+
+-- name: ListBotCommandsForBot :many
+SELECT id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
+FROM bot_commands
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND bot_user_id = sqlc.arg(bot_user_id)
+ORDER BY command;
+
+-- name: ListWorkspaceBotCommands :many
+SELECT bc.id, bc.workspace_id, bc.bot_user_id, bc.command, bc.description, bc.args_hint,
+       bc.created_at, bc.updated_at, u.handle AS bot_handle,
+       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url
+FROM bot_commands bc
+JOIN users u ON u.id = bc.bot_user_id AND u.kind = 'bot'
+JOIN workspace_members wm
+  ON wm.workspace_id = bc.workspace_id
+ AND wm.user_id = bc.bot_user_id
+ AND wm.role = 'bot'
+WHERE bc.workspace_id = sqlc.arg(workspace_id)
+ORDER BY u.handle, bc.command;

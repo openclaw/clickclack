@@ -1675,6 +1675,10 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	}
 	resp.Body.Close()
 	messageID := messages[len(messages)-1].ID
+	botTokenError := map[string]string{
+		"rotate slash command secret":      "bot tokens cannot rotate slash command secrets",
+		"rotate event subscription secret": "bot tokens cannot rotate event subscription secrets",
+	}
 	for _, tc := range []struct {
 		name        string
 		method      string
@@ -1718,9 +1722,11 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		{"list slash commands", http.MethodGet, "/api/workspaces/" + workspace.ID + "/slash-commands", "", ""},
 		{"create slash command", http.MethodPost, "/api/workspaces/" + workspace.ID + "/slash-commands", `{"command":"/x"}`, "application/json"},
 		{"revoke slash command", http.MethodPost, "/api/slash-commands/" + registeredCommand.SlashCommand.ID + "/revoke", `{}`, "application/json"},
+		{"rotate slash command secret", http.MethodPost, "/api/slash-commands/" + registeredCommand.SlashCommand.ID + "/rotate-secret", `{}`, "application/json"},
 		{"list event subscriptions", http.MethodGet, "/api/workspaces/" + workspace.ID + "/event-subscriptions", "", ""},
 		{"create event subscription", http.MethodPost, "/api/workspaces/" + workspace.ID + "/event-subscriptions", `{"event_types":["message.created"]}`, "application/json"},
 		{"revoke event subscription", http.MethodPost, "/api/event-subscriptions/" + eventSubscription.EventSubscription.ID + "/revoke", `{}`, "application/json"},
+		{"rotate event subscription secret", http.MethodPost, "/api/event-subscriptions/" + eventSubscription.EventSubscription.ID + "/rotate-secret", `{}`, "application/json"},
 		{"list event deliveries", http.MethodGet, "/api/event-subscriptions/" + eventSubscription.EventSubscription.ID + "/deliveries", "", ""},
 		{"list audit log", http.MethodGet, "/api/workspaces/" + workspace.ID + "/audit-log", "", ""},
 		{"list connected accounts", http.MethodGet, "/api/workspaces/" + workspace.ID + "/connected-accounts", "", ""},
@@ -1744,9 +1750,12 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer resp.Body.Close()
+			payload, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode != http.StatusForbidden {
-				payload, _ := io.ReadAll(resp.Body)
 				t.Fatalf("%s %s: expected forbidden, got %s %s", tc.method, tc.path, resp.Status, string(payload))
+			}
+			if want := botTokenError[tc.name]; want != "" && !strings.Contains(string(payload), want) {
+				t.Fatalf("%s %s: expected %q, got %s", tc.method, tc.path, want, string(payload))
 			}
 		})
 	}

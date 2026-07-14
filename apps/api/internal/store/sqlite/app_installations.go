@@ -16,7 +16,7 @@ func (s *Store) ListAppInstallations(ctx context.Context, workspaceID, requester
 	}
 	rows, err := s.db.QueryContext(ctx, appInstallationSelect()+`
 		WHERE workspace_id = ? AND revoked_at IS NULL
-		ORDER BY app_slug`, workspaceID)
+		ORDER BY app_slug, created_at, id`, workspaceID)
 	if err != nil {
 		return nil, err
 	}

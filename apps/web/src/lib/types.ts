@@ -170,6 +170,23 @@ export type SlashCommand = {
   revoked_at?: string;
 };
 
+export type BotCommandBot = {
+  id: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string;
+};
+
+export type WorkspaceBotCommand = {
+  id: string;
+  command: string;
+  description: string;
+  args_hint: string;
+  bot: BotCommandBot;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ThreadState = {
   root_message_id: string;
   reply_count: number;

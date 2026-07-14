@@ -17,9 +17,9 @@ async function createWorkspace(page: Page, suffix: string, stamp: number) {
   return body.workspace;
 }
 
-async function createChannel(page: Page, workspaceID: string) {
+async function createChannel(page: Page, workspaceID: string, name = "general") {
   const response = await page.request.post(`/api/workspaces/${workspaceID}/channels`, {
-    data: { name: "general", kind: "public" },
+    data: { name, kind: "public" },
   });
   expect(response.ok()).toBe(true);
   return ((await response.json()) as { channel: { id: string; name: string } }).channel;
@@ -75,24 +75,39 @@ async function setBotCommands(
 type SlashProbe = {
   url: string;
   payloads: Record<string, unknown>[];
+  received: Promise<void>;
+  release: () => void;
   close: () => Promise<void>;
 };
 
-async function startSlashProbe(reply: {
-  response_type: string;
-  text: string;
-}): Promise<SlashProbe> {
+async function startSlashProbe(
+  reply: {
+    response_type: string;
+    text: string;
+  },
+  options: { deferred?: boolean; status?: number } = {},
+): Promise<SlashProbe> {
   const payloads: Record<string, unknown>[] = [];
+  let resolveReceived: () => void = () => {};
+  let resolveRelease: () => void = () => {};
+  const received = new Promise<void>((resolve) => {
+    resolveReceived = resolve;
+  });
+  const responseGate = new Promise<void>((resolve) => {
+    resolveRelease = resolve;
+  });
   const server = http.createServer((request, response) => {
     let raw = "";
     request.on("data", (chunk) => (raw += chunk));
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
         payloads.push(JSON.parse(raw) as Record<string, unknown>);
       } catch {
         payloads.push({ raw });
       }
-      response.writeHead(200, { "content-type": "application/json" });
+      resolveReceived();
+      if (options.deferred) await responseGate;
+      response.writeHead(options.status ?? 200, { "content-type": "application/json" });
       response.end(JSON.stringify(reply));
     });
   });
@@ -101,6 +116,8 @@ async function startSlashProbe(reply: {
   return {
     url: `http://127.0.0.1:${address.port}/slash`,
     payloads,
+    received,
+    release: resolveRelease,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -183,6 +200,101 @@ test("unregistered slash text falls through to a plain message", async ({ page }
 
   await expect(page.locator(".markdown").filter({ hasText: "/shrug oh well" })).toBeVisible();
   await expect(page.locator(".composer-notice")).toHaveCount(0);
+});
+
+test("quoted registered slash text falls through to a quoted plain message", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Quoted", stamp);
+  const channel = await createChannel(page, workspace.id);
+  const { bot } = await createBot(page, workspace.id, stamp, "quoted");
+  const probe = await startSlashProbe({ response_type: "in_channel", text: "should not run" });
+  try {
+    await registerSlashCommand(page, workspace.id, bot.id, "/deploy", probe.url);
+
+    await openChannel(page, workspace.route_id, channel.name);
+    await page.getByLabel("Message body").fill("quoted source");
+    await page.getByRole("button", { name: "Send" }).click();
+    const sourceRow = page.locator(".message-row", {
+      has: page.locator(".markdown").filter({ hasText: "quoted source" }),
+    });
+    await expect(sourceRow).toBeVisible();
+    await sourceRow.hover();
+    await sourceRow.getByRole("button", { name: "Reply" }).click();
+
+    await page.getByLabel("Message body").fill("/deploy quoted");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    const replyRow = page.locator(".message-row", {
+      has: page.locator(".markdown").filter({ hasText: "/deploy quoted" }),
+    });
+    await expect(replyRow).toBeVisible();
+    await expect(replyRow.locator(".quote-block")).toContainText("quoted source");
+    expect(probe.payloads).toHaveLength(0);
+  } finally {
+    probe.release();
+    await probe.close();
+  }
+});
+
+test("restores a registered slash draft when callback dispatch fails", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Failure", stamp);
+  const channel = await createChannel(page, workspace.id);
+  const { bot } = await createBot(page, workspace.id, stamp, "failure");
+  const probe = await startSlashProbe(
+    { response_type: "ephemeral", text: "unavailable" },
+    { status: 500 },
+  );
+  try {
+    await registerSlashCommand(page, workspace.id, bot.id, "/broken", probe.url);
+
+    await openChannel(page, workspace.route_id, channel.name);
+    await page.getByLabel("Message body").fill("/broken retry-me");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page.locator(".composer-notice--error")).toBeVisible();
+    await expect(page.getByLabel("Message body")).toHaveValue("/broken retry-me");
+    await expect(page.locator(".markdown").filter({ hasText: "/broken retry-me" })).toHaveCount(0);
+  } finally {
+    probe.release();
+    await probe.close();
+  }
+});
+
+test("does not apply delayed slash callback state after a conversation change", async ({
+  page,
+}) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Delayed", stamp);
+  const firstChannel = await createChannel(page, workspace.id);
+  const secondChannel = await createChannel(page, workspace.id, "other");
+  const { bot } = await createBot(page, workspace.id, stamp, "delayed");
+  const probe = await startSlashProbe(
+    { response_type: "ephemeral", text: "late response" },
+    { deferred: true },
+  );
+  try {
+    await registerSlashCommand(page, workspace.id, bot.id, "/slow", probe.url);
+
+    await openChannel(page, workspace.route_id, firstChannel.name);
+    await page.getByLabel("Message body").fill("/slow");
+    await page.getByRole("button", { name: "Send" }).click();
+    await probe.received;
+
+    await page.getByRole("link", { name: `# ${secondChannel.name}` }).click();
+    await expect(page.getByRole("heading", { name: `#${secondChannel.name}` })).toBeVisible();
+    probe.release();
+    await expect(page.locator(".composer-notice")).toHaveCount(0);
+    await expect(page.getByLabel("Message body")).toHaveValue("");
+
+    await page.getByRole("link", { name: `# ${firstChannel.name}` }).click();
+    await expect(page.getByRole("heading", { name: `#${firstChannel.name}` })).toBeVisible();
+    await expect(page.locator(".composer-notice")).toHaveCount(0);
+    await expect(page.getByLabel("Message body")).toHaveValue("");
+  } finally {
+    probe.release();
+    await probe.close();
+  }
 });
 
 test("merges bot-declared command menus into composer autocomplete", async ({ page }) => {

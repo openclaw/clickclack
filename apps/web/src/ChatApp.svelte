@@ -158,6 +158,9 @@
   let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
+  let slashCommandsLoadSerial = 0;
+  let botCommandsLoadSerial = 0;
+  let slashDispatchGeneration = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
   let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
   let deletingMessageIDs = new Set<string>();
@@ -618,6 +621,10 @@
     if (workspaceChanged) {
       captureScrollMemory();
       selectedWorkspaceID = workspace.id;
+      slashCommandsLoadSerial += 1;
+      botCommandsLoadSerial += 1;
+      slashCommands = [];
+      botCommands = [];
       selectedChannelID = "";
       selectedDirectID = "";
       selectedThread = null;
@@ -634,7 +641,13 @@
     if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
     if (serial !== routeApplySerial) return;
     if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
-    if (workspaceChanged) await Promise.all([loadModerationMembers(), loadSlashCommands(), loadBotCommands()]);
+    if (workspaceChanged) {
+      await Promise.all([
+        loadModerationMembers(),
+        loadSlashCommands(workspace.id),
+        loadBotCommands(workspace.id),
+      ]);
+    }
     if (serial !== routeApplySerial) return;
 
     if (routeTarget) {
@@ -830,28 +843,42 @@
     }
   }
 
-  async function loadSlashCommands() {
-    slashCommands = [];
-    if (!selectedWorkspaceID) return;
+  async function loadSlashCommands(workspaceID = selectedWorkspaceID) {
+    const serial = ++slashCommandsLoadSerial;
+    if (!workspaceID) {
+      slashCommands = [];
+      return;
+    }
     try {
-      const data = await api<{ slash_commands: SlashCommand[] }>(`/api/workspaces/${selectedWorkspaceID}/slash-commands`);
+      const data = await api<{ slash_commands: SlashCommand[] }>(`/api/workspaces/${workspaceID}/slash-commands`);
+      if (serial !== slashCommandsLoadSerial || workspaceID !== selectedWorkspaceID) return;
       slashCommands = data.slash_commands;
     } catch {
-      slashCommands = [];
+      if (serial === slashCommandsLoadSerial && workspaceID === selectedWorkspaceID) {
+        slashCommands = [];
+      }
     }
   }
 
-  async function loadBotCommands() {
-    botCommands = [];
-    if (!selectedWorkspaceID) return;
-    try {
-      botCommands = await listBotCommands(selectedWorkspaceID);
-    } catch {
+  async function loadBotCommands(workspaceID = selectedWorkspaceID) {
+    const serial = ++botCommandsLoadSerial;
+    if (!workspaceID) {
       botCommands = [];
+      return;
+    }
+    try {
+      const commands = await listBotCommands(workspaceID);
+      if (serial !== botCommandsLoadSerial || workspaceID !== selectedWorkspaceID) return;
+      botCommands = commands;
+    } catch {
+      if (serial === botCommandsLoadSerial && workspaceID === selectedWorkspaceID) {
+        botCommands = [];
+      }
     }
   }
 
   function clearComposerNoticeFor(_conversationKey: string) {
+    slashDispatchGeneration += 1;
     composerNotice = null;
   }
 
@@ -1796,20 +1823,29 @@
     }
     stopTyping();
     composerNotice = null;
+    const dispatchGeneration = ++slashDispatchGeneration;
+    const conversationKey = currentConversationKey();
+    const activeContext: "channel" | "dm" = selectedDirectID ? "dm" : "channel";
+    const quote = replyTarget && replyContext === activeContext ? replyTarget : null;
     // Registered HTTP slash commands dispatch through the hook endpoint in
     // channels (Slack semantics: the invocation itself is never posted).
     // Bot-declared and unknown commands fall through to a plain message.
-    if (selectedChannelID && !selectedDirectID && !pendingUpload) {
+    if (selectedChannelID && !selectedDirectID && !pendingUpload && !quote) {
       const slash = splitSlashDraft(body);
       const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
       if (slash && registered) {
         messageBody = "";
-        await dispatchRegisteredCommand(selectedChannelID, slash.command, slash.text, body);
+        await dispatchRegisteredCommand(
+          selectedChannelID,
+          slash.command,
+          slash.text,
+          body,
+          conversationKey,
+          dispatchGeneration,
+        );
         return;
       }
     }
-    const activeContext: "channel" | "dm" = selectedDirectID ? "dm" : "channel";
-    const quote = replyTarget && replyContext === activeContext ? replyTarget : null;
     const draft: OutgoingDraft = {
       body,
       quotedMessageID: quote?.id,
@@ -1825,9 +1861,22 @@
     await dispatchDraft(draft);
   }
 
-  async function dispatchRegisteredCommand(channelID: string, command: string, text: string, draftBody: string) {
+  async function dispatchRegisteredCommand(
+    channelID: string,
+    command: string,
+    text: string,
+    draftBody: string,
+    conversationKey: string,
+    dispatchGeneration: number,
+  ) {
     try {
       const result = await dispatchSlashCommand(channelID, command, text);
+      if (
+        dispatchGeneration !== slashDispatchGeneration ||
+        currentConversationKey() !== conversationKey
+      ) {
+        return;
+      }
       // `in_channel` responses are posted as the bot server-side and arrive
       // over realtime like any other bot message; nothing to render here.
       if (result.text && result.response_type !== "in_channel") {
@@ -1835,6 +1884,12 @@
       }
     } catch (err) {
       console.warn("slash dispatch failed", err);
+      if (
+        dispatchGeneration !== slashDispatchGeneration ||
+        currentConversationKey() !== conversationKey
+      ) {
+        return;
+      }
       composerNotice = {
         kind: "error",
         text: err instanceof APIError && err.message ? messageFromAPIError(err) : `${command} failed`,
@@ -2328,7 +2383,7 @@
       return;
     }
     if (event.type === "bot_command.updated") {
-      if (event.workspace_id === selectedWorkspaceID) await loadBotCommands();
+      if (event.workspace_id === selectedWorkspaceID) await loadBotCommands(event.workspace_id);
       return;
     }
     if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {

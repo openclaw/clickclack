@@ -124,11 +124,11 @@ func (s *Store) RotateEventSubscriptionSecret(ctx context.Context, subscriptionI
 	if err != nil {
 		return store.EventSubscription{}, err
 	}
-	if subscription.RevokedAt != nil {
-		return store.EventSubscription{}, errors.New("cannot rotate a revoked event subscription")
-	}
 	if err := requireWorkspaceManagerTx(ctx, tx, subscription.WorkspaceID, requesterID); err != nil {
 		return store.EventSubscription{}, err
+	}
+	if subscription.RevokedAt != nil {
+		return store.EventSubscription{}, errors.New("cannot rotate a revoked event subscription")
 	}
 	secret := newID("ccs")
 	result, err := tx.ExecContext(ctx, `UPDATE event_subscriptions SET signing_secret = $1 WHERE id = $2 AND revoked_at IS NULL`, secret, subscriptionID)

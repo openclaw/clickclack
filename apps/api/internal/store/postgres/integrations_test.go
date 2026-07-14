@@ -181,6 +181,12 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if result.Revoked.SlashCommands != 1 || result.Revoked.EventSubscriptions != 1 || result.Revoked.BotTokens != 0 {
 		t.Fatalf("unexpected default postgres cascade: %#v", result)
 	}
+	if _, err := st.RotateSlashCommandSecret(ctx, command.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected revoked slash command rotation to check manager authority first, got %v", err)
+	}
+	if _, err := st.RotateEventSubscriptionSecret(ctx, subscription.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected revoked event subscription rotation to check manager authority first, got %v", err)
+	}
 	if _, err := st.GetBotTokenAuth(ctx, initialToken.Token); err != nil {
 		t.Fatalf("default postgres cascade revoked the bot token: %v", err)
 	}

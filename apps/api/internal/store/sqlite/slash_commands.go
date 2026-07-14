@@ -135,11 +135,11 @@ func (s *Store) RotateSlashCommandSecret(ctx context.Context, commandID, request
 	if err != nil {
 		return store.SlashCommand{}, err
 	}
-	if cmd.RevokedAt != nil {
-		return store.SlashCommand{}, errors.New("cannot rotate a revoked slash command")
-	}
 	if err := requireWorkspaceManagerTx(ctx, tx, cmd.WorkspaceID, requesterID); err != nil {
 		return store.SlashCommand{}, err
+	}
+	if cmd.RevokedAt != nil {
+		return store.SlashCommand{}, errors.New("cannot rotate a revoked slash command")
 	}
 	secret := newID("ccs")
 	result, err := tx.ExecContext(ctx, `UPDATE slash_commands SET signing_secret = ? WHERE id = ? AND revoked_at IS NULL`, secret, commandID)

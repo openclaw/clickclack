@@ -81,7 +81,11 @@
   let result = $state<{ installation: AppInstallation; bot: User; token: BotToken } | null>(null);
 
   const availableBots = $derived(
-    bots.filter((entry) => !boundBotIDs.has(entry.bot.id)),
+    bots.filter(
+      (entry) =>
+        !boundBotIDs.has(entry.bot.id) &&
+        (isServiceBot(entry.bot) || entry.bot.owner_user_id === currentUserID),
+    ),
   );
 
   const channelNames = $derived.by(() => {

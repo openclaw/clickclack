@@ -16,7 +16,7 @@
     type EventSubscription,
     type SlashCommand,
   } from "$lib/integrations";
-  import { listWorkspaceBots, type BotWithTokens } from "$lib/bots";
+  import { isServiceBot, listWorkspaceBots, type BotWithTokens } from "$lib/bots";
   import { manifestForInstallation } from "$lib/app-catalog";
   import { isWorkspaceManager } from "$lib/permissions";
   import InstallWizard from "../../../../../../components/settings/integrations/InstallWizard.svelte";
@@ -176,6 +176,11 @@
       tokenCount: bot ? bot.tokens.filter((token) => !token.revoked_at).length : 0,
     };
   }
+
+  function canRevokeInstallationTokens(installation: AppInstallation): boolean {
+    const bot = botFor(installation);
+    return !!bot && (isServiceBot(bot) || bot.owner_user_id === me?.id);
+  }
 </script>
 
 <div class="ws-intg-page">
@@ -313,19 +318,21 @@
                     {impact.subscriptionCount === 1 ? "event subscription" : "event subscriptions"}
                     attached to this app. Delivery history is kept.
                   </p>
-                  <label class="ws-intg__toggle">
-                    <input type="checkbox" bind:checked={revokePending.revokeTokens} />
-                    <span>
-                      <span class="ws-bots__choice-title">
-                        Also revoke the bot's {impact.tokenCount} active
-                        {impact.tokenCount === 1 ? "token" : "tokens"}
+                  {#if canRevokeInstallationTokens(installation) && impact.tokenCount > 0}
+                    <label class="ws-intg__toggle">
+                      <input type="checkbox" bind:checked={revokePending.revokeTokens} />
+                      <span>
+                        <span class="ws-bots__choice-title">
+                          Also revoke the bot's {impact.tokenCount} active
+                          {impact.tokenCount === 1 ? "token" : "tokens"}
+                        </span>
+                        <span class="ws-bots__choice-hint">
+                          Anything still using them fails immediately. Leave unchecked if the bot
+                          is shared with other things.
+                        </span>
                       </span>
-                      <span class="ws-bots__choice-hint">
-                        Anything still using them fails immediately. Leave unchecked if the bot is
-                        shared with other things.
-                      </span>
-                    </span>
-                  </label>
+                    </label>
+                  {/if}
                   <div class="ws-bots__form-actions">
                     <button
                       type="button"

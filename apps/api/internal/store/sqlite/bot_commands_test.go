@@ -99,6 +99,30 @@ func TestBotCommandsLifecycle(t *testing.T) {
 	}
 	assertSQLiteBotCommandSet(t, st, workspace.ID, zetaBot.ID, []string{"/help"})
 	assertSQLiteBotCommandSet(t, st, workspace.ID, alphaBot.ID, []string{"/about"})
+	blocked := true
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+		WorkspaceID:  workspace.ID,
+		TargetUserID: zetaBot.ID,
+		ActorUserID:  owner.ID,
+		Blocked:      &blocked,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetBotCommands(ctx, workspace.ID, zetaBot.ID, []store.BotCommandInput{
+		{Command: "blocked", Description: "Must not be stored"},
+	}); !errors.Is(err, store.ErrModerationRestricted) {
+		t.Fatalf("expected blocked bot command update to fail, got %v", err)
+	}
+	assertSQLiteBotCommandSet(t, st, workspace.ID, zetaBot.ID, []string{"/help"})
+	blocked = false
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+		WorkspaceID:  workspace.ID,
+		TargetUserID: zetaBot.ID,
+		ActorUserID:  owner.ID,
+		Blocked:      &blocked,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	tooMany := make([]store.BotCommandInput, 101)
 	for i := range tooMany {

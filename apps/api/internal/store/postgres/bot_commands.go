@@ -42,6 +42,9 @@ func (s *Store) SetBotCommands(ctx context.Context, workspaceID, botUserID strin
 	}); err != nil {
 		return nil, err
 	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, botUserID); err != nil {
+		return nil, err
+	}
 	if err := qtx.DeleteBotCommandsForBot(ctx, storedb.DeleteBotCommandsForBotParams{
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,

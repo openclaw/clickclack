@@ -11,10 +11,24 @@
     botHandle: string;
     botUserID: string;
     workspace: string;
+    defaultTo?: string;
+    allowFrom?: string[];
+    agentActivity?: boolean;
+    showSnippets?: boolean;
     onDismiss: () => void;
   };
 
-  let { token, botHandle, botUserID, workspace, onDismiss }: Props = $props();
+  let {
+    token,
+    botHandle,
+    botUserID,
+    workspace,
+    defaultTo,
+    allowFrom,
+    agentActivity,
+    showSnippets = true,
+    onDismiss,
+  }: Props = $props();
 
   let acknowledged = $state(false);
   let mode = $state<OpenClawAccountMode>("single");
@@ -26,6 +40,9 @@
       botHandle,
       botUserID,
       mode,
+      defaultTo,
+      allowFrom,
+      agentActivity,
     }),
   );
   const shellSnippet = $derived(
@@ -80,6 +97,7 @@
     </div>
   </div>
 
+  {#if showSnippets}
   <div class="ws-bots__reveal-field">
     <span class="ws-bots__reveal-label">OpenClaw account shape</span>
     <div class="ws-bots__setup-mode" role="group" aria-label="OpenClaw account shape">
@@ -127,6 +145,7 @@
     </div>
     <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
   </div>
+  {/if}
 
   {#if token.scopes?.length}
     <div class="ws-bots__reveal-field">

@@ -201,6 +201,9 @@ export function buildOpenClawConfigSnippet(opts: {
   botUserID: string;
   mode: OpenClawAccountMode;
   baseURL?: string;
+  defaultTo?: string;
+  allowFrom?: string[];
+  agentActivity?: boolean;
 }): string {
   const base = (
     opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")
@@ -208,6 +211,23 @@ export function buildOpenClawConfigSnippet(opts: {
   const handle = opts.botHandle.replace(/^@/, "");
   const envName = opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(handle);
   const baseURL = base || "https://your-clickclack.example.com";
+  const defaultTo = opts.defaultTo?.trim() || "channel:general";
+
+  // Account-level lines shared by both single and named-account shapes.
+  const accountLines = (indent: string): string => {
+    const lines = [
+      `workspace: ${jsonString(opts.workspace)},`,
+      `botUserId: ${jsonString(opts.botUserID)},`,
+      `defaultTo: ${jsonString(defaultTo)},`,
+    ];
+    if (opts.allowFrom && opts.allowFrom.length > 0 && !opts.allowFrom.includes("*")) {
+      lines.push(`allowFrom: [${opts.allowFrom.map(jsonString).join(", ")}],`);
+    }
+    if (opts.agentActivity) {
+      lines.push(`agentActivity: true,`);
+    }
+    return lines.map((line) => indent + line).join("\n");
+  };
 
   if (opts.mode === "named") {
     return `{
@@ -219,9 +239,7 @@ export function buildOpenClawConfigSnippet(opts: {
       accounts: {
         ${jsonString(handle)}: {
           token: { source: "env", provider: "default", id: ${jsonString(envName)} },
-          workspace: ${jsonString(opts.workspace)},
-          botUserId: ${jsonString(opts.botUserID)},
-          defaultTo: "channel:general",
+${accountLines("          ")}
         },
       },
     },
@@ -235,9 +253,7 @@ export function buildOpenClawConfigSnippet(opts: {
       enabled: true,
       baseUrl: ${jsonString(baseURL)},
       token: { source: "env", provider: "default", id: ${jsonString(envName)} },
-      workspace: ${jsonString(opts.workspace)},
-      botUserId: ${jsonString(opts.botUserID)},
-      defaultTo: "channel:general",
+${accountLines("      ")}
     },
   },
 }`;

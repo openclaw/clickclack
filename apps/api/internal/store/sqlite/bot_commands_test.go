@@ -184,6 +184,12 @@ func TestBotCommandsLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.SetBotCommands(ctx, workspace.ID, zetaBot.ID, []store.BotCommandInput{
+		{Command: "revoked", Description: "Must not be stored"},
+	}); !errors.Is(err, store.ErrModerationRestricted) {
+		t.Fatalf("expected role-revoked bot command update to fail, got %v", err)
+	}
+	assertSQLiteBotCommandSet(t, st, workspace.ID, zetaBot.ID, []string{"/status"})
 	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, zetaBot.ID, owner.ID); err != nil {
 		t.Fatal(err)
 	}

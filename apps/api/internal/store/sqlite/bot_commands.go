@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -40,6 +41,9 @@ func (s *Store) SetBotCommands(ctx context.Context, workspaceID, botUserID strin
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,
 	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrModerationRestricted
+		}
 		return nil, err
 	}
 	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, botUserID); err != nil {

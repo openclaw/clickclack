@@ -160,6 +160,15 @@ func TestHTTPBotCommandAuthorizationAndRealtime(t *testing.T) {
 	expectStatusWithBearer(t, zetaToken.Token, http.MethodGet, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/bot-commands", nil, http.StatusForbidden)
 	expectStatusAsUser(t, outsider.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bot-commands", nil, http.StatusForbidden)
 
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+		WorkspaceID:  workspace.ID,
+		TargetUserID: zetaBot.ID,
+		ActorUserID:  owner.ID,
+		Role:         store.WorkspaceRoleMember,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expectStatusWithBearer(t, zetaToken.Token, http.MethodPut, endpoint, strings.NewReader(`{"commands":[]}`), http.StatusForbidden)
 	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, zetaBot.ID, owner.ID); err != nil {
 		t.Fatal(err)
 	}

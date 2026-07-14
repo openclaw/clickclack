@@ -63,7 +63,8 @@ func (s *Store) CreateSlashCommand(ctx context.Context, input store.CreateSlashC
 		if err := tx.QueryRowContext(ctx, `
 			SELECT 1
 			FROM app_installations
-			WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL`, appInstallationID, workspaceID).Scan(&one); err != nil {
+			WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL
+			FOR KEY SHARE`, appInstallationID, workspaceID).Scan(&one); err != nil {
 			return store.SlashCommand{}, err
 		}
 	}

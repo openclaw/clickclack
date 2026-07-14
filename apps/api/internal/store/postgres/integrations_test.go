@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
@@ -255,6 +256,164 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	}
 	if _, err := st.GetBotTokenAuth(ctx, rollbackToken.Token); err != nil {
 		t.Fatalf("postgres cascade failure revoked the bot token: %v", err)
+	}
+}
+
+func TestPostgresRegistrationCreationSerializesWithInstallationRevoke(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Integration Race Owner", "postgres-integrations-race@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Integration Race Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		appSlug    string
+		create     func(string) error
+		activeRows func(string) int
+	}{
+		{
+			name:    "slash command",
+			appSlug: "postgres-race-command",
+			create: func(installationID string) error {
+				_, err := st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
+					WorkspaceID:       workspace.ID,
+					AppInstallationID: installationID,
+					Command:           "/postgres-race",
+					CallbackURL:       "https://example.com/slash",
+					BotUserID:         bot.ID,
+					CreatedBy:         owner.ID,
+				})
+				return err
+			},
+			activeRows: func(installationID string) int {
+				var count int
+				if err := st.db.QueryRowContext(ctx, `
+					SELECT COUNT(*)
+					FROM slash_commands
+					WHERE app_installation_id = $1 AND revoked_at IS NULL`, installationID).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				return count
+			},
+		},
+		{
+			name:    "event subscription",
+			appSlug: "postgres-race-subscription",
+			create: func(installationID string) error {
+				_, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+					WorkspaceID:       workspace.ID,
+					AppInstallationID: installationID,
+					EventTypes:        []string{"message.created"},
+					CallbackURL:       "https://example.com/events",
+					CreatedBy:         owner.ID,
+				})
+				return err
+			},
+			activeRows: func(installationID string) int {
+				var count int
+				if err := st.db.QueryRowContext(ctx, `
+					SELECT COUNT(*)
+					FROM event_subscriptions
+					WHERE app_installation_id = $1 AND revoked_at IS NULL`, installationID).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				return count
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installation := createPostgresTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, tt.appSlug)
+			revokeTx, err := st.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer revokeTx.Rollback()
+			var one int
+			if err := revokeTx.QueryRowContext(ctx, `
+				SELECT 1
+				FROM app_installations
+				WHERE id = $1
+				FOR UPDATE`, installation.ID).Scan(&one); err != nil {
+				t.Fatal(err)
+			}
+
+			createResult := make(chan error, 1)
+			go func() {
+				createResult <- tt.create(installation.ID)
+			}()
+			waitForBlockedInstallationRegistration(t, ctx, st.db)
+
+			revokedAt := now()
+			if _, err := revokeTx.ExecContext(ctx, `
+				UPDATE app_installations
+				SET revoked_at = $1
+				WHERE id = $2`, revokedAt, installation.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := revokeTx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+
+			select {
+			case err := <-createResult:
+				if !errors.Is(err, sql.ErrNoRows) {
+					t.Fatalf("registration creation after installation revoke returned %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("registration creation did not resume after installation revoke")
+			}
+			if count := tt.activeRows(installation.ID); count != 0 {
+				t.Fatalf("installation revoke left %d active registrations", count)
+			}
+		})
+	}
+}
+
+func waitForBlockedInstallationRegistration(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var blocked bool
+		if err := db.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM pg_stat_activity
+				WHERE datname = current_database()
+				  AND pid <> pg_backend_pid()
+				  AND wait_event_type = 'Lock'
+				  AND cardinality(pg_blocking_pids(pid)) > 0
+				  AND position('FROM app_installations' in query) > 0
+				  AND position('FOR KEY SHARE' in query) > 0
+			)`).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("registration creation did not wait for the installation revoke lock")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

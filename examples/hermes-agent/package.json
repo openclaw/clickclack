@@ -1,0 +1,23 @@
+{
+  "name": "@clickclack/example-hermes-agent",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "test:e2e": "node --experimental-strip-types src/e2e.ts",
+    "typecheck": "pnpm --filter @clickclack/sdk-ts build && tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@clickclack/sdk-ts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@typescript/native": "npm:typescript@^7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

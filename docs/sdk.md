@@ -80,9 +80,23 @@ See [features/auth.md](features/auth.md).
 | `search(workspaceId, q)` | full-text search |
 | `uploads`     | `create(workspaceId, file, filename?, { nonce? })`, `findByNonce(workspaceId, nonce)`, `attach(messageId, uploadId)` |
 | `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
-| `events`      | `publishEphemeral`, `subscribe` |
+| `events`      | `list`, `publishEphemeral`, `subscribe` |
 
 ## Realtime subscription
+
+Capture the current tail or drain a bounded backlog through the same client:
+
+```ts
+const initial = await client.events.list({ workspaceId, includeTail: true });
+const page = await client.events.list({
+  workspaceId,
+  afterCursor: initial.tailCursor,
+  limit: 500,
+});
+```
+
+`tailCursor` is captured before the initial page query, so events created during
+startup remain eligible for the following WebSocket subscription.
 
 ```ts
 const socket = client.events.subscribe({
@@ -99,6 +113,24 @@ const socket = client.events.subscribe({
 
 `subscribe` returns a raw `WebSocket`. Call `.close()` to disconnect. See
 [features/realtime.md](features/realtime.md) for cursor recovery rules.
+
+Bot tokens can publish typed, target-scoped agent progress:
+
+```ts
+await client.events.publishEphemeral({
+  workspaceId,
+  channelId,
+  type: "agent.progress",
+  payload: {
+    turn_id: sourceMessageId,
+    seq: 1,
+    op: "append",
+    line: { id: "tool-1", kind: "tool", tool_name: "web_search", status: "running" },
+  },
+});
+```
+
+`agent.progress` requires a bot token and exactly one channel or DM target.
 
 ## Generated types
 
@@ -188,3 +220,7 @@ CLICKCLACK_CHANNEL_ID=chn_... \
 CLICKCLACK_TEXT="clack from bot" \
 pnpm --filter @clickclack/example-bot start
 ```
+
+`examples/hermes-agent` is a long-running bridge for the Hermes Agent Runs API.
+It handles DMs, mention-gated channels, thread continuity, safe progress, and
+cursor recovery. See its README and [bot-installs.md](bot-installs.md).

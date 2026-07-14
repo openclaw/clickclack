@@ -188,6 +188,33 @@ The default `replyMode` is `agent`. Using `replyMode: "model"` requires the
 explicit OpenClaw trust setting
 `plugins.entries.clickclack.llm.allowAgentIdOverride: true`.
 
+## Install into Hermes Agent
+
+The repository includes a standalone Hermes bridge at
+`examples/hermes-agent`. Create a `bot:write` token as above, enable Hermes'
+[API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server),
+and run:
+
+```sh
+CLICKCLACK_BASE_URL=https://app.clickclack.chat \
+CLICKCLACK_BOT_TOKEN=ccb_... \
+CLICKCLACK_WORKSPACE_ID=wsp_... \
+HERMES_API_URL=http://127.0.0.1:8642 \
+HERMES_API_KEY=replace-with-a-long-random-secret \
+pnpm --filter @clickclack/example-hermes-agent start
+```
+
+DMs dispatch directly. Channel messages require the bot's `@handle`; the first
+answer starts a thread, and later human replies continue that thread without
+another mention. The bridge reconstructs bounded ClickClack history for each
+Hermes run and publishes only safe lifecycle/tool-name progress—not raw
+reasoning or tool arguments.
+
+Keep Hermes on loopback when both processes share a host. The connector refuses
+an unauthenticated non-loopback Hermes URL. See the
+[connector README](../examples/hermes-agent/README.md) for environment options,
+cursor semantics, approvals, and deployment notes.
+
 ## Install into a small SDK bot
 
 For a one-shot bot:

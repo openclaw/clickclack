@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +17,61 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
+
+func TestGetThreadReturnsLatestRepliesInChronologicalOrder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channels[0].ID,
+		AuthorID:  owner.ID,
+		Body:      "root",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 1; index <= 5; index++ {
+		if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+			RootMessageID: root.ID,
+			AuthorID:      owner.ID,
+			Body:          fmt.Sprintf("reply-%d", index),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, head, _, err := st.GetThread(ctx, root.ID, owner.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head[0].Body != "reply-1" || head[1].Body != "reply-2" {
+		t.Fatalf("expected default head window, got %#v", head)
+	}
+
+	_, replies, state, err := st.GetThreadLatest(ctx, root.ID, owner.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ReplyCount != 5 || len(replies) != 2 {
+		t.Fatalf("unexpected latest thread window: state=%#v replies=%#v", state, replies)
+	}
+	if replies[0].Body != "reply-4" || replies[1].Body != "reply-5" {
+		t.Fatalf("expected latest chronological replies, got %#v", replies)
+	}
+}
 
 func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	t.Parallel()

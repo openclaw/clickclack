@@ -30,8 +30,9 @@ go run ./apps/api/cmd/clickclack serve
   approvals, timeouts, and blocks.
 - CLI-managed bootstrap, magic-link auth, optional GitHub OAuth, and an
   agent-friendly client mode for sending/listing/replying from scripts.
-- Framework-neutral [TypeScript SDK](packages/sdk-ts) and a tiny
-  [bot example](examples/bot-ts).
+- Framework-neutral [TypeScript SDK](packages/sdk-ts), a tiny
+  [bot example](examples/bot-ts), and a production-shaped
+  [Hermes Agent connector](examples/hermes-agent).
 - Mattermost-shaped incoming webhook and slash command surfaces for drop-in
   scripts.
 
@@ -133,6 +134,10 @@ pnpm --filter @clickclack/example-bot start
 Create bot tokens with `clickclack admin bot create`. See
 [docs/features/bots.md](docs/features/bots.md),
 [docs/bot-installs.md](docs/bot-installs.md), and [docs/sdk.md](docs/sdk.md).
+
+The [Hermes Agent connector](examples/hermes-agent) turns DMs and channel/thread
+mentions into server-side Hermes runs with safe progress events and durable
+ClickClack replies.
 
 ## Auth
 

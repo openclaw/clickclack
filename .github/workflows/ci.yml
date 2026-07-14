@@ -113,6 +113,9 @@ jobs:
       - name: Test FakeCo AWS owner
         run: pnpm test:fakeco-aws
 
+      - name: Test Hermes Agent connector
+        run: pnpm test:hermes-agent
+
       - name: Typecheck root tests
         run: pnpm typecheck
 
@@ -169,6 +172,9 @@ jobs:
 
       - name: Run e2e tests
         run: pnpm test:e2e
+
+      - name: Run Hermes Agent connector e2e
+        run: pnpm build:web && pnpm build:sdk && pnpm test:hermes-agent-e2e
 
   docker:
     name: Docker Image

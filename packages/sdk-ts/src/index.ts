@@ -292,6 +292,46 @@ export type RealtimeEvent = {
   payload: RealtimeEventPayload;
 };
 
+export type RealtimeEventPage = {
+  events: RealtimeEvent[];
+  tailCursor?: string;
+};
+
+export type AgentProgressLine = {
+  id: string;
+  kind: "commentary" | "lifecycle" | "thinking" | "tool";
+  text?: string;
+  title?: string;
+  tool_name?: string;
+  status?: string;
+};
+
+export type AgentProgressPayload = {
+  turn_id: string;
+  seq?: number;
+} & (
+  | { op: "append" | "update" | "finalize"; line: AgentProgressLine }
+  | { op: "clear"; line?: never }
+);
+
+type EphemeralEventTarget =
+  | { channelId: string; directConversationId?: never }
+  | { channelId?: never; directConversationId: string };
+
+export type EphemeralEventInput = {
+  workspaceId: string;
+} & EphemeralEventTarget &
+  (
+    | {
+        type: "agent.progress";
+        payload: AgentProgressPayload;
+      }
+    | {
+        type: "presence.changed" | "typing.started" | "typing.stopped";
+        payload?: Record<string, unknown>;
+      }
+  );
+
 export type ClickClackClientOptions = {
   baseUrl: string;
   userId?: string;
@@ -803,8 +843,17 @@ export class ClickClackClient {
   };
 
   threads = {
-    get: async (messageId: string) => {
-      return this.request(`/api/messages/${messageId}/thread`);
+    get: async (
+      messageId: string,
+      options: { limit?: number; latest?: boolean } = {},
+    ): Promise<{ root: Message; replies: Message[] }> => {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      if (options.latest !== undefined) params.set("latest", String(options.latest));
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      return this.request<{ root: Message; replies: Message[] }>(
+        `/api/messages/${messageId}/thread${query}`,
+      );
     },
     reply: async (
       messageId: string,
@@ -895,9 +944,11 @@ export class ClickClackClient {
       );
       return data.conversation;
     },
-    messages: async (conversationId: string, afterSeq = 0): Promise<Message[]> => {
+    messages: async (conversationId: string, afterSeq = 0, limit?: number): Promise<Message[]> => {
+      const params = new URLSearchParams({ after_seq: String(afterSeq) });
+      if (limit !== undefined) params.set("limit", String(limit));
       const data = await this.request<{ messages: Message[] }>(
-        `/api/dms/${conversationId}/messages?after_seq=${afterSeq}`,
+        `/api/dms/${conversationId}/messages?${params.toString()}`,
       );
       return data.messages;
     },
@@ -918,13 +969,25 @@ export class ClickClackClient {
   };
 
   events = {
-    publishEphemeral: async (input: {
+    list: async (input: {
       workspaceId: string;
-      channelId?: string;
-      directConversationId?: string;
-      type: "typing.started" | "typing.stopped" | "presence.changed";
-      payload?: Record<string, unknown>;
-    }): Promise<RealtimeEvent> => {
+      afterCursor?: string;
+      limit?: number;
+      includeTail?: boolean;
+    }): Promise<RealtimeEventPage> => {
+      const params = new URLSearchParams({ workspace_id: input.workspaceId });
+      if (input.afterCursor) params.set("after_cursor", input.afterCursor);
+      if (input.limit !== undefined) params.set("limit", String(input.limit));
+      if (input.includeTail) params.set("include_tail", "true");
+      const data = await this.request<{ events: RealtimeEvent[]; tail_cursor?: string }>(
+        `/api/realtime/events?${params.toString()}`,
+      );
+      return {
+        events: data.events,
+        ...(data.tail_cursor !== undefined ? { tailCursor: data.tail_cursor } : {}),
+      };
+    },
+    publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
       const data = await this.request<{ event: RealtimeEvent }>("/api/realtime/ephemeral", {
         method: "POST",
         body: JSON.stringify({

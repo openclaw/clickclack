@@ -125,6 +125,19 @@ importers:
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
 
+  examples/hermes-agent:
+    dependencies:
+      '@clickclack/sdk-ts':
+        specifier: workspace:*
+        version: link:../../packages/sdk-ts
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      '@typescript/native':
+        specifier: npm:typescript@^7.0.2
+        version: typescript@7.0.2
+
   packages/protocol:
     devDependencies:
       openapi-typescript:

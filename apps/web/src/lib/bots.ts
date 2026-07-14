@@ -43,12 +43,12 @@ export const BOT_SCOPE_BUNDLES: { id: BotScopeBundle; label: string; hint: strin
   {
     id: "bot:write",
     label: "Read & write",
-    hint: "Post and edit messages, send DMs, upload attachments.",
+    hint: "Post and edit messages, send DMs, upload attachments, and publish command menus.",
   },
   {
     id: "bot:admin",
     label: "Admin",
-    hint: "Read & write plus manage channels. Use sparingly.",
+    hint: "Read & write, publish command menus, and manage channels. Use sparingly.",
   },
 ];
 

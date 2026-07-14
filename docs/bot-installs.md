@@ -114,6 +114,10 @@ Start with the smallest useful bundle:
   publishing the bot's command menu.
 - `bot:admin`: `bot:write` plus channel creation/update.
 
+Bundles are expanded to concrete scopes when the token is created. Existing
+tokens do not gain newly added bundle capabilities automatically; create a
+replacement token and revoke the old one after moving the runtime.
+
 Use explicit comma-separated scopes when a runtime needs less than a bundle:
 
 ```sh

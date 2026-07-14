@@ -113,6 +113,9 @@ Rules:
 - Raw token is returned once on creation.
 - Token auth resolves to the bot user, never to the owner.
 - `owner_user_id` on the token is copied from the bot at creation for audit.
+- Bundle names are expanded to concrete scopes when a token is issued. Bundle
+  changes are not applied retroactively; rotate or mint a token to gain a newly
+  added scope such as `commands:write`.
 - Revoked tokens fail auth.
 - Tokens update `last_used_at` after successful auth.
 - Tokens are workspace-scoped. A token cannot access another workspace even if

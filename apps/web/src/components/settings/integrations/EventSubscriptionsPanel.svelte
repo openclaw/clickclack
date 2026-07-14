@@ -16,7 +16,7 @@
     // unset the panel is read-only over unattached subscriptions.
     installationID?: string;
     canManage: boolean;
-    onChanged: () => void;
+    onChanged: (subscription: EventSubscription) => void;
   };
 
   let { workspaceID, subscriptions, eventTypes, installationID, canManage, onChanged }: Props =
@@ -64,7 +64,7 @@
       allEvents = false;
       selectedTypes = [];
       showCreate = false;
-      onChanged();
+      onChanged(created);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
@@ -83,8 +83,8 @@
     busyID = subscription.id;
     error = "";
     try {
-      await revokeEventSubscription(subscription.id);
-      onChanged();
+      const revoked = await revokeEventSubscription(subscription.id);
+      onChanged(revoked);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
@@ -107,6 +107,7 @@
       if (rotated.signing_secret) {
         revealedSecrets = { ...revealedSecrets, [subscription.id]: rotated.signing_secret };
       }
+      onChanged(rotated);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {

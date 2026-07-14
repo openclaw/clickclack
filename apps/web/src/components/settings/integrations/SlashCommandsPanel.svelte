@@ -15,7 +15,7 @@
     installationID?: string;
     botUserID?: string;
     canManage: boolean;
-    onChanged: () => void;
+    onChanged: (command: SlashCommand) => void;
   };
 
   let { workspaceID, commands, installationID, botUserID, canManage, onChanged }: Props =
@@ -62,7 +62,7 @@
       description = "";
       callbackURL = "";
       showCreate = false;
-      onChanged();
+      onChanged(created);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
@@ -81,8 +81,8 @@
     busyID = command.id;
     error = "";
     try {
-      await revokeSlashCommand(command.id);
-      onChanged();
+      const revoked = await revokeSlashCommand(command.id);
+      onChanged(revoked);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {
@@ -105,6 +105,7 @@
       if (rotated.signing_secret) {
         revealedSecrets = { ...revealedSecrets, [command.id]: rotated.signing_secret };
       }
+      onChanged(rotated);
     } catch (err) {
       error = integrationsLoadErrorMessage(err);
     } finally {

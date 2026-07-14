@@ -18,7 +18,12 @@
     type EventSubscription,
     type SlashCommand,
   } from "$lib/integrations";
-  import { isServiceBot, listWorkspaceBots, type BotWithTokens } from "$lib/bots";
+  import {
+    isServiceBot,
+    listWorkspaceBots,
+    type BotToken,
+    type BotWithTokens,
+  } from "$lib/bots";
   import { manifestForInstallation } from "$lib/app-catalog";
   import { isWorkspaceManager } from "$lib/permissions";
   import type { Channel, User } from "$lib/types";
@@ -124,20 +129,32 @@
     }
   }
 
-  async function refreshHooks() {
-    const [commandsResult, subscriptionsResult] = await Promise.allSettled([
-      listSlashCommands(workspaceID),
-      listEventSubscriptions(workspaceID),
-    ]);
-    if (commandsResult.status === "fulfilled") commands = commandsResult.value;
-    if (subscriptionsResult.status === "fulfilled") subscriptions = subscriptionsResult.value;
-    actionError = settledErrors([commandsResult, subscriptionsResult]);
+  function handleCommandChanged(command: SlashCommand) {
+    const { signing_secret: _, ...commandMetadata } = command;
+    commands = [commandMetadata, ...commands.filter((entry) => entry.id !== command.id)];
   }
 
-  function handleInstalled(installation: AppInstallation) {
+  function handleSubscriptionChanged(subscription: EventSubscription) {
+    const { signing_secret: _, ...subscriptionMetadata } = subscription;
+    subscriptions = [
+      subscriptionMetadata,
+      ...subscriptions.filter((entry) => entry.id !== subscription.id),
+    ];
+  }
+
+  function handleInstalled(installation: AppInstallation, bot: User, token: BotToken) {
+    const { token: _, ...tokenMetadata } = token;
+    const existingBot = bots.find((entry) => entry.bot.id === bot.id);
+    const updatedBot = {
+      bot,
+      tokens: [
+        tokenMetadata,
+        ...(existingBot?.tokens.filter((entry) => entry.id !== token.id) ?? []),
+      ],
+    };
     installations = [installation, ...installations];
+    bots = [updatedBot, ...bots.filter((entry) => entry.bot.id !== bot.id)];
     expandedID = installation.id;
-    void refresh();
   }
 
   function startRevoke(installation: AppInstallation) {
@@ -151,14 +168,34 @@
     revoking = true;
     actionError = "";
     try {
-      await revokeAppInstallation(installation.id, {
+      const result = await revokeAppInstallation(installation.id, {
         revoke_slash_commands: true,
         revoke_event_subscriptions: true,
         revoke_bot_tokens: revokeTokens,
       });
+      installations = [
+        result.installation,
+        ...installations.filter((entry) => entry.id !== installation.id),
+      ];
+      commands = commands.filter((entry) => entry.app_installation_id !== installation.id);
+      subscriptions = subscriptions.filter(
+        (entry) => entry.app_installation_id !== installation.id,
+      );
+      if (revokeTokens) {
+        const revokedAt = new Date().toISOString();
+        bots = bots.map((entry) =>
+          entry.bot.id === installation.bot_user_id
+            ? {
+                ...entry,
+                tokens: entry.tokens.map((token) =>
+                  token.revoked_at ? token : { ...token, revoked_at: revokedAt },
+                ),
+              }
+            : entry,
+        );
+      }
       revokePending = null;
       if (expandedID === installation.id) expandedID = "";
-      await refresh();
     } catch (err) {
       actionError = integrationsLoadErrorMessage(err);
     } finally {
@@ -393,7 +430,7 @@
                 installationID={installation.id}
                 botUserID={installation.bot_user_id}
                 {canManage}
-                onChanged={refreshHooks}
+                onChanged={handleCommandChanged}
               />
 
               <EventSubscriptionsPanel
@@ -402,7 +439,7 @@
                 {eventTypes}
                 installationID={installation.id}
                 {canManage}
-                onChanged={refreshHooks}
+                onChanged={handleSubscriptionChanged}
               />
             </div>
           {/if}
@@ -423,7 +460,7 @@
           {workspaceID}
           commands={unattachedCommands}
           {canManage}
-          onChanged={refreshHooks}
+          onChanged={handleCommandChanged}
         />
       {/if}
       {#if unattachedSubscriptions.length > 0}
@@ -432,7 +469,7 @@
           subscriptions={unattachedSubscriptions}
           {eventTypes}
           {canManage}
-          onChanged={refreshHooks}
+          onChanged={handleSubscriptionChanged}
         />
       {/if}
     </section>

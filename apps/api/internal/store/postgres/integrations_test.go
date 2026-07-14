@@ -54,19 +54,7 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacyScopes := make([]string, 0, len(retryToken.Scopes))
-	for _, scope := range retryToken.Scopes {
-		if scope != store.BotCommandsWriteScope {
-			legacyScopes = append(legacyScopes, scope)
-		}
-	}
-	legacyScopesJSON, err := json.Marshal(legacyScopes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = $1 WHERE id = $2`, legacyScopesJSON, retryToken.ID); err != nil {
-		t.Fatal(err)
-	}
+	setPostgresLegacyBotCommandScopes(t, st, retryToken)
 	replayedBot, replayedToken, err := st.CreateBot(ctx, retryBotInput)
 	if err != nil {
 		t.Fatal(err)
@@ -89,19 +77,7 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondaryLegacyScopes := make([]string, 0, len(secondaryToken.Scopes))
-	for _, scope := range secondaryToken.Scopes {
-		if scope != store.BotCommandsWriteScope {
-			secondaryLegacyScopes = append(secondaryLegacyScopes, scope)
-		}
-	}
-	secondaryLegacyScopesJSON, err := json.Marshal(secondaryLegacyScopes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.db.ExecContext(ctx, `UPDATE bot_tokens SET scopes_json = $1 WHERE id = $2`, secondaryLegacyScopesJSON, secondaryToken.ID); err != nil {
-		t.Fatal(err)
-	}
+	setPostgresLegacyBotCommandScopes(t, st, secondaryToken)
 	replayedSecondaryToken, err := st.CreateBotToken(ctx, retryTokenInput)
 	if err != nil {
 		t.Fatal(err)
@@ -419,6 +395,23 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	}
 	if _, err := st.GetBotTokenAuth(ctx, userBotToken.Token); err != nil {
 		t.Fatalf("denied postgres user-owned token cascade revoked the token: %v", err)
+	}
+}
+
+func setPostgresLegacyBotCommandScopes(t *testing.T, st *Store, token store.BotToken) {
+	t.Helper()
+	legacyScopes := make([]string, 0, len(token.Scopes))
+	for _, scope := range token.Scopes {
+		if scope != store.BotCommandsWriteScope {
+			legacyScopes = append(legacyScopes, scope)
+		}
+	}
+	scopesJSON, err := json.Marshal(legacyScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(context.Background(), `UPDATE bot_tokens SET scopes_json = $1 WHERE id = $2`, scopesJSON, token.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 

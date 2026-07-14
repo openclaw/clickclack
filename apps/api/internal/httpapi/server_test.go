@@ -1554,10 +1554,10 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		t.Fatalf("expected message.created event payload, got %#v", eventPayload)
 	}
 	deliveries := getJSONAsUser[struct {
-		EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
 	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
-	if len(deliveries.EventDeliveryAttempts) == 0 || deliveries.EventDeliveryAttempts[0].ResponseStatus != http.StatusAccepted {
-		t.Fatalf("expected accepted event delivery attempt, got %#v", deliveries.EventDeliveryAttempts)
+	if len(deliveries.Deliveries) == 0 || deliveries.Deliveries[0].ResponseStatus != http.StatusAccepted {
+		t.Fatalf("expected accepted event delivery attempt, got %#v", deliveries.Deliveries)
 	}
 	oldEventSigningSecret = eventSigningSecret
 	rotatedSubscription := postJSONAsUser[struct {
@@ -1571,10 +1571,30 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		Message store.Message `json:"message"`
 	}](t, owner.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]any{"body": "deliver after rotation"})
 	deliveriesAfterRotation := getJSONAsUser[struct {
-		EventDeliveryAttempts []store.EventDeliveryAttempt `json:"event_delivery_attempts"`
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
 	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
-	if len(deliveriesAfterRotation.EventDeliveryAttempts) != len(deliveries.EventDeliveryAttempts)+1 {
-		t.Fatalf("rotation must preserve delivery history: before=%d after=%d", len(deliveries.EventDeliveryAttempts), len(deliveriesAfterRotation.EventDeliveryAttempts))
+	if len(deliveriesAfterRotation.Deliveries) != len(deliveries.Deliveries)+1 {
+		t.Fatalf("rotation must preserve delivery history: before=%d after=%d", len(deliveries.Deliveries), len(deliveriesAfterRotation.Deliveries))
+	}
+	postJSONAsUser[struct {
+		Message store.Message `json:"message"`
+	}](t, owner.ID, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]any{"body": "third delivery"})
+	firstDeliveryPage := getJSONAsUser[struct {
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
+		NextCursor *string                      `json:"next_cursor"`
+	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries?limit=2")
+	if len(firstDeliveryPage.Deliveries) != 2 || firstDeliveryPage.NextCursor == nil || *firstDeliveryPage.NextCursor != firstDeliveryPage.Deliveries[1].ID {
+		t.Fatalf("unexpected first delivery page: %#v", firstDeliveryPage)
+	}
+	secondDeliveryPage := getJSONAsUser[struct {
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
+		NextCursor *string                      `json:"next_cursor"`
+	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries?limit=2&before="+url.QueryEscape(*firstDeliveryPage.NextCursor))
+	if len(secondDeliveryPage.Deliveries) != 1 || secondDeliveryPage.NextCursor != nil {
+		t.Fatalf("unexpected final delivery page: %#v", secondDeliveryPage)
+	}
+	if secondDeliveryPage.Deliveries[0].ID == firstDeliveryPage.Deliveries[0].ID || secondDeliveryPage.Deliveries[0].ID == firstDeliveryPage.Deliveries[1].ID {
+		t.Fatalf("delivery pages overlap: first=%#v second=%#v", firstDeliveryPage.Deliveries, secondDeliveryPage.Deliveries)
 	}
 	revokedSubscription := postJSONAsUser[struct {
 		EventSubscription store.EventSubscription `json:"event_subscription"`

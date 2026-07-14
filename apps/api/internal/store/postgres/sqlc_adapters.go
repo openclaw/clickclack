@@ -228,6 +228,23 @@ func storeEventFromListEventsAfter(row storedb.ListEventsAfterRow) store.Event {
 	return event
 }
 
+func storeEventDeliveryAttemptFromDB(row storedb.EventDeliveryAttempt) store.EventDeliveryAttempt {
+	return store.EventDeliveryAttempt{
+		ID:             row.ID,
+		SubscriptionID: row.SubscriptionID,
+		EventID:        row.EventID,
+		WorkspaceID:    row.WorkspaceID,
+		EventType:      row.EventType,
+		Attempt:        int(row.Attempt),
+		RequestJSON:    row.RequestJson,
+		ResponseStatus: int(row.ResponseStatus),
+		ResponseBody:   row.ResponseBody,
+		Error:          row.Error,
+		CreatedAt:      row.CreatedAt,
+		CompletedAt:    row.CompletedAt,
+	}
+}
+
 func storeDirectConversationFromList(row storedb.ListDirectConversationsRow) store.DirectConversation {
 	return store.DirectConversation{
 		ID:          row.ID,

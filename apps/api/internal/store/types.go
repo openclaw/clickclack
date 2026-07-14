@@ -818,7 +818,7 @@ type Store interface {
 	RotateEventSubscriptionSecret(ctx context.Context, subscriptionID, requesterID string) (EventSubscription, error)
 	ListEventSubscriptionsForEvent(ctx context.Context, event Event) ([]EventSubscription, error)
 	CreateEventDeliveryAttempt(ctx context.Context, input CreateEventDeliveryAttemptInput) (EventDeliveryAttempt, error)
-	ListEventDeliveryAttempts(ctx context.Context, subscriptionID, requesterID string) ([]EventDeliveryAttempt, error)
+	ListEventDeliveryAttempts(ctx context.Context, subscriptionID, requesterID string, limit int, before string) ([]EventDeliveryAttempt, error)
 	CreateAuditLogEntry(ctx context.Context, input CreateAuditLogEntryInput) (AuditLogEntry, error)
 	ListAuditLogEntries(ctx context.Context, workspaceID, requesterID string, limit int) ([]AuditLogEntry, error)
 	ListConnectedAccounts(ctx context.Context, workspaceID, requesterID string) ([]ConnectedAccount, error)

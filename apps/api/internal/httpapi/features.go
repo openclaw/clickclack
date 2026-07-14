@@ -955,8 +955,34 @@ func (s *Server) listEventDeliveryAttempts(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot list event delivery attempts"))
 		return
 	}
-	attempts, err := s.store.ListEventDeliveryAttempts(r.Context(), chi.URLParam(r, "subscription_id"), act.user.ID)
-	writeResult(w, map[string]any{"event_delivery_attempts": attempts}, err)
+	limit := queryInt(r, "limit", 50)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	attempts, err := s.store.ListEventDeliveryAttempts(
+		r.Context(),
+		chi.URLParam(r, "subscription_id"),
+		act.user.ID,
+		limit+1,
+		r.URL.Query().Get("before"),
+	)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	var nextCursor *string
+	if len(attempts) > limit {
+		attempts = attempts[:limit]
+		cursor := attempts[len(attempts)-1].ID
+		nextCursor = &cursor
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"deliveries":  attempts,
+		"next_cursor": nextCursor,
+	})
 }
 
 func (s *Server) listAuditLogEntries(w http.ResponseWriter, r *http.Request) {

@@ -420,7 +420,7 @@ CREATE TABLE event_delivery_attempts (
 );
 
 CREATE INDEX idx_event_delivery_attempts_subscription
-  ON event_delivery_attempts(subscription_id, created_at);
+  ON event_delivery_attempts(subscription_id, created_at DESC, id DESC);
 
 CREATE UNIQUE INDEX idx_event_delivery_attempts_once
   ON event_delivery_attempts(subscription_id, event_id, attempt);

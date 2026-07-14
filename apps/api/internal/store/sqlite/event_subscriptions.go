@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
 
 func (s *Store) ListEventSubscriptions(ctx context.Context, workspaceID, requesterID string) ([]store.EventSubscription, error) {
@@ -217,7 +218,7 @@ func (s *Store) CreateEventDeliveryAttempt(ctx context.Context, input store.Crea
 	return attempt, err
 }
 
-func (s *Store) ListEventDeliveryAttempts(ctx context.Context, subscriptionID, requesterID string) ([]store.EventDeliveryAttempt, error) {
+func (s *Store) ListEventDeliveryAttempts(ctx context.Context, subscriptionID, requesterID string, limit int, before string) ([]store.EventDeliveryAttempt, error) {
 	subscription, err := s.getEventSubscription(ctx, subscriptionID, false)
 	if err != nil {
 		return nil, err
@@ -225,14 +226,25 @@ func (s *Store) ListEventDeliveryAttempts(ctx context.Context, subscriptionID, r
 	if err := s.requireMembership(ctx, subscription.WorkspaceID, requesterID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, eventDeliveryAttemptSelect()+`
-		WHERE subscription_id = ?
-		ORDER BY created_at DESC`, subscriptionID)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 201 {
+		limit = 201
+	}
+	rows, err := s.q.ListEventDeliveryAttemptsPage(ctx, storedb.ListEventDeliveryAttemptsPageParams{
+		SubscriptionID: subscriptionID,
+		BeforeID:       strings.TrimSpace(before),
+		PageLimit:      int64(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanEventDeliveryAttempts(rows)
+	out := make([]store.EventDeliveryAttempt, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, storeEventDeliveryAttemptFromDB(row))
+	}
+	return out, nil
 }
 
 func (s *Store) getEventSubscription(ctx context.Context, subscriptionID string, includeSecret bool) (store.EventSubscription, error) {
@@ -321,33 +333,4 @@ func scanEventSubscription(row scanner) (store.EventSubscription, error) {
 		return store.EventSubscription{}, err
 	}
 	return subscription, nil
-}
-
-func eventDeliveryAttemptSelect() string {
-	return `SELECT id, subscription_id, event_id, workspace_id, event_type, attempt, request_json, response_status, response_body, error, created_at, completed_at FROM event_delivery_attempts`
-}
-
-func scanEventDeliveryAttempts(rows *sql.Rows) ([]store.EventDeliveryAttempt, error) {
-	out := []store.EventDeliveryAttempt{}
-	for rows.Next() {
-		var attempt store.EventDeliveryAttempt
-		if err := rows.Scan(
-			&attempt.ID,
-			&attempt.SubscriptionID,
-			&attempt.EventID,
-			&attempt.WorkspaceID,
-			&attempt.EventType,
-			&attempt.Attempt,
-			&attempt.RequestJSON,
-			&attempt.ResponseStatus,
-			&attempt.ResponseBody,
-			&attempt.Error,
-			&attempt.CreatedAt,
-			&attempt.CompletedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, attempt)
-	}
-	return out, rows.Err()
 }

@@ -63,7 +63,7 @@
   let existingBotID = $state("");
 
   // Config step (manifest-driven)
-  let defaultChannel = $state("general");
+  let defaultChannel = $state("");
   let allowMode = $state<"everyone" | "specific">("everyone");
   let allowMembers = $state<{ id: string; label: string }[]>([]);
   let memberQuery = $state("");
@@ -79,6 +79,7 @@
   let createdBot = $state<User | null>(null);
   let createdToken = $state<BotToken | null>(null);
   let result = $state<{ installation: AppInstallation; bot: User; token: BotToken } | null>(null);
+  const hasPartialCredentials = $derived(!!createdBot && !!createdToken);
 
   const availableBots = $derived(
     bots.filter(
@@ -93,7 +94,7 @@
       .filter((channel) => !channel.archived_at)
       .map((channel) => channel.name)
       .filter(Boolean);
-    return names.length > 0 ? names : ["general"];
+    return names;
   });
 
   $effect(() => {
@@ -102,13 +103,31 @@
     }
   });
 
+  $effect(() => {
+    if (!hasPartialCredentials && !channelNames.includes(defaultChannel)) {
+      defaultChannel = channelNames[0] ?? "";
+    }
+  });
+
   function pickManifest(next: AppManifest) {
     manifest = next;
-    displayName = untrack(() => displayName) || next.suggestedBotName;
-    if (!untrack(() => handleEdited)) {
-      handle = next.suggestedBotHandle || suggestHandleFrom(next.suggestedBotName);
-    }
+    botMode = "create";
+    displayName = next.suggestedBotName;
+    handle = next.suggestedBotHandle || suggestHandleFrom(next.suggestedBotName);
+    handleEdited = false;
+    ownership = "service";
+    tokenName = "default";
     scopeBundle = next.suggestedScopeBundle;
+    existingBotID = "";
+    defaultChannel = untrack(() => channelNames[0] ?? "");
+    allowMode = "everyone";
+    allowMembers = [];
+    memberQuery = "";
+    memberResults = [];
+    agentActivity = false;
+    createdBot = null;
+    createdToken = null;
+    result = null;
     error = "";
     step = "bot";
   }
@@ -173,7 +192,13 @@
     allowMembers = allowMembers.filter((member) => member.id !== id);
   }
 
-  const configStepValid = $derived(allowMode === "everyone" || allowMembers.length > 0);
+  const requiresDefaultChannel = $derived(
+    manifest?.configFields.some((field) => field.id === "default_channel") ?? false,
+  );
+  const configStepValid = $derived(
+    (!requiresDefaultChannel || defaultChannel.length > 0) &&
+      (allowMode === "everyone" || allowMembers.length > 0),
+  );
 
   const allowFromValue = $derived.by(() => {
     if (allowMode === "everyone") return ["*"];
@@ -183,7 +208,7 @@
   const defaultToValue = $derived(`channel:${defaultChannel}`);
 
   async function submit() {
-    if (!manifest || submitting) return;
+    if (!manifest || submitting || (hasConfigStep && !configStepValid)) return;
     submitting = true;
     error = "";
     try {
@@ -301,7 +326,7 @@
         advanceFromBot();
       }}
     >
-      <fieldset class="ws-bots__form-field">
+      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
         <legend class="ws-bots__form-label">Bot identity</legend>
         <div class="ws-bots__choices">
           <label class="ws-bots__choice" class:is-active={botMode === "create"}>
@@ -342,6 +367,7 @@
               placeholder={manifest?.suggestedBotName || "My app"}
               maxlength="80"
               required
+              disabled={hasPartialCredentials}
             />
           </label>
           <label class="ws-bots__form-field">
@@ -355,12 +381,13 @@
                 oninput={onHandleInput}
                 placeholder={manifest?.suggestedBotHandle || "my-app"}
                 required
+                disabled={hasPartialCredentials}
               />
             </div>
           </label>
         </div>
 
-        <fieldset class="ws-bots__form-field">
+        <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
           <legend class="ws-bots__form-label">Ownership</legend>
           <div class="ws-bots__choices">
             <label class="ws-bots__choice" class:is-active={ownership === "service"}>
@@ -382,7 +409,12 @@
       {:else}
         <label class="ws-bots__form-field">
           <span class="ws-bots__form-label">Bot</span>
-          <select class="ws-bots__form-input" bind:value={existingBotID} required>
+          <select
+            class="ws-bots__form-input"
+            bind:value={existingBotID}
+            required
+            disabled={hasPartialCredentials}
+          >
             <option value="" disabled>Pick a bot…</option>
             {#each availableBots as entry (entry.bot.id)}
               <option value={entry.bot.id}>
@@ -395,7 +427,7 @@
         </label>
       {/if}
 
-      <fieldset class="ws-bots__form-field">
+      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
         <legend class="ws-bots__form-label">Token scope</legend>
         <div class="ws-bots__choices">
           {#each BOT_SCOPE_BUNDLES as bundle (bundle.id)}
@@ -417,6 +449,7 @@
           placeholder="production"
           maxlength="80"
           required
+          disabled={hasPartialCredentials}
         />
       </label>
 
@@ -425,8 +458,19 @@
       {/if}
 
       <div class="ws-bots__form-actions">
-        <button type="button" class="ws-btn" onclick={back} disabled={submitting}>Back</button>
-        <button type="submit" class="ws-btn ws-btn--primary" disabled={!botStepValid || submitting}>
+        <button
+          type="button"
+          class="ws-btn"
+          onclick={back}
+          disabled={submitting || hasPartialCredentials}
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          class="ws-btn ws-btn--primary"
+          disabled={!botStepValid || submitting}
+        >
           {hasConfigStep ? "Continue" : submitting ? "Installing…" : "Install"}
         </button>
       </div>
@@ -441,17 +485,23 @@
     >
       <label class="ws-bots__form-field">
         <span class="ws-bots__form-label">Default channel</span>
-        <select class="ws-bots__form-input" bind:value={defaultChannel}>
+        <select
+          class="ws-bots__form-input"
+          bind:value={defaultChannel}
+          disabled={hasPartialCredentials || channelNames.length === 0}
+        >
           {#each channelNames as name (name)}
             <option value={name}>#{name}</option>
           {/each}
         </select>
         <span class="ws-bots__form-hint">
-          Where the agent sends messages when no target is specified.
+          {channelNames.length === 0
+            ? "Create or restore a channel before installing this app."
+            : "Where the agent sends messages when no target is specified."}
         </span>
       </label>
 
-      <fieldset class="ws-bots__form-field">
+      <fieldset class="ws-bots__form-field" disabled={hasPartialCredentials}>
         <legend class="ws-bots__form-label">Who can talk to this agent</legend>
         <div class="ws-bots__choices">
           <label class="ws-bots__choice" class:is-active={allowMode === "everyone"}>
@@ -482,6 +532,7 @@
                     class="ws-intg__chip-remove"
                     aria-label={`Remove ${member.label}`}
                     onclick={() => removeAllowMember(member.id)}
+                    disabled={hasPartialCredentials}
                   >
                     ×
                   </button>
@@ -495,6 +546,7 @@
             placeholder="Search members by name or handle"
             value={memberQuery}
             oninput={onMemberQueryInput}
+            disabled={hasPartialCredentials}
           />
           {#if memberResults.length > 0}
             <ul class="ws-intg__member-results">
@@ -504,6 +556,7 @@
                     type="button"
                     class="ws-intg__member-result"
                     onclick={() => addAllowMember(member)}
+                    disabled={hasPartialCredentials}
                   >
                     {member.user.display_name || member.user.handle}
                     <code class="ws-members__handle">@{member.user.handle}</code>
@@ -516,7 +569,7 @@
       {/if}
 
       <label class="ws-bots__form-field ws-intg__toggle">
-        <input type="checkbox" bind:checked={agentActivity} />
+        <input type="checkbox" bind:checked={agentActivity} disabled={hasPartialCredentials} />
         <span>
           <span class="ws-bots__choice-title">Stream agent activity</span>
           <span class="ws-bots__choice-hint">
@@ -531,7 +584,12 @@
       {/if}
 
       <div class="ws-bots__form-actions">
-        <button type="button" class="ws-btn" onclick={back} disabled={submitting || !!createdBot}>
+        <button
+          type="button"
+          class="ws-btn"
+          onclick={back}
+          disabled={submitting || hasPartialCredentials}
+        >
           Back
         </button>
         <button

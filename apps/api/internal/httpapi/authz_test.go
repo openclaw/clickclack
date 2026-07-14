@@ -364,6 +364,120 @@ func TestHTTPBotManagementAuthorization(t *testing.T) {
 	}
 }
 
+func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "integration-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "integration-moderator@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "integration-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Integration Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", strings.NewReader(`{"app_slug":"blocked","bot_user_id":"`+bot.ID+`"}`), http.StatusForbidden)
+	installation := postJSONAsUser[struct {
+		AppInstallation store.AppInstallation `json:"app_installation"`
+	}](t, moderator.ID, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", map[string]any{
+		"app_slug":    "openclaw",
+		"bot_user_id": bot.ID,
+	})
+	getJSONAsUser[struct {
+		AppInstallations []store.AppInstallation `json:"app_installations"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations")
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/app-installations/"+installation.AppInstallation.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/slash-commands", strings.NewReader(`{"command":"/blocked","callback_url":"https://example.com/slash","bot_user_id":"`+bot.ID+`"}`), http.StatusForbidden)
+	command := postJSONAsUser[struct {
+		SlashCommand store.SlashCommand `json:"slash_command"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/slash-commands", map[string]any{
+		"app_installation_id": installation.AppInstallation.ID,
+		"command":             "/deploy",
+		"callback_url":        "https://example.com/slash",
+		"bot_user_id":         bot.ID,
+	})
+	getJSONAsUser[struct {
+		SlashCommands []store.SlashCommand `json:"slash_commands"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/slash-commands")
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/slash-commands/"+command.SlashCommand.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", strings.NewReader(`{"event_types":["message.created"],"callback_url":"https://example.com/events"}`), http.StatusForbidden)
+	subscription := postJSONAsUser[struct {
+		EventSubscription store.EventSubscription `json:"event_subscription"`
+	}](t, moderator.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", map[string]any{
+		"app_installation_id": installation.AppInstallation.ID,
+		"event_types":         []string{"message.created"},
+		"callback_url":        "https://example.com/events",
+	})
+	getJSONAsUser[struct {
+		EventSubscriptions []store.EventSubscription `json:"event_subscriptions"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions")
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/event-subscriptions/"+subscription.EventSubscription.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts", strings.NewReader(`{"user_id":"`+member.ID+`","provider":"github","provider_account_id":"blocked"}`), http.StatusForbidden)
+	memberAccount := postJSONAsUser[struct {
+		ConnectedAccount store.ConnectedAccount `json:"connected_account"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts", map[string]any{
+		"user_id":             member.ID,
+		"provider":            "github",
+		"provider_account_id": "member",
+	})
+	postJSONAsUser[struct {
+		ConnectedAccount store.ConnectedAccount `json:"connected_account"`
+	}](t, member.ID, server.URL+"/api/connected-accounts/"+memberAccount.ConnectedAccount.ID+"/revoke", map[string]any{})
+
+	ownerAccount := postJSONAsUser[struct {
+		ConnectedAccount store.ConnectedAccount `json:"connected_account"`
+	}](t, moderator.ID, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts", map[string]any{
+		"user_id":             owner.ID,
+		"provider":            "github",
+		"provider_account_id": "owner",
+	})
+	getJSONAsUser[struct {
+		ConnectedAccounts []store.ConnectedAccount `json:"connected_accounts"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/connected-accounts")
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/connected-accounts/"+ownerAccount.ConnectedAccount.ID+"/revoke", strings.NewReader(`{}`), http.StatusForbidden)
+	postJSONAsUser[struct {
+		ConnectedAccount store.ConnectedAccount `json:"connected_account"`
+	}](t, moderator.ID, server.URL+"/api/connected-accounts/"+ownerAccount.ConnectedAccount.ID+"/revoke", map[string]any{})
+}
+
 func TestHTTPUploadNotConfiguredAndCookieAuth(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

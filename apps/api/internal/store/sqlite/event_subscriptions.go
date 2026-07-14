@@ -47,7 +47,7 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 		return store.EventSubscription{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
+	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.EventSubscription{}, err
 	}
 	appInstallationID := strings.TrimSpace(input.AppInstallationID)
@@ -97,7 +97,7 @@ func (s *Store) RevokeEventSubscription(ctx context.Context, subscriptionID, req
 	if err != nil {
 		return store.EventSubscription{}, err
 	}
-	if err := s.requireMembership(ctx, subscription.WorkspaceID, requesterID); err != nil {
+	if err := s.requireWorkspaceManager(ctx, subscription.WorkspaceID, requesterID); err != nil {
 		return store.EventSubscription{}, err
 	}
 	revokedAt := now()

@@ -51,7 +51,7 @@ func (s *Store) CreateSlashCommand(ctx context.Context, input store.CreateSlashC
 		return store.SlashCommand{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
+	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.SlashCommand{}, err
 	}
 	if err := requireWorkspaceBotTx(ctx, tx, workspaceID, botUserID); err != nil {
@@ -111,7 +111,7 @@ func (s *Store) RevokeSlashCommand(ctx context.Context, commandID, requesterID s
 	if err != nil {
 		return store.SlashCommand{}, err
 	}
-	if err := s.requireMembership(ctx, cmd.WorkspaceID, requesterID); err != nil {
+	if err := s.requireWorkspaceManager(ctx, cmd.WorkspaceID, requesterID); err != nil {
 		return store.SlashCommand{}, err
 	}
 	revokedAt := now()

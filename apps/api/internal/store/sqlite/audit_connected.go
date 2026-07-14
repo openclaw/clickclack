@@ -109,7 +109,7 @@ func (s *Store) CreateConnectedAccount(ctx context.Context, input store.CreateCo
 		return store.ConnectedAccount{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
+	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.ConnectedAccount{}, err
 	}
 	if err := requireMembershipTx(ctx, tx, workspaceID, userID); err != nil {
@@ -154,8 +154,10 @@ func (s *Store) RevokeConnectedAccount(ctx context.Context, accountID, requester
 	if err != nil {
 		return store.ConnectedAccount{}, err
 	}
-	if err := s.requireMembership(ctx, account.WorkspaceID, requesterID); err != nil {
-		return store.ConnectedAccount{}, err
+	if account.UserID != requesterID {
+		if err := s.requireWorkspaceManager(ctx, account.WorkspaceID, requesterID); err != nil {
+			return store.ConnectedAccount{}, err
+		}
 	}
 	revokedAt := now()
 	if _, err := s.db.ExecContext(ctx, `UPDATE connected_accounts SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?`, revokedAt, accountID); err != nil {

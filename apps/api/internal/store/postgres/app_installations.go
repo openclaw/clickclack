@@ -58,7 +58,7 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		return store.AppInstallation{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
+	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.AppInstallation{}, err
 	}
 	var botKind string
@@ -112,7 +112,7 @@ func (s *Store) RevokeAppInstallation(ctx context.Context, installationID, reque
 	if err != nil {
 		return store.AppInstallation{}, err
 	}
-	if err := s.requireMembership(ctx, installation.WorkspaceID, requesterID); err != nil {
+	if err := s.requireWorkspaceManager(ctx, installation.WorkspaceID, requesterID); err != nil {
 		return store.AppInstallation{}, err
 	}
 	revokedAt := now()

@@ -1121,8 +1121,6 @@ export interface components {
       config: {
         [key: string]: unknown;
       };
-      /** @description Retry key that returns the original installation instead of creating a duplicate. */
-      setup_nonce?: string;
       created_by?: string;
       /** Format: date-time */
       created_at: string;
@@ -1136,6 +1134,8 @@ export interface components {
       config?: {
         [key: string]: unknown;
       };
+      /** @description Retry key that returns the original installation instead of creating a duplicate. */
+      setup_nonce?: string;
     };
     AppInstallationResponse: {
       app_installation: components["schemas"]["AppInstallation"];

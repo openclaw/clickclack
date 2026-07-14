@@ -1692,11 +1692,6 @@ components:
         config:
           type: object
           additionalProperties: true
-        setup_nonce:
-          type: string
-          minLength: 16
-          maxLength: 128
-          description: Retry key that returns the original installation instead of creating a duplicate.
         created_by:
           type: string
         created_at:
@@ -1719,6 +1714,11 @@ components:
         config:
           type: object
           additionalProperties: true
+        setup_nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: Retry key that returns the original installation instead of creating a duplicate.
     AppInstallationResponse:
       type: object
       required: [app_installation]

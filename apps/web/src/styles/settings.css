@@ -2862,6 +2862,13 @@
   justify-content: center;
 }
 
+.ws-intg__deliveries-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 /* --- Page sections (unattached, connected accounts) --- */
 
 .ws-intg__section {

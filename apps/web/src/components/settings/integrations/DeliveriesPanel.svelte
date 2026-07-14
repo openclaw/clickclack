@@ -62,6 +62,14 @@
     }
   }
 
+  function retryLoad() {
+    if (deliveries.length === 0) {
+      void loadFirstPage();
+    } else {
+      void loadMore();
+    }
+  }
+
   function statusLabel(delivery: EventDeliveryAttempt): string {
     if (delivery.error) return "Failed";
     if (delivery.response_status >= 200 && delivery.response_status < 300) return "Delivered";
@@ -100,74 +108,82 @@
 </script>
 
 <div class="ws-intg__deliveries">
-  {#if loading}
+  {#if loading && deliveries.length === 0}
     <p class="ws-intg__panel-empty">Loading deliveries…</p>
-  {:else if error}
-    <p class="ws-bots__form-error" role="alert">{error}</p>
-  {:else if deliveries.length === 0}
-    <p class="ws-intg__panel-empty">
-      No deliveries yet. Attempts show up here as soon as an event fires.
-    </p>
   {:else}
-    <div class="ws-intg__deliveries-scroll">
-      <Virtualizer
-        data={deliveries}
-        getKey={(delivery: EventDeliveryAttempt) => delivery.id}
-        itemSize={ROW_HEIGHT}
-      >
-        {#snippet children(delivery: EventDeliveryAttempt, _index: number)}
-          <div class="ws-intg__delivery">
-            <button
-              type="button"
-              class="ws-intg__delivery-row"
-              aria-expanded={expandedID === delivery.id}
-              onclick={() => (expandedID = expandedID === delivery.id ? "" : delivery.id)}
-            >
-              <span class="ws-intg__delivery-status ws-intg__delivery-status--{statusVariant(delivery)}">
-                {statusLabel(delivery)}
-              </span>
-              <code class="ws-intg__delivery-type">{delivery.event_type}</code>
-              <span class="ws-intg__delivery-attempt">attempt {delivery.attempt}</span>
-              <span class="ws-intg__delivery-time">{formatTimestamp(delivery.created_at)}</span>
-            </button>
-            {#if expandedID === delivery.id}
-              <div class="ws-intg__delivery-detail">
-                {#if delivery.error}
-                  <div class="ws-intg__delivery-block">
-                    <span class="ws-intg__secret-label">Error</span>
-                    <pre class="ws-bots__reveal-snippet"><code>{delivery.error}</code></pre>
-                  </div>
-                {/if}
-                {#if delivery.request_json}
-                  <div class="ws-intg__delivery-block">
-                    <span class="ws-intg__secret-label">Request</span>
-                    <pre class="ws-bots__reveal-snippet"><code>{prettyJSON(delivery.request_json)}</code></pre>
-                  </div>
-                {/if}
-                {#if delivery.response_body}
-                  <div class="ws-intg__delivery-block">
-                    <span class="ws-intg__secret-label">
-                      Response ({delivery.response_status})
-                    </span>
-                    <pre class="ws-bots__reveal-snippet"><code>{delivery.response_body}</code></pre>
-                  </div>
-                {/if}
-                <div class="ws-intg__item-meta">
-                  Started {formatTimestamp(delivery.created_at)} · completed
-                  {formatTimestamp(delivery.completed_at)}
-                </div>
-              </div>
-            {/if}
-          </div>
-        {/snippet}
-      </Virtualizer>
-    </div>
-    {#if nextCursor}
-      <div class="ws-intg__deliveries-more">
-        <button type="button" class="ws-btn" onclick={loadMore} disabled={loadingMore}>
-          {loadingMore ? "Loading…" : "Load older deliveries"}
-        </button>
+    {#if error}
+      <div class="ws-intg__deliveries-retry">
+        <p class="ws-bots__form-error" role="alert">{error}</p>
+        <button type="button" class="ws-btn" onclick={retryLoad}>Retry</button>
       </div>
+    {/if}
+    {#if deliveries.length === 0}
+      {#if !error}
+        <p class="ws-intg__panel-empty">
+          No deliveries yet. Attempts show up here as soon as an event fires.
+        </p>
+      {/if}
+    {:else}
+      <div class="ws-intg__deliveries-scroll">
+        <Virtualizer
+          data={deliveries}
+          getKey={(delivery: EventDeliveryAttempt) => delivery.id}
+          itemSize={ROW_HEIGHT}
+        >
+          {#snippet children(delivery: EventDeliveryAttempt, _index: number)}
+            <div class="ws-intg__delivery">
+              <button
+                type="button"
+                class="ws-intg__delivery-row"
+                aria-expanded={expandedID === delivery.id}
+                onclick={() => (expandedID = expandedID === delivery.id ? "" : delivery.id)}
+              >
+                <span class="ws-intg__delivery-status ws-intg__delivery-status--{statusVariant(delivery)}">
+                  {statusLabel(delivery)}
+                </span>
+                <code class="ws-intg__delivery-type">{delivery.event_type}</code>
+                <span class="ws-intg__delivery-attempt">attempt {delivery.attempt}</span>
+                <span class="ws-intg__delivery-time">{formatTimestamp(delivery.created_at)}</span>
+              </button>
+              {#if expandedID === delivery.id}
+                <div class="ws-intg__delivery-detail">
+                  {#if delivery.error}
+                    <div class="ws-intg__delivery-block">
+                      <span class="ws-intg__secret-label">Error</span>
+                      <pre class="ws-bots__reveal-snippet"><code>{delivery.error}</code></pre>
+                    </div>
+                  {/if}
+                  {#if delivery.request_json}
+                    <div class="ws-intg__delivery-block">
+                      <span class="ws-intg__secret-label">Request</span>
+                      <pre class="ws-bots__reveal-snippet"><code>{prettyJSON(delivery.request_json)}</code></pre>
+                    </div>
+                  {/if}
+                  {#if delivery.response_body}
+                    <div class="ws-intg__delivery-block">
+                      <span class="ws-intg__secret-label">
+                        Response ({delivery.response_status})
+                      </span>
+                      <pre class="ws-bots__reveal-snippet"><code>{delivery.response_body}</code></pre>
+                    </div>
+                  {/if}
+                  <div class="ws-intg__item-meta">
+                    Started {formatTimestamp(delivery.created_at)} · completed
+                    {formatTimestamp(delivery.completed_at)}
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/snippet}
+        </Virtualizer>
+      </div>
+      {#if nextCursor && !error}
+        <div class="ws-intg__deliveries-more">
+          <button type="button" class="ws-btn" onclick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Load older deliveries"}
+          </button>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>

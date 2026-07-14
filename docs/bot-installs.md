@@ -110,7 +110,8 @@ Start with the smallest useful bundle:
 
 - `bot:read`: read workspace/channel/message/thread/DM state and realtime
   events.
-- `bot:write`: `bot:read` plus posting messages, replies, DMs, and uploads.
+- `bot:write`: `bot:read` plus posting messages, replies, DMs, uploads, and
+  publishing the bot's command menu.
 - `bot:admin`: `bot:write` plus channel creation/update.
 
 Use explicit comma-separated scopes when a runtime needs less than a bundle:

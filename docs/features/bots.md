@@ -136,11 +136,13 @@ MVP scopes:
 - `realtime:read`
 - `uploads:write`
 - `profile:read`
+- `commands:write`
 
 Derived bundles:
 
 - `bot:read` = workspace/channel/message/thread/DM/realtime read scopes.
-- `bot:write` = read scopes plus message/thread/DM/upload write scopes.
+- `bot:write` = read scopes plus message/thread/DM/upload writes and
+  `commands:write`.
 - `bot:admin` = all MVP scopes including channel creation/update.
 
 Enforcement:
@@ -164,6 +166,8 @@ MVP endpoint mapping:
   require a bot token with `agent_activity:write`; human sessions and ordinary
   bot bundles cannot publish them.
 - `GET /api/realtime/events` and `/ws`: `realtime:read`
+- `PUT /api/bots/self/commands`: bot tokens only, with `commands:write`
+- `GET /api/workspaces/{id}/bot-commands`: `workspaces:read`
 - `POST /api/uploads`: `uploads:write`
 - `POST /api/messages/{id}/attachments`: `uploads:write` and `messages:write`
 - `POST /api/realtime/ephemeral`: `messages:write`; the `agent.progress`
@@ -217,6 +221,8 @@ HTTP API:
 - `POST /api/bots/{bot_user_id}/tokens`
 - `POST /api/bot-tokens/{token_id}/revoke`
 - `GET /api/me/bots`
+- `PUT /api/bots/self/commands`
+- `GET /api/workspaces/{workspace_id}/bot-commands`
 
 The creation and token-management API requires a human session. Bot tokens can
 read and write through the normal chat APIs according to scope, but cannot mint,
@@ -231,6 +237,35 @@ returned by list calls. `GET /api/workspaces/{workspace_id}/bots` returns
 Raw token values are never returned by list calls. Rotation is create-new, move
 the runtime, then revoke-old through
 `POST /api/bot-tokens/{token_id}/revoke`.
+
+## Command Menus
+
+Bots publish command discovery metadata with
+`PUT /api/bots/self/commands`. The endpoint accepts bot tokens only, requires
+`commands:write`, and derives the bot user and workspace from the token. It
+atomically replaces that bot's full menu; `{"commands":[]}` clears it.
+
+Commands accept an optional leading slash and are stored in lowercase canonical
+form such as `/status`. A menu can contain at most 100 unique commands.
+Descriptions are required and limited to 100 characters; optional `args_hint`
+values are also limited to 100 characters. Any validation failure leaves the
+previous menu unchanged.
+
+Workspace members read the merged bot menus through
+`GET /api/workspaces/{workspace_id}/bot-commands`. Bot tokens need
+`workspaces:read` and must be bound to that workspace. Results embed the bot's
+ID, handle, display name, and avatar, and are sorted by bot handle then command.
+Removing a bot from a workspace deletes its menu in the same transaction.
+
+The TypeScript SDK exposes these endpoints as
+`client.bots.setCommands(commands)` and
+`client.bots.listCommands(workspaceId)`.
+
+Bot command menus are discovery metadata only. They do not change dispatch:
+bot-declared and unknown commands continue through normal plain-message
+delivery. If a name also exists as an HTTP-registered slash command, the web
+client dispatches the HTTP registration first. There is no cross-system
+uniqueness constraint.
 
 Workspace owners and moderators can remove any bot from a workspace with
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this

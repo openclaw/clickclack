@@ -151,6 +151,21 @@ work for bots installed in exactly one workspace.
 Only `create`, `createToken`, and `createWorkspaceToken` responses include the
 one-time raw `bot_token.token`. List calls return metadata only.
 
+Bot runtimes can atomically publish their command menu with their own token:
+
+```ts
+await client.bots.setCommands([
+  { command: "status", description: "Show agent status" },
+  { command: "new", description: "Start a new session", args_hint: "[message]" },
+]);
+
+const commands = await client.bots.listCommands(workspaceId);
+```
+
+`setCommands([])` clears the authenticated bot's menu. It requires
+`commands:write`; listing requires workspace membership and `workspaces:read`
+for bot tokens.
+
 The SDK also exports `ClickClackBot`, a tiny runner around the same client plus
 the realtime WebSocket:
 

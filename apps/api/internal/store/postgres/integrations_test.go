@@ -1,0 +1,300 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"sort"
+	"testing"
+
+	"github.com/openclaw/clickclack/apps/api/internal/store"
+)
+
+func TestPostgresIntegrationLifecycle(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Integration Owner", "postgres-integrations@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Integration Member", Email: "postgres-integration-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	bot, initialToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Integration Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     "member-blocked",
+		BotUserID:   bot.ID,
+		CreatedBy:   member.ID,
+	}); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member installation create to require manager, got %v", err)
+	}
+
+	first := createPostgresTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, "postgres-defaults")
+	command, subscription := createPostgresTestInstallationRegistrations(t, st, first.ID, workspace.ID, bot.ID, owner.ID, "/postgres-defaults")
+	if _, err := st.RevokeAppInstallation(ctx, first.ID, member.ID, store.RevokeAppInstallationOptions{}); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member installation revoke to require manager, got %v", err)
+	}
+	if _, err := st.RotateSlashCommandSecret(ctx, command.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member slash rotation to require manager, got %v", err)
+	}
+	rotatedCommand, err := st.RotateSlashCommandSecret(ctx, command.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rotatedCommand.ID != command.ID || rotatedCommand.SigningSecret == "" || rotatedCommand.SigningSecret == command.SigningSecret {
+		t.Fatalf("unexpected slash rotation: before=%#v after=%#v", command, rotatedCommand)
+	}
+	if _, err := st.RotateEventSubscriptionSecret(ctx, subscription.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member subscription rotation to require manager, got %v", err)
+	}
+	rotatedSubscription, err := st.RotateEventSubscriptionSecret(ctx, subscription.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rotatedSubscription.ID != subscription.ID || rotatedSubscription.SigningSecret == "" || rotatedSubscription.SigningSecret == subscription.SigningSecret {
+		t.Fatalf("unexpected subscription rotation: before=%#v after=%#v", subscription, rotatedSubscription)
+	}
+
+	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Name:        "integration-deliveries",
+		Kind:        "public",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channel.ID,
+		AuthorID:  owner.ID,
+		Body:      "delivery",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attemptIDs := make([]string, 0, 3)
+	for range 3 {
+		attempt, err := st.CreateEventDeliveryAttempt(ctx, store.CreateEventDeliveryAttemptInput{
+			SubscriptionID: subscription.ID,
+			EventID:        event.ID,
+			WorkspaceID:    workspace.ID,
+			EventType:      event.Type,
+			ResponseStatus: 202,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		attemptIDs = append(attemptIDs, attempt.ID)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		UPDATE event_delivery_attempts
+		SET created_at = '2026-07-14T12:00:00Z'
+		WHERE subscription_id = $1`, subscription.ID); err != nil {
+		t.Fatal(err)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(attemptIDs)))
+	firstPage, err := st.ListEventDeliveryAttempts(ctx, subscription.ID, member.ID, 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPage, err := st.ListEventDeliveryAttempts(ctx, subscription.ID, member.ID, 2, firstPage[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage) != 2 || firstPage[0].ID != attemptIDs[0] || firstPage[1].ID != attemptIDs[1] || len(secondPage) != 1 || secondPage[0].ID != attemptIDs[2] {
+		t.Fatalf("unexpected postgres delivery pages: first=%#v second=%#v", firstPage, secondPage)
+	}
+
+	if _, err := st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
+		WorkspaceID:       workspace.ID,
+		UserID:            member.ID,
+		Provider:          "github",
+		ProviderAccountID: "member-blocked",
+		CreatedBy:         member.ID,
+	}); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member connected-account create to require manager, got %v", err)
+	}
+	memberAccount, err := st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
+		WorkspaceID:       workspace.ID,
+		UserID:            member.ID,
+		Provider:          "github",
+		ProviderAccountID: "member-self",
+		CreatedBy:         owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RevokeConnectedAccount(ctx, memberAccount.ID, member.ID); err != nil {
+		t.Fatalf("member could not self-revoke connected account: %v", err)
+	}
+	ownerAccount, err := st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
+		WorkspaceID:       workspace.ID,
+		UserID:            owner.ID,
+		Provider:          "github",
+		ProviderAccountID: "owner-account",
+		CreatedBy:         owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RevokeConnectedAccount(ctx, ownerAccount.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected member cross-user revoke to require manager, got %v", err)
+	}
+	if _, err := st.RevokeConnectedAccount(ctx, ownerAccount.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := st.RevokeAppInstallation(ctx, first.ID, owner.ID, store.RevokeAppInstallationOptions{
+		RevokeSlashCommands:      true,
+		RevokeEventSubscriptions: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Revoked.SlashCommands != 1 || result.Revoked.EventSubscriptions != 1 || result.Revoked.BotTokens != 0 {
+		t.Fatalf("unexpected default postgres cascade: %#v", result)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, initialToken.Token); err != nil {
+		t.Fatalf("default postgres cascade revoked the bot token: %v", err)
+	}
+
+	second := createPostgresTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, "postgres-tokens")
+	createPostgresTestInstallationRegistrations(t, st, second.ID, workspace.ID, bot.ID, owner.ID, "/postgres-tokens")
+	secondToken, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "second",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = st.RevokeAppInstallation(ctx, second.ID, owner.ID, store.RevokeAppInstallationOptions{
+		RevokeSlashCommands:      true,
+		RevokeEventSubscriptions: true,
+		RevokeBotTokens:          true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Revoked.SlashCommands != 1 || result.Revoked.EventSubscriptions != 1 || result.Revoked.BotTokens != 2 {
+		t.Fatalf("unexpected explicit postgres cascade: %#v", result)
+	}
+	for _, token := range []string{initialToken.Token, secondToken.Token} {
+		if _, err := st.GetBotTokenAuth(ctx, token); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("expected postgres cascade token to stop authenticating, got %v", err)
+		}
+	}
+
+	third := createPostgresTestAppInstallation(t, st, workspace.ID, bot.ID, owner.ID, "postgres-rollback")
+	rollbackCommand, rollbackSubscription := createPostgresTestInstallationRegistrations(t, st, third.ID, workspace.ID, bot.ID, owner.ID, "/postgres-rollback")
+	rollbackToken, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "rollback",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		CREATE FUNCTION fail_event_subscription_revoke() RETURNS trigger
+		LANGUAGE plpgsql AS $$
+		BEGIN
+			RAISE EXCEPTION 'induced cascade failure';
+		END;
+		$$;
+		CREATE TRIGGER fail_event_subscription_revoke
+		BEFORE UPDATE OF revoked_at ON event_subscriptions
+		FOR EACH ROW
+		WHEN (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL)
+		EXECUTE FUNCTION fail_event_subscription_revoke()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RevokeAppInstallation(ctx, third.ID, owner.ID, store.RevokeAppInstallationOptions{
+		RevokeSlashCommands:      true,
+		RevokeEventSubscriptions: true,
+		RevokeBotTokens:          true,
+	}); err == nil {
+		t.Fatal("expected induced postgres cascade failure")
+	}
+	installationAfterFailure, err := st.getAppInstallation(ctx, third.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandAfterFailure, err := st.getSlashCommand(ctx, rollbackCommand.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscriptionAfterFailure, err := st.getEventSubscription(ctx, rollbackSubscription.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installationAfterFailure.RevokedAt != nil || commandAfterFailure.RevokedAt != nil || subscriptionAfterFailure.RevokedAt != nil {
+		t.Fatalf("postgres cascade failure did not roll back registrations: installation=%#v command=%#v subscription=%#v", installationAfterFailure, commandAfterFailure, subscriptionAfterFailure)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, rollbackToken.Token); err != nil {
+		t.Fatalf("postgres cascade failure revoked the bot token: %v", err)
+	}
+}
+
+func createPostgresTestAppInstallation(t *testing.T, st *Store, workspaceID, botUserID, ownerID, appSlug string) store.AppInstallation {
+	t.Helper()
+	installation, err := st.CreateAppInstallation(context.Background(), store.CreateAppInstallationInput{
+		WorkspaceID: workspaceID,
+		AppSlug:     appSlug,
+		BotUserID:   botUserID,
+		CreatedBy:   ownerID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return installation
+}
+
+func createPostgresTestInstallationRegistrations(t *testing.T, st *Store, installationID, workspaceID, botUserID, ownerID, commandName string) (store.SlashCommand, store.EventSubscription) {
+	t.Helper()
+	ctx := context.Background()
+	command, err := st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
+		WorkspaceID:       workspaceID,
+		AppInstallationID: installationID,
+		Command:           commandName,
+		CallbackURL:       "https://example.com/slash",
+		BotUserID:         botUserID,
+		CreatedBy:         ownerID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+		WorkspaceID:       workspaceID,
+		AppInstallationID: installationID,
+		EventTypes:        []string{"message.created"},
+		CallbackURL:       "https://example.com/events",
+		CreatedBy:         ownerID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return command, subscription
+}

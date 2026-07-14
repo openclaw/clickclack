@@ -97,6 +97,10 @@
   let directMemberID = "";
   let searchQuery = "";
   let searchResults: SearchResult[] = [];
+  let searchPanelOpen = false;
+  let searchState: "idle" | "loading" | "ready" | "error" = "idle";
+  let searchError = "";
+  let searchRequestID = 0;
   let pendingUpload: Upload | null = null;
   let showGifPicker = false;
   let settingsModalOpen = false;
@@ -2047,6 +2051,7 @@
   }
 
   async function openThread(message: Message) {
+    resetSearch();
     await refreshThread(message.id, message);
     if (selectedWorkspaceID && selectedThread?.route_id && window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)) {
       await navigateToApp(selectedWorkspaceID, selectedThread.id);
@@ -2170,23 +2175,42 @@
 
   async function searchMessages() {
     if (!selectedWorkspaceID || !searchQuery.trim()) {
-      searchResults = [];
+      resetSearch();
       return;
     }
-    const params = new URLSearchParams({ workspace_id: selectedWorkspaceID, q: searchQuery.trim() });
+    const query = searchQuery.trim();
+    const requestID = ++searchRequestID;
+    searchPanelOpen = true;
+    searchState = "loading";
+    searchError = "";
+    const params = new URLSearchParams({ workspace_id: selectedWorkspaceID, q: query });
     if (selectedDirectID) params.set("direct_conversation_id", selectedDirectID);
     else if (selectedChannelID) params.set("channel_id", selectedChannelID);
-    const data = await api<{ results: SearchResult[]; next_cursor: string | null }>(`/api/search?${params.toString()}`);
-    searchResults = data.results;
+    try {
+      const data = await api<{ results: SearchResult[]; next_cursor: string | null }>(
+        `/api/search?${params.toString()}`,
+      );
+      if (requestID !== searchRequestID) return;
+      searchResults = data.results;
+      searchState = "ready";
+    } catch (error) {
+      if (requestID !== searchRequestID) return;
+      searchResults = [];
+      searchState = "error";
+      searchError = error instanceof APIError ? error.message : "Search is unavailable right now.";
+    }
   }
 
   function resetSearch() {
+    searchRequestID += 1;
     searchQuery = "";
     searchResults = [];
+    searchPanelOpen = false;
+    searchState = "idle";
+    searchError = "";
   }
 
   async function openSearchResult(result: SearchResult) {
-    searchResults = [];
     const targetID = result.channel_id || result.direct_conversation_id || "";
     if (!selectedWorkspaceID || !targetID) return;
     if (currentConversationKey() !== targetID) {
@@ -2195,6 +2219,7 @@
     }
     if (currentConversationKey() !== targetID) return;
     if (result.parent_message_id) {
+      searchPanelOpen = false;
       await refreshThread(result.thread_root_id);
       if (selectedThread?.route_id) {
         await navigateToApp(selectedWorkspaceID, selectedThread.id);
@@ -2811,6 +2836,7 @@
 
   function openUserProfile(profile?: User | null) {
     if (!profile || profile.deleted_at) return;
+    resetSearch();
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedThread = null;
@@ -2986,6 +3012,10 @@
         event.preventDefault();
         closeSidePanel();
         return;
+      } else if (searchPanelOpen) {
+        event.preventDefault();
+        resetSearch();
+        return;
       } else if (replyTarget) {
         event.preventDefault();
         clearReplyTarget();
@@ -3087,7 +3117,8 @@
   class:desktop-shell={integratedTitleBar}
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
-  class:thread-open={sidePanelOpen}
+  class:thread-open={sidePanelOpen && !searchPanelOpen}
+  class:search-open={searchPanelOpen}
   class:artifact-open={selectedArtifact !== null}
   data-connected={connected}
   data-app-ready={connected && status === "ready"}
@@ -3198,12 +3229,6 @@
       />
     {/if}
 
-    <SearchResults
-      results={searchResults}
-      onClose={() => (searchResults = [])}
-      onOpenResult={(result) => void openSearchResult(result)}
-    />
-
     <MessageList
       messages={visibleMessages}
       {selectedDirect}
@@ -3311,6 +3336,19 @@
     </div>
   </main>
 
+  {#if searchPanelOpen}
+    <SearchResults
+      query={searchQuery.trim()}
+      results={searchResults}
+      state={searchState}
+      error={searchError}
+      covered={selectedArtifact !== null}
+      inert={mobileNavOpen || selectedArtifact !== null}
+      onClose={resetSearch}
+      onOpenResult={(result) => void openSearchResult(result)}
+    />
+  {/if}
+
   {#if selectedArtifact}
     <aside
       bind:this={artifactViewerElement}
@@ -3327,9 +3365,9 @@
   <aside
     class="thread"
     class:open={sidePanelOpen}
-    class:covered={selectedArtifact !== null}
-    inert={mobileNavOpen || selectedArtifact !== null}
-    aria-hidden={selectedArtifact ? "true" : undefined}
+    class:covered={selectedArtifact !== null || searchPanelOpen}
+    inert={mobileNavOpen || selectedArtifact !== null || searchPanelOpen}
+    aria-hidden={selectedArtifact || searchPanelOpen ? "true" : undefined}
     aria-label={selectedProfile ? "Profile pane" : "Thread pane"}
   >
     {#if selectedThread}

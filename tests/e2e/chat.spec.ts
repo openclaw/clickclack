@@ -1070,7 +1070,9 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await titlebarSearch.fill("titlebar search probe");
   await titlebar.getByRole("button", { name: "Search" }).click();
   await expect(
-    page.getByLabel("Search results").getByText("desktop titlebar search probe"),
+    page
+      .getByLabel("Search results")
+      .locator(".search-result", { hasText: "desktop titlebar search probe" }),
   ).toBeVisible();
   await titlebar.getByRole("button", { name: "Reset" }).click();
   await expect(titlebarSearch).toHaveValue("");
@@ -2092,14 +2094,19 @@ test("automatic read receipts do not clear unseen paged history", async ({ page 
   await expect(unreadJump).toBeVisible();
   await page.getByLabel("Search messages").fill("latesttargetword");
   await page.getByRole("button", { name: "Search" }).click();
-  await expect(page.getByLabel("Search results").getByText("latesttargetword")).toBeVisible();
+  await expect(
+    page.getByLabel("Search results").locator(".search-result", { hasText: "latesttargetword" }),
+  ).toBeVisible();
   const latestUnreadPage = page.waitForResponse(
     (response) =>
       response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
       response.url().includes("around_seq=180") &&
       response.ok(),
   );
-  await page.getByLabel("Search results").getByText("latesttargetword").click();
+  await page
+    .getByLabel("Search results")
+    .locator(".search-result", { hasText: "latesttargetword" })
+    .click();
   await latestUnreadPage;
   await expect(page.locator(".markdown").filter({ hasText: "auto-read-msg-179" })).toBeVisible();
   await expect(page.getByRole("separator", { name: "New messages" })).toHaveCount(0);
@@ -2109,12 +2116,84 @@ test("automatic read receipts do not clear unseen paged history", async ({ page 
   await expect.poll(async () => (await currentChannelState()).last_read_seq || 0).toBe(0);
 
   await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Search results")).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(page.locator(".markdown").filter({ hasText: "auto-read-msg-179" })).toBeVisible();
   await expectScrollAtMessageEnd(page);
   await expect.poll(async () => (await currentChannelState()).last_read_seq || 0).toBe(180);
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
 });
 
+test("renders search results in a responsive sidebar", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `search-proof-${Date.now()}`, kind: "public" },
+  });
+  const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const body = "A concise message containing precisionneedle for sidebar navigation proof.";
+  const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body },
+  });
+  expect(messageResponse.ok()).toBe(true);
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+
+  await page.getByLabel("Search messages").fill("precisionneedle");
+  const searchResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/search?") && response.ok(),
+  );
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await searchResponse;
+
+  const results = page.getByLabel("Search results");
+  await expect(results.getByText("Results for “precisionneedle”")).toBeVisible();
+  const result = results.locator(".search-result", { hasText: "precisionneedle" });
+  await expect(result).toContainText(body);
+
+  await expect
+    .poll(async () => (await results.boundingBox())?.width || 0)
+    .toBeGreaterThanOrEqual(350);
+  const timelineBox = await page.locator(".timeline").boundingBox();
+  const resultsBox = await results.boundingBox();
+  expect(timelineBox).not.toBeNull();
+  expect(resultsBox).not.toBeNull();
+  expect(resultsBox!.x).toBeGreaterThanOrEqual(timelineBox!.x + timelineBox!.width - 1);
+  expect(resultsBox!.width).toBeGreaterThanOrEqual(350);
+
+  if (process.env.CAPTURE_SEARCH_SIDEBAR_PROOF === "1") {
+    await page.screenshot({ path: "docs/proof/search-sidebar.png", fullPage: true });
+  }
+
+  await result.click();
+  await expect(results).toBeVisible();
+  await expect(page.locator(".message-row.highlight")).toContainText("precisionneedle");
+
+  await results.getByRole("button", { name: "Close search panel" }).click();
+  await expect(results).toHaveCount(0);
+  await expect
+    .poll(async () => (await page.locator(".timeline").boundingBox())?.width || 0)
+    .toBeGreaterThan(timelineBox!.width);
+
+  await page.setViewportSize({ width: 768, height: 720 });
+  await page.getByLabel("Search messages").fill("precisionneedle");
+  const mobileSearchResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/search?") && response.ok(),
+  );
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await mobileSearchResponse;
+  await expect(results).toBeVisible();
+  await expect.poll(async () => (await results.boundingBox())?.width || 0).toBe(420);
+  const mobileResultsBox = await results.boundingBox();
+  expect(mobileResultsBox!.x + mobileResultsBox!.width).toBe(768);
+  expect(mobileResultsBox!.height).toBe(720);
+  await page.keyboard.press("Escape");
+  await expect(results).toHaveCount(0);
+});
 test("message history pages older, newer, and search target windows", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
@@ -2222,7 +2301,10 @@ test("message history pages older, newer, and search target windows", async ({ p
       response.url().includes("around_seq=") &&
       response.ok(),
   );
-  await page.getByLabel("Search results").getByText("targetten").click();
+  await page
+    .getByLabel("Search results")
+    .locator(".search-result", { hasText: "targetten" })
+    .click();
   await aroundPage;
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-010" })).toBeVisible();
   await settleScrollFrames(page);

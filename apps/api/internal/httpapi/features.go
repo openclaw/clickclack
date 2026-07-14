@@ -595,6 +595,71 @@ func (s *Server) listMyBots(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"bots": bots}, err)
 }
 
+func (s *Server) listBotCommands(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireScope("workspaces:read"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	commands, err := s.store.ListBotCommands(r.Context(), workspaceID, act.user.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusForbidden, errors.New("workspace membership required"))
+		return
+	}
+	writeResult(w, map[string]any{"bot_commands": commands}, err)
+}
+
+func (s *Server) setBotCommands(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID == "" {
+		writeError(w, http.StatusForbidden, errors.New("bot token required"))
+		return
+	}
+	if err := act.requireScope(store.BotCommandsWriteScope); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	var body struct {
+		Commands *[]store.BotCommandInput `json:"commands"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.Commands == nil {
+		writeError(w, http.StatusBadRequest, errors.New("commands is required"))
+		return
+	}
+	commands, err := s.store.SetBotCommands(r.Context(), act.workspaceID, act.user.ID, *body.Commands)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.publishEvent(r.Context(), store.Event{
+		Type:        "bot_command.updated",
+		WorkspaceID: act.workspaceID,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		Payload: map[string]string{
+			"workspace_id": act.workspaceID,
+			"bot_user_id":  act.user.ID,
+		},
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"bot_commands": commands})
+}
+
 func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {

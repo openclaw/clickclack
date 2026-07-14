@@ -86,6 +86,10 @@ const (
 // is unchanged: a bot must be granted it explicitly.
 const AgentActivityWriteScope = "agent_activity:write"
 
+// BotCommandsWriteScope allows a bot token to replace its bot user's command
+// menu in the token's bound workspace.
+const BotCommandsWriteScope = "commands:write"
+
 // IsActivityMessageKind reports whether kind is one of the durable agent
 // activity kinds (anything other than the ordinary 'message').
 func IsActivityMessageKind(kind string) bool {

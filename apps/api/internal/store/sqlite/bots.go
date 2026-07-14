@@ -40,6 +40,7 @@ var botScopeBundles = map[string][]string{
 		"realtime:read",
 		"uploads:write",
 		"profile:read",
+		store.BotCommandsWriteScope,
 	},
 	"bot:admin": {
 		"workspaces:read",
@@ -54,6 +55,7 @@ var botScopeBundles = map[string][]string{
 		"realtime:read",
 		"uploads:write",
 		"profile:read",
+		store.BotCommandsWriteScope,
 	},
 }
 
@@ -70,6 +72,7 @@ var botAllowedScopes = []string{
 	"realtime:read",
 	"uploads:write",
 	"profile:read",
+	store.BotCommandsWriteScope,
 	// agent_activity:write is grantable but intentionally NOT part of any
 	// bot:* bundle. Durable agent activity is a distinct authorization surface
 	// and must be granted explicitly, so existing bot:* deployments gain no new

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestBotCommandsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zetaBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+	zetaBot, zetaToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: "Zeta Bot",
 		Handle:      "zeta-bot",
@@ -45,15 +46,22 @@ func TestBotCommandsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alphaBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+	if !slices.Contains(zetaToken.Scopes, store.BotCommandsWriteScope) {
+		t.Fatalf("expected default bot:write bundle to include %s, got %#v", store.BotCommandsWriteScope, zetaToken.Scopes)
+	}
+	alphaBot, alphaToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: "Alpha Bot",
 		Handle:      "alpha-bot",
 		AvatarURL:   "https://example.com/alpha.png",
+		Scopes:      []string{store.BotCommandsWriteScope},
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(alphaToken.Scopes, []string{store.BotCommandsWriteScope}) {
+		t.Fatalf("expected standalone %s grant, got %#v", store.BotCommandsWriteScope, alphaToken.Scopes)
 	}
 
 	first, err := st.SetBotCommands(ctx, workspace.ID, zetaBot.ID, []store.BotCommandInput{
@@ -156,14 +164,18 @@ func TestBotCommandsLifecycle(t *testing.T) {
 		t.Fatalf("expected removal cleanup to leave only the other bot, got %#v", listed)
 	}
 
-	staleBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+	staleBot, staleToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: "Stale Bot",
 		Handle:      "stale-bot",
+		Scopes:      []string{"bot:admin"},
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Contains(staleToken.Scopes, store.BotCommandsWriteScope) {
+		t.Fatalf("expected bot:admin bundle to include %s, got %#v", store.BotCommandsWriteScope, staleToken.Scopes)
 	}
 	if _, err := st.SetBotCommands(ctx, workspace.ID, staleBot.ID, []store.BotCommandInput{
 		{Command: "stale", Description: "Should be hidden"},

@@ -1713,6 +1713,8 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		{"mark dm read", http.MethodPost, "/api/dms/dm_missing/read", `{"seq":1}`, "application/json"},
 		{"list bots", http.MethodGet, "/api/workspaces/" + workspace.ID + "/bots", "", ""},
 		{"create bot", http.MethodPost, "/api/workspaces/" + workspace.ID + "/bots", `{"display_name":"Nope"}`, "application/json"},
+		{"list bot commands", http.MethodGet, "/api/workspaces/" + workspace.ID + "/bot-commands", "", ""},
+		{"set bot commands", http.MethodPut, "/api/bots/self/commands", `{"commands":[]}`, "application/json"},
 		{"list bot tokens", http.MethodGet, "/api/bots/" + createdBot.Bot.ID + "/tokens", "", ""},
 		{"create bot token", http.MethodPost, "/api/bots/" + createdBot.Bot.ID + "/tokens", `{"name":"Nope"}`, "application/json"},
 		{"revoke bot token", http.MethodPost, "/api/bot-tokens/" + rotatedToken.BotToken.ID + "/revoke", `{}`, "application/json"},

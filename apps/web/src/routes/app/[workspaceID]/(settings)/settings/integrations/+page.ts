@@ -97,6 +97,16 @@ export async function load({
     channels,
     eventTypes,
     me,
+    loaded: {
+      installations: installationsResult.status === "fulfilled",
+      commands: commandsResult.status === "fulfilled",
+      subscriptions: subscriptionsResult.status === "fulfilled",
+      connectedAccounts: accountsResult.status === "fulfilled",
+      bots: botsResult.status === "fulfilled",
+      channels: channelsResult.status === "fulfilled",
+      eventTypes: eventTypesResult.status === "fulfilled",
+      me: meResult.status === "fulfilled",
+    },
     loadError,
   };
 }

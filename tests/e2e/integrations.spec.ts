@@ -118,6 +118,9 @@ test("keeps successful integration data when one initial request fails", async (
   await page.route(`**/api/workspaces/${workspace.id}/connected-accounts`, async (route) => {
     await route.fulfill({ status: 500, json: { error: "forced account failure" } });
   });
+  await page.route(`**/api/workspaces/${workspace.id}/slash-commands`, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "forced command failure" } });
+  });
   await page.goto(`/app/${workspace.route_id}/settings/integrations`);
 
   await expect(
@@ -125,6 +128,14 @@ test("keeps successful integration data when one initial request fails", async (
   ).toBeVisible();
   await expect(page.getByText(`Partial App ${stamp}`, { exact: true })).toBeVisible();
   await expect(page.getByText("1 app installed")).toBeVisible();
+  await expect(
+    page.getByText("Connected accounts are unavailable", { exact: false }),
+  ).toBeVisible();
+  await page
+    .locator(".ws-bots__row", { hasText: `Partial App ${stamp}` })
+    .locator(".ws-bots__row-main")
+    .click();
+  await expect(page.getByRole("button", { name: "Uninstall", exact: true })).toBeDisabled();
 });
 
 test("requires a real active channel for OpenClaw installs", async ({ page }) => {

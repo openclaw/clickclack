@@ -41,6 +41,7 @@
   let channels = $state<Channel[]>(untrack(() => data.channels));
   let eventTypes = $state<string[]>(untrack(() => data.eventTypes));
   let me = $state<User | null>(untrack(() => data.me));
+  let loaded = $state({ ...untrack(() => data.loaded) });
   let loadError = $state(untrack(() => data.loadError));
   let refreshing = $state(false);
   let showWizard = $state(false);
@@ -56,6 +57,7 @@
   const workspaceID = $derived(data.workspaceID);
   const workspaceIdentifier = $derived(data.workspaceIdentifier || data.workspaceID);
   const canManage = $derived(isWorkspaceManager(data.workspace?.role));
+  const canAssessRevoke = $derived(loaded.commands && loaded.subscriptions && loaded.bots);
 
   const activeInstallations = $derived(activeOnly(installations));
   const activeCommands = $derived(activeOnly(commands));
@@ -114,6 +116,17 @@
       if (channelsResult.status === "fulfilled") channels = channelsResult.value.channels ?? [];
       if (eventTypesResult.status === "fulfilled") eventTypes = eventTypesResult.value;
       if (meResult.status === "fulfilled") me = meResult.value.user;
+      loaded = {
+        installations: loaded.installations || installationsResult.status === "fulfilled",
+        commands: loaded.commands || commandsResult.status === "fulfilled",
+        subscriptions: loaded.subscriptions || subscriptionsResult.status === "fulfilled",
+        connectedAccounts:
+          loaded.connectedAccounts || accountsResult.status === "fulfilled",
+        bots: loaded.bots || botsResult.status === "fulfilled",
+        channels: loaded.channels || channelsResult.status === "fulfilled",
+        eventTypes: loaded.eventTypes || eventTypesResult.status === "fulfilled",
+        me: loaded.me || meResult.status === "fulfilled",
+      };
       loadError = settledErrors([
         installationsResult,
         commandsResult,
@@ -158,6 +171,7 @@
   }
 
   function startRevoke(installation: AppInstallation) {
+    if (!canAssessRevoke) return;
     actionError = "";
     revokePending = { installation, revokeTokens: false };
   }
@@ -273,7 +287,12 @@
           type="button"
           class="ws-btn ws-btn--primary"
           onclick={() => (showWizard = true)}
-          disabled={showWizard}
+          disabled={showWizard || !loaded.bots || !loaded.channels}
+          title={
+            !loaded.bots || !loaded.channels
+              ? "Refresh before adding an app so bot and channel data is current."
+              : undefined
+          }
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
@@ -304,11 +323,11 @@
     />
   {/if}
 
-  {#if activeInstallations.length === 0 && !loadError}
+  {#if activeInstallations.length === 0 && loaded.installations}
     <div class="ws-bots__empty">
       No apps installed. Add one to connect an agent platform to this workspace.
     </div>
-  {:else}
+  {:else if activeInstallations.length > 0}
     <div class="ws-bots__list">
       {#each activeInstallations as installation (installation.id)}
         {@const manifest = manifestForInstallation(installation.app_slug)}
@@ -356,7 +375,9 @@
                     {manifest.name}
                   </h4>
                   <p class="ws-bots__detail-hint">
-                    {#if bot}
+                    {#if !loaded.bots}
+                      Bot details are unavailable. Refresh to load the current binding.
+                    {:else if bot}
                       Connected as <a href={`/app/${workspaceID}/settings/bots`}>@{bot.handle}</a>
                       — tokens are managed on the Bots page.
                     {:else}
@@ -370,7 +391,12 @@
                       type="button"
                       class="ws-btn ws-btn--danger"
                       onclick={() => startRevoke(installation)}
-                      disabled={pendingHere}
+                      disabled={pendingHere || !canAssessRevoke}
+                      title={
+                        canAssessRevoke
+                          ? "Uninstall app"
+                          : "Refresh before uninstalling so the cascade impact is exact."
+                      }
                     >
                       Uninstall
                     </button>
@@ -424,23 +450,27 @@
                 </div>
               {/if}
 
-              <SlashCommandsPanel
-                {workspaceID}
-                commands={attachedTo(activeCommands, installation.id)}
-                installationID={installation.id}
-                botUserID={installation.bot_user_id}
-                {canManage}
-                onChanged={handleCommandChanged}
-              />
+              {#if loaded.commands}
+                <SlashCommandsPanel
+                  {workspaceID}
+                  commands={attachedTo(activeCommands, installation.id)}
+                  installationID={installation.id}
+                  botUserID={installation.bot_user_id}
+                  {canManage}
+                  onChanged={handleCommandChanged}
+                />
+              {/if}
 
-              <EventSubscriptionsPanel
-                {workspaceID}
-                subscriptions={attachedTo(activeSubscriptions, installation.id)}
-                {eventTypes}
-                installationID={installation.id}
-                {canManage}
-                onChanged={handleSubscriptionChanged}
-              />
+              {#if loaded.subscriptions}
+                <EventSubscriptionsPanel
+                  {workspaceID}
+                  subscriptions={attachedTo(activeSubscriptions, installation.id)}
+                  {eventTypes}
+                  installationID={installation.id}
+                  {canManage}
+                  onChanged={handleSubscriptionChanged}
+                />
+              {/if}
             </div>
           {/if}
         </div>
@@ -448,14 +478,15 @@
     </div>
   {/if}
 
-  {#if unattachedCommands.length > 0 || unattachedSubscriptions.length > 0}
+  {#if (loaded.commands && unattachedCommands.length > 0) ||
+  (loaded.subscriptions && unattachedSubscriptions.length > 0)}
     <section class="ws-intg__section">
       <h2 class="ws-intg__section-title">Not attached to an app</h2>
       <p class="ws-intg__section-hint">
         Created directly through the API without an app installation. They work the same; they just
         aren't bundled into an install.
       </p>
-      {#if unattachedCommands.length > 0}
+      {#if loaded.commands && unattachedCommands.length > 0}
         <SlashCommandsPanel
           {workspaceID}
           commands={unattachedCommands}
@@ -463,7 +494,7 @@
           onChanged={handleCommandChanged}
         />
       {/if}
-      {#if unattachedSubscriptions.length > 0}
+      {#if loaded.subscriptions && unattachedSubscriptions.length > 0}
         <EventSubscriptionsPanel
           {workspaceID}
           subscriptions={unattachedSubscriptions}
@@ -480,7 +511,9 @@
     <p class="ws-intg__section-hint">
       External identities apps have linked to members of this workspace.
     </p>
-    {#if connectedAccounts.length === 0}
+    {#if !loaded.connectedAccounts}
+      <p class="ws-intg__panel-empty">Connected accounts are unavailable. Use Refresh to retry.</p>
+    {:else if connectedAccounts.length === 0}
       <p class="ws-intg__panel-empty">No connected accounts.</p>
     {:else}
       <ul class="ws-intg__item-list">

@@ -1904,9 +1904,9 @@ components:
           items:
             $ref: "#/components/schemas/EventDeliveryAttempt"
         next_cursor:
-          type:
-            - string
-            - "null"
+          anyOf:
+            - type: string
+            - type: "null"
     EventTypesResponse:
       type: object
       required: [event_types]

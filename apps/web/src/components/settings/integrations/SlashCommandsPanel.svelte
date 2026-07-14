@@ -39,7 +39,11 @@
   );
 
   function normalizedCommand(): string {
-    return commandName.trim().replace(/^\//, "");
+    return commandName.trim().replace(/^\/+/, "");
+  }
+
+  function displayCommand(command: string): string {
+    return `/${command.replace(/^\/+/, "")}`;
   }
 
   async function submitCreate(event: Event) {
@@ -73,7 +77,7 @@
   async function revoke(command: SlashCommand) {
     if (
       !confirm(
-        `Revoke /${command.command}? It disappears from the composer and its callback stops firing immediately.`,
+        `Revoke ${displayCommand(command.command)}? It disappears from the composer and its callback stops firing immediately.`,
       )
     ) {
       return;
@@ -93,7 +97,7 @@
   async function rotate(command: SlashCommand) {
     if (
       !confirm(
-        `Rotate the signing secret for /${command.command}? The old secret stops verifying immediately — update the receiver right away.`,
+        `Rotate the signing secret for ${displayCommand(command.command)}? The old secret stops verifying immediately — update the receiver right away.`,
       )
     ) {
       return;
@@ -221,7 +225,7 @@
       {#each commands as command (command.id)}
         <li class="ws-intg__item-row">
           <div class="ws-intg__item-main">
-            <div class="ws-intg__item-name"><code>/{command.command}</code></div>
+            <div class="ws-intg__item-name"><code>{displayCommand(command.command)}</code></div>
             <div class="ws-intg__item-meta">
               {#if command.description}{command.description} · {/if}
               <span class="ws-intg__url" title={command.callback_url}>{command.callback_url}</span>

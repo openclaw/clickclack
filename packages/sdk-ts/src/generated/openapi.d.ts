@@ -1103,10 +1103,14 @@ export interface components {
       avatar_url?: string;
       token_name?: string;
       scopes?: string[];
+      /** @description Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. */
+      setup_nonce?: string;
     };
     CreateBotTokenRequest: {
       name?: string;
       scopes?: string[];
+      /** @description Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token. */
+      setup_nonce?: string;
     };
     AppInstallation: {
       id: string;
@@ -1117,6 +1121,8 @@ export interface components {
       config: {
         [key: string]: unknown;
       };
+      /** @description Retry key that returns the original installation instead of creating a duplicate. */
+      setup_nonce?: string;
       created_by?: string;
       /** Format: date-time */
       created_at: string;

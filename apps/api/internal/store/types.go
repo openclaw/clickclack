@@ -15,6 +15,10 @@ var ErrQuotedMessageOutOfScope = errors.New("quoted message is not in this chann
 // for a different message request.
 var ErrClientNonceConflict = errors.New("client nonce was already used for a different message")
 
+// ErrSetupNonceConflict is returned when a retry-safe integration setup nonce
+// is reused with different inputs or after its credential was revoked.
+var ErrSetupNonceConflict = errors.New("setup nonce was already used for a different request")
+
 // ErrInvalidMessagePage is returned when a message-history request combines
 // mutually exclusive cursors or uses an invalid cursor value.
 var ErrInvalidMessagePage = errors.New("invalid message page request")
@@ -274,6 +278,7 @@ type CreateBotInput struct {
 	AvatarURL   string
 	TokenName   string
 	Scopes      []string
+	SetupNonce  string
 	CreatedBy   string
 }
 
@@ -313,6 +318,7 @@ type CreateBotTokenInput struct {
 	BotUserID   string
 	Name        string
 	Scopes      []string
+	SetupNonce  string
 	CreatedBy   string
 }
 
@@ -334,6 +340,7 @@ type CreateAppInstallationInput struct {
 	DisplayName string
 	BotUserID   string
 	Config      map[string]any
+	SetupNonce  string
 	CreatedBy   string
 }
 

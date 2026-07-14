@@ -45,6 +45,10 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		return store.AppInstallation{}, errors.New("bot_user_id is required")
 	}
 	createdBy := strings.TrimSpace(input.CreatedBy)
+	setupNonce, err := normalizeSetupNonce(input.SetupNonce)
+	if err != nil {
+		return store.AppInstallation{}, err
+	}
 	config := input.Config
 	if config == nil {
 		config = map[string]any{}
@@ -60,6 +64,32 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 	defer tx.Rollback()
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.AppInstallation{}, err
+	}
+	if setupNonce != "" {
+		existing, replayErr := scanAppInstallation(tx.QueryRowContext(
+			ctx,
+			appInstallationSelect()+` WHERE created_by = ? AND setup_nonce = ?`,
+			createdBy,
+			setupNonce,
+		))
+		if replayErr == nil {
+			existingConfigJSON, marshalErr := json.Marshal(existing.Config)
+			if marshalErr != nil {
+				return store.AppInstallation{}, marshalErr
+			}
+			if existing.WorkspaceID != workspaceID ||
+				existing.AppSlug != appSlug ||
+				existing.DisplayName != displayName ||
+				existing.BotUserID != botUserID ||
+				existing.RevokedAt != nil ||
+				string(existingConfigJSON) != string(configJSON) {
+				return store.AppInstallation{}, store.ErrSetupNonceConflict
+			}
+			return existing, tx.Commit()
+		}
+		if !errors.Is(replayErr, sql.ErrNoRows) {
+			return store.AppInstallation{}, replayErr
+		}
 	}
 	var botKind string
 	if err := tx.QueryRowContext(ctx, `
@@ -83,8 +113,8 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		CreatedAt:   now(),
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO app_installations (id, workspace_id, app_slug, display_name, bot_user_id, config_json, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO app_installations (id, workspace_id, app_slug, display_name, bot_user_id, config_json, created_by, setup_nonce, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		installation.ID,
 		installation.WorkspaceID,
 		installation.AppSlug,
@@ -92,6 +122,7 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		installation.BotUserID,
 		string(configJSON),
 		sqlOptionalText(installation.CreatedBy),
+		setupNonce,
 		installation.CreatedAt,
 	)
 	if err != nil {

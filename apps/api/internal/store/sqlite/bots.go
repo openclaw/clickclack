@@ -110,6 +110,10 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		return store.User{}, store.BotToken{}, errors.New("created_by is required")
 	}
 	ownerUserID := strings.TrimSpace(input.OwnerUserID)
+	setupNonce, err := normalizeSetupNonce(input.SetupNonce)
+	if err != nil {
+		return store.User{}, store.BotToken{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
@@ -137,6 +141,29 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		}
 		if err := requireMembershipTx(ctx, tx, workspaceID, owner.ID); err != nil {
 			return store.User{}, store.BotToken{}, errors.New("bot owner is not a workspace member")
+		}
+	}
+	if setupNonce != "" {
+		replayBot, replayToken, replayErr := getSetupBotTokenTx(ctx, tx, createdBy, setupNonce)
+		if replayErr == nil {
+			if replayToken.WorkspaceID != workspaceID ||
+				replayToken.Name != tokenName ||
+				!slices.Equal(replayToken.Scopes, scopes) ||
+				replayToken.RevokedAt != nil ||
+				replayBot.OwnerUserID != ownerUserID ||
+				replayBot.DisplayName != displayName ||
+				replayBot.Handle != handle ||
+				replayBot.AvatarURL != avatarURL {
+				return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
+			}
+			replayToken, err = rotateSetupBotTokenTx(ctx, tx, replayToken)
+			if err != nil {
+				return store.User{}, store.BotToken{}, err
+			}
+			return replayBot, replayToken, tx.Commit()
+		}
+		if !errors.Is(replayErr, sql.ErrNoRows) {
+			return store.User{}, store.BotToken{}, replayErr
 		}
 	}
 	bot := store.User{
@@ -194,6 +221,7 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		Name:        botToken.Name,
 		ScopesJson:  string(scopesJSON),
 		CreatedBy:   sqlOptionalText(botToken.CreatedBy),
+		SetupNonce:  setupNonce,
 		CreatedAt:   botToken.CreatedAt,
 	}); err != nil {
 		return store.User{}, store.BotToken{}, err
@@ -308,6 +336,10 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 	if createdBy == "" {
 		return store.BotToken{}, errors.New("created_by is required")
 	}
+	setupNonce, err := normalizeSetupNonce(input.SetupNonce)
+	if err != nil {
+		return store.BotToken{}, err
+	}
 	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, botUserID))
 	if err != nil {
 		return store.BotToken{}, err
@@ -321,6 +353,27 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 	}
 	if err := requireBotTokenManagerTx(ctx, tx, workspaceID, bot, createdBy); err != nil {
 		return store.BotToken{}, err
+	}
+	if setupNonce != "" {
+		replayBot, replayToken, replayErr := getSetupBotTokenTx(ctx, tx, createdBy, setupNonce)
+		if replayErr == nil {
+			if replayToken.WorkspaceID != workspaceID ||
+				replayToken.BotUserID != bot.ID ||
+				replayToken.Name != tokenName ||
+				!slices.Equal(replayToken.Scopes, scopes) ||
+				replayToken.RevokedAt != nil ||
+				replayBot.ID != bot.ID {
+				return store.BotToken{}, store.ErrSetupNonceConflict
+			}
+			replayToken, err = rotateSetupBotTokenTx(ctx, tx, replayToken)
+			if err != nil {
+				return store.BotToken{}, err
+			}
+			return replayToken, tx.Commit()
+		}
+		if !errors.Is(replayErr, sql.ErrNoRows) {
+			return store.BotToken{}, replayErr
+		}
 	}
 	token := newID("ccb")
 	scopesJSON, err := json.Marshal(scopes)
@@ -339,8 +392,8 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		CreatedAt:   now(),
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, setup_nonce, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		botToken.ID,
 		hashBotToken(token),
 		botToken.BotUserID,
@@ -349,6 +402,7 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		botToken.Name,
 		string(scopesJSON),
 		sqlOptionalText(botToken.CreatedBy),
+		setupNonce,
 		botToken.CreatedAt,
 	)
 	if err != nil {
@@ -678,6 +732,58 @@ func normalizeBotScopes(values []string) ([]string, error) {
 	}
 	slices.Sort(scopes)
 	return scopes, nil
+}
+
+func normalizeSetupNonce(value string) (string, error) {
+	nonce, err := normalizeClientNonce(value)
+	if err != nil {
+		return "", err
+	}
+	if nonce != "" && len(nonce) < 16 {
+		return "", errors.New("setup_nonce must be at least 16 characters")
+	}
+	return nonce, nil
+}
+
+func getSetupBotTokenTx(ctx context.Context, tx *sql.Tx, createdBy, setupNonce string) (store.User, store.BotToken, error) {
+	token, err := scanBotToken(tx.QueryRowContext(
+		ctx,
+		botTokenSelect()+` WHERE created_by = ? AND setup_nonce = ?`,
+		createdBy,
+		setupNonce,
+	))
+	if err != nil {
+		return store.User{}, store.BotToken{}, err
+	}
+	bot, err := scanUser(tx.QueryRowContext(
+		ctx,
+		`SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`,
+		token.BotUserID,
+	))
+	return bot, token, err
+}
+
+func rotateSetupBotTokenTx(ctx context.Context, tx *sql.Tx, token store.BotToken) (store.BotToken, error) {
+	rawToken := newID("ccb")
+	result, err := tx.ExecContext(
+		ctx,
+		`UPDATE bot_tokens SET token_hash = ?, last_used_at = NULL WHERE id = ? AND revoked_at IS NULL`,
+		hashBotToken(rawToken),
+		token.ID,
+	)
+	if err != nil {
+		return store.BotToken{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return store.BotToken{}, err
+	}
+	if affected != 1 {
+		return store.BotToken{}, store.ErrSetupNonceConflict
+	}
+	token.Token = rawToken
+	token.LastUsedAt = nil
+	return token, nil
 }
 
 func hashBotToken(token string) string {

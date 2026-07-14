@@ -45,6 +45,10 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		return store.AppInstallation{}, errors.New("bot_user_id is required")
 	}
 	createdBy := strings.TrimSpace(input.CreatedBy)
+	setupNonce, err := normalizeSetupNonce(input.SetupNonce)
+	if err != nil {
+		return store.AppInstallation{}, err
+	}
 	config := input.Config
 	if config == nil {
 		config = map[string]any{}
@@ -58,8 +62,39 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		return store.AppInstallation{}, err
 	}
 	defer tx.Rollback()
+	if setupNonce != "" {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, "clickclack.app-installation-setup."+createdBy, setupNonce); err != nil {
+			return store.AppInstallation{}, err
+		}
+	}
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.AppInstallation{}, err
+	}
+	if setupNonce != "" {
+		existing, replayErr := scanAppInstallation(tx.QueryRowContext(
+			ctx,
+			appInstallationSelect()+` WHERE created_by = $1 AND setup_nonce = $2 FOR UPDATE`,
+			createdBy,
+			setupNonce,
+		))
+		if replayErr == nil {
+			existingConfigJSON, marshalErr := json.Marshal(existing.Config)
+			if marshalErr != nil {
+				return store.AppInstallation{}, marshalErr
+			}
+			if existing.WorkspaceID != workspaceID ||
+				existing.AppSlug != appSlug ||
+				existing.DisplayName != displayName ||
+				existing.BotUserID != botUserID ||
+				existing.RevokedAt != nil ||
+				string(existingConfigJSON) != string(configJSON) {
+				return store.AppInstallation{}, store.ErrSetupNonceConflict
+			}
+			return existing, tx.Commit()
+		}
+		if !errors.Is(replayErr, sql.ErrNoRows) {
+			return store.AppInstallation{}, replayErr
+		}
 	}
 	var botKind string
 	if err := tx.QueryRowContext(ctx, `
@@ -83,8 +118,8 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		CreatedAt:   now(),
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO app_installations (id, workspace_id, app_slug, display_name, bot_user_id, config_json, created_by, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		INSERT INTO app_installations (id, workspace_id, app_slug, display_name, bot_user_id, config_json, created_by, setup_nonce, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		installation.ID,
 		installation.WorkspaceID,
 		installation.AppSlug,
@@ -92,6 +127,7 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		installation.BotUserID,
 		string(configJSON),
 		sqlOptionalText(installation.CreatedBy),
+		setupNonce,
 		installation.CreatedAt,
 	)
 	if err != nil {

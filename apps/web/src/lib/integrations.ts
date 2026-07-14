@@ -109,6 +109,7 @@ export async function createAppInstallation(
     display_name: string;
     bot_user_id: string;
     config?: Record<string, unknown>;
+    setup_nonce?: string;
   },
 ): Promise<AppInstallation> {
   const data = await api<{ app_installation: AppInstallation }>(

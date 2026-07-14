@@ -89,7 +89,7 @@ func shouldRedactExportColumn(table, column string) bool {
 	case "auth_magic_links", "sessions":
 		return column == "token" || column == "token_hash"
 	case "bot_tokens":
-		return column == "token_hash"
+		return column == "token_hash" || column == "setup_nonce"
 	case "uploads":
 		return column == "storage_path"
 	default:

@@ -41,6 +41,48 @@ func TestPostgresIntegrationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	retryBotInput := store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Postgres Retry Bot",
+		Handle:      "postgres-retry-bot",
+		TokenName:   "setup",
+		SetupNonce:  "postgres-bot-setup-0001",
+		CreatedBy:   owner.ID,
+	}
+	retryBot, retryToken, err := st.CreateBot(ctx, retryBotInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedBot, replayedToken, err := st.CreateBot(ctx, retryBotInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedBot.ID != retryBot.ID || replayedToken.ID != retryToken.ID || replayedToken.Token == retryToken.Token {
+		t.Fatalf("postgres bot setup replay was not stable: first=%#v/%#v replay=%#v/%#v", retryBot, retryToken, replayedBot, replayedToken)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, retryToken.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("postgres response-lost token still authenticates: %v", err)
+	}
+	retryInstallationInput := store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     "postgres-retry",
+		DisplayName: "Postgres retry installation",
+		BotUserID:   retryBot.ID,
+		Config:      map[string]any{"default_to": "channel:general"},
+		SetupNonce:  "postgres-installation-setup-0001",
+		CreatedBy:   owner.ID,
+	}
+	retryInstallation, err := st.CreateAppInstallation(ctx, retryInstallationInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedInstallation, err := st.CreateAppInstallation(ctx, retryInstallationInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedInstallation.ID != retryInstallation.ID {
+		t.Fatalf("postgres installation setup replay created a duplicate: first=%#v replay=%#v", retryInstallation, replayedInstallation)
+	}
 	if _, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
 		WorkspaceID: workspace.ID,
 		AppSlug:     "member-blocked",

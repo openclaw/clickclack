@@ -612,6 +612,7 @@ func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 		AvatarURL   string   `json:"avatar_url"`
 		TokenName   string   `json:"token_name"`
 		Scopes      []string `json:"scopes"`
+		SetupNonce  string   `json:"setup_nonce"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -625,6 +626,7 @@ func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 		AvatarURL:   body.AvatarURL,
 		TokenName:   body.TokenName,
 		Scopes:      body.Scopes,
+		SetupNonce:  body.SetupNonce,
 		CreatedBy:   act.user.ID,
 	})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"bot": bot, "bot_token": token}, err)
@@ -677,8 +679,9 @@ func (s *Server) createBotTokenForWorkspace(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var body struct {
-		Name   string   `json:"name"`
-		Scopes []string `json:"scopes"`
+		Name       string   `json:"name"`
+		Scopes     []string `json:"scopes"`
+		SetupNonce string   `json:"setup_nonce"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -689,6 +692,7 @@ func (s *Server) createBotTokenForWorkspace(w http.ResponseWriter, r *http.Reque
 		BotUserID:   chi.URLParam(r, "bot_user_id"),
 		Name:        body.Name,
 		Scopes:      body.Scopes,
+		SetupNonce:  body.SetupNonce,
 		CreatedBy:   act.user.ID,
 	})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"bot_token": token}, err)
@@ -769,6 +773,7 @@ func (s *Server) createAppInstallation(w http.ResponseWriter, r *http.Request) {
 		DisplayName string         `json:"display_name"`
 		BotUserID   string         `json:"bot_user_id"`
 		Config      map[string]any `json:"config"`
+		SetupNonce  string         `json:"setup_nonce"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -780,6 +785,7 @@ func (s *Server) createAppInstallation(w http.ResponseWriter, r *http.Request) {
 		DisplayName: body.DisplayName,
 		BotUserID:   body.BotUserID,
 		Config:      body.Config,
+		SetupNonce:  body.SetupNonce,
 		CreatedBy:   act.user.ID,
 	})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"app_installation": installation}, err)

@@ -1656,6 +1656,11 @@ components:
           type: array
           items:
             type: string
+        setup_nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token.
     CreateBotTokenRequest:
       type: object
       properties:
@@ -1665,6 +1670,11 @@ components:
           type: array
           items:
             type: string
+        setup_nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token.
     AppInstallation:
       type: object
       required: [id, workspace_id, app_slug, display_name, bot_user_id, config, created_at]
@@ -1682,6 +1692,11 @@ components:
         config:
           type: object
           additionalProperties: true
+        setup_nonce:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: Retry key that returns the original installation instead of creating a duplicate.
         created_by:
           type: string
         created_at:

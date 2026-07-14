@@ -452,6 +452,7 @@ export class ClickClackClient {
         avatar_url?: string;
         token_name?: string;
         scopes?: string[];
+        setup_nonce?: string;
       },
     ): Promise<{ bot: User; bot_token: BotToken }> => {
       return this.request(`/api/workspaces/${workspaceId}/bots`, {
@@ -473,7 +474,7 @@ export class ClickClackClient {
     createWorkspaceToken: async (
       workspaceId: string,
       botUserId: string,
-      input: { name?: string; scopes?: string[] },
+      input: { name?: string; scopes?: string[]; setup_nonce?: string },
     ): Promise<BotToken> => {
       const data = await this.request<{ bot_token: BotToken }>(
         `/api/workspaces/${workspaceId}/bots/${botUserId}/tokens`,
@@ -490,7 +491,7 @@ export class ClickClackClient {
     },
     createToken: async (
       botUserId: string,
-      input: { name?: string; scopes?: string[] },
+      input: { name?: string; scopes?: string[]; setup_nonce?: string },
     ): Promise<BotToken> => {
       const data = await this.request<{ bot_token: BotToken }>(`/api/bots/${botUserId}/tokens`, {
         method: "POST",
@@ -524,6 +525,7 @@ export class ClickClackClient {
         display_name?: string;
         bot_user_id: string;
         config?: Record<string, unknown>;
+        setup_nonce?: string;
       },
     ): Promise<AppInstallation> => {
       const data = await this.request<{ app_installation: AppInstallation }>(

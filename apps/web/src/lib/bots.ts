@@ -59,6 +59,7 @@ export type CreateBotInput = {
   owner_user_id?: string;
   token_name?: string;
   scopes?: string[];
+  setup_nonce?: string;
 };
 
 export type CreateBotResponse = {
@@ -94,7 +95,7 @@ export async function listWorkspaceBotTokens(
 export async function createWorkspaceBotToken(
   workspaceID: string,
   botUserID: string,
-  input: { name?: string; scopes?: string[] },
+  input: { name?: string; scopes?: string[]; setup_nonce?: string },
 ): Promise<BotToken> {
   const data = await api<{ bot_token: BotToken }>(
     `/api/workspaces/${workspaceID}/bots/${botUserID}/tokens`,
@@ -113,7 +114,7 @@ export async function listBotTokens(botUserID: string): Promise<BotToken[]> {
 
 export async function createBotToken(
   botUserID: string,
-  input: { name?: string; scopes?: string[] },
+  input: { name?: string; scopes?: string[]; setup_nonce?: string },
 ): Promise<BotToken> {
   const data = await api<{ bot_token: BotToken }>(`/api/bots/${botUserID}/tokens`, {
     method: "POST",

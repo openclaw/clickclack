@@ -1502,6 +1502,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, err)
 	case errors.Is(err, store.ErrUploadNonceConflict):
 		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, store.ErrSetupNonceConflict):
+		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrModerationRestricted):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):

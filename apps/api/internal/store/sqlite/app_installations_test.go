@@ -9,6 +9,118 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+func TestIntegrationSetupNoncesAreRetrySafe(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "integration-retry@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+
+	botInput := store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Retry Bot",
+		Handle:      "retry-bot",
+		TokenName:   "setup",
+		Scopes:      []string{"bot:write"},
+		SetupNonce:  "bot-setup-nonce-0001",
+		CreatedBy:   owner.ID,
+	}
+	bot, firstToken, err := st.CreateBot(ctx, botInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedBot, replayedToken, err := st.CreateBot(ctx, botInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedBot.ID != bot.ID || replayedToken.ID != firstToken.ID {
+		t.Fatalf("setup replay created duplicate bot credentials: first=%#v/%#v replay=%#v/%#v", bot, firstToken, replayedBot, replayedToken)
+	}
+	if replayedToken.Token == firstToken.Token {
+		t.Fatal("setup replay did not replace the response-lost raw token")
+	}
+	if _, err := st.GetBotTokenAuth(ctx, firstToken.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("old setup token still authenticates after replay: %v", err)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, replayedToken.Token); err != nil {
+		t.Fatalf("replacement setup token does not authenticate: %v", err)
+	}
+	conflictingBotInput := botInput
+	conflictingBotInput.DisplayName = "Different Retry Bot"
+	if _, _, err := st.CreateBot(ctx, conflictingBotInput); !errors.Is(err, store.ErrSetupNonceConflict) {
+		t.Fatalf("expected changed bot replay to conflict, got %v", err)
+	}
+
+	tokenInput := store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "secondary",
+		Scopes:      []string{"bot:read"},
+		SetupNonce:  "token-setup-nonce-0001",
+		CreatedBy:   owner.ID,
+	}
+	secondToken, err := st.CreateBotToken(ctx, tokenInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedSecondToken, err := st.CreateBotToken(ctx, tokenInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedSecondToken.ID != secondToken.ID || replayedSecondToken.Token == secondToken.Token {
+		t.Fatalf("token setup replay was not stable: first=%#v replay=%#v", secondToken, replayedSecondToken)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, secondToken.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("old secondary token still authenticates after replay: %v", err)
+	}
+
+	installationInput := store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     "openclaw",
+		DisplayName: "Retry installation",
+		BotUserID:   bot.ID,
+		Config:      map[string]any{"default_to": "channel:general"},
+		SetupNonce:  "installation-setup-nonce-0001",
+		CreatedBy:   owner.ID,
+	}
+	installation, err := st.CreateAppInstallation(ctx, installationInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedInstallation, err := st.CreateAppInstallation(ctx, installationInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedInstallation.ID != installation.ID {
+		t.Fatalf("installation setup replay created a duplicate: first=%#v replay=%#v", installation, replayedInstallation)
+	}
+	conflictingInstallationInput := installationInput
+	conflictingInstallationInput.AppSlug = "custom"
+	if _, err := st.CreateAppInstallation(ctx, conflictingInstallationInput); !errors.Is(err, store.ErrSetupNonceConflict) {
+		t.Fatalf("expected changed installation replay to conflict, got %v", err)
+	}
+
+	installations, err := st.ListAppInstallations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(installations) != 1 || len(tokens) != 2 {
+		t.Fatalf("setup retries left duplicate rows: installations=%d tokens=%d", len(installations), len(tokens))
+	}
+}
+
 func TestRevokeAppInstallationCascadesAtomically(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

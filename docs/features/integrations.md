@@ -38,6 +38,11 @@ Behavior:
 - `app_slug` identifies the app manifest, not a singleton. A workspace may
   create any number of active installations for the same slug; each
   installation has its own ID, bot binding, token lifecycle, and config.
+- Guided setup sends a private `setup_nonce` with bot-token and installation
+  creation. Retrying after a lost response reuses the same bot, token row, and
+  installation instead of creating duplicate active resources. The token row
+  receives a fresh raw token on retry, so the previous unconfirmed secret no
+  longer authenticates and no raw token is stored for replay.
 - `GET /api/workspaces/{workspace_id}/app-installations` lists active
   installations.
 - `POST /api/app-installations/{installation_id}/revoke` atomically revokes the

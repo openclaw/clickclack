@@ -319,6 +319,7 @@ CREATE TABLE bot_tokens (
   name TEXT NOT NULL,
   scopes_json TEXT NOT NULL,
   created_by TEXT REFERENCES users(id),
+  setup_nonce TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   last_used_at TEXT,
   revoked_at TEXT
@@ -327,6 +328,9 @@ CREATE TABLE bot_tokens (
 CREATE INDEX idx_bot_tokens_hash ON bot_tokens(token_hash);
 CREATE INDEX idx_bot_tokens_bot ON bot_tokens(bot_user_id);
 CREATE INDEX idx_bot_tokens_workspace_bot_revoked ON bot_tokens(workspace_id, bot_user_id, revoked_at);
+CREATE UNIQUE INDEX idx_bot_tokens_setup_nonce
+  ON bot_tokens(created_by, setup_nonce)
+  WHERE setup_nonce <> '';
 
 CREATE TABLE app_installations (
   id TEXT PRIMARY KEY,
@@ -336,6 +340,7 @@ CREATE TABLE app_installations (
   bot_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   config_json TEXT NOT NULL DEFAULT '{}',
   created_by TEXT REFERENCES users(id),
+  setup_nonce TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   revoked_at TEXT
 );
@@ -345,6 +350,10 @@ CREATE INDEX idx_app_installations_workspace
 
 CREATE INDEX idx_app_installations_bot
   ON app_installations(bot_user_id);
+
+CREATE UNIQUE INDEX idx_app_installations_setup_nonce
+  ON app_installations(created_by, setup_nonce)
+  WHERE setup_nonce <> '';
 
 CREATE TABLE slash_commands (
   id TEXT PRIMARY KEY,

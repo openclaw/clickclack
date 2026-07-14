@@ -1564,8 +1564,8 @@ func (q *Queries) HideDirectConversation(ctx context.Context, arg HideDirectConv
 }
 
 const insertBotToken = `-- name: InsertBotToken :exec
-INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, setup_nonce, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type InsertBotTokenParams struct {
@@ -1577,6 +1577,7 @@ type InsertBotTokenParams struct {
 	Name        string         `json:"name"`
 	ScopesJson  string         `json:"scopes_json"`
 	CreatedBy   sql.NullString `json:"created_by"`
+	SetupNonce  string         `json:"setup_nonce"`
 	CreatedAt   string         `json:"created_at"`
 }
 
@@ -1590,6 +1591,7 @@ func (q *Queries) InsertBotToken(ctx context.Context, arg InsertBotTokenParams) 
 		arg.Name,
 		arg.ScopesJson,
 		arg.CreatedBy,
+		arg.SetupNonce,
 		arg.CreatedAt,
 	)
 	return err

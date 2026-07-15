@@ -1299,7 +1299,8 @@ func (s *Server) shouldDeliverEventToActor(ctx context.Context, event store.Even
 		return err == nil
 	}
 	if event.ChannelID == "" {
-		return true
+		_, err := s.store.GetWorkspace(ctx, event.WorkspaceID, userID)
+		return err == nil
 	}
 	_, err := s.store.GetChannel(ctx, event.ChannelID, userID)
 	return err == nil

@@ -3663,6 +3663,69 @@ func TestDirectRealtimeEventsRespectGuestDemotion(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRealtimeEventsRecheckBotMembership(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "live-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	server := New(st, realtime.NewHub(), Options{})
+	event := store.Event{Type: "workspace.updated", WorkspaceID: workspace.ID}
+
+	deletedBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Deleted Live Bot",
+		Handle:      "deleted-live-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !server.shouldDeliverEventToActor(ctx, event, deletedBot.ID) {
+		t.Fatal("workspace realtime event denied to active bot")
+	}
+	if _, err := st.DeleteBot(ctx, deletedBot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if server.shouldDeliverEventToActor(ctx, event, deletedBot.ID) {
+		t.Fatal("workspace realtime event delivered to deleted bot")
+	}
+
+	removedBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Removed Live Bot",
+		Handle:      "removed-live-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, removedBot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if server.shouldDeliverEventToActor(ctx, event, removedBot.ID) {
+		t.Fatal("workspace realtime event delivered to removed bot")
+	}
+	if !server.shouldDeliverEventToActor(ctx, event, owner.ID) {
+		t.Fatal("workspace realtime event denied to active owner")
+	}
+}
+
 func readEventType(t *testing.T, conn *websocket.Conn, eventType string) store.Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

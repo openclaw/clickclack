@@ -255,6 +255,85 @@ func TestDeleteBotWithoutHandle(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDeletionRetiresExclusiveServiceBots(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "workspace-bot-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletedWorkspace := workspaces[0]
+	survivingWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Surviving"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exclusiveBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: deletedWorkspace.ID,
+		DisplayName: "Exclusive Service Bot",
+		Handle:      "exclusive-workspace-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sharedBot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: deletedWorkspace.ID,
+		DisplayName: "Shared Service Bot",
+		Handle:      "shared-workspace-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, survivingWorkspace.ID, sharedBot.ID, store.WorkspaceRoleBot); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.DeleteWorkspace(ctx, deletedWorkspace.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	retired, err := st.GetUser(ctx, exclusiveBot.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retired.Handle != "" || retired.FormerHandle != exclusiveBot.Handle || retired.DeletedAt == nil {
+		t.Fatalf("workspace deletion did not retire its exclusive service bot: %#v", retired)
+	}
+	replacement, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: survivingWorkspace.ID,
+		DisplayName: "Replacement Service Bot",
+		Handle:      exclusiveBot.Handle,
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.ID == exclusiveBot.ID || replacement.DeletedAt != nil {
+		t.Fatalf("expected a new active bot identity to reuse the released handle: %#v", replacement)
+	}
+	stillShared, err := st.GetUser(ctx, sharedBot.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillShared.Handle != sharedBot.Handle || stillShared.DeletedAt != nil {
+		t.Fatalf("workspace deletion retired a bot still used elsewhere: %#v", stillShared)
+	}
+	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: survivingWorkspace.ID,
+		DisplayName: "Conflicting Shared Bot",
+		Handle:      sharedBot.Handle,
+		CreatedBy:   owner.ID,
+	}); err == nil {
+		t.Fatal("expected a shared active bot to retain its handle")
+	}
+}
+
 func TestRemoveBotFromWorkspaceMarksDirectConversationReadOnly(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

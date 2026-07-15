@@ -114,6 +114,9 @@ func (s *Store) DeleteWorkspace(ctx context.Context, workspaceID, actorUserID st
 		return nil, err
 	}
 	qtx := s.q.WithTx(tx)
+	if err := s.retireExclusiveWorkspaceServiceBotsTx(ctx, tx, workspaceID, actorUserID); err != nil {
+		return nil, err
+	}
 	storagePaths, err := qtx.ListWorkspaceUploadStoragePaths(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -144,6 +147,32 @@ func (s *Store) DeleteWorkspace(ctx context.Context, workspaceID, actorUserID st
 		return nil, err
 	}
 	return cleanups, nil
+}
+
+func (s *Store) retireExclusiveWorkspaceServiceBotsTx(ctx context.Context, tx *sql.Tx, workspaceID, actorUserID string) error {
+	qtx := s.q.WithTx(tx)
+	botUserIDs, err := qtx.ListWorkspaceActiveServiceBotIDs(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	for _, botUserID := range botUserIDs {
+		governedWorkspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, botUserID)
+		if err != nil {
+			return err
+		}
+		historicalWorkspaceIDs, err := qtx.ListBotHistoricalWorkspaces(ctx, botUserID)
+		if err != nil {
+			return err
+		}
+		workspaceIDs := mergeBotWorkspaceIDs(governedWorkspaceIDs, historicalWorkspaceIDs)
+		if len(workspaceIDs) != 1 || workspaceIDs[0] != workspaceID {
+			continue
+		}
+		if _, _, err := s.deleteBotTx(ctx, tx, botUserID, actorUserID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListPendingUploadCleanups(ctx context.Context, limit int) ([]store.PendingUploadCleanup, error) {

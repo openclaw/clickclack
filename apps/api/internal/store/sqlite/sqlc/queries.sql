@@ -311,6 +311,55 @@ FROM uploads
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND storage_path <> '';
 
+-- name: ListWorkspaceActiveServiceBotIDs :many
+SELECT DISTINCT u.id
+FROM users u
+JOIN (
+  SELECT wm.user_id AS bot_user_id
+  FROM workspace_members wm
+  WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT bt.bot_user_id
+  FROM bot_tokens bt
+  WHERE bt.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT bc.bot_user_id
+  FROM bot_commands bc
+  WHERE bc.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT ai.bot_user_id
+  FROM app_installations ai
+  WHERE ai.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT sc.bot_user_id
+  FROM slash_commands sc
+  WHERE sc.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT ai.bot_user_id
+  FROM event_subscriptions es
+  JOIN app_installations ai ON ai.id = es.app_installation_id
+  WHERE es.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT ca.user_id
+  FROM connected_accounts ca
+  WHERE ca.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT m.author_id
+  FROM messages m
+  WHERE m.workspace_id = sqlc.arg(workspace_id)
+  UNION
+  SELECT dcm.user_id
+  FROM direct_conversations dc
+  JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
+  WHERE dc.workspace_id = sqlc.arg(workspace_id)
+) AS referenced ON referenced.bot_user_id = u.id
+WHERE u.kind = 'bot'
+  AND u.owner_user_id IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
+ORDER BY u.id;
+
 -- name: InsertPendingUploadCleanup :one
 INSERT INTO pending_upload_cleanups (id, workspace_id, storage_path, created_at, updated_at)
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(storage_path), sqlc.arg(created_at), sqlc.arg(updated_at))

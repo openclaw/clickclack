@@ -50,11 +50,16 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByText("Stream agent activity").click();
   await page.getByRole("button", { name: "Install", exact: true }).click();
 
-  // Reveal: one-time token plus an OpenClaw config with the chosen options.
+  // Reveal: one-time token, connect command first, config collapsed below.
   await expect(page.getByText("Your new token is ready")).toBeVisible();
-  const snippet = page.locator(".ws-bots__reveal-snippet").first();
-  await expect(snippet).toContainText(`workspace: "${workspace.slug}"`);
-  await expect(snippet).toContainText("agentActivity: true");
+  const shellSnippet = page.locator(".ws-bots__reveal-snippet").first();
+  await expect(shellSnippet).toContainText("openclaw channels add clickclack");
+  await expect(shellSnippet).toContainText(`--workspace '${workspace.slug}'`);
+  const configSnippet = page.locator(".ws-bots__reveal-snippet").nth(1);
+  await expect(configSnippet).not.toBeVisible();
+  await page.getByText("OpenClaw config (optional)").click();
+  await expect(configSnippet).toContainText(`workspace: "${workspace.slug}"`);
+  await expect(configSnippet).toContainText("agentActivity: true");
   await expect(page.getByText("agent_activity:write")).toBeVisible();
   await page.getByText("I've copied this token somewhere safe.").click();
   await page.getByRole("button", { name: "Done" }).click();

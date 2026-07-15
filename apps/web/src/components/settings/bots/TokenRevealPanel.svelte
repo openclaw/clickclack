@@ -117,26 +117,10 @@
     </div>
   </div>
 
-  {#if configSnippetBuilder}
-    <div class="ws-bots__reveal-field">
-      <div class="ws-bots__reveal-snippet-header">
-        <span class="ws-bots__reveal-label">OpenClaw config</span>
-        <button
-          type="button"
-          class="ws-btn"
-          onclick={() => copyTo(configSnippet, "config")}
-        >
-          {copied === "config" ? "Copied" : "Copy config"}
-        </button>
-      </div>
-      <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
-    </div>
-  {/if}
-
   {#if shellSnippetBuilder}
     <div class="ws-bots__reveal-field">
       <div class="ws-bots__reveal-snippet-header">
-        <span class="ws-bots__reveal-label">Install, export, and start</span>
+        <span class="ws-bots__reveal-label">Add to OpenClaw</span>
         <button
           type="button"
           class="ws-btn"
@@ -146,7 +130,34 @@
         </button>
       </div>
       <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
+      <p class="ws-bots__reveal-hint">
+        A running OpenClaw gateway picks this up automatically. Not running yet? Start it with
+        <code>openclaw gateway</code>.
+      </p>
     </div>
+  {/if}
+
+  {#if configSnippetBuilder}
+    <details class="ws-bots__reveal-details">
+      <summary class="ws-bots__reveal-summary">OpenClaw config (optional)</summary>
+      <div class="ws-bots__reveal-details-body">
+        <p class="ws-bots__reveal-hint">
+          The command above writes this config for you. Use it for manual installs, or to add
+          options the command does not cover (agent activity, default channel, allowlist).
+        </p>
+        <div class="ws-bots__reveal-snippet-header">
+          <span class="ws-bots__reveal-label">OpenClaw config</span>
+          <button
+            type="button"
+            class="ws-btn"
+            onclick={() => copyTo(configSnippet, "config")}
+          >
+            {copied === "config" ? "Copied" : "Copy config"}
+          </button>
+        </div>
+        <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
+      </div>
+    </details>
   {/if}
   {/if}
 

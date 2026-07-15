@@ -496,6 +496,91 @@ func TestPostgresBotDeletionSerializesTokenCreation(t *testing.T) {
 	}
 }
 
+func TestPostgresBotDeletionWaitsForAuthorizedWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		authorize func(context.Context, *sql.Tx, store.User, store.Workspace, store.DirectConversation) error
+	}{
+		{
+			name: "workspace membership",
+			authorize: func(ctx context.Context, tx *sql.Tx, bot store.User, workspace store.Workspace, _ store.DirectConversation) error {
+				return requireMembershipTx(ctx, tx, workspace.ID, bot.ID)
+			},
+		},
+		{
+			name: "direct membership",
+			authorize: func(ctx context.Context, tx *sql.Tx, bot store.User, _ store.Workspace, dm store.DirectConversation) error {
+				return requireDirectMembershipTx(ctx, tx, dm.ID, bot.ID)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			st := newIsolatedPostgresTestStore(t)
+			if err := st.Migrate(ctx); err != nil {
+				t.Fatal(err)
+			}
+			owner, err := st.EnsureBootstrap(ctx, "Owner", "postgres-bot-write-race-owner@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			workspace := workspaces[0]
+			bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+				WorkspaceID: workspace.ID,
+				DisplayName: "Write Race Bot",
+				Handle:      "postgres-write-race-bot",
+				CreatedBy:   owner.ID,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+				WorkspaceID: workspace.ID,
+				UserID:      owner.ID,
+				MemberIDs:   []string{bot.ID},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			writer, err := st.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer writer.Rollback()
+			if err := tc.authorize(ctx, writer, bot, workspace, dm); err != nil {
+				t.Fatal(err)
+			}
+
+			deleteResult := make(chan error, 1)
+			go func() {
+				_, err := st.DeleteBot(ctx, bot.ID, owner.ID)
+				deleteResult <- err
+			}()
+			waitForBlockedPostgresQuery(t, ctx, st.db, "DELETE FROM workspace_members")
+
+			if err := writer.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-deleteResult:
+				if err != nil {
+					t.Fatalf("bot deletion failed after authorized write completed: %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("bot deletion did not resume after authorized write completed")
+			}
+			if err := requireMembershipTx(ctx, mustBeginPostgresTx(t, ctx, st.db), workspace.ID, bot.ID); !errors.Is(err, sql.ErrNoRows) {
+				t.Fatalf("deleted bot retained workspace write authorization: %v", err)
+			}
+		})
+	}
+}
+
 func waitForBlockedBotLifecycleOperations(t *testing.T, ctx context.Context, db *sql.DB, want int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -519,6 +604,41 @@ func waitForBlockedBotLifecycleOperations(t *testing.T, ctx context.Context, db 
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func waitForBlockedPostgresQuery(t *testing.T, ctx context.Context, db *sql.DB, queryFragment string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var blocked int
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND pid <> pg_backend_pid()
+			  AND wait_event_type = 'Lock'
+			  AND cardinality(pg_blocking_pids(pid)) > 0
+			  AND position($1 in query) > 0`, queryFragment).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected blocked PostgreSQL query containing %q", queryFragment)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func mustBeginPostgresTx(t *testing.T, ctx context.Context, db *sql.DB) *sql.Tx {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	return tx
 }
 
 func TestPostgresDeleteServiceBotRequiresManagementForPreservedSubscriptionWorkspace(t *testing.T) {

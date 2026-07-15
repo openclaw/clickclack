@@ -374,29 +374,33 @@ ORDER BY c.name;
 
 -- name: RequireMembership :one
 SELECT 1
-FROM workspace_members
-WHERE workspace_id = sqlc.arg(workspace_id)
-  AND user_id = sqlc.arg(user_id);
+FROM workspace_members wm
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.user_id = sqlc.arg(user_id)
+FOR KEY SHARE OF wm;
 
 -- name: RequireMembershipRole :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = sqlc.arg(workspace_id)
-  AND user_id = sqlc.arg(user_id);
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.user_id = sqlc.arg(user_id)
+FOR KEY SHARE OF wm;
 
 -- name: RequireWorkspaceManager :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = sqlc.arg(workspace_id)
-  AND user_id = sqlc.arg(user_id)
-  AND role IN ('owner', 'moderator');
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.user_id = sqlc.arg(user_id)
+  AND wm.role IN ('owner', 'moderator')
+FOR KEY SHARE OF wm;
 
 -- name: RequireWorkspaceOwner :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = sqlc.arg(workspace_id)
-  AND user_id = sqlc.arg(user_id)
-  AND role = 'owner';
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND wm.user_id = sqlc.arg(user_id)
+  AND wm.role = 'owner'
+FOR KEY SHARE OF wm;
 
 -- name: MembershipRolesForUpdate :many
 SELECT user_id, role
@@ -1010,7 +1014,8 @@ FROM direct_conversation_members dcm
 JOIN direct_conversations dc ON dc.id = dcm.conversation_id
 JOIN workspace_members wm ON wm.workspace_id = dc.workspace_id AND wm.user_id = dcm.user_id
 WHERE dcm.conversation_id = sqlc.arg(conversation_id)
-  AND dcm.user_id = sqlc.arg(user_id);
+  AND dcm.user_id = sqlc.arg(user_id)
+FOR KEY SHARE OF wm;
 
 -- name: DirectConversationMemberIDs :many
 SELECT dcm.user_id

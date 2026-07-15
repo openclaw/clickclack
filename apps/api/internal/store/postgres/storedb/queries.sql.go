@@ -4041,6 +4041,7 @@ JOIN direct_conversations dc ON dc.id = dcm.conversation_id
 JOIN workspace_members wm ON wm.workspace_id = dc.workspace_id AND wm.user_id = dcm.user_id
 WHERE dcm.conversation_id = $1
   AND dcm.user_id = $2
+FOR KEY SHARE OF wm
 `
 
 type RequireDirectMembershipParams struct {
@@ -4057,9 +4058,10 @@ func (q *Queries) RequireDirectMembership(ctx context.Context, arg RequireDirect
 
 const requireMembership = `-- name: RequireMembership :one
 SELECT 1
-FROM workspace_members
-WHERE workspace_id = $1
-  AND user_id = $2
+FROM workspace_members wm
+WHERE wm.workspace_id = $1
+  AND wm.user_id = $2
+FOR KEY SHARE OF wm
 `
 
 type RequireMembershipParams struct {
@@ -4075,10 +4077,11 @@ func (q *Queries) RequireMembership(ctx context.Context, arg RequireMembershipPa
 }
 
 const requireMembershipRole = `-- name: RequireMembershipRole :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = $1
-  AND user_id = $2
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = $1
+  AND wm.user_id = $2
+FOR KEY SHARE OF wm
 `
 
 type RequireMembershipRoleParams struct {
@@ -4094,11 +4097,12 @@ func (q *Queries) RequireMembershipRole(ctx context.Context, arg RequireMembersh
 }
 
 const requireWorkspaceManager = `-- name: RequireWorkspaceManager :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = $1
-  AND user_id = $2
-  AND role IN ('owner', 'moderator')
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = $1
+  AND wm.user_id = $2
+  AND wm.role IN ('owner', 'moderator')
+FOR KEY SHARE OF wm
 `
 
 type RequireWorkspaceManagerParams struct {
@@ -4114,11 +4118,12 @@ func (q *Queries) RequireWorkspaceManager(ctx context.Context, arg RequireWorksp
 }
 
 const requireWorkspaceOwner = `-- name: RequireWorkspaceOwner :one
-SELECT role
-FROM workspace_members
-WHERE workspace_id = $1
-  AND user_id = $2
-  AND role = 'owner'
+SELECT wm.role
+FROM workspace_members wm
+WHERE wm.workspace_id = $1
+  AND wm.user_id = $2
+  AND wm.role = 'owner'
+FOR KEY SHARE OF wm
 `
 
 type RequireWorkspaceOwnerParams struct {

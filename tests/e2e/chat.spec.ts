@@ -2234,6 +2234,142 @@ test("renders search results in a responsive sidebar", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(results).toHaveCount(0);
 });
+
+test("search paginates, and handles empty, failed, and stale responses", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `search-pages-${Date.now()}`, kind: "public" },
+  });
+  const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+
+  const result = (index: number) => ({
+    id: `MSEARCH${String(index).padStart(10, "0")}`,
+    workspace_id: workspaceId,
+    channel_id: channel.id,
+    channel_name: channel.name,
+    author: {
+      id: "USEARCH000000000",
+      kind: "human",
+      display_name: "Search Fixture",
+      handle: "search-fixture",
+      avatar_url: "",
+      created_at: "2026-01-01T00:00:00Z",
+    },
+    thread_root_id: `MSEARCH${String(index).padStart(10, "0")}`,
+    channel_seq: index + 1,
+    created_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+    reply_count: 0,
+    snippet: `pagermatch entry ${String(index).padStart(2, "0")} for cursor paging`,
+    highlights: [{ start: 0, end: 10 }],
+  });
+  const firstPage = Array.from({ length: 50 }, (_, index) => result(index));
+  const secondPage = Array.from({ length: 10 }, (_, index) => result(index + 50));
+  let failNextPage = false;
+  await page.route("**/api/search?*", async (route) => {
+    const url = new URL(route.request().url());
+    const query = url.searchParams.get("q");
+    if (query === "zzzunfindable") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ results: [], next_cursor: null }),
+      });
+      return;
+    }
+    if (query === "stalefirst") {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ results: [], next_cursor: null }),
+      });
+      return;
+    }
+    if (query === "initialfailure") {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: `{"error":"boom"}`,
+      });
+      return;
+    }
+    if (query === "pagermatch") {
+      const cursor = url.searchParams.get("cursor");
+      if (cursor && failNextPage) {
+        failNextPage = false;
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: `{"error":"boom"}`,
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          results: cursor ? secondPage : firstPage,
+          next_cursor: cursor ? null : "search-next-page",
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  const results = page.getByLabel("Search results");
+  async function submitSearch(query: string) {
+    await page.getByLabel("Search messages").fill(query);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+  }
+
+  // Empty state.
+  await submitSearch("zzzunfindable");
+  await expect(results.getByText("No messages found")).toBeVisible();
+
+  // First page plus cursor.
+  await submitSearch("pagermatch");
+  await expect(results.locator(".search-result")).toHaveCount(50);
+  const loadMore = results.getByRole("button", { name: "Load more results" });
+  await expect(loadMore).toBeVisible();
+
+  // A failed additional page keeps loaded results and offers a retry.
+  failNextPage = true;
+  await loadMore.click();
+  await expect(results.locator(".search-foot-error")).toBeVisible();
+  await expect(results.locator(".search-result")).toHaveCount(50);
+
+  // Retry appends the second page without duplicates or gaps.
+  await results.getByRole("button", { name: "Retry" }).click();
+  await expect(results.locator(".search-result")).toHaveCount(60);
+  await expect(results.getByText("End of results")).toBeVisible();
+  const resultIDs = await results
+    .locator(".search-result")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-result-id")));
+  expect(new Set(resultIDs).size).toBe(60);
+
+  // A stale slow response cannot replace a newer search.
+  await submitSearch("stalefirst");
+  await submitSearch("pagermatch");
+  await expect(results.getByText("Results for “pagermatch”")).toBeVisible();
+  await expect(results.locator(".search-result")).toHaveCount(50);
+  await page.waitForTimeout(1400);
+  await expect(results.getByText("Results for “pagermatch”")).toBeVisible();
+  await expect(results.locator(".search-result")).toHaveCount(50);
+
+  // A failed initial search shows the error state.
+  await submitSearch("initialfailure");
+  await expect(results.getByText("We couldn’t search messages")).toBeVisible();
+  await page.unroute("**/api/search?*");
+});
+
 test("message history pages older, newer, and search target windows", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };

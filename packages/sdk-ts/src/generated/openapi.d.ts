@@ -881,6 +881,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /** Search messages visible to the authenticated actor */
     get: operations["search"];
     put?: never;
     post?: never;
@@ -1648,15 +1649,32 @@ export interface components {
       end: number;
     };
     SearchResult: {
-      message: components["schemas"]["Message"];
-      /** Format: double */
-      rank: number;
+      id: string;
+      workspace_id: string;
+      channel_id?: string;
+      channel_name?: string;
+      direct_conversation_id?: string;
+      author: components["schemas"]["User"];
+      parent_message_id?: string;
+      thread_root_id: string;
+      /** Format: int64 */
+      channel_seq?: number;
+      /** Format: int64 */
+      thread_seq?: number;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      edited_at?: string;
+      reply_count: number;
+      /** Format: date-time */
+      last_reply_at?: string;
       /** @description Bounded plain-text excerpt containing the matched terms. */
       snippet: string;
       highlights: components["schemas"]["SearchHighlight"][];
     };
     SearchResponse: {
       results: components["schemas"]["SearchResult"][];
+      next_cursor: string | null;
     };
     Upload: {
       id: string;
@@ -3786,7 +3804,14 @@ export interface operations {
       query: {
         workspace_id: string;
         q: string;
+        /** @description Limit results to one channel. Mutually exclusive with direct_conversation_id. */
         channel_id?: string;
+        /** @description Limit results to one direct conversation. The actor must be a conversation member. Mutually exclusive with channel_id. */
+        direct_conversation_id?: string;
+        sort?: "relevance" | "newest";
+        limit?: number;
+        /** @description Opaque next_cursor from a previous response with the same search scope, query, and sort. */
+        cursor?: string;
       };
       header?: never;
       path?: never;
@@ -3794,7 +3819,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Search results */
+      /** @description One page of search results */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3802,6 +3827,20 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["SearchResponse"];
         };
+      };
+      /** @description Invalid search scope, sort, limit, query, or cursor */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Required scope, workspace binding, or conversation access is missing */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

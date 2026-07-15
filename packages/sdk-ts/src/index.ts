@@ -283,14 +283,27 @@ export type SearchHighlight = {
 };
 
 export type SearchResult = {
-  message: Message;
-  rank: number;
+  id: string;
+  workspace_id: string;
+  channel_id?: string;
+  channel_name?: string;
+  direct_conversation_id?: string;
+  author: User;
+  parent_message_id?: string;
+  thread_root_id: string;
+  channel_seq?: number;
+  thread_seq?: number;
+  created_at: string;
+  edited_at?: string;
+  reply_count: number;
+  last_reply_at?: string;
   snippet: string;
   highlights: SearchHighlight[];
 };
 
 export type SearchResponse = {
   results: SearchResult[];
+  next_cursor: string | null;
 };
 
 export type Upload = {
@@ -907,10 +920,22 @@ export class ClickClackClient {
   search = async (
     workspaceId: string,
     query: string,
-    options: { channelId?: string } = {},
+    options: {
+      channelId?: string;
+      directConversationId?: string;
+      sort?: "relevance" | "newest";
+      limit?: number;
+      cursor?: string;
+    } = {},
   ): Promise<SearchResponse> => {
     const params = new URLSearchParams({ workspace_id: workspaceId, q: query });
     if (options.channelId) params.set("channel_id", options.channelId);
+    if (options.directConversationId) {
+      params.set("direct_conversation_id", options.directConversationId);
+    }
+    if (options.sort) params.set("sort", options.sort);
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
     return this.request<SearchResponse>(`/api/search?${params.toString()}`);
   };
 

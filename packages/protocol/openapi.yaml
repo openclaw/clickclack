@@ -1224,6 +1224,7 @@ paths:
   /api/search:
     get:
       operationId: search
+      summary: Search messages visible to the authenticated actor
       parameters:
         - name: workspace_id
           in: query
@@ -1235,18 +1236,46 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 500
         - name: channel_id
           in: query
-          required: false
+          description: Limit results to one channel. Mutually exclusive with direct_conversation_id.
+          schema:
+            type: string
+        - name: direct_conversation_id
+          in: query
+          description: Limit results to one direct conversation. The actor must be a conversation member. Mutually exclusive with channel_id.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [relevance, newest]
+            default: relevance
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          description: Opaque next_cursor from a previous response with the same search scope, query, and sort.
           schema:
             type: string
       responses:
         "200":
-          description: Search results
+          description: One page of search results
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
+        "400":
+          description: Invalid search scope, sort, limit, query, or cursor
+        "403":
+          description: Required scope, workspace binding, or conversation access is missing
   /api/uploads:
     post:
       operationId: createUpload
@@ -2605,13 +2634,42 @@ components:
           description: Exclusive Unicode code-point offset into snippet.
     SearchResult:
       type: object
-      required: [message, rank, snippet, highlights]
+      required: [id, workspace_id, author, thread_root_id, created_at, reply_count, snippet, highlights]
       properties:
-        message:
-          $ref: "#/components/schemas/Message"
-        rank:
-          type: number
-          format: double
+        id:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        channel_name:
+          type: string
+        direct_conversation_id:
+          type: string
+        author:
+          $ref: "#/components/schemas/User"
+        parent_message_id:
+          type: string
+        thread_root_id:
+          type: string
+        channel_seq:
+          type: integer
+          format: int64
+        thread_seq:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+        reply_count:
+          type: integer
+          minimum: 0
+        last_reply_at:
+          type: string
+          format: date-time
         snippet:
           type: string
           description: Bounded plain-text excerpt containing the matched terms.
@@ -2621,12 +2679,16 @@ components:
             $ref: "#/components/schemas/SearchHighlight"
     SearchResponse:
       type: object
-      required: [results]
+      required: [results, next_cursor]
       properties:
         results:
           type: array
           items:
             $ref: "#/components/schemas/SearchResult"
+        next_cursor:
+          anyOf:
+            - type: string
+            - type: "null"
     Upload:
       type: object
       required: [id, workspace_id, owner_id, filename, content_type, byte_size, created_at]

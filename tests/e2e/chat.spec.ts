@@ -1388,13 +1388,13 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
   await expect(threadedRow.locator(".thread-hint")).toContainText("1 reply");
 
-  const threadPane = page.getByLabel("Thread pane");
+  const threadPane = page.getByLabel("Thread pane", { exact: true });
   await threadPane.getByRole("button", { name: "Close thread" }).click();
   await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
   await expect(threadPane.getByText("No thread open")).toBeVisible();
   await page.getByLabel("Search messages").fill("thread");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  const searchPane = page.getByLabel("Search results");
+  const searchPane = page.getByLabel("Search results", { exact: true });
   const threadReplyResult = searchPane
     .locator(".search-result")
     .filter({ hasText: "thread _reply_" });
@@ -1404,7 +1404,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     if (request.url().includes("/api/search?")) searchRequestsAfterResults += 1;
   });
   await threadReplyResult.click();
-  await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to search results" })).toBeVisible();
   await expect(searchPane).toHaveCount(0);
   await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/M[A-Z0-9]{16}$/);
 
@@ -1414,6 +1414,16 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.getByLabel("Thread pane")).toHaveCount(0);
   expect(searchRequestsAfterResults).toBe(0);
 
+  await threadReplyResult.click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Back to search results" })).toHaveCount(0);
+  await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
+  await expect(threadPane.getByText("No thread open")).toBeVisible();
+  await expect(searchPane).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/C[A-Z0-9]{16}$/);
+
+  await page.getByLabel("Search messages").fill("thread");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await threadReplyResult.click();
   await expect(page.getByLabel("Thread pane")).toBeVisible();
   await page.getByLabel("Search messages").fill("playwright");

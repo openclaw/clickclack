@@ -2066,18 +2066,24 @@
     }
   }
 
-  async function refreshThread(messageID: string, optimisticRoot?: Message) {
+  async function refreshThread(
+    messageID: string,
+    optimisticRoot?: Message,
+    shouldCommit: () => boolean = () => true,
+  ): Promise<boolean> {
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedProfile = null;
     if (optimisticRoot) selectedThread = optimisticRoot;
     activeComposerContext = "thread";
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
+    if (!shouldCommit()) return false;
     const root = { ...data.root, thread_state: data.thread_state };
     selectedThread = root;
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
     replies = data.replies;
     selectedThreadState = data.thread_state;
+    return true;
   }
 
   async function refreshThreadSummary(messageID: string) {
@@ -2304,9 +2310,18 @@
       const returnScrollTop =
         document.querySelector<HTMLElement>(".search-results-scroll")?.scrollTop ?? 0;
       searchReturnScrollTop = returnScrollTop;
+      const requestID = searchRequestID;
       searchThreadDetour = true;
       try {
-        await refreshThread(result.thread_root_id);
+        const loaded = await refreshThread(
+          result.thread_root_id,
+          undefined,
+          () =>
+            requestID === searchRequestID &&
+            searchThreadDetour &&
+            searchSession?.activeResultID === result.id,
+        );
+        if (!loaded) return;
       } catch (error) {
         searchThreadDetour = false;
         await tick();
@@ -3103,6 +3118,7 @@
       return;
     }
     const threadWasOpen = selectedThread !== null;
+    const searchDetourWasOpen = searchThreadDetour;
     const parentTargetID = currentConversationKey();
     if (replyContext === "thread") clearReplyTarget();
     selectedThread = null;
@@ -3110,8 +3126,8 @@
     activeComposerContext = "message";
     replies = [];
     // Closing a thread opened from search closes the whole pane, session included.
-    if (threadWasOpen && searchThreadDetour) resetSearch();
-    if (threadWasOpen && selectedWorkspaceID && parentTargetID) {
+    if (searchDetourWasOpen) resetSearch();
+    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
       void navigateToApp(selectedWorkspaceID, parentTargetID);
     }
   }
@@ -3138,6 +3154,10 @@
         closeMobileNav();
         return;
       } else if (selectedArtifact) {
+        event.preventDefault();
+        closeSidePanel();
+        return;
+      } else if (searchThreadDetour) {
         event.preventDefault();
         closeSidePanel();
         return;

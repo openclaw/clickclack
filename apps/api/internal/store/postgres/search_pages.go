@@ -8,6 +8,18 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+const postgresSearchCreatedAtKey = `CASE
+	WHEN length(m.created_at) = 20 AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 19) || '.000000000Z'
+	WHEN length(m.created_at) BETWEEN 22 AND 30
+		AND substr(m.created_at, 20, 1) = '.'
+		AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 20) ||
+			rpad(substr(m.created_at, 21, length(m.created_at) - 21), 9, '0') ||
+			'Z'
+	ELSE to_char(m.created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+END`
+
 func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequest) (store.SearchPage, error) {
 	req, err := store.NormalizeSearchPageRequest(page)
 	if err != nil {
@@ -48,31 +60,31 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 
 	rankExpression := "ts_rank_cd(to_tsvector('simple', m.body), plainto_tsquery('simple', $1))"
 	cursorWhere := ""
-	orderBy := "rank DESC, m.created_at DESC, m.id DESC"
+	orderBy := "rank DESC, created_at_key DESC, m.id DESC"
 	if req.Cursor != "" {
 		start := len(args) + 1
 		switch req.Sort {
 		case store.SearchSortRelevance:
 			cursorWhere = fmt.Sprintf(`AND (
 				%s < $%d
-				OR (%s = $%d AND m.created_at < $%d)
-				OR (%s = $%d AND m.created_at = $%d AND m.id < $%d)
+				OR (%s = $%d AND %s < $%d)
+				OR (%s = $%d AND %s = $%d AND m.id < $%d)
 			)`,
 				rankExpression, start,
-				rankExpression, start+1, start+2,
-				rankExpression, start+3, start+4, start+5,
+				rankExpression, start+1, postgresSearchCreatedAtKey, start+2,
+				rankExpression, start+3, postgresSearchCreatedAtKey, start+4, start+5,
 			)
 			args = append(args, cursor.Rank, cursor.Rank, cursor.CreatedAt, cursor.Rank, cursor.CreatedAt, cursor.MessageID)
 		case store.SearchSortNewest:
 			cursorWhere = fmt.Sprintf(`AND (
-				m.created_at < $%d
-				OR (m.created_at = $%d AND m.id < $%d)
-			)`, start, start+1, start+2)
+				%s < $%d
+				OR (%s = $%d AND m.id < $%d)
+			)`, postgresSearchCreatedAtKey, start, postgresSearchCreatedAtKey, start+1, start+2)
 			args = append(args, cursor.CreatedAt, cursor.CreatedAt, cursor.MessageID)
 		}
 	}
 	if req.Sort == store.SearchSortNewest {
-		orderBy = "m.created_at DESC, m.id DESC"
+		orderBy = "created_at_key DESC, m.id DESC"
 	}
 	limitPlaceholder := len(args) + 1
 	args = append(args, req.Limit+1)
@@ -97,6 +109,7 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		       m.channel_seq,
 		       m.thread_seq,
 		       m.created_at,
+		       `+postgresSearchCreatedAtKey+` AS created_at_key,
 		       m.edited_at,
 		       COALESCE(thread_state.reply_count, 0),
 		       thread_state.last_reply_at,
@@ -208,6 +221,7 @@ func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
 		&channelSeq,
 		&threadSeq,
 		&result.Hit.CreatedAt,
+		&result.CursorCreatedAt,
 		&editedAt,
 		&result.Hit.ReplyCount,
 		&lastReplyAt,

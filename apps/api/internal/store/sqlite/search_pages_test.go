@@ -108,6 +108,56 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 		t.Fatalf("root thread summary missing from %#v", second.Results[1])
 	}
 
+	fractionEarly, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: general.ID,
+		AuthorID:  owner.ID,
+		Body:      "fractionprobe identical",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fractionLate, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: general.ID,
+		AuthorID:  owner.ID,
+		Body:      "fractionprobe identical",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, createdAt := range map[string]string{
+		fractionEarly.ID: "2026-07-15T10:00:05.1Z",
+		fractionLate.ID:  "2026-07-15T10:00:05.12Z",
+	} {
+		if _, err := st.db.ExecContext(ctx, `UPDATE messages SET created_at = ? WHERE id = ?`, createdAt, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, sort := range []store.SearchSort{store.SearchSortNewest, store.SearchSortRelevance} {
+		fractionRequest := store.SearchPageRequest{
+			WorkspaceID: workspace.ID,
+			ChannelID:   general.ID,
+			UserID:      owner.ID,
+			Query:       "fractionprobe",
+			Sort:        sort,
+			Limit:       1,
+		}
+		fractionFirst, err := st.SearchMessagePage(ctx, fractionRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fractionFirst.Results) != 1 || fractionFirst.Results[0].ID != fractionLate.ID || fractionFirst.NextCursor == nil {
+			t.Fatalf("%s search ordered fractional timestamps incorrectly: %#v", sort, fractionFirst)
+		}
+		fractionRequest.Cursor = *fractionFirst.NextCursor
+		fractionSecond, err := st.SearchMessagePage(ctx, fractionRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fractionSecond.Results) != 1 || fractionSecond.Results[0].ID != fractionEarly.ID || fractionSecond.NextCursor != nil {
+			t.Fatalf("%s search cursor lost fractional timestamp ordering: %#v", sort, fractionSecond)
+		}
+	}
+
 	relevanceRequest := store.SearchPageRequest{
 		WorkspaceID: workspace.ID,
 		ChannelID:   general.ID,

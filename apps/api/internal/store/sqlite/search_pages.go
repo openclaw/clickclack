@@ -8,6 +8,18 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+const sqliteSearchCreatedAtKey = `CASE
+	WHEN length(m.created_at) = 20 AND substr(m.created_at, -1) = 'Z'
+		THEN substr(m.created_at, 1, 19) || '.000000000Z'
+	WHEN length(m.created_at) BETWEEN 22 AND 30
+		AND substr(m.created_at, 20, 1) = '.'
+		AND substr(m.created_at, -1) = 'Z'
+		THEN substr(m.created_at, 1, 20) ||
+			substr(substr(m.created_at, 21, length(m.created_at) - 21) || '000000000', 1, 9) ||
+			'Z'
+	ELSE strftime('%Y-%m-%dT%H:%M:%fZ', m.created_at)
+END`
+
 func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequest) (store.SearchPage, error) {
 	req, err := store.NormalizeSearchPageRequest(page)
 	if err != nil {
@@ -46,26 +58,26 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 
 	cursorWhere := ""
 	cursorArgs := []any{}
-	orderBy := "rank ASC, m.created_at DESC, m.id DESC"
+	orderBy := "rank ASC, created_at_key DESC, m.id DESC"
 	if req.Cursor != "" {
 		switch req.Sort {
 		case store.SearchSortRelevance:
-			cursorWhere = `AND (
+			cursorWhere = fmt.Sprintf(`AND (
 				bm25(messages_fts) > ?
-				OR (bm25(messages_fts) = ? AND m.created_at < ?)
-				OR (bm25(messages_fts) = ? AND m.created_at = ? AND m.id < ?)
-			)`
+				OR (bm25(messages_fts) = ? AND %s < ?)
+				OR (bm25(messages_fts) = ? AND %s = ? AND m.id < ?)
+			)`, sqliteSearchCreatedAtKey, sqliteSearchCreatedAtKey)
 			cursorArgs = append(cursorArgs, cursor.Rank, cursor.Rank, cursor.CreatedAt, cursor.Rank, cursor.CreatedAt, cursor.MessageID)
 		case store.SearchSortNewest:
-			cursorWhere = `AND (
-				m.created_at < ?
-				OR (m.created_at = ? AND m.id < ?)
-			)`
+			cursorWhere = fmt.Sprintf(`AND (
+				%s < ?
+				OR (%s = ? AND m.id < ?)
+			)`, sqliteSearchCreatedAtKey, sqliteSearchCreatedAtKey)
 			cursorArgs = append(cursorArgs, cursor.CreatedAt, cursor.CreatedAt, cursor.MessageID)
 		}
 	}
 	if req.Sort == store.SearchSortNewest {
-		orderBy = "m.created_at DESC, m.id DESC"
+		orderBy = "created_at_key DESC, m.id DESC"
 	}
 
 	args := []any{markers.Start, markers.End, req.WorkspaceID, compiledQuery}
@@ -92,6 +104,7 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		       m.channel_seq,
 		       m.thread_seq,
 		       m.created_at,
+		       `+sqliteSearchCreatedAtKey+` AS created_at_key,
 		       m.edited_at,
 		       COALESCE(thread_state.reply_count, 0),
 		       thread_state.last_reply_at,
@@ -199,6 +212,7 @@ func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
 		&channelSeq,
 		&threadSeq,
 		&result.Hit.CreatedAt,
+		&result.CursorCreatedAt,
 		&editedAt,
 		&result.Hit.ReplyCount,
 		&lastReplyAt,

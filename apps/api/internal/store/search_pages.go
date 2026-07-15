@@ -49,8 +49,9 @@ type SearchCursor struct {
 }
 
 type SearchPageEntry struct {
-	Hit  SearchHit
-	Rank float64
+	Hit             SearchHit
+	Rank            float64
+	CursorCreatedAt string
 }
 
 func NormalizeSearchPageRequest(req SearchPageRequest) (SearchPageRequest, error) {
@@ -165,7 +166,7 @@ func BuildSearchPage(req SearchPageRequest, entries []SearchPageEntry) (SearchPa
 	}
 	if hasMore && len(entries) > 0 {
 		last := entries[len(entries)-1]
-		cursor, err := EncodeSearchCursor(req, last.Rank, last.Hit.CreatedAt, last.Hit.ID)
+		cursor, err := EncodeSearchCursor(req, last.Rank, last.CursorCreatedAt, last.Hit.ID)
 		if err != nil {
 			return SearchPage{}, err
 		}

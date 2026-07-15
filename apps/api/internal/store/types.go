@@ -149,8 +149,10 @@ type User struct {
 	OwnerUserID          string                `json:"owner_user_id,omitempty"`
 	DisplayName          string                `json:"display_name"`
 	Handle               string                `json:"handle"`
+	FormerHandle         string                `json:"former_handle,omitempty"`
 	AvatarURL            string                `json:"avatar_url"`
 	CreatedAt            string                `json:"created_at"`
+	DeletedAt            *string               `json:"deleted_at,omitempty"`
 	NotificationSettings *NotificationSettings `json:"notification_settings,omitempty"`
 }
 
@@ -305,6 +307,13 @@ type BotWithTokens struct {
 	Tokens []BotToken `json:"tokens"`
 }
 
+type DeletedBot struct {
+	ID           string `json:"id"`
+	DisplayName  string `json:"display_name"`
+	FormerHandle string `json:"former_handle"`
+	DeletedAt    string `json:"deleted_at"`
+}
+
 type BotCommandInput struct {
 	Command     string `json:"command"`
 	Description string `json:"description"`
@@ -386,6 +395,7 @@ type RevokeAppInstallationOptions struct {
 	RevokeSlashCommands      bool
 	RevokeEventSubscriptions bool
 	RevokeBotTokens          bool
+	DeleteBot                bool
 }
 
 type AppInstallationRevokedCounts struct {
@@ -397,6 +407,7 @@ type AppInstallationRevokedCounts struct {
 type RevokeAppInstallationResult struct {
 	Installation AppInstallation              `json:"installation"`
 	Revoked      AppInstallationRevokedCounts `json:"revoked"`
+	DeletedBot   *DeletedBot                  `json:"deleted_bot,omitempty"`
 }
 
 type SlashCommand struct {
@@ -867,6 +878,7 @@ type Store interface {
 	ListBotTokensForWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) ([]BotToken, error)
 	RevokeBotToken(ctx context.Context, tokenID, requesterID string) (BotToken, error)
 	RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) error
+	DeleteBot(ctx context.Context, botUserID, requesterID string) (DeletedBot, error)
 	ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]OwnedBotEntry, error)
 	SetBotCommands(ctx context.Context, workspaceID, botUserID string, commands []BotCommandInput) ([]BotCommand, error)
 	ListBotCommands(ctx context.Context, workspaceID, requesterID string) ([]WorkspaceBotCommand, error)

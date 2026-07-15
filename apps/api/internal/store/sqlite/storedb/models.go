@@ -69,6 +69,13 @@ type BotToken struct {
 	RevokedAt   sql.NullString `json:"revoked_at"`
 }
 
+type BotTombstone struct {
+	BotUserID    string         `json:"bot_user_id"`
+	FormerHandle string         `json:"former_handle"`
+	DeletedAt    string         `json:"deleted_at"`
+	DeletedBy    sql.NullString `json:"deleted_by"`
+}
+
 type Channel struct {
 	ID          string         `json:"id"`
 	WorkspaceID string         `json:"workspace_id"`

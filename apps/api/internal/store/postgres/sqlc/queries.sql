@@ -486,7 +486,92 @@ SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.
 FROM bot_tokens bt
 JOIN users u ON u.id = bt.bot_user_id
 WHERE bt.token_hash = sqlc.arg(token_hash)
-  AND bt.revoked_at IS NULL;
+  AND bt.revoked_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  );
+
+-- name: GetActiveBotForDeletion :one
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+FROM users u
+WHERE u.id = sqlc.arg(bot_user_id)
+  AND u.kind = 'bot'
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
+FOR UPDATE;
+
+-- name: ListBotGovernedWorkspaces :many
+SELECT DISTINCT workspace_id
+FROM (
+  SELECT wm.workspace_id
+  FROM workspace_members wm
+  WHERE wm.user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT bt.workspace_id
+  FROM bot_tokens bt
+  WHERE bt.bot_user_id = sqlc.arg(bot_user_id)
+    AND bt.revoked_at IS NULL
+  UNION
+  SELECT bc.workspace_id
+  FROM bot_commands bc
+  WHERE bc.bot_user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT ai.workspace_id
+  FROM app_installations ai
+  WHERE ai.bot_user_id = sqlc.arg(bot_user_id)
+    AND ai.revoked_at IS NULL
+  UNION
+  SELECT sc.workspace_id
+  FROM slash_commands sc
+  WHERE sc.bot_user_id = sqlc.arg(bot_user_id)
+    AND sc.revoked_at IS NULL
+) AS governed
+ORDER BY workspace_id;
+
+-- name: InsertBotTombstone :exec
+INSERT INTO bot_tombstones (bot_user_id, former_handle, deleted_at, deleted_by)
+VALUES (sqlc.arg(bot_user_id), sqlc.arg(former_handle), sqlc.arg(deleted_at), sqlc.arg(deleted_by));
+
+-- name: RetireBotUser :execrows
+UPDATE users
+SET handle = ''
+WHERE id = sqlc.arg(bot_user_id)
+  AND kind = 'bot';
+
+-- name: RevokeAllBotTokens :execrows
+UPDATE bot_tokens
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at))
+WHERE bot_user_id = sqlc.arg(bot_user_id)
+  AND revoked_at IS NULL;
+
+-- name: RevokeAllBotSlashCommands :execrows
+UPDATE slash_commands
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at))
+WHERE bot_user_id = sqlc.arg(bot_user_id)
+  AND revoked_at IS NULL;
+
+-- name: RevokeAllBotEventSubscriptions :execrows
+UPDATE event_subscriptions
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at))
+WHERE revoked_at IS NULL
+  AND app_installation_id IN (
+    SELECT id FROM app_installations WHERE bot_user_id = sqlc.arg(bot_user_id)
+  );
+
+-- name: RevokeAllBotAppInstallations :execrows
+UPDATE app_installations
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at))
+WHERE bot_user_id = sqlc.arg(bot_user_id)
+  AND revoked_at IS NULL;
+
+-- name: DeleteAllBotCommands :exec
+DELETE FROM bot_commands
+WHERE bot_user_id = sqlc.arg(bot_user_id);
+
+-- name: DeleteAllBotWorkspaceMemberships :execrows
+DELETE FROM workspace_members
+WHERE user_id = sqlc.arg(bot_user_id);
 
 -- name: TouchBotToken :exec
 UPDATE bot_tokens
@@ -859,9 +944,12 @@ WHERE dcm.conversation_id = sqlc.arg(conversation_id)
 ORDER BY dcm.user_id;
 
 -- name: DirectConversationMembers :many
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(tombstone.former_handle, '') AS former_handle,
+       COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
 JOIN direct_conversation_members dcm ON dcm.user_id = u.id
+LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = u.id
 WHERE dcm.conversation_id = sqlc.arg(conversation_id)
 ORDER BY u.display_name;
 

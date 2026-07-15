@@ -10,6 +10,13 @@ CREATE TABLE users (
 
 CREATE UNIQUE INDEX idx_users_handle ON users(handle) WHERE handle <> '';
 
+CREATE TABLE bot_tombstones (
+  bot_user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  former_handle TEXT NOT NULL,
+  deleted_at TEXT NOT NULL,
+  deleted_by TEXT REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE identities (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

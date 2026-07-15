@@ -86,7 +86,12 @@ func storeUserFromIdentityProviderSubject(row storedb.GetUserByIdentityProviderS
 }
 
 func storeUserFromDirectConversationMember(row storedb.DirectConversationMembersRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user.FormerHandle = row.FormerHandle
+	if row.DeletedAt != "" {
+		user.DeletedAt = &row.DeletedAt
+	}
+	return user
 }
 
 func storeMagicLinkFromDB(link storedb.AuthMagicLink) store.MagicLink {

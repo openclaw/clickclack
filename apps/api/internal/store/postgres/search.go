@@ -46,13 +46,17 @@ func (s *Store) SearchMessages(ctx context.Context, workspaceID, channelID, user
 		SELECT m.id, m.workspace_id, COALESCE(m.channel_id, ''), COALESCE(m.direct_conversation_id, ''), m.author_id, m.parent_message_id, m.thread_root_id, m.channel_seq, m.thread_seq,
 		       m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at,
 		       u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+		       author_tombstone.former_handle, author_tombstone.deleted_at,
 		       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
 		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.created_at,
+		       quoted_tombstone.former_handle, quoted_tombstone.deleted_at,
 		       ts_rank_cd(to_tsvector('simple', m.body), websearch_to_tsquery('simple', $2)) AS rank
 		FROM messages m
 		`+channelJoin+`
 		JOIN users u ON u.id = m.author_id
+		LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
 		LEFT JOIN users qu ON qu.id = m.quoted_author_id
+		LEFT JOIN bot_tombstones quoted_tombstone ON quoted_tombstone.bot_user_id = qu.id
 		WHERE m.workspace_id = $1
 		  AND to_tsvector('simple', m.body) @@ websearch_to_tsquery('simple', $2)
 		  AND m.direct_conversation_id IS NULL
@@ -86,13 +90,16 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 	var quotedMessageID, quotedAuthorID sql.NullString
 	var authorOwnerID sql.NullString
 	var quAuthorID, quKind, quOwnerID, quDisplayName, quHandle, quAvatarURL, quCreatedAt sql.NullString
+	var authorFormerHandle, authorDeletedAt, quFormerHandle, quDeletedAt sql.NullString
 	var rank float64
 	err := row.Scan(
 		&msg.ID, &msg.WorkspaceID, &msg.ChannelID, &msg.DirectConversationID, &msg.AuthorID, &parent, &msg.ThreadRootID, &channelSeq, &threadSeq,
 		&msg.Body, &msg.BodyFormat, &msg.CreatedAt, &edited, &deleted,
 		&author.ID, &author.Kind, &authorOwnerID, &author.DisplayName, &author.Handle, &author.AvatarURL, &author.CreatedAt,
+		&authorFormerHandle, &authorDeletedAt,
 		&quotedMessageID, &msg.QuotedBodySnapshot, &quotedAuthorID,
 		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quCreatedAt,
+		&quFormerHandle, &quDeletedAt,
 		&rank,
 	)
 	if err != nil {
@@ -116,6 +123,12 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 	if authorOwnerID.Valid {
 		author.OwnerUserID = authorOwnerID.String
 	}
+	if authorFormerHandle.Valid {
+		author.FormerHandle = authorFormerHandle.String
+	}
+	if authorDeletedAt.Valid {
+		author.DeletedAt = &authorDeletedAt.String
+	}
 	msg.Author = &author
 	if quotedMessageID.Valid {
 		msg.QuotedMessageID = &quotedMessageID.String
@@ -132,6 +145,12 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 			Handle:      quHandle.String,
 			AvatarURL:   quAvatarURL.String,
 			CreatedAt:   quCreatedAt.String,
+		}
+		if quFormerHandle.Valid {
+			msg.QuotedAuthor.FormerHandle = quFormerHandle.String
+		}
+		if quDeletedAt.Valid {
+			msg.QuotedAuthor.DeletedAt = &quDeletedAt.String
 		}
 	}
 	return msg, rank, nil

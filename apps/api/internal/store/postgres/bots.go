@@ -638,6 +638,124 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 	return tx.Commit()
 }
 
+type botDeletionCounts struct {
+	slashCommands      int
+	eventSubscriptions int
+	botTokens          int
+}
+
+func (s *Store) DeleteBot(ctx context.Context, botUserID, requesterID string) (store.DeletedBot, error) {
+	botUserID = strings.TrimSpace(botUserID)
+	requesterID = strings.TrimSpace(requesterID)
+	if botUserID == "" {
+		return store.DeletedBot{}, errors.New("bot_user_id is required")
+	}
+	if requesterID == "" {
+		return store.DeletedBot{}, errors.New("requester_id is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.DeletedBot{}, err
+	}
+	defer tx.Rollback()
+	deleted, _, err := s.deleteBotTx(ctx, tx, botUserID, requesterID)
+	if err != nil {
+		return store.DeletedBot{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.DeletedBot{}, err
+	}
+	return deleted, nil
+}
+
+func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requesterID string) (store.DeletedBot, botDeletionCounts, error) {
+	qtx := s.q.WithTx(tx)
+	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	if bot.OwnerUserID != "" {
+		if requesterID != bot.OwnerUserID {
+			return store.DeletedBot{}, botDeletionCounts{}, store.ErrBotOwnerRequired
+		}
+	} else {
+		workspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, bot.ID)
+		if err != nil {
+			return store.DeletedBot{}, botDeletionCounts{}, err
+		}
+		if len(workspaceIDs) == 0 {
+			return store.DeletedBot{}, botDeletionCounts{}, store.ErrNotWorkspaceManager
+		}
+		for _, workspaceID := range workspaceIDs {
+			if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
+				return store.DeletedBot{}, botDeletionCounts{}, err
+			}
+		}
+	}
+	if bot.Handle == "" {
+		return store.DeletedBot{}, botDeletionCounts{}, errors.New("bot handle is empty")
+	}
+
+	deletedAt := now()
+	counts := botDeletionCounts{}
+	tokenCount, err := qtx.RevokeAllBotTokens(ctx, storedb.RevokeAllBotTokensParams{
+		RevokedAt: sqlText(deletedAt),
+		BotUserID: bot.ID,
+	})
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	counts.botTokens = int(tokenCount)
+	commandCount, err := qtx.RevokeAllBotSlashCommands(ctx, storedb.RevokeAllBotSlashCommandsParams{
+		RevokedAt: sqlText(deletedAt),
+		BotUserID: bot.ID,
+	})
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	counts.slashCommands = int(commandCount)
+	subscriptionCount, err := qtx.RevokeAllBotEventSubscriptions(ctx, storedb.RevokeAllBotEventSubscriptionsParams{
+		RevokedAt: sqlText(deletedAt),
+		BotUserID: bot.ID,
+	})
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	counts.eventSubscriptions = int(subscriptionCount)
+	if _, err := qtx.RevokeAllBotAppInstallations(ctx, storedb.RevokeAllBotAppInstallationsParams{
+		RevokedAt: sqlText(deletedAt),
+		BotUserID: bot.ID,
+	}); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	if err := qtx.DeleteAllBotCommands(ctx, bot.ID); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	if _, err := qtx.DeleteAllBotWorkspaceMemberships(ctx, bot.ID); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	if err := qtx.InsertBotTombstone(ctx, storedb.InsertBotTombstoneParams{
+		BotUserID:    bot.ID,
+		FormerHandle: bot.Handle,
+		DeletedAt:    deletedAt,
+		DeletedBy:    sqlOptionalText(requesterID),
+	}); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	if rows, err := qtx.RetireBotUser(ctx, bot.ID); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	} else if rows != 1 {
+		return store.DeletedBot{}, botDeletionCounts{}, errors.New("bot changed during deletion")
+	}
+	return store.DeletedBot{
+		ID:           bot.ID,
+		DisplayName:  bot.DisplayName,
+		FormerHandle: bot.Handle,
+		DeletedAt:    deletedAt,
+	}, counts, nil
+}
+
 func (s *Store) ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]store.OwnedBotEntry, error) {
 	ownerUserID = strings.TrimSpace(ownerUserID)
 	if ownerUserID == "" {

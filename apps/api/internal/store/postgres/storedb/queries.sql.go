@@ -343,6 +343,29 @@ func (q *Queries) CountWorkspaceMembersByRole(ctx context.Context, arg CountWork
 	return count, err
 }
 
+const deleteAllBotCommands = `-- name: DeleteAllBotCommands :exec
+DELETE FROM bot_commands
+WHERE bot_user_id = $1
+`
+
+func (q *Queries) DeleteAllBotCommands(ctx context.Context, botUserID string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllBotCommands, botUserID)
+	return err
+}
+
+const deleteAllBotWorkspaceMemberships = `-- name: DeleteAllBotWorkspaceMemberships :execrows
+DELETE FROM workspace_members
+WHERE user_id = $1
+`
+
+func (q *Queries) DeleteAllBotWorkspaceMemberships(ctx context.Context, botUserID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAllBotWorkspaceMemberships, botUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteBotCommandsForBot = `-- name: DeleteBotCommandsForBot :exec
 DELETE FROM bot_commands
 WHERE workspace_id = $1
@@ -526,21 +549,26 @@ func (q *Queries) DirectConversationMemberIDs(ctx context.Context, conversationI
 }
 
 const directConversationMembers = `-- name: DirectConversationMembers :many
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(tombstone.former_handle, '') AS former_handle,
+       COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
 JOIN direct_conversation_members dcm ON dcm.user_id = u.id
+LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = u.id
 WHERE dcm.conversation_id = $1
 ORDER BY u.display_name
 `
 
 type DirectConversationMembersRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID           string         `json:"id"`
+	Kind         string         `json:"kind"`
+	OwnerUserID  sql.NullString `json:"owner_user_id"`
+	DisplayName  string         `json:"display_name"`
+	Handle       string         `json:"handle"`
+	AvatarUrl    string         `json:"avatar_url"`
+	CreatedAt    string         `json:"created_at"`
+	FormerHandle string         `json:"former_handle"`
+	DeletedAt    string         `json:"deleted_at"`
 }
 
 func (q *Queries) DirectConversationMembers(ctx context.Context, conversationID string) ([]DirectConversationMembersRow, error) {
@@ -560,6 +588,8 @@ func (q *Queries) DirectConversationMembers(ctx context.Context, conversationID 
 			&i.Handle,
 			&i.AvatarUrl,
 			&i.CreatedAt,
+			&i.FormerHandle,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -733,6 +763,42 @@ func (q *Queries) FirstWorkspace(ctx context.Context) (FirstWorkspaceRow, error)
 	return i, err
 }
 
+const getActiveBotForDeletion = `-- name: GetActiveBotForDeletion :one
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+FROM users u
+WHERE u.id = $1
+  AND u.kind = 'bot'
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
+FOR UPDATE
+`
+
+type GetActiveBotForDeletionRow struct {
+	ID          string         `json:"id"`
+	Kind        string         `json:"kind"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+}
+
+func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string) (GetActiveBotForDeletionRow, error) {
+	row := q.db.QueryRowContext(ctx, getActiveBotForDeletion, botUserID)
+	var i GetActiveBotForDeletionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.OwnerUserID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getBotTokenAuth = `-- name: GetBotTokenAuth :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
        bt.id AS token_id, bt.workspace_id, bt.scopes_json
@@ -740,6 +806,9 @@ FROM bot_tokens bt
 JOIN users u ON u.id = bt.bot_user_id
 WHERE bt.token_hash = $1
   AND bt.revoked_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
 `
 
 type GetBotTokenAuthRow struct {
@@ -1647,6 +1716,28 @@ func (q *Queries) InsertBotToken(ctx context.Context, arg InsertBotTokenParams) 
 	return err
 }
 
+const insertBotTombstone = `-- name: InsertBotTombstone :exec
+INSERT INTO bot_tombstones (bot_user_id, former_handle, deleted_at, deleted_by)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertBotTombstoneParams struct {
+	BotUserID    string         `json:"bot_user_id"`
+	FormerHandle string         `json:"former_handle"`
+	DeletedAt    string         `json:"deleted_at"`
+	DeletedBy    sql.NullString `json:"deleted_by"`
+}
+
+func (q *Queries) InsertBotTombstone(ctx context.Context, arg InsertBotTombstoneParams) error {
+	_, err := q.db.ExecContext(ctx, insertBotTombstone,
+		arg.BotUserID,
+		arg.FormerHandle,
+		arg.DeletedAt,
+		arg.DeletedBy,
+	)
+	return err
+}
+
 const insertBotUser = `-- name: InsertBotUser :exec
 INSERT INTO users (id, kind, owner_user_id, display_name, handle, avatar_url, created_at)
 VALUES ($1, 'bot', $2, $3, $4, $5, $6)
@@ -2463,6 +2554,58 @@ func (q *Queries) ListBotCommandsForBot(ctx context.Context, arg ListBotCommands
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBotGovernedWorkspaces = `-- name: ListBotGovernedWorkspaces :many
+SELECT DISTINCT workspace_id
+FROM (
+  SELECT wm.workspace_id
+  FROM workspace_members wm
+  WHERE wm.user_id = $1
+  UNION
+  SELECT bt.workspace_id
+  FROM bot_tokens bt
+  WHERE bt.bot_user_id = $1
+    AND bt.revoked_at IS NULL
+  UNION
+  SELECT bc.workspace_id
+  FROM bot_commands bc
+  WHERE bc.bot_user_id = $1
+  UNION
+  SELECT ai.workspace_id
+  FROM app_installations ai
+  WHERE ai.bot_user_id = $1
+    AND ai.revoked_at IS NULL
+  UNION
+  SELECT sc.workspace_id
+  FROM slash_commands sc
+  WHERE sc.bot_user_id = $1
+    AND sc.revoked_at IS NULL
+) AS governed
+ORDER BY workspace_id
+`
+
+func (q *Queries) ListBotGovernedWorkspaces(ctx context.Context, botUserID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listBotGovernedWorkspaces, botUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workspace_id string
+		if err := rows.Scan(&workspace_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workspace_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -3885,6 +4028,103 @@ func (q *Queries) RequireWorkspaceOwner(ctx context.Context, arg RequireWorkspac
 	var role string
 	err := row.Scan(&role)
 	return role, err
+}
+
+const retireBotUser = `-- name: RetireBotUser :execrows
+UPDATE users
+SET handle = ''
+WHERE id = $1
+  AND kind = 'bot'
+`
+
+func (q *Queries) RetireBotUser(ctx context.Context, botUserID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, retireBotUser, botUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeAllBotAppInstallations = `-- name: RevokeAllBotAppInstallations :execrows
+UPDATE app_installations
+SET revoked_at = COALESCE(revoked_at, $1)
+WHERE bot_user_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeAllBotAppInstallationsParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	BotUserID string         `json:"bot_user_id"`
+}
+
+func (q *Queries) RevokeAllBotAppInstallations(ctx context.Context, arg RevokeAllBotAppInstallationsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAllBotAppInstallations, arg.RevokedAt, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeAllBotEventSubscriptions = `-- name: RevokeAllBotEventSubscriptions :execrows
+UPDATE event_subscriptions
+SET revoked_at = COALESCE(revoked_at, $1)
+WHERE revoked_at IS NULL
+  AND app_installation_id IN (
+    SELECT id FROM app_installations WHERE bot_user_id = $2
+  )
+`
+
+type RevokeAllBotEventSubscriptionsParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	BotUserID string         `json:"bot_user_id"`
+}
+
+func (q *Queries) RevokeAllBotEventSubscriptions(ctx context.Context, arg RevokeAllBotEventSubscriptionsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAllBotEventSubscriptions, arg.RevokedAt, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeAllBotSlashCommands = `-- name: RevokeAllBotSlashCommands :execrows
+UPDATE slash_commands
+SET revoked_at = COALESCE(revoked_at, $1)
+WHERE bot_user_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeAllBotSlashCommandsParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	BotUserID string         `json:"bot_user_id"`
+}
+
+func (q *Queries) RevokeAllBotSlashCommands(ctx context.Context, arg RevokeAllBotSlashCommandsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAllBotSlashCommands, arg.RevokedAt, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeAllBotTokens = `-- name: RevokeAllBotTokens :execrows
+UPDATE bot_tokens
+SET revoked_at = COALESCE(revoked_at, $1)
+WHERE bot_user_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeAllBotTokensParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	BotUserID string         `json:"bot_user_id"`
+}
+
+func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokensParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAllBotTokens, arg.RevokedAt, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const threadNextSeq = `-- name: ThreadNextSeq :one

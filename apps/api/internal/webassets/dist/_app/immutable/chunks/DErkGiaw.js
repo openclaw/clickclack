@@ -22,6 +22,7 @@ ${o(`          `)}
 ${o(`      `)}
     },
   },
-}`}function y(e){return`openclaw plugins install @openclaw/clickclack
-export ${e.mode===`single`?`CLICKCLACK_BOT_TOKEN`:g(e.botHandle)}=${_(e.token)}
-openclaw gateway`}export{y as a,d as c,r as d,m as f,p as h,v as i,l,s as m,f as n,i as o,c as p,u as r,o as s,n as t,a as u};
+}`}function y(e){let t=(e.baseURL||(typeof window<`u`?window.location.origin:``)).replace(/\/$/,``)||`https://your-clickclack.example.com`,n=e.botHandle.replace(/^@/,``);return`openclaw channels add clickclack${e.mode===`named`?` \\\n  --account ${_(n)}`:``} \\
+  --base-url ${_(t)} \\
+  --token ${_(e.token)} \\
+  --workspace ${_(e.workspace)}`}export{y as a,d as c,r as d,m as f,p as h,v as i,l,s as m,f as n,i as o,c as p,u as r,o as s,n as t,a as u};

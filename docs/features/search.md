@@ -8,6 +8,9 @@ read_when:
 `GET /api/search` searches messages visible to the authenticated actor. It
 requires `workspace_id` and `q`.
 
+Bot tokens require `messages:read` and must be bound to the requested
+workspace. Direct-conversation searches additionally require `dms:read`.
+
 Optional parameters:
 
 - `channel_id`: search one channel.

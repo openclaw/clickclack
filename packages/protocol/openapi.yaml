@@ -1275,7 +1275,7 @@ paths:
         "400":
           description: Invalid search scope, sort, limit, query, or cursor
         "403":
-          description: Required scope, workspace binding, or conversation access is missing
+          description: Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search.
   /api/uploads:
     post:
       operationId: createUpload

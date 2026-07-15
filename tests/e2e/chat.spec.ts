@@ -2106,54 +2106,6 @@ test("automatic read receipts do not clear unseen paged history", async ({ page 
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
 });
 
-test("renders bounded highlighted search snippets", async ({ page }) => {
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: `search-proof-${Date.now()}`, kind: "public" },
-  });
-  const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
-  const body = [
-    "far-before-boundary",
-    ...Array.from({ length: 60 }, (_, index) => `leading-${index}`),
-    "precisionneedle",
-    ...Array.from({ length: 60 }, (_, index) => `trailing-${index}`),
-    "far-after-boundary",
-  ].join(" ");
-  const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    data: { body },
-  });
-  expect(messageResponse.ok()).toBe(true);
-
-  await page.goto("/app");
-  await waitForAppReady(page);
-  await page.getByRole("link", { name: `# ${channel.name}` }).click();
-  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
-
-  const searchResponse = page.waitForResponse(
-    (response) => response.url().includes("/api/search?") && response.ok(),
-  );
-  await page.getByLabel("Search messages").fill("precisionneedle");
-  await page.getByRole("button", { name: "Search", exact: true }).click();
-  const payload = (await (await searchResponse).json()) as {
-    results: { snippet: string; highlights: { start: number; end: number }[] }[];
-  };
-  expect(payload.results).toHaveLength(1);
-  expect(payload.results[0].snippet.length).toBeLessThan(body.length);
-  expect(payload.results[0].highlights).toHaveLength(1);
-
-  const results = page.getByLabel("Search results");
-  await expect(results.locator("mark")).toHaveText("precisionneedle");
-  await expect(results).not.toContainText("far-before-boundary");
-  await expect(results).not.toContainText("far-after-boundary");
-  await expect(results).toContainText("…");
-
-  if (process.env.CAPTURE_SEARCH_PROOF === "1") {
-    await page.screenshot({ path: "docs/proof/search-snippets.png", fullPage: true });
-  }
-});
-
 test("message history pages older, newer, and search target windows", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };

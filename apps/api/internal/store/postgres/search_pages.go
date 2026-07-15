@@ -40,6 +40,10 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if err != nil {
 		return store.SearchPage{}, err
 	}
+	scopeWhere, scopeArgs, err := postgresSearchScope(ctx, tx, req, role, 4)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
 	if req.Query == "" {
 		return store.SearchPage{Results: []store.SearchHit{}}, tx.Commit()
 	}
@@ -52,10 +56,6 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		", MaxWords=32, MinWords=16, MaxFragments=2, FragmentDelimiter=…"
 
 	args := []any{req.Query, headlineOptions, req.WorkspaceID}
-	scopeWhere, scopeArgs, err := postgresSearchScope(ctx, tx, req, role, len(args)+1)
-	if err != nil {
-		return store.SearchPage{}, err
-	}
 	args = append(args, scopeArgs...)
 
 	rankExpression := "ts_rank_cd(to_tsvector('simple', m.body), plainto_tsquery('simple', $1))"

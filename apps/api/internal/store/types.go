@@ -725,13 +725,6 @@ type AttachUploadInput struct {
 	UserID    string
 }
 
-type SearchResult struct {
-	Message    Message           `json:"message"`
-	Rank       float64           `json:"rank"`
-	Snippet    string            `json:"snippet"`
-	Highlights []SearchHighlight `json:"highlights"`
-}
-
 type SearchHighlight struct {
 	Start int `json:"start"`
 	End   int `json:"end"`
@@ -1010,7 +1003,6 @@ type Store interface {
 	UploadHasOtherDirectMessageAttachment(ctx context.Context, uploadID, messageID string) (bool, error)
 	AttachUpload(ctx context.Context, input AttachUploadInput) (Event, error)
 	SearchMessagePage(ctx context.Context, page SearchPageRequest) (SearchPage, error)
-	SearchMessages(ctx context.Context, workspaceID, channelID, userID, query string, limit int) ([]SearchResult, error)
 	ListDirectConversations(ctx context.Context, workspaceID, userID string) ([]DirectConversation, error)
 	GetDirectConversation(ctx context.Context, conversationID, userID string) (DirectConversation, error)
 	CreateDirectConversation(ctx context.Context, input CreateDirectConversationInput) (DirectConversation, error)

@@ -45,7 +45,7 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	literalMarkers := string(store.SearchHighlightStart) + "literal" + string(store.SearchHighlightEnd)
+	literalMarkers := "\ufdd0literal\ufdd1"
 	literalMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
 		ChannelID: general.ID,
 		AuthorID:  owner.ID,

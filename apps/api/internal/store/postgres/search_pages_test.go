@@ -34,7 +34,7 @@ func TestSearchMessagePagePostgresParity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	literalMarkers := string(store.SearchHighlightStart) + "literal" + string(store.SearchHighlightEnd)
+	literalMarkers := "\ufdd0literal\ufdd1"
 	literalMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
 		ChannelID: channel.ID,
 		AuthorID:  owner.ID,
@@ -79,7 +79,7 @@ func TestSearchMessagePagePostgresParity(t *testing.T) {
 		first.Results[0].ThreadRootID != root.ID || first.Results[0].ThreadSeq == nil {
 		t.Fatalf("thread routing metadata missing from %#v", first.Results[0])
 	}
-	if !strings.Contains(first.Results[1].Snippet, string(store.SearchHighlightEnd)) {
+	if !strings.Contains(first.Results[1].Snippet, "\ufdd1") {
 		t.Fatalf("literal marker text was consumed by the parser in %#v", first.Results[1])
 	}
 	highlighted := make([]string, 0, len(first.Results[1].Highlights))

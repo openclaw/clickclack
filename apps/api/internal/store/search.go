@@ -8,10 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-const (
-	SearchHighlightStart = '\ufdd0'
-	SearchHighlightEnd   = '\ufdd1'
-)
+const searchHighlightBoundary = "\ufdd0"
 
 type SearchMarkers struct {
 	Start string
@@ -25,37 +22,9 @@ func NewSearchMarkers() (SearchMarkers, error) {
 	}
 	suffix := hex.EncodeToString(nonce[:])
 	return SearchMarkers{
-		Start: string(SearchHighlightStart) + "start-" + suffix + string(SearchHighlightEnd),
-		End:   string(SearchHighlightStart) + "end-" + suffix + string(SearchHighlightEnd),
+		Start: searchHighlightBoundary + "start-" + suffix + searchHighlightBoundary,
+		End:   searchHighlightBoundary + "end-" + suffix + searchHighlightBoundary,
 	}, nil
-}
-
-func ParseSearchSnippet(marked string) (string, []SearchHighlight) {
-	var snippet strings.Builder
-	highlights := []SearchHighlight{}
-	highlightStart := -1
-	position := 0
-
-	for _, char := range marked {
-		switch char {
-		case SearchHighlightStart:
-			if highlightStart < 0 {
-				highlightStart = position
-			}
-		case SearchHighlightEnd:
-			if highlightStart >= 0 && highlightStart < position {
-				highlights = append(highlights, SearchHighlight{Start: highlightStart, End: position})
-			}
-			highlightStart = -1
-		default:
-			snippet.WriteRune(char)
-			position++
-		}
-	}
-	if highlightStart >= 0 && highlightStart < position {
-		highlights = append(highlights, SearchHighlight{Start: highlightStart, End: position})
-	}
-	return snippet.String(), highlights
 }
 
 func ParseSearchSnippetWithMarkers(marked string, markers SearchMarkers) (string, []SearchHighlight, error) {

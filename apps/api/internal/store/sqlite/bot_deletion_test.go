@@ -127,6 +127,11 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 		deletedMember.FormerHandle != bot.Handle || deletedMember.DeletedAt == nil {
 		t.Fatalf("direct conversation did not preserve deleted bot identity: %#v", reloadedDirect.Members)
 	}
+	directList, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDeletedBotInDirectList(t, directList, direct.ID, bot.ID, bot.Handle)
 	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: bot.DisplayName,
@@ -521,4 +526,23 @@ func assertDeletedMessageAuthor(t *testing.T, st *Store, ctx context.Context, me
 		message.Author.DeletedAt == nil {
 		t.Fatalf("message did not preserve deleted bot identity: %#v", message.Author)
 	}
+}
+
+func assertDeletedBotInDirectList(t *testing.T, conversations []store.DirectConversation, conversationID, botID, formerHandle string) {
+	t.Helper()
+	for _, conversation := range conversations {
+		if conversation.ID != conversationID {
+			continue
+		}
+		for _, member := range conversation.Members {
+			if member.ID == botID &&
+				member.Handle == "" &&
+				member.FormerHandle == formerHandle &&
+				member.DeletedAt != nil {
+				return
+			}
+		}
+		t.Fatalf("direct conversation list did not preserve deleted bot identity: %#v", conversation.Members)
+	}
+	t.Fatalf("direct conversation %s missing from list", conversationID)
 }

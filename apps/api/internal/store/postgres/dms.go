@@ -402,9 +402,11 @@ func (s *Store) directConversationMembersByConversationIDs(ctx context.Context, 
 			args = append(args, id)
 		}
 		rows, err := s.db.QueryContext(ctx, `
-			SELECT dcm.conversation_id, u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+			SELECT dcm.conversation_id, u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+			       tombstone.former_handle, tombstone.deleted_at
 			FROM direct_conversation_members dcm
 			JOIN users u ON u.id = dcm.user_id
+			LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = u.id
 			WHERE dcm.conversation_id IN (`+placeholders+`)
 			ORDER BY dcm.conversation_id, u.display_name`, args...)
 		if err != nil {
@@ -413,13 +415,31 @@ func (s *Store) directConversationMembersByConversationIDs(ctx context.Context, 
 		for rows.Next() {
 			var conversationID string
 			var owner sql.NullString
+			var formerHandle, deletedAt sql.NullString
 			var member store.User
-			if err := rows.Scan(&conversationID, &member.ID, &member.Kind, &owner, &member.DisplayName, &member.Handle, &member.AvatarURL, &member.CreatedAt); err != nil {
+			if err := rows.Scan(
+				&conversationID,
+				&member.ID,
+				&member.Kind,
+				&owner,
+				&member.DisplayName,
+				&member.Handle,
+				&member.AvatarURL,
+				&member.CreatedAt,
+				&formerHandle,
+				&deletedAt,
+			); err != nil {
 				_ = rows.Close()
 				return nil, err
 			}
 			if owner.Valid {
 				member.OwnerUserID = owner.String
+			}
+			if formerHandle.Valid {
+				member.FormerHandle = formerHandle.String
+			}
+			if deletedAt.Valid {
+				member.DeletedAt = &deletedAt.String
 			}
 			out[conversationID] = append(out[conversationID], member)
 		}

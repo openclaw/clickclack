@@ -53,22 +53,27 @@
 
 <article class="message-group" class:is-agent={isBot} class:is-self={isSelf}>
   <Avatar
-    class="avatar avatar-button"
+    class={group.authorDeleted ? "avatar" : "avatar avatar-button"}
     id={group.authorID}
     name={group.authorName}
     src={group.authorAvatarURL}
     size={38}
-    buttonLabel={`View profile for ${group.authorName}`}
+    buttonLabel={group.authorDeleted ? undefined : `View profile for ${group.authorName}`}
     onclick={() => onOpenProfile(group.messages[0]?.author)}
   />
   <div class="group-body">
     <header>
-      <button
-        type="button"
-        class="author-name"
-        onclick={() => onOpenProfile(group.messages[0]?.author)}
-      >{group.authorName}</button>
-      {#if isBot}<span class="bot-chip">bot</span>{/if}
+      {#if group.authorDeleted}
+        <span class="author-name author-name--static">{group.authorName}</span>
+        <span class="bot-chip bot-chip--deleted">deleted bot</span>
+      {:else}
+        <button
+          type="button"
+          class="author-name"
+          onclick={() => onOpenProfile(group.messages[0]?.author)}
+        >{group.authorName}</button>
+        {#if isBot}<span class="bot-chip">bot</span>{/if}
+      {/if}
       {#if group.authorHandle}<span>{handleLabel(group.authorHandle)}</span>{/if}
       <time>{time(group.timestamp)}</time>
     </header>

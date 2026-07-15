@@ -890,13 +890,13 @@
   ): User[] {
     const people = new Map<string, User>();
     for (const member of members) {
-      if (member.user.id) people.set(member.user.id, member.user);
+      if (member.user.id && !member.user.deleted_at) people.set(member.user.id, member.user);
     }
     for (const person of direct?.members || []) {
-      if (person.id) people.set(person.id, person);
+      if (person.id && !person.deleted_at) people.set(person.id, person);
     }
     for (const person of recent) {
-      if (person.id) people.set(person.id, person);
+      if (person.id && !person.deleted_at) people.set(person.id, person);
     }
     if (currentUser?.id) people.set(currentUser.id, currentUser);
     return [...people.values()].slice(0, 24);
@@ -2676,7 +2676,7 @@
   }
 
   function openUserProfile(profile?: User | null) {
-    if (!profile) return;
+    if (!profile || profile.deleted_at) return;
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedThread = null;

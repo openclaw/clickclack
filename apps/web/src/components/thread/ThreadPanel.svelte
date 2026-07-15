@@ -1,7 +1,11 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
   import { enhanceMarkdownGifs } from "../../lib/actions/markdownGifs";
-  import { handleLabel } from "../../lib/chat/people";
+  import {
+    handleLabel,
+    isDeletedBot,
+    userHandle,
+  } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
   import type { Message, ThreadState, Upload, User } from "../../lib/types";
@@ -89,13 +93,16 @@
       class="avatar"
       id={root.author?.id || root.author_id}
       name={root.author?.display_name}
-      src={root.author?.avatar_url}
+      src={isDeletedBot(root.author) ? undefined : root.author?.avatar_url}
       size={38}
     />
     <div class="group-body">
       <header>
         <strong>{root.author?.display_name || "Local User"}</strong>
-        {#if root.author?.handle}<span>{handleLabel(root.author.handle)}</span>{/if}
+        {#if isDeletedBot(root.author)}
+          <span class="bot-chip bot-chip--deleted">deleted bot</span>
+        {/if}
+        {#if userHandle(root.author)}<span>{handleLabel(userHandle(root.author))}</span>{/if}
         <time>{time(root.created_at)}</time>
         {#if !root.deleted_at}
           <button
@@ -152,13 +159,16 @@
           class="avatar small"
           id={reply.author?.id || reply.author_id}
           name={reply.author?.display_name}
-          src={reply.author?.avatar_url}
+          src={isDeletedBot(reply.author) ? undefined : reply.author?.avatar_url}
           size={30}
         />
         <div class="group-body">
           <header>
             <strong>{reply.author?.display_name || "Local User"}</strong>
-            {#if reply.author?.handle}<span>{handleLabel(reply.author.handle)}</span>{/if}
+            {#if isDeletedBot(reply.author)}
+              <span class="bot-chip bot-chip--deleted">deleted bot</span>
+            {/if}
+            {#if userHandle(reply.author)}<span>{handleLabel(userHandle(reply.author))}</span>{/if}
             <time>{time(reply.created_at)}</time>
             {#if !reply.deleted_at}
               <button

@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import { isDeletedBot, userDisplayLabel, userHandle } from "./people";
 
 export type MessageGroup = {
   key: string;
@@ -8,6 +9,7 @@ export type MessageGroup = {
   authorHandle: string;
   authorAvatarURL: string;
   authorID: string;
+  authorDeleted: boolean;
   timestamp: string;
 };
 
@@ -21,7 +23,7 @@ export function quoteSnippet(text: string | undefined, max = 120): string {
 }
 
 export function quotedAuthorName(message: Message): string {
-  return message.quoted_author?.display_name || "Unknown";
+  return userDisplayLabel(message.quoted_author, "Unknown");
 }
 
 export function threadSummary(message: Message, selectedThreadID?: string): string {
@@ -91,9 +93,10 @@ export function groupMessages(list: Message[]): MessageGroup[] {
         dayLabel: dayChanged ? dayLabel(message.created_at) : null,
         messages: [message],
         authorName: message.author?.display_name || "Local User",
-        authorHandle: message.author?.handle || "",
-        authorAvatarURL: message.author?.avatar_url || "",
+        authorHandle: userHandle(message.author),
+        authorAvatarURL: isDeletedBot(message.author) ? "" : message.author?.avatar_url || "",
         authorID,
+        authorDeleted: isDeletedBot(message.author),
         timestamp: message.created_at,
       });
     } else {

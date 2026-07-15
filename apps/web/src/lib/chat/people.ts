@@ -18,6 +18,19 @@ export function handleLabel(value?: string | null): string {
   return value ? `@${value}` : "";
 }
 
+export function userHandle(user?: User | null): string {
+  return user?.handle || user?.former_handle || "";
+}
+
+export function isDeletedBot(user?: User | null): boolean {
+  return user?.kind === "bot" && !!user.deleted_at;
+}
+
+export function userDisplayLabel(user?: User | null, fallback = "Local User"): string {
+  const name = user?.display_name || fallback;
+  return isDeletedBot(user) ? `${name} (deleted bot)` : name;
+}
+
 export function avatarHue(seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
@@ -33,7 +46,7 @@ export function dmAvatarUser(conversation: DirectConversation, currentUserID?: s
 export function dmTitle(conversation: DirectConversation, currentUserID?: string): string {
   const others = conversation.members.filter((member) => member.id !== currentUserID);
   const list = others.length > 0 ? others : conversation.members;
-  return list.map((member) => member.display_name).join(", ");
+  return list.map((member) => userDisplayLabel(member)).join(", ");
 }
 
 export function collectRecentPeople(
@@ -44,12 +57,16 @@ export function collectRecentPeople(
   const people = new Map<string, User>();
   for (const conversation of conversations) {
     for (const member of conversation.members) {
-      if (member.id && member.id !== currentUserID) people.set(member.id, member);
+      if (member.id && member.id !== currentUserID && !member.deleted_at) {
+        people.set(member.id, member);
+      }
     }
   }
   for (const message of [...messageList].reverse()) {
     const author = message.author;
-    if (author?.id && author.id !== currentUserID) people.set(author.id, author);
+    if (author?.id && author.id !== currentUserID && !author.deleted_at) {
+      people.set(author.id, author);
+    }
   }
   return [...people.values()].slice(0, 12);
 }

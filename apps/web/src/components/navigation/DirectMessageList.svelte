@@ -1,6 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { dmAvatarUser, dmTitle } from "../../lib/chat/people";
+  import { dmAvatarUser, dmTitle, isDeletedBot } from "../../lib/chat/people";
   import type { DirectConversation } from "../../lib/types";
 
   type Props = {
@@ -93,7 +93,7 @@
             class="dm-avatar"
             id={dmUser?.id || conversation.id}
             name={dmUser?.display_name}
-            src={dmUser?.avatar_url}
+            src={isDeletedBot(dmUser) ? undefined : dmUser?.avatar_url}
             size={22}
           />
           <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>

@@ -627,6 +627,11 @@
   text-underline-offset: 2px;
 }
 
+.author-name--static:hover {
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
 /* Timestamps as machine metadata: mono, tabular. */
 .group-body > header time {
   color: var(--muted);
@@ -654,6 +659,11 @@
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.bot-chip--deleted {
+  border-color: var(--line-strong);
+  color: var(--muted);
 }
 
 .message-row {

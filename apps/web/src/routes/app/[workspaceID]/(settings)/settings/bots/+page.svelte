@@ -2,6 +2,7 @@
   import {
     activeTokens,
     botLoadErrorMessage,
+    deleteBot as deleteBotIdentity,
     isServiceBot,
     listWorkspaceBots,
     listWorkspaceBotTokens,
@@ -11,6 +12,7 @@
     type BotWithTokens,
     type CreateBotResponse,
   } from "$lib/bots";
+  import { APIError } from "$lib/api";
   import { isWorkspaceManager } from "$lib/permissions";
   import BotCreateForm from "../../../../../../components/settings/bots/BotCreateForm.svelte";
   import BotTokenForm from "../../../../../../components/settings/bots/BotTokenForm.svelte";
@@ -29,7 +31,9 @@
   } | null>(null);
   let expandedBotID = $state<string | null>(null);
   let mintingBotID = $state<string | null>(null);
-  let pendingAction = $state<{ botID: string; kind: "revoke" | "remove" } | null>(null);
+  let pendingAction = $state<
+    { botID: string; kind: "revoke" | "remove" | "delete" } | null
+  >(null);
   let actionError = $state("");
 
   const me = $derived(data.me);
@@ -51,6 +55,11 @@
 
   function canRemove(): boolean {
     return canManage;
+  }
+
+  function canDelete(bot: BotWithTokens["bot"]): boolean {
+    if (isServiceBot(bot)) return canManage;
+    return !!me && bot.owner_user_id === me.id;
   }
 
   function toggleExpand(botID: string) {
@@ -123,6 +132,25 @@
       if (expandedBotID === bot.id) expandedBotID = null;
     } catch (err) {
       actionError = botLoadErrorMessage(err);
+    } finally {
+      pendingAction = null;
+    }
+  }
+
+  async function deleteBotEverywhere(bot: BotWithTokens["bot"]) {
+    const handle = formatHandle(bot.handle);
+    const message = `Delete ${handle} everywhere? This permanently retires this bot identity, revokes all of its tokens and integrations in every workspace, and releases ${handle} for reuse. Existing messages keep the old identity marked as deleted.`;
+    if (!confirm(message)) return;
+    pendingAction = { botID: bot.id, kind: "delete" };
+    actionError = "";
+    try {
+      await deleteBotIdentity(bot.id);
+      bots = bots.filter((entry) => entry.bot.id !== bot.id);
+      if (expandedBotID === bot.id) expandedBotID = null;
+      if (revealed?.bot.id === bot.id) revealed = null;
+    } catch (err) {
+      actionError =
+        err instanceof APIError && err.status === 403 ? err.message : botLoadErrorMessage(err);
     } finally {
       pendingAction = null;
     }
@@ -298,6 +326,16 @@
                       {acting && pendingAction?.kind === "remove"
                         ? "Removing…"
                         : "Remove from workspace"}
+                    </button>
+                  {/if}
+                  {#if canDelete(bot)}
+                    <button
+                      type="button"
+                      class="ws-btn ws-btn--danger"
+                      onclick={() => deleteBotEverywhere(bot)}
+                      disabled={acting}
+                    >
+                      {acting && pendingAction?.kind === "delete" ? "Deleting…" : "Delete bot"}
                     </button>
                   {/if}
                 </div>

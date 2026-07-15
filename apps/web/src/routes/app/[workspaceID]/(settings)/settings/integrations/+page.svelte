@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { api } from "$lib/api";
+  import { api, APIError } from "$lib/api";
   import {
     activeOnly,
     attachedTo,
@@ -50,9 +50,11 @@
   let expandedID = $state("");
   let actionError = $state("");
   // Cascade-revoke confirm state for one installation at a time.
-  let revokePending = $state<{ installation: AppInstallation; revokeTokens: boolean } | null>(
-    null,
-  );
+  let revokePending = $state<{
+    installation: AppInstallation;
+    revokeTokens: boolean;
+    deleteBot: boolean;
+  } | null>(null);
   let revoking = $state(false);
   let accountBusyIDs = $state<Set<string>>(new Set());
 
@@ -195,19 +197,20 @@
   function startRevoke(installation: AppInstallation) {
     if (!canAssessRevoke) return;
     actionError = "";
-    revokePending = { installation, revokeTokens: false };
+    revokePending = { installation, revokeTokens: false, deleteBot: false };
   }
 
   async function confirmRevoke() {
     if (!revokePending || revoking) return;
-    const { installation, revokeTokens } = revokePending;
+    const { installation, revokeTokens, deleteBot } = revokePending;
     revoking = true;
     actionError = "";
     try {
       const result = await revokeAppInstallation(installation.id, {
         revoke_slash_commands: true,
         revoke_event_subscriptions: true,
-        revoke_bot_tokens: revokeTokens,
+        revoke_bot_tokens: deleteBot ? false : revokeTokens,
+        delete_bot: deleteBot,
       });
       markMutation();
       installations = [
@@ -218,7 +221,9 @@
       subscriptions = subscriptions.filter(
         (entry) => entry.app_installation_id !== installation.id,
       );
-      if (revokeTokens) {
+      if (result.deleted_bot) {
+        bots = bots.filter((entry) => entry.bot.id !== result.deleted_bot?.id);
+      } else if (revokeTokens) {
         const revokedAt = new Date().toISOString();
         bots = bots.map((entry) =>
           entry.bot.id === installation.bot_user_id
@@ -234,7 +239,10 @@
       revokePending = null;
       if (expandedID === installation.id) expandedID = "";
     } catch (err) {
-      actionError = integrationsLoadErrorMessage(err);
+      actionError =
+        deleteBot && err instanceof APIError && err.status === 403
+          ? err.message
+          : integrationsLoadErrorMessage(err);
     } finally {
       revoking = false;
     }
@@ -289,6 +297,13 @@
   function canRevokeInstallationTokens(installation: AppInstallation): boolean {
     const bot = botFor(installation);
     return !!bot && (isServiceBot(bot) || bot.owner_user_id === me?.id);
+  }
+
+  function canDeleteInstallationBot(installation: AppInstallation): boolean {
+    const bot = botFor(installation);
+    if (!bot) return false;
+    if (isServiceBot(bot)) return canManage;
+    return bot.owner_user_id === me?.id;
   }
 </script>
 
@@ -439,7 +454,7 @@
                     {impact.subscriptionCount === 1 ? "event subscription" : "event subscriptions"}
                     attached to this app. Delivery history is kept.
                   </p>
-                  {#if canRevokeInstallationTokens(installation) && impact.tokenCount > 0}
+                  {#if canRevokeInstallationTokens(installation) && impact.tokenCount > 0 && !revokePending.deleteBot}
                     <label class="ws-intg__toggle">
                       <input type="checkbox" bind:checked={revokePending.revokeTokens} />
                       <span>
@@ -450,6 +465,22 @@
                         <span class="ws-bots__choice-hint">
                           Anything still using them fails immediately. Leave unchecked if the bot
                           is shared with other things.
+                        </span>
+                      </span>
+                    </label>
+                  {/if}
+                  {#if canDeleteInstallationBot(installation) && bot}
+                    <label class="ws-intg__toggle">
+                      <input type="checkbox" bind:checked={revokePending.deleteBot} />
+                      <span>
+                        <span class="ws-bots__choice-title">
+                          Also delete @{bot.handle} everywhere and release the handle
+                        </span>
+                        <span class="ws-bots__choice-hint">
+                          This retires the bot identity and revokes all of its tokens and
+                          integrations in every workspace. Existing messages remain marked as from
+                          a deleted bot. Shared service bots require manager access in every
+                          affected workspace.
                         </span>
                       </span>
                     </label>

@@ -1394,16 +1394,45 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(threadPane.getByText("No thread open")).toBeVisible();
   await page.getByLabel("Search messages").fill("thread");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await page
-    .getByLabel("Search results")
+  const searchPane = page.getByLabel("Search results");
+  const threadReplyResult = searchPane
     .locator(".search-result")
-    .filter({ hasText: "thread _reply_" })
-    .click();
+    .filter({ hasText: "thread _reply_" });
+  await expect(threadReplyResult).toContainText("Reply in thread");
+  let searchRequestsAfterResults = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/api/search?")) searchRequestsAfterResults += 1;
+  });
+  await threadReplyResult.click();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await expect(searchPane).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/M[A-Z0-9]{16}$/);
+
+  await page.getByRole("button", { name: "Back to search results" }).click();
+  await expect(searchPane).toBeVisible();
+  await expect(threadReplyResult).toBeVisible();
+  await expect(page.getByLabel("Thread pane")).toHaveCount(0);
+  expect(searchRequestsAfterResults).toBe(0);
+
+  await threadReplyResult.click();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await page.getByLabel("Search messages").fill("playwright");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(
+    searchPane.locator(".search-result").filter({ hasText: "hello **playwright**" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Thread pane")).toHaveCount(0);
+  await searchPane.getByRole("button", { name: "Close search panel" }).click();
+
+  await page.getByLabel("Search messages").fill("thread");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await threadReplyResult.click();
   await expect(page.getByLabel("Thread pane")).toBeVisible();
   await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/M[A-Z0-9]{16}$/);
 
   await page.reload();
   await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back to search results" })).toHaveCount(0);
   await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/C[A-Z0-9]{16}$/);
@@ -1421,6 +1450,17 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByLabel("Message body").fill("private playwright");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
+
+  // Direct-message search stays scoped to the open conversation.
+  await page.getByLabel("Search messages").fill("private playwright");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(searchPane.getByText(/Search in @Second User/)).toBeVisible();
+  const dmResult = searchPane.locator(".search-result").filter({ hasText: "private playwright" });
+  await dmResult.click();
+  await expect(searchPane).toBeVisible();
+  await expect(page.locator(".message-row.highlight")).toContainText("private playwright");
+  await searchPane.getByRole("button", { name: "Close search panel" }).click();
+  await expect(searchPane).toHaveCount(0);
 });
 
 test("confirms message deletion in the app modal", async ({ page }) => {

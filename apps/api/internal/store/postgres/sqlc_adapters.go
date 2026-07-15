@@ -264,6 +264,7 @@ func storeDirectConversationFromList(row storedb.ListDirectConversationsRow) sto
 		LastSeq:     row.LastSeq,
 		LastReadSeq: row.LastReadSeq,
 		UnreadCount: row.UnreadCount,
+		CanSend:     row.CanSend,
 	}
 }
 
@@ -276,6 +277,7 @@ func storeDirectConversationFromGet(row storedb.GetDirectConversationRow) store.
 		LastSeq:     row.LastSeq,
 		LastReadSeq: row.LastReadSeq,
 		UnreadCount: row.UnreadCount,
+		CanSend:     row.CanSend,
 	}
 }
 

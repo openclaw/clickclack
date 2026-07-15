@@ -103,12 +103,7 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 			if err := tx.Commit(); err != nil {
 				return store.DirectConversation{}, err
 			}
-			return s.hydrateDirectConversation(ctx, store.DirectConversation{
-				ID:          existing.ID,
-				RouteID:     existing.RouteID,
-				WorkspaceID: existing.WorkspaceID,
-				CreatedAt:   existing.CreatedAt,
-			})
+			return s.GetDirectConversation(ctx, existing.ID, input.UserID)
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return store.DirectConversation{}, err
@@ -145,12 +140,7 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 					if err := tx.Commit(); err != nil {
 						return store.DirectConversation{}, err
 					}
-					return s.hydrateDirectConversation(ctx, store.DirectConversation{
-						ID:          existing.ID,
-						RouteID:     existing.RouteID,
-						WorkspaceID: existing.WorkspaceID,
-						CreatedAt:   existing.CreatedAt,
-					})
+					return s.GetDirectConversation(ctx, existing.ID, input.UserID)
 				}
 				if !errors.Is(lookupErr, sql.ErrNoRows) {
 					return store.DirectConversation{}, lookupErr
@@ -172,7 +162,7 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 	if err := tx.Commit(); err != nil {
 		return store.DirectConversation{}, err
 	}
-	return s.hydrateDirectConversation(ctx, dm)
+	return s.GetDirectConversation(ctx, dm.ID, input.UserID)
 }
 
 func (s *Store) HideDirectConversation(ctx context.Context, conversationID, userID string) error {
@@ -207,23 +197,10 @@ func (s *Store) ReopenDirectConversation(ctx context.Context, conversationID, us
 	if err := qtx.UnhideDirectConversation(ctx, storedb.UnhideDirectConversationParams{ConversationID: conversationID, UserID: userID}); err != nil {
 		return store.DirectConversation{}, err
 	}
-	row, err := qtx.GetDirectConversation(ctx, storedb.GetDirectConversationParams{ReaderUserID: userID, ConversationID: conversationID})
-	if err != nil {
-		return store.DirectConversation{}, err
-	}
 	if err := tx.Commit(); err != nil {
 		return store.DirectConversation{}, err
 	}
-	return s.hydrateDirectConversation(ctx, storeDirectConversationFromGet(row))
-}
-
-func (s *Store) hydrateDirectConversation(ctx context.Context, dm store.DirectConversation) (store.DirectConversation, error) {
-	members, err := s.directConversationMembers(ctx, dm.ID)
-	if err != nil {
-		return store.DirectConversation{}, err
-	}
-	dm.Members = members
-	return dm, nil
+	return s.GetDirectConversation(ctx, conversationID, userID)
 }
 
 func (s *Store) ListDirectMessages(ctx context.Context, conversationID, userID string, page store.MessagePageRequest) (store.MessagePage, error) {

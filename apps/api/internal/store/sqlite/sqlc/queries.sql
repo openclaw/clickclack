@@ -889,7 +889,18 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
            AND m.author_id <> sqlc.arg(reader_user_id)
            AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = sqlc.arg(reader_user_id)), 0)
-       ), 0) AS INTEGER) AS unread_count
+       ), 0) AS INTEGER) AS unread_count,
+       EXISTS (
+         SELECT 1
+         FROM direct_conversation_members peer
+         JOIN workspace_members peer_wm
+           ON peer_wm.workspace_id = dc.workspace_id
+          AND peer_wm.user_id = peer.user_id
+         LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = peer.user_id
+         WHERE peer.conversation_id = dc.id
+           AND peer.user_id <> sqlc.arg(reader_user_id)
+           AND tombstone.bot_user_id IS NULL
+       ) AS can_send
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = sqlc.arg(workspace_id)
@@ -914,7 +925,18 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
            AND m.author_id <> sqlc.arg(reader_user_id)
            AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = sqlc.arg(reader_user_id)), 0)
-       ), 0) AS INTEGER) AS unread_count
+       ), 0) AS INTEGER) AS unread_count,
+       EXISTS (
+         SELECT 1
+         FROM direct_conversation_members peer
+         JOIN workspace_members peer_wm
+           ON peer_wm.workspace_id = dc.workspace_id
+          AND peer_wm.user_id = peer.user_id
+         LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = peer.user_id
+         WHERE peer.conversation_id = dc.id
+           AND peer.user_id <> sqlc.arg(reader_user_id)
+           AND tombstone.bot_user_id IS NULL
+       ) AS can_send
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 JOIN workspace_members wm ON wm.workspace_id = dc.workspace_id AND wm.user_id = dcm.user_id

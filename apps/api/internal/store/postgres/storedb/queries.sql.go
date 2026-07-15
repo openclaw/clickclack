@@ -1063,7 +1063,18 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
            AND m.author_id <> $1
            AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
-       ), 0) AS BIGINT) AS unread_count
+       ), 0) AS BIGINT) AS unread_count,
+       EXISTS (
+         SELECT 1
+         FROM direct_conversation_members peer
+         JOIN workspace_members peer_wm
+           ON peer_wm.workspace_id = dc.workspace_id
+          AND peer_wm.user_id = peer.user_id
+         LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = peer.user_id
+         WHERE peer.conversation_id = dc.id
+           AND peer.user_id <> $1
+           AND tombstone.bot_user_id IS NULL
+       ) AS can_send
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 JOIN workspace_members wm ON wm.workspace_id = dc.workspace_id AND wm.user_id = dcm.user_id
@@ -1084,6 +1095,7 @@ type GetDirectConversationRow struct {
 	LastSeq     int64  `json:"last_seq"`
 	LastReadSeq int64  `json:"last_read_seq"`
 	UnreadCount int64  `json:"unread_count"`
+	CanSend     bool   `json:"can_send"`
 }
 
 func (q *Queries) GetDirectConversation(ctx context.Context, arg GetDirectConversationParams) (GetDirectConversationRow, error) {
@@ -1097,6 +1109,7 @@ func (q *Queries) GetDirectConversation(ctx context.Context, arg GetDirectConver
 		&i.LastSeq,
 		&i.LastReadSeq,
 		&i.UnreadCount,
+		&i.CanSend,
 	)
 	return i, err
 }
@@ -2853,7 +2866,18 @@ SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created
            AND m.author_id <> $1
            AND m.kind = 'message'
            AND m.channel_seq > COALESCE((SELECT dr2.last_read_seq FROM direct_reads dr2 WHERE dr2.conversation_id = dc.id AND dr2.user_id = $1), 0)
-       ), 0) AS BIGINT) AS unread_count
+       ), 0) AS BIGINT) AS unread_count,
+       EXISTS (
+         SELECT 1
+         FROM direct_conversation_members peer
+         JOIN workspace_members peer_wm
+           ON peer_wm.workspace_id = dc.workspace_id
+          AND peer_wm.user_id = peer.user_id
+         LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = peer.user_id
+         WHERE peer.conversation_id = dc.id
+           AND peer.user_id <> $1
+           AND tombstone.bot_user_id IS NULL
+       ) AS can_send
 FROM direct_conversations dc
 JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
 WHERE dc.workspace_id = $2
@@ -2880,6 +2904,7 @@ type ListDirectConversationsRow struct {
 	LastSeq     int64  `json:"last_seq"`
 	LastReadSeq int64  `json:"last_read_seq"`
 	UnreadCount int64  `json:"unread_count"`
+	CanSend     bool   `json:"can_send"`
 }
 
 func (q *Queries) ListDirectConversations(ctx context.Context, arg ListDirectConversationsParams) ([]ListDirectConversationsRow, error) {
@@ -2899,6 +2924,7 @@ func (q *Queries) ListDirectConversations(ctx context.Context, arg ListDirectCon
 			&i.LastSeq,
 			&i.LastReadSeq,
 			&i.UnreadCount,
+			&i.CanSend,
 		); err != nil {
 			return nil, err
 		}

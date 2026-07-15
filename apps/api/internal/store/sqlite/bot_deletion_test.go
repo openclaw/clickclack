@@ -255,6 +255,80 @@ func TestDeleteBotWithoutHandle(t *testing.T) {
 	}
 }
 
+func TestRemoveBotFromWorkspaceMarksDirectConversationReadOnly(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "bot-membership-dm-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Membership Bot",
+		Handle:      "membership-dm-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{bot.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !direct.CanSend {
+		t.Fatalf("new bot DM was marked read-only: %#v", direct)
+	}
+	root, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: direct.ID,
+		AuthorID:       owner.ID,
+		Body:           "before membership removal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := st.GetDirectConversation(ctx, direct.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.CanSend {
+		t.Fatalf("bot DM remained writable after membership removal: %#v", reloaded)
+	}
+	listed, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDirectConversationReadOnly(t, listed, direct.ID)
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: direct.ID,
+		AuthorID:       owner.ID,
+		Body:           "after membership removal",
+	}); !errors.Is(err, store.ErrDirectConversationNoActivePeer) {
+		t.Fatalf("bot DM accepted a message after membership removal: %v", err)
+	}
+	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: root.ID,
+		AuthorID:      owner.ID,
+		Body:          "thread after membership removal",
+	}); !errors.Is(err, store.ErrDirectConversationNoActivePeer) {
+		t.Fatalf("bot DM thread accepted a reply after membership removal: %v", err)
+	}
+}
+
 func TestDeleteServiceBotRequiresManagementAcrossEveryWorkspace(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -613,4 +687,17 @@ func assertDeletedBotInDirectList(t *testing.T, conversations []store.DirectConv
 		t.Fatalf("direct conversation list did not preserve deleted bot identity: %#v", conversation.Members)
 	}
 	t.Fatalf("direct conversation %s missing from list", conversationID)
+}
+
+func assertDirectConversationReadOnly(t *testing.T, conversations []store.DirectConversation, conversationID string) {
+	t.Helper()
+	for _, conversation := range conversations {
+		if conversation.ID == conversationID {
+			if conversation.CanSend {
+				t.Fatalf("direct conversation %q remained writable: %#v", conversationID, conversation)
+			}
+			return
+		}
+	}
+	t.Fatalf("direct conversation %q was not listed: %#v", conversationID, conversations)
 }

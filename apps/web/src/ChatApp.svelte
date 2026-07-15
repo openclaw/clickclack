@@ -194,9 +194,7 @@
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
-  $: selectedDirectWritable = selectedDirect
-    ? selectedDirect.members.some((member) => member.id !== user?.id && !member.deleted_at)
-    : true;
+  $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
   // Slash-dispatch notices are scoped to the conversation they fired in.
   $: clearComposerNoticeFor(activeConversationKey);

@@ -739,6 +739,7 @@ type DirectConversation struct {
 	LastSeq     int64  `json:"last_seq"`
 	LastReadSeq int64  `json:"last_read_seq"`
 	UnreadCount int64  `json:"unread_count"`
+	CanSend     bool   `json:"can_send"`
 }
 
 type CreateDirectConversationInput struct {

@@ -143,6 +143,7 @@ export type DirectConversation = {
   last_seq?: number;
   last_read_seq?: number;
   unread_count?: number;
+  can_send: boolean;
 };
 
 export type MemberModeration = {

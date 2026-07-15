@@ -2475,7 +2475,7 @@ components:
           format: int64
     DirectConversation:
       type: object
-      required: [id, route_id, workspace_id, created_at, members]
+      required: [id, route_id, workspace_id, created_at, members, can_send]
       properties:
         id:
           type: string
@@ -2491,6 +2491,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/User"
+        can_send:
+          type: boolean
+          description: Whether the current user can send to at least one active recipient.
         last_seq:
           type: integer
           format: int64

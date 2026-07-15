@@ -297,6 +297,7 @@ export type DirectConversation = {
   workspace_id: string;
   created_at: string;
   members: User[];
+  can_send: boolean;
   last_seq?: number;
   last_read_seq?: number;
   unread_count?: number;

@@ -1583,6 +1583,8 @@ export interface components {
       /** Format: date-time */
       created_at: string;
       members: components["schemas"]["User"][];
+      /** @description Whether the current user can send to at least one active recipient. */
+      can_send: boolean;
       /** Format: int64 */
       last_seq?: number;
       /** Format: int64 */

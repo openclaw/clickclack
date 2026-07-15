@@ -22,8 +22,11 @@ POST /api/dms/{conversation_id}/messages                 # { body, quoted_messag
 POST /api/dms/{conversation_id}/read                     # { seq }
 ```
 
-Conversations include their members hydrated from `users`. The `member_ids`
-list on create is deduplicated and the caller is added automatically.
+Conversations include their members hydrated from `users` and a `can_send`
+flag. The flag is false when every other member has been deleted or removed
+from the workspace. Root messages and thread replies return `409 Conflict`
+while the conversation has no active recipient. The `member_ids` list on
+create is deduplicated and the caller is added automatically.
 
 The web sidebar lists existing DMs and also derives a People section from DM
 members and hydrated message authors. Users appear there automatically as

@@ -58,7 +58,9 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 
 	cursorWhere := ""
 	cursorArgs := []any{}
-	orderBy := "rank ASC, created_at_key DESC, m.id DESC"
+	rankExpression := "bm25(messages_fts)"
+	innerOrderBy := "rank ASC, created_at_key DESC, m.id DESC"
+	outerOrderBy := "ranked.rank ASC, ranked.created_at_key DESC, m.id DESC"
 	if req.Cursor != "" {
 		switch req.Sort {
 		case store.SearchSortRelevance:
@@ -77,14 +79,33 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		}
 	}
 	if req.Sort == store.SearchSortNewest {
-		orderBy = "created_at_key DESC, m.id DESC"
+		rankExpression = "0.0"
+		innerOrderBy = "created_at_key DESC, m.id DESC"
+		outerOrderBy = "ranked.created_at_key DESC, m.id DESC"
 	}
 
-	args := []any{markers.Start, markers.End, req.WorkspaceID, compiledQuery}
+	args := []any{req.WorkspaceID, compiledQuery}
 	args = append(args, scopeArgs...)
 	args = append(args, cursorArgs...)
 	args = append(args, req.Limit+1)
+	args = append(args, markers.Start, markers.End, compiledQuery)
 	rows, err := tx.QueryContext(ctx, `
+		WITH ranked AS (
+			SELECT messages_fts.rowid AS fts_rowid,
+			       m.id AS message_id,
+			       `+sqliteSearchCreatedAtKey+` AS created_at_key,
+			       `+rankExpression+` AS rank
+			FROM messages_fts
+			JOIN messages m ON m.id = messages_fts.message_id
+			WHERE messages_fts.workspace_id = ?
+			  AND messages_fts MATCH ?
+			  AND m.deleted_at IS NULL
+			  AND m.kind = 'message'
+			  `+scopeWhere+`
+			  `+cursorWhere+`
+			ORDER BY `+innerOrderBy+`
+			LIMIT ?
+		)
 		SELECT m.id,
 		       m.workspace_id,
 		       COALESCE(m.channel_id, ''),
@@ -104,26 +125,21 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		       m.channel_seq,
 		       m.thread_seq,
 		       m.created_at,
-		       `+sqliteSearchCreatedAtKey+` AS created_at_key,
+		       ranked.created_at_key,
 		       m.edited_at,
 		       COALESCE(thread_state.reply_count, 0),
 		       thread_state.last_reply_at,
-		       bm25(messages_fts) AS rank,
-		       snippet(messages_fts, 2, ?, ?, '…', 32) AS snippet
-		FROM messages_fts
-		JOIN messages m ON m.id = messages_fts.message_id
+		       ranked.rank,
+		       snippet(messages_fts, 2, ?, ?, '…', 32)
+		FROM ranked
+		JOIN messages m ON m.id = ranked.message_id
+		JOIN messages_fts ON messages_fts.rowid = ranked.fts_rowid
 		LEFT JOIN channels c ON c.id = m.channel_id AND c.workspace_id = m.workspace_id
 		JOIN users u ON u.id = m.author_id
 		LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
 		LEFT JOIN thread_state ON thread_state.root_message_id = m.id
-		WHERE messages_fts.workspace_id = ?
-		  AND messages_fts MATCH ?
-		  AND m.deleted_at IS NULL
-		  AND m.kind = 'message'
-		  `+scopeWhere+`
-		  `+cursorWhere+`
-		ORDER BY `+orderBy+`
-		LIMIT ?`, args...)
+		WHERE messages_fts MATCH ?
+		ORDER BY `+outerOrderBy, args...)
 	if err != nil {
 		return store.SearchPage{}, err
 	}
@@ -181,7 +197,11 @@ func sqliteSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRequ
 			)`, []any{req.DirectConversationID, req.UserID}, nil
 	default:
 		if role == store.WorkspaceRoleGuest {
-			return "AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL AND c.name = ?", []any{store.GuestChannelName}, nil
+			var guestChannelID string
+			if err := tx.QueryRowContext(ctx, `SELECT id FROM channels WHERE workspace_id = ? AND name = ?`, req.WorkspaceID, store.GuestChannelName).Scan(&guestChannelID); err != nil {
+				return "", nil, err
+			}
+			return "AND m.direct_conversation_id IS NULL AND m.channel_id = ?", []any{guestChannelID}, nil
 		}
 		return "AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL", nil, nil
 	}

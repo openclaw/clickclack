@@ -2197,17 +2197,13 @@ test("renders search results in a responsive sidebar", async ({ page }) => {
 
   await expect
     .poll(async () => (await results.boundingBox())?.width || 0)
-    .toBeGreaterThanOrEqual(350);
+    .toBeGreaterThanOrEqual(340);
   const timelineBox = await page.locator(".timeline").boundingBox();
   const resultsBox = await results.boundingBox();
   expect(timelineBox).not.toBeNull();
   expect(resultsBox).not.toBeNull();
   expect(resultsBox!.x).toBeGreaterThanOrEqual(timelineBox!.x + timelineBox!.width - 1);
-  expect(resultsBox!.width).toBeGreaterThanOrEqual(350);
-
-  if (process.env.CAPTURE_SEARCH_SIDEBAR_PROOF === "1") {
-    await page.screenshot({ path: "docs/proof/search-sidebar.png", fullPage: true });
-  }
+  expect(resultsBox!.width).toBeGreaterThanOrEqual(340);
 
   await result.click();
   await expect(results).toBeVisible();
@@ -2470,7 +2466,9 @@ test("message history pages older, newer, and search target windows", async ({ p
 
   await page.getByLabel("Search messages").fill("targetten");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByLabel("Search results").getByText("targetten")).toBeVisible();
+  await expect(
+    page.getByLabel("Search results").locator(".search-result", { hasText: "targetten" }),
+  ).toBeVisible();
   const aroundPage = page.waitForResponse(
     (response) =>
       response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&

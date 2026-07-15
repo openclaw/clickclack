@@ -89,6 +89,9 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	if len(listed) != 0 {
 		t.Fatalf("deleted bot remains in workspace list: %#v", listed)
 	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, bot.ID, store.WorkspaceRoleBot); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleted bot was reattached to the workspace: %v", err)
+	}
 
 	assertDeletedMessageAuthor(t, st, ctx, botMessage.ID, owner.ID, bot.ID, bot.Handle)
 	assertDeletedMessageAuthor(t, st, ctx, directMessage.ID, owner.ID, bot.ID, bot.Handle)

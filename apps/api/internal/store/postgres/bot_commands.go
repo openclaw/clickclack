@@ -37,6 +37,9 @@ func (s *Store) SetBotCommands(ctx context.Context, workspaceID, botUserID strin
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	if _, err := lockActiveWorkspaceBotTx(ctx, tx, workspaceID, botUserID); err != nil {
+		return nil, err
+	}
 	if _, err := qtx.LockBotCommandSet(ctx, storedb.LockBotCommandSetParams{
 		WorkspaceID: workspaceID,
 		BotUserID:   botUserID,

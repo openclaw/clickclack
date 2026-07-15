@@ -70,6 +70,9 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.AppInstallation{}, err
 	}
+	if _, err := lockActiveWorkspaceBotTx(ctx, tx, workspaceID, botUserID); err != nil {
+		return store.AppInstallation{}, err
+	}
 	if setupNonce != "" {
 		existing, replayErr := scanAppInstallation(tx.QueryRowContext(
 			ctx,
@@ -95,17 +98,6 @@ func (s *Store) CreateAppInstallation(ctx context.Context, input store.CreateApp
 		if !errors.Is(replayErr, sql.ErrNoRows) {
 			return store.AppInstallation{}, replayErr
 		}
-	}
-	var botKind string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT u.kind
-		FROM users u
-		JOIN workspace_members wm ON wm.user_id = u.id
-		WHERE u.id = $1 AND wm.workspace_id = $2`, botUserID, workspaceID).Scan(&botKind); err != nil {
-		return store.AppInstallation{}, err
-	}
-	if botKind != "bot" {
-		return store.AppInstallation{}, errors.New("bot_user_id must refer to a bot in the workspace")
 	}
 	installation := store.AppInstallation{
 		ID:          newID("app"),
@@ -146,6 +138,18 @@ func (s *Store) RevokeAppInstallation(ctx context.Context, installationID, reque
 		return store.RevokeAppInstallationResult{}, err
 	}
 	defer tx.Rollback()
+	if options.DeleteBot {
+		var botUserID string
+		if err := tx.QueryRowContext(ctx, `
+			SELECT bot_user_id
+			FROM app_installations
+			WHERE id = $1`, installationID).Scan(&botUserID); err != nil {
+			return store.RevokeAppInstallationResult{}, err
+		}
+		if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+			return store.RevokeAppInstallationResult{}, err
+		}
+	}
 	installation, err := scanAppInstallation(tx.QueryRowContext(ctx, appInstallationSelect()+` WHERE id = $1 FOR UPDATE`, installationID))
 	if err != nil {
 		return store.RevokeAppInstallationResult{}, err

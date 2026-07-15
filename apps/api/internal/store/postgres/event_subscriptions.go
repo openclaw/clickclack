@@ -54,6 +54,16 @@ func (s *Store) CreateEventSubscription(ctx context.Context, input store.CreateE
 	}
 	appInstallationID := strings.TrimSpace(input.AppInstallationID)
 	if appInstallationID != "" {
+		var botUserID string
+		if err := tx.QueryRowContext(ctx, `
+			SELECT bot_user_id
+			FROM app_installations
+			WHERE id = $1 AND workspace_id = $2`, appInstallationID, workspaceID).Scan(&botUserID); err != nil {
+			return store.EventSubscription{}, err
+		}
+		if _, err := lockActiveWorkspaceBotTx(ctx, tx, workspaceID, botUserID); err != nil {
+			return store.EventSubscription{}, err
+		}
 		var one int
 		if err := tx.QueryRowContext(ctx, `
 			SELECT 1

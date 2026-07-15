@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
@@ -82,6 +83,9 @@ func TestPostgresDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	}
 	if _, err := st.GetBotTokenAuth(ctx, token.Token); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("deleted bot token still authenticates: %v", err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, bot.ID, store.WorkspaceRoleBot); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleted bot was reattached to the workspace: %v", err)
 	}
 	assertPostgresDeletedMessageAuthor(t, st, ctx, botMessage.ID, owner.ID, bot.ID, bot.Handle)
 	assertPostgresDeletedMessageAuthor(t, st, ctx, directMessage.ID, owner.ID, bot.ID, bot.Handle)
@@ -186,6 +190,205 @@ func TestPostgresDeleteBotWithoutHandle(t *testing.T) {
 	}
 	if _, err := st.GetBotTokenAuth(ctx, token.Token); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("deleted handleless bot token still authenticates: %v", err)
+	}
+}
+
+func TestPostgresDeletedBotRejectsActiveResourceCreation(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "postgres-deleted-bot-resources-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Resource Bot",
+		Handle:      "postgres-deleted-resource-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     "deleted-resource-app",
+		DisplayName: "Deleted resource app",
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DeleteBot(ctx, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertNoRows := func(name string, err error) {
+		t.Helper()
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("%s accepted a deleted bot: %v", name, err)
+		}
+	}
+	assertNoRows("workspace membership", st.AddWorkspaceMember(ctx, workspace.ID, bot.ID, store.WorkspaceRoleBot))
+	_, err = st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "after-delete",
+		CreatedBy:   owner.ID,
+	})
+	assertNoRows("bot token", err)
+	_, err = st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: workspace.ID,
+		AppSlug:     "after-delete",
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	assertNoRows("app installation", err)
+	_, err = st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
+		WorkspaceID: workspace.ID,
+		Command:     "/after-delete",
+		CallbackURL: "https://example.com/slash",
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	assertNoRows("slash command", err)
+	_, err = st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+		WorkspaceID:       workspace.ID,
+		AppInstallationID: installation.ID,
+		EventTypes:        []string{"message.created"},
+		CallbackURL:       "https://example.com/events",
+		CreatedBy:         owner.ID,
+	})
+	assertNoRows("event subscription", err)
+	_, err = st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
+		WorkspaceID:       workspace.ID,
+		UserID:            bot.ID,
+		Provider:          "github",
+		ProviderAccountID: "deleted-resource-bot",
+		CreatedBy:         owner.ID,
+	})
+	assertNoRows("connected account", err)
+	_, err = st.SetBotCommands(ctx, workspace.ID, bot.ID, []store.BotCommandInput{{
+		Command:     "/after-delete",
+		Description: "Should not be created",
+	}})
+	assertNoRows("bot command", err)
+}
+
+func TestPostgresBotDeletionSerializesTokenCreation(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "postgres-bot-delete-race-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Race Bot",
+		Handle:      "postgres-delete-race-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocker, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Rollback()
+	if err := lockBotLifecycleTx(ctx, blocker, bot.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	deleteResult := make(chan error, 1)
+	go func() {
+		_, err := st.DeleteBot(ctx, bot.ID, owner.ID)
+		deleteResult <- err
+	}()
+	waitForBlockedBotLifecycleOperations(t, ctx, st.db, 1)
+
+	createResult := make(chan error, 1)
+	go func() {
+		_, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+			WorkspaceID: workspace.ID,
+			BotUserID:   bot.ID,
+			Name:        "racing-token",
+			CreatedBy:   owner.ID,
+		})
+		createResult <- err
+	}()
+	waitForBlockedBotLifecycleOperations(t, ctx, st.db, 2)
+
+	if err := blocker.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-deleteResult:
+		if err != nil {
+			t.Fatalf("bot deletion failed after acquiring the lifecycle lock: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("bot deletion did not resume after lifecycle lock release")
+	}
+	select {
+	case err := <-createResult:
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("token creation after queued deletion returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("token creation did not resume after bot deletion")
+	}
+	var activeTokens int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM bot_tokens
+		WHERE bot_user_id = $1 AND revoked_at IS NULL`, bot.ID).Scan(&activeTokens); err != nil {
+		t.Fatal(err)
+	}
+	if activeTokens != 0 {
+		t.Fatalf("bot deletion race left %d active tokens", activeTokens)
+	}
+}
+
+func waitForBlockedBotLifecycleOperations(t *testing.T, ctx context.Context, db *sql.DB, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var blocked int
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND pid <> pg_backend_pid()
+			  AND wait_event_type = 'Lock'
+			  AND cardinality(pg_blocking_pids(pid)) > 0
+			  AND position('pg_advisory_xact_lock' in query) > 0`).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected %d blocked bot lifecycle operations, got %d", want, blocked)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

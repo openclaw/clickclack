@@ -112,7 +112,15 @@ func (s *Store) CreateConnectedAccount(ctx context.Context, input store.CreateCo
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.ConnectedAccount{}, err
 	}
-	if err := requireMembershipTx(ctx, tx, workspaceID, userID); err != nil {
+	var userKind string
+	if err := tx.QueryRowContext(ctx, `SELECT kind FROM users WHERE id = $1`, userID).Scan(&userKind); err != nil {
+		return store.ConnectedAccount{}, err
+	}
+	if userKind == "bot" {
+		if _, err := lockActiveWorkspaceBotTx(ctx, tx, workspaceID, userID); err != nil {
+			return store.ConnectedAccount{}, err
+		}
+	} else if err := requireMembershipTx(ctx, tx, workspaceID, userID); err != nil {
 		return store.ConnectedAccount{}, err
 	}
 	account := store.ConnectedAccount{

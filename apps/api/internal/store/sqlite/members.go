@@ -13,12 +13,30 @@ func (s *Store) AddWorkspaceMember(ctx context.Context, workspaceID, userID, rol
 	if role == "" {
 		role = store.WorkspaceRoleMember
 	}
-	return s.q.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var one int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT 1
+		FROM users u
+		WHERE u.id = ?
+		  AND NOT EXISTS (
+		    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+		  )`, userID).Scan(&one); err != nil {
+		return err
+	}
+	if err := storedb.New(tx).InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
 		UserID:      userID,
 		Role:        normalizeWorkspaceRole(role),
 		CreatedAt:   now(),
-	})
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorUserID string, page store.WorkspaceMemberPageRequest) (store.WorkspaceMemberPage, error) {

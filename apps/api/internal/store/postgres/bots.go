@@ -18,6 +18,47 @@ type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
+const botLifecycleLockNamespace = "clickclack.bot-lifecycle"
+
+func lockBotLifecycleTx(ctx context.Context, tx *sql.Tx, botUserID string) error {
+	_, err := tx.ExecContext(
+		ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		botLifecycleLockNamespace,
+		botUserID,
+	)
+	return err
+}
+
+func lockActiveBotTx(ctx context.Context, tx *sql.Tx, botUserID string) (store.User, error) {
+	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+		return store.User{}, err
+	}
+	return scanUser(tx.QueryRowContext(ctx, `
+		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		FROM users u
+		WHERE u.id = $1
+		  AND u.kind = 'bot'
+		  AND NOT EXISTS (
+		    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+		  )`, botUserID))
+}
+
+func lockActiveWorkspaceBotTx(ctx context.Context, tx *sql.Tx, workspaceID, botUserID string) (store.User, error) {
+	bot, err := lockActiveBotTx(ctx, tx, botUserID)
+	if err != nil {
+		return store.User{}, err
+	}
+	var one int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT 1
+		FROM workspace_members
+		WHERE workspace_id = $1 AND user_id = $2`, workspaceID, botUserID).Scan(&one); err != nil {
+		return store.User{}, err
+	}
+	return bot, nil
+}
+
 var botScopeBundles = map[string][]string{
 	"bot:read": {
 		"workspaces:read",
@@ -353,12 +394,9 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 			return store.BotToken{}, err
 		}
 	}
-	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = $1`, botUserID))
+	bot, err := lockActiveBotTx(ctx, tx, botUserID)
 	if err != nil {
 		return store.BotToken{}, err
-	}
-	if bot.Kind != "bot" {
-		return store.BotToken{}, errors.New("bot_user_id must refer to a bot")
 	}
 	workspaceID, err := botWorkspaceForTokenTx(ctx, tx, bot.ID, strings.TrimSpace(input.WorkspaceID))
 	if err != nil {
@@ -669,6 +707,9 @@ func (s *Store) DeleteBot(ctx context.Context, botUserID, requesterID string) (s
 }
 
 func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requesterID string) (store.DeletedBot, botDeletionCounts, error) {
+	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
 	qtx := s.q.WithTx(tx)
 	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
 	if err != nil {

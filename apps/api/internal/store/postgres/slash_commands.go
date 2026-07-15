@@ -218,18 +218,8 @@ func (s *Store) getSlashCommand(ctx context.Context, commandID string, includeSe
 }
 
 func requireWorkspaceBotTx(ctx context.Context, tx *sql.Tx, workspaceID, botUserID string) error {
-	var kind string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT u.kind
-		FROM users u
-		JOIN workspace_members wm ON wm.user_id = u.id
-		WHERE u.id = $1 AND wm.workspace_id = $2`, botUserID, workspaceID).Scan(&kind); err != nil {
-		return err
-	}
-	if kind != "bot" {
-		return errors.New("bot_user_id must refer to a bot in the workspace")
-	}
-	return nil
+	_, err := lockActiveWorkspaceBotTx(ctx, tx, workspaceID, botUserID)
+	return err
 }
 
 func normalizeSlashCommand(command string) string {

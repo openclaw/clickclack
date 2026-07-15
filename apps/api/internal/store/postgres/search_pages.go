@@ -17,16 +17,6 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if err != nil {
 		return store.SearchPage{}, err
 	}
-	if req.Query == "" {
-		return store.SearchPage{Results: []store.SearchHit{}}, nil
-	}
-	markers, err := store.NewSearchMarkers()
-	if err != nil {
-		return store.SearchPage{}, err
-	}
-	headlineOptions := "StartSel=" + markers.Start +
-		", StopSel=" + markers.End +
-		", MaxWords=32, MinWords=16, MaxFragments=2, FragmentDelimiter=…"
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -38,6 +28,17 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if err != nil {
 		return store.SearchPage{}, err
 	}
+	if req.Query == "" {
+		return store.SearchPage{Results: []store.SearchHit{}}, tx.Commit()
+	}
+	markers, err := store.NewSearchMarkers()
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	headlineOptions := "StartSel=" + markers.Start +
+		", StopSel=" + markers.End +
+		", MaxWords=32, MinWords=16, MaxFragments=2, FragmentDelimiter=…"
+
 	args := []any{req.Query, headlineOptions, req.WorkspaceID}
 	scopeWhere, scopeArgs, err := postgresSearchScope(ctx, tx, req, role, len(args)+1)
 	if err != nil {

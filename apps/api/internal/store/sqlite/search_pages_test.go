@@ -218,8 +218,24 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   general.ID,
+		UserID:      outsider.ID,
+		Query:       " ",
+	}); err == nil {
+		t.Fatal("expected empty channel search to enforce workspace membership")
+	}
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, outsider.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID:          workspace.ID,
+		DirectConversationID: conversation.ID,
+		UserID:               outsider.ID,
+		Query:                " ",
+	}); err == nil {
+		t.Fatal("expected empty direct search to enforce conversation membership")
 	}
 	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
 		WorkspaceID:          workspace.ID,

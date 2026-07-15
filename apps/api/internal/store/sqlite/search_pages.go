@@ -17,17 +17,6 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if err != nil {
 		return store.SearchPage{}, err
 	}
-	if req.Query == "" {
-		return store.SearchPage{Results: []store.SearchHit{}}, nil
-	}
-	compiledQuery := store.CompileSQLiteSearchQuery(req.WorkspaceID, req.Query)
-	if compiledQuery == "" {
-		return store.SearchPage{Results: []store.SearchHit{}}, nil
-	}
-	markers, err := store.NewSearchMarkers()
-	if err != nil {
-		return store.SearchPage{}, err
-	}
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -40,6 +29,17 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		return store.SearchPage{}, err
 	}
 	scopeWhere, scopeArgs, err := sqliteSearchScope(ctx, tx, req, role)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	if req.Query == "" {
+		return store.SearchPage{Results: []store.SearchHit{}}, tx.Commit()
+	}
+	compiledQuery := store.CompileSQLiteSearchQuery(req.WorkspaceID, req.Query)
+	if compiledQuery == "" {
+		return store.SearchPage{Results: []store.SearchHit{}}, tx.Commit()
+	}
+	markers, err := store.NewSearchMarkers()
 	if err != nil {
 		return store.SearchPage{}, err
 	}

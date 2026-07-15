@@ -181,6 +181,30 @@ func TestSearchMessagePagePostgresParity(t *testing.T) {
 		t.Fatalf("unexpected direct search page %#v", directPage)
 	}
 
+	outsider, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Search Outsider", Email: "postgres-search-outsider@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		UserID:      outsider.ID,
+		Query:       " ",
+	}); err == nil {
+		t.Fatal("expected empty channel search to enforce workspace membership")
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, outsider.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID:          workspace.ID,
+		DirectConversationID: conversation.ID,
+		UserID:               outsider.ID,
+		Query:                " ",
+	}); err == nil {
+		t.Fatal("expected empty direct search to enforce conversation membership")
+	}
+
 	for _, indexName := range []string{"idx_messages_direct_search_fts", "idx_messages_direct_search_scope"} {
 		var count int
 		if err := st.db.QueryRowContext(ctx, `

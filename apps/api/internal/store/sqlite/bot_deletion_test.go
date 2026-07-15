@@ -71,6 +71,24 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	activePeer, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Active Peer",
+		Email:       "bot-delete-active-peer@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, activePeer.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	groupDirect, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{bot.ID, activePeer.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	deleted, err := st.DeleteBot(ctx, bot.ID, owner.ID)
 	if err != nil {
@@ -135,6 +153,20 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertDeletedBotInDirectList(t, directList, direct.ID, bot.ID, bot.Handle)
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: direct.ID,
+		AuthorID:       owner.ID,
+		Body:           "no recipient",
+	}); !errors.Is(err, store.ErrDirectConversationNoActivePeer) {
+		t.Fatalf("one-to-one DM with deleted bot remained writable: %v", err)
+	}
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: groupDirect.ID,
+		AuthorID:       owner.ID,
+		Body:           "active group recipient",
+	}); err != nil {
+		t.Fatalf("group DM with an active peer became unwritable: %v", err)
+	}
 	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: bot.DisplayName,

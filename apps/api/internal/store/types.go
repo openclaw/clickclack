@@ -35,6 +35,10 @@ var ErrModerationRestricted = errors.New("moderation restriction")
 // mutate it.
 var ErrMessageNotWritable = errors.New("message is not writable")
 
+// ErrDirectConversationNoActivePeer is returned when a sender is the only
+// active workspace member left in a retained direct conversation.
+var ErrDirectConversationNoActivePeer = errors.New("direct conversation has no active recipient")
+
 // ErrPostRateLimited is returned when a waiting-room guest exhausts the small
 // daily post budget.
 var ErrPostRateLimited = errors.New("waiting room post limit reached")

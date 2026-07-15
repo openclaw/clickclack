@@ -253,6 +253,9 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if err := requireCanSendDirectTx(ctx, tx, workspaceID, input.AuthorID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	if err := requireDirectActivePeerTx(ctx, tx, input.ConversationID, input.AuthorID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if err := lockMessageSequenceTx(ctx, tx, "direct", input.ConversationID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -369,6 +372,28 @@ func requireDirectAccessTx(ctx context.Context, tx *sql.Tx, conversationID, user
 
 func requireDirectMembershipTx(ctx context.Context, tx *sql.Tx, conversationID, userID string) error {
 	_, err := storedb.New(tx).RequireDirectMembership(ctx, storedb.RequireDirectMembershipParams{ConversationID: conversationID, UserID: userID})
+	return err
+}
+
+func requireDirectActivePeerTx(ctx context.Context, tx *sql.Tx, conversationID, authorID string) error {
+	var peerID string
+	err := tx.QueryRowContext(ctx, `
+		SELECT wm.user_id
+		FROM direct_conversations dc
+		JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
+		JOIN workspace_members wm
+		  ON wm.workspace_id = dc.workspace_id
+		 AND wm.user_id = dcm.user_id
+		LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = dcm.user_id
+		WHERE dc.id = $1
+		  AND dcm.user_id <> $2
+		  AND tombstone.bot_user_id IS NULL
+		ORDER BY wm.user_id
+		LIMIT 1
+		FOR KEY SHARE OF wm`, conversationID, authorID).Scan(&peerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrDirectConversationNoActivePeer
+	}
 	return err
 }
 

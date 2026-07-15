@@ -44,6 +44,7 @@
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
+    disabled?: boolean;
     onValue: (value: string) => void;
     onSubmit: () => void;
     onKeydown: (event: KeyboardEvent) => void;
@@ -75,6 +76,7 @@
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
+    disabled = false,
     onValue,
     onSubmit,
     onKeydown,
@@ -269,6 +271,7 @@
   class={formClass}
   onsubmit={(event) => {
     event.preventDefault();
+    if (disabled) return;
     onSubmit();
   }}
 >
@@ -326,7 +329,7 @@
     <div class="composer-row">
       {#if showUpload}
         <label class="composer-icon" title="Upload file">
-          <input type="file" aria-label="Upload file" onchange={onUploadFile} />
+          <input type="file" aria-label="Upload file" {disabled} onchange={onUploadFile} />
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/>
           </svg>
@@ -339,6 +342,7 @@
         rows="1"
         {placeholder}
         aria-label={ariaLabel}
+        {disabled}
         oninput={handleInput}
         onfocus={handleFocus}
         onkeydown={handleKeydown}
@@ -346,7 +350,7 @@
         onmouseup={() => updateCaret()}
         onselect={() => updateCaret()}
       ></textarea>
-      <button type="submit" class="send" aria-label={submitLabel} disabled={!value.trim()}>
+      <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || !value.trim()}>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M3 3.5 21 12 3 20.5l3.6-7.5L15 12 6.6 11l-3.6-7.5Z"/>
         </svg>
@@ -355,6 +359,7 @@
     {#if showToolbar}
       <ComposerToolbar
         showGifPicker={showGifPicker}
+        {disabled}
         onWrap={onApplyMarkdownWrap}
         onAppend={onAppendToComposer}
         onToggleGif={onToggleGif}

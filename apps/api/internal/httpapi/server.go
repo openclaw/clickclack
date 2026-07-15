@@ -1524,6 +1524,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrMessageNotWritable):
 		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrDirectConversationNoActivePeer):
+		writeError(w, http.StatusConflict, err)
 	default:
 		writeError(w, http.StatusBadRequest, err)
 	}

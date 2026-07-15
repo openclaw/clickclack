@@ -194,6 +194,9 @@
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
+  $: selectedDirectWritable = selectedDirect
+    ? selectedDirect.members.some((member) => member.id !== user?.id && !member.deleted_at)
+    : true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
   // Slash-dispatch notices are scoped to the conversation they fired in.
   $: clearComposerNoticeFor(activeConversationKey);
@@ -1817,6 +1820,10 @@
   async function sendMessage() {
     const body = messageBody.trim();
     if (!body) return;
+    if (selectedDirect && !selectedDirectWritable) {
+      status = "This conversation has no active recipient";
+      return;
+    }
     if (!selectedChannelID && !selectedDirectID) {
       status = "pick or create a channel";
       return;
@@ -3140,9 +3147,10 @@
 
     <ChatComposer
       value={messageBody}
-      placeholder={selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
+      placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
       ariaLabel="Message body"
       submitLabel="Send"
+      disabled={!!selectedDirect && !selectedDirectWritable}
       pendingUpload={pendingUpload}
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload

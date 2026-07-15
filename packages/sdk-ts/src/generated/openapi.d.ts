@@ -1641,6 +1641,23 @@ export interface components {
     MessageResponse: {
       message: components["schemas"]["Message"];
     };
+    SearchHighlight: {
+      /** @description Inclusive Unicode code-point offset into snippet. */
+      start: number;
+      /** @description Exclusive Unicode code-point offset into snippet. */
+      end: number;
+    };
+    SearchResult: {
+      message: components["schemas"]["Message"];
+      /** Format: double */
+      rank: number;
+      /** @description Bounded plain-text excerpt containing the matched terms. */
+      snippet: string;
+      highlights: components["schemas"]["SearchHighlight"][];
+    };
+    SearchResponse: {
+      results: components["schemas"]["SearchResult"][];
+    };
     Upload: {
       id: string;
       workspace_id: string;
@@ -3782,7 +3799,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["SearchResponse"];
+        };
       };
     };
   };

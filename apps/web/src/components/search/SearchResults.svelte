@@ -2,7 +2,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { handleLabel, isDeletedBot, userHandle } from "../../lib/chat/people";
   import { time } from "../../lib/format";
-  import type { SearchResult } from "../../lib/types";
+  import type { SearchHighlight, SearchResult } from "../../lib/types";
 
   type Props = {
     results: SearchResult[];
@@ -11,6 +11,21 @@
   };
 
   let { results, onClose, onOpenResult }: Props = $props();
+
+  function snippetParts(snippet: string, highlights: SearchHighlight[]) {
+    const characters = Array.from(snippet);
+    const parts: { text: string; highlighted: boolean }[] = [];
+    let position = 0;
+    for (const highlight of highlights) {
+      const start = Math.max(position, Math.min(characters.length, highlight.start));
+      const end = Math.max(start, Math.min(characters.length, highlight.end));
+      if (start > position) parts.push({ text: characters.slice(position, start).join(""), highlighted: false });
+      if (end > start) parts.push({ text: characters.slice(start, end).join(""), highlighted: true });
+      position = end;
+    }
+    if (position < characters.length) parts.push({ text: characters.slice(position).join(""), highlighted: false });
+    return parts;
+  }
 </script>
 
 {#if results.length > 0}
@@ -39,7 +54,11 @@
             {/if}
             <time>{time(result.message.created_at)}</time>
           </div>
-          <span>{result.message.body}</span>
+          <span class="search-result-snippet">
+            {#each snippetParts(result.snippet, result.highlights) as part}
+              {#if part.highlighted}<mark>{part.text}</mark>{:else}{part.text}{/if}
+            {/each}
+          </span>
         </div>
       </button>
     {/each}

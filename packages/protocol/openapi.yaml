@@ -1243,6 +1243,10 @@ paths:
       responses:
         "200":
           description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
   /api/uploads:
     post:
       operationId: createUpload
@@ -2587,6 +2591,42 @@ components:
       properties:
         message:
           $ref: "#/components/schemas/Message"
+    SearchHighlight:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: integer
+          minimum: 0
+          description: Inclusive Unicode code-point offset into snippet.
+        end:
+          type: integer
+          minimum: 0
+          description: Exclusive Unicode code-point offset into snippet.
+    SearchResult:
+      type: object
+      required: [message, rank, snippet, highlights]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        rank:
+          type: number
+          format: double
+        snippet:
+          type: string
+          description: Bounded plain-text excerpt containing the matched terms.
+        highlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHighlight"
+    SearchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
     Upload:
       type: object
       required: [id, workspace_id, owner_id, filename, content_type, byte_size, created_at]

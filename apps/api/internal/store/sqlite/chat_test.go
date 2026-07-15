@@ -148,6 +148,9 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 	if len(results) != 1 || results[0].Message.ID != root.ID {
 		t.Fatalf("unexpected search results: %#v", results)
 	}
+	if results[0].Snippet == "" || len(results[0].Highlights) == 0 {
+		t.Fatalf("expected highlighted search snippet: %#v", results[0])
+	}
 	eventsAfter, err := st.ListEventsAfter(ctx, workspace.ID, owner.ID, channelEvent.Cursor, 10)
 	if err != nil {
 		t.Fatal(err)

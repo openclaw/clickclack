@@ -671,9 +671,16 @@
   font-size: 11px;
 }
 
-.search-result-body span {
+.search-result-snippet {
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.search-result-snippet mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-strong);
+  font-weight: 650;
 }

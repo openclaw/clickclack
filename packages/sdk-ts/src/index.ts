@@ -277,6 +277,22 @@ export type Message = {
   nonce?: string;
 };
 
+export type SearchHighlight = {
+  start: number;
+  end: number;
+};
+
+export type SearchResult = {
+  message: Message;
+  rank: number;
+  snippet: string;
+  highlights: SearchHighlight[];
+};
+
+export type SearchResponse = {
+  results: SearchResult[];
+};
+
 export type Upload = {
   id: string;
   workspace_id: string;
@@ -888,10 +904,14 @@ export class ClickClackClient {
     },
   };
 
-  search = async (workspaceId: string, query: string, options: { channelId?: string } = {}) => {
+  search = async (
+    workspaceId: string,
+    query: string,
+    options: { channelId?: string } = {},
+  ): Promise<SearchResponse> => {
     const params = new URLSearchParams({ workspace_id: workspaceId, q: query });
     if (options.channelId) params.set("channel_id", options.channelId);
-    return this.request(`/api/search?${params.toString()}`);
+    return this.request<SearchResponse>(`/api/search?${params.toString()}`);
   };
 
   uploads = {

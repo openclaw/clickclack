@@ -132,6 +132,13 @@ export type Upload = {
 export type SearchResult = {
   message: Message;
   rank: number;
+  snippet: string;
+  highlights: SearchHighlight[];
+};
+
+export type SearchHighlight = {
+  start: number;
+  end: number;
 };
 
 export type DirectConversation = {

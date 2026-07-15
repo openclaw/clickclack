@@ -726,8 +726,15 @@ type AttachUploadInput struct {
 }
 
 type SearchResult struct {
-	Message Message `json:"message"`
-	Rank    float64 `json:"rank"`
+	Message    Message           `json:"message"`
+	Rank       float64           `json:"rank"`
+	Snippet    string            `json:"snippet"`
+	Highlights []SearchHighlight `json:"highlights"`
+}
+
+type SearchHighlight struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
 }
 
 type DirectConversation struct {

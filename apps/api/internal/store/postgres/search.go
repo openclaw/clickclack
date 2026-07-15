@@ -50,7 +50,9 @@ func (s *Store) SearchMessages(ctx context.Context, workspaceID, channelID, user
 		       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
 		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.created_at,
 		       quoted_tombstone.former_handle, quoted_tombstone.deleted_at,
-		       ts_rank_cd(to_tsvector('simple', m.body), websearch_to_tsquery('simple', $2)) AS rank
+		       ts_rank_cd(to_tsvector('simple', m.body), websearch_to_tsquery('simple', $2)) AS rank,
+		       ts_headline('simple', m.body, websearch_to_tsquery('simple', $2),
+		         'StartSel=`+string(store.SearchHighlightStart)+`, StopSel=`+string(store.SearchHighlightEnd)+`, MaxWords=24, MinWords=12, MaxFragments=2, FragmentDelimiter=…') AS snippet
 		FROM messages m
 		`+channelJoin+`
 		JOIN users u ON u.id = m.author_id
@@ -73,16 +75,17 @@ func (s *Store) SearchMessages(ctx context.Context, workspaceID, channelID, user
 	defer rows.Close()
 	out := []store.SearchResult{}
 	for rows.Next() {
-		msg, rank, err := scanSearchMessage(rows)
+		msg, rank, markedSnippet, err := scanSearchMessage(rows)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, store.SearchResult{Message: msg, Rank: rank})
+		snippet, highlights := store.ParseSearchSnippet(markedSnippet)
+		out = append(out, store.SearchResult{Message: msg, Rank: rank, Snippet: snippet, Highlights: highlights})
 	}
 	return out, rows.Err()
 }
 
-func scanSearchMessage(row scanner) (store.Message, float64, error) {
+func scanSearchMessage(row scanner) (store.Message, float64, string, error) {
 	var msg store.Message
 	var parent, edited, deleted sql.NullString
 	var channelSeq, threadSeq sql.NullInt64
@@ -92,6 +95,7 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 	var quAuthorID, quKind, quOwnerID, quDisplayName, quHandle, quAvatarURL, quCreatedAt sql.NullString
 	var authorFormerHandle, authorDeletedAt, quFormerHandle, quDeletedAt sql.NullString
 	var rank float64
+	var markedSnippet string
 	err := row.Scan(
 		&msg.ID, &msg.WorkspaceID, &msg.ChannelID, &msg.DirectConversationID, &msg.AuthorID, &parent, &msg.ThreadRootID, &channelSeq, &threadSeq,
 		&msg.Body, &msg.BodyFormat, &msg.CreatedAt, &edited, &deleted,
@@ -100,10 +104,10 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 		&quotedMessageID, &msg.QuotedBodySnapshot, &quotedAuthorID,
 		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quCreatedAt,
 		&quFormerHandle, &quDeletedAt,
-		&rank,
+		&rank, &markedSnippet,
 	)
 	if err != nil {
-		return store.Message{}, 0, err
+		return store.Message{}, 0, "", err
 	}
 	if parent.Valid {
 		msg.ParentMessageID = &parent.String
@@ -153,5 +157,5 @@ func scanSearchMessage(row scanner) (store.Message, float64, error) {
 			msg.QuotedAuthor.DeletedAt = &quDeletedAt.String
 		}
 	}
-	return msg, rank, nil
+	return msg, rank, markedSnippet, nil
 }

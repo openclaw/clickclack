@@ -203,6 +203,9 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	for _, result := range results {
 		if result.Message.ID == created.ID {
 			foundCreated = true
+			if result.Snippet == "" || len(result.Highlights) == 0 {
+				t.Fatalf("expected highlighted search snippet: %#v", result)
+			}
 			break
 		}
 	}

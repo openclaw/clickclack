@@ -14,11 +14,24 @@ text search.
 GET /api/search?workspace_id=&channel_id=&q=&limit=
 ```
 
-Returns:
+Returns bounded plain-text excerpts with Unicode code-point highlight ranges:
 
 ```jsonc
-{ "results": [ { "message": Message, "rank": <backend score> } ] }
+{
+  "results": [
+    {
+      "message": Message,
+      "rank": <backend score>,
+      "snippet": "the matched message excerpt",
+      "highlights": [{ "start": 4, "end": 11 }]
+    }
+  ]
+}
 ```
+
+Clients render `snippet` as text and may emphasize each `[start, end)` range.
+Offsets count Unicode code points rather than UTF-8 bytes. The web client does
+not inject search-generated HTML.
 
 `limit` is clamped to `1..100` (default 50). Empty `q` returns an empty list
 without hitting FTS. Membership is required for `workspace_id`.
@@ -37,8 +50,7 @@ SQLite: a virtual table `messages_fts` mirrors `messages.body` with the
 - After `UPDATE OF body`: delete + reinsert.
 
 Soft-deleted messages remain in the index because the row stays around with
-`deleted_at` set. Filter on the client if you don't want to surface
-tombstones.
+`deleted_at` set, but both stores exclude them from search results.
 
 Postgres: the store queries `to_tsvector('simple', body)` with
 `websearch_to_tsquery('simple', q)` and orders by `ts_rank_cd`.
@@ -55,5 +67,3 @@ search text and surface errors cleanly.
 - Cross-workspace global search.
 - DM search. It needs a separate endpoint scoped to direct conversation
   membership.
-- Highlighting/snippet generation. Add `snippet(messages_fts, ...)` if/when
-  the UI needs it.

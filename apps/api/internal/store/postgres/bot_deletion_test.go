@@ -91,6 +91,14 @@ func TestPostgresDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	groupDirectMessage, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: groupDirect.ID,
+		AuthorID:       bot.ID,
+		Body:           "postgres historical group direct message",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	deleted, err := st.DeleteBot(ctx, bot.ID, owner.ID)
 	if err != nil {
@@ -154,12 +162,26 @@ func TestPostgresDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	}); !errors.Is(err, store.ErrDirectConversationNoActivePeer) {
 		t.Fatalf("one-to-one DM with deleted bot remained writable: %v", err)
 	}
+	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: directMessage.ID,
+		AuthorID:      owner.ID,
+		Body:          "no thread recipient",
+	}); !errors.Is(err, store.ErrDirectConversationNoActivePeer) {
+		t.Fatalf("one-to-one DM thread with deleted bot remained writable: %v", err)
+	}
 	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
 		ConversationID: groupDirect.ID,
 		AuthorID:       owner.ID,
 		Body:           "active group recipient",
 	}); err != nil {
 		t.Fatalf("group DM with an active peer became unwritable: %v", err)
+	}
+	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: groupDirectMessage.ID,
+		AuthorID:      owner.ID,
+		Body:          "active group thread recipient",
+	}); err != nil {
+		t.Fatalf("group DM thread with an active peer became unwritable: %v", err)
 	}
 	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,

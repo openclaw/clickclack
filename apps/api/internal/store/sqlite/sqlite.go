@@ -750,6 +750,9 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		if err := requireCanSendDirectTx(ctx, tx, root.WorkspaceID, input.AuthorID); err != nil {
 			return store.Message{}, store.ThreadState{}, nil, err
 		}
+		if err := requireDirectActivePeerTx(ctx, tx, root.DirectConversationID, input.AuthorID); err != nil {
+			return store.Message{}, store.ThreadState{}, nil, err
+		}
 	} else if err := requireCanPostTx(ctx, tx, root.WorkspaceID, root.ChannelID, input.AuthorID); err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}

@@ -21,6 +21,7 @@
     replyTarget: Message | null;
     currentUserID?: string;
     mentionPeople?: User[];
+    replyDisabled?: boolean;
     onClose: () => void;
     onReplyBody: (value: string) => void;
     onSubmitReply: () => void;
@@ -47,6 +48,7 @@
     replyTarget,
     currentUserID,
     mentionPeople = [],
+    replyDisabled = false,
     onClose,
     onReplyBody,
     onSubmitReply,
@@ -223,10 +225,11 @@
 </div>
 <ChatComposer
   value={replyBody}
-  placeholder="Reply in thread"
+  placeholder={replyDisabled ? "No active recipient" : "Reply in thread"}
   ariaLabel="Reply body"
   submitLabel="Reply"
   formClass="composer reply-composer"
+  disabled={replyDisabled}
   replyTarget={replyTarget}
   {mentionPeople}
   onValue={onReplyBody}

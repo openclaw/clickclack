@@ -2081,6 +2081,10 @@
   async function sendReply() {
     const body = replyBody.trim();
     if (!body || !selectedThread) return;
+    if (selectedDirect && !selectedDirectWritable) {
+      status = "This direct message has no active recipient";
+      return;
+    }
     const quote = replyTarget && replyContext === "thread" ? replyTarget : null;
     replyBody = "";
     const payload: Record<string, unknown> = { body, nonce: newNonce() };
@@ -3253,6 +3257,7 @@
         {replyBody}
         replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
         {mentionPeople}
+        replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onClose={closeSidePanel}
         onReplyBody={(value) => (replyBody = value)}
         onSubmitReply={() => void sendReply()}

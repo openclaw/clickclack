@@ -233,7 +233,7 @@ GET    /api/realtime/events?after_cursor=
 POST   /api/realtime/ephemeral
 GET    /api/realtime/ws
 
-GET    /api/search?workspace_id=&q=&limit=
+GET    /api/search?workspace_id=&q=&channel_id=&direct_conversation_id=&sort=&limit=&cursor=
 
 POST   /api/uploads
 GET    /api/uploads/{upload_id}

@@ -1347,6 +1347,9 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 	}
 	if id := r.Header.Get("X-ClickClack-User"); id != "" {
 		user, err := s.store.GetUser(r.Context(), id)
+		if err == nil && user.DeletedAt != nil {
+			return actor{}, errors.New("authentication required")
+		}
 		return actor{user: user}, err
 	}
 	user, err := s.store.FirstUser(r.Context())

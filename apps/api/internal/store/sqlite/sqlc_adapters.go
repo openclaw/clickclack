@@ -65,7 +65,12 @@ func storeUserFromFirstUser(row storedb.FirstUserRow) store.User {
 }
 
 func storeUserFromGetUser(row storedb.GetUserRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user.FormerHandle = row.FormerHandle
+	if row.DeletedAt != "" {
+		user.DeletedAt = &row.DeletedAt
+	}
+	return user
 }
 
 func storeUserFromGetSessionUser(row storedb.GetSessionUserRow) store.User {

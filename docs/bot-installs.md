@@ -265,9 +265,11 @@ identity, so old messages keep rendering.
 
 Delete a bot everywhere through `DELETE /api/bots/{bot_user_id}` or the
 **Delete bot** action in workspace settings. Deletion revokes every credential
-and integration for that bot, preserves old messages under a deleted marker,
-and releases the former handle for a newly created bot ID. Deleting a shared
-service bot requires owner or moderator access in every affected workspace.
+and integration binding for that bot, preserves old messages under a deleted
+marker, and releases the former handle for a newly created bot ID. Deleting a
+shared service bot requires owner or moderator access in every affected
+workspace; already orphaned bots use their retained workspace history for this
+authorization check.
 
 Keep these rules:
 

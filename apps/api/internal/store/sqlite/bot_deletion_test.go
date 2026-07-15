@@ -204,6 +204,174 @@ func TestDeleteServiceBotRequiresManagementAcrossEveryWorkspace(t *testing.T) {
 	}
 }
 
+func TestDeleteServiceBotRequiresManagementForPreservedSubscriptionWorkspace(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "bot-delete-subscription-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := workspaces[0]
+	second, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Subscription Workspace"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Connected Account Workspace"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Manager",
+		Email:       "bot-delete-subscription-manager@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, first.ID, manager.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, second.ID, manager.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: first.ID,
+		DisplayName: "Subscription Bot",
+		Handle:      "subscription-delete-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, second.ID, bot.ID, store.WorkspaceRoleBot); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, third.ID, bot.ID, store.WorkspaceRoleBot); err != nil {
+		t.Fatal(err)
+	}
+	installation, err := st.CreateAppInstallation(ctx, store.CreateAppInstallationInput{
+		WorkspaceID: second.ID,
+		AppSlug:     "preserved-subscription",
+		DisplayName: "Preserved subscription",
+		BotUserID:   bot.ID,
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+		WorkspaceID:       second.ID,
+		AppInstallationID: installation.ID,
+		EventTypes:        []string{"message.created"},
+		CallbackURL:       "https://example.com/events",
+		CreatedBy:         owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := st.CreateConnectedAccount(ctx, store.CreateConnectedAccountInput{
+		WorkspaceID:       third.ID,
+		UserID:            bot.ID,
+		Provider:          "github",
+		ProviderAccountID: "bot-connected-account",
+		DisplayName:       "Bot Connected Account",
+		CreatedBy:         owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RevokeAppInstallation(ctx, installation.ID, owner.ID, store.RevokeAppInstallationOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemoveBotFromWorkspace(ctx, second.ID, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemoveBotFromWorkspace(ctx, third.ID, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.DeleteBot(ctx, bot.ID, manager.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("manager without access to the connected-account workspace deleted the bot: %v", err)
+	}
+	if _, err := st.DeleteBot(ctx, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := st.getEventSubscription(ctx, subscription.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.RevokedAt == nil {
+		t.Fatalf("bot deletion left the preserved event subscription active: %#v", reloaded)
+	}
+	reloadedAccount, err := st.getConnectedAccount(ctx, account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloadedAccount.RevokedAt == nil {
+		t.Fatalf("bot deletion left the connected account active: %#v", reloadedAccount)
+	}
+}
+
+func TestDeleteOrphanedServiceBotUsesHistoricalWorkspaceAuthority(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "bot-delete-orphan-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	manager, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Manager",
+		Email:       "bot-delete-orphan-manager@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, manager.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Member",
+		Email:       "bot-delete-orphan-member@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Orphaned Bot",
+		Handle:      "orphaned-delete-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemoveBotFromWorkspace(ctx, workspace.ID, bot.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.DeleteBot(ctx, bot.ID, member.ID); !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("ordinary member deleted an orphaned service bot: %v", err)
+	}
+	if _, err := st.DeleteBot(ctx, bot.ID, manager.ID); err != nil {
+		t.Fatalf("historical workspace manager could not delete orphaned bot: %v", err)
+	}
+}
+
 func TestDeleteUserOwnedBotRequiresItsOwner(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

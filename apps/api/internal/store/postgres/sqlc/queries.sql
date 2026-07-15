@@ -132,9 +132,12 @@ ORDER BY created_at
 LIMIT 1;
 
 -- name: GetUser :one
-SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
-FROM users
-WHERE id = sqlc.arg(id);
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(tombstone.former_handle, '') AS former_handle,
+       COALESCE(tombstone.deleted_at, '') AS deleted_at
+FROM users u
+LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = u.id
+WHERE u.id = sqlc.arg(id);
 
 -- name: UpdateUserProfile :exec
 UPDATE users
@@ -526,7 +529,53 @@ FROM (
   FROM slash_commands sc
   WHERE sc.bot_user_id = sqlc.arg(bot_user_id)
     AND sc.revoked_at IS NULL
+  UNION
+  SELECT es.workspace_id
+  FROM event_subscriptions es
+  JOIN app_installations ai ON ai.id = es.app_installation_id
+  WHERE ai.bot_user_id = sqlc.arg(bot_user_id)
+    AND es.revoked_at IS NULL
+  UNION
+  SELECT ca.workspace_id
+  FROM connected_accounts ca
+  WHERE ca.user_id = sqlc.arg(bot_user_id)
+    AND ca.revoked_at IS NULL
 ) AS governed
+ORDER BY workspace_id;
+
+-- name: ListBotHistoricalWorkspaces :many
+SELECT DISTINCT workspace_id
+FROM (
+  SELECT bt.workspace_id
+  FROM bot_tokens bt
+  WHERE bt.bot_user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT ai.workspace_id
+  FROM app_installations ai
+  WHERE ai.bot_user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT sc.workspace_id
+  FROM slash_commands sc
+  WHERE sc.bot_user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT es.workspace_id
+  FROM event_subscriptions es
+  JOIN app_installations ai ON ai.id = es.app_installation_id
+  WHERE ai.bot_user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT ca.workspace_id
+  FROM connected_accounts ca
+  WHERE ca.user_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT m.workspace_id
+  FROM messages m
+  WHERE m.author_id = sqlc.arg(bot_user_id)
+  UNION
+  SELECT dc.workspace_id
+  FROM direct_conversations dc
+  JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
+  WHERE dcm.user_id = sqlc.arg(bot_user_id)
+) AS historical
 ORDER BY workspace_id;
 
 -- name: InsertBotTombstone :exec
@@ -558,6 +607,12 @@ WHERE revoked_at IS NULL
   AND app_installation_id IN (
     SELECT id FROM app_installations WHERE bot_user_id = sqlc.arg(bot_user_id)
   );
+
+-- name: RevokeAllBotConnectedAccounts :execrows
+UPDATE connected_accounts
+SET revoked_at = COALESCE(revoked_at, sqlc.arg(revoked_at))
+WHERE user_id = sqlc.arg(bot_user_id)
+  AND revoked_at IS NULL;
 
 -- name: RevokeAllBotAppInstallations :execrows
 UPDATE app_installations

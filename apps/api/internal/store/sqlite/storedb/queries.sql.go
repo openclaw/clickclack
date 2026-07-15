@@ -1455,19 +1455,24 @@ func (q *Queries) GetUploadWorkspace(ctx context.Context, id string) (string, er
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
-FROM users
-WHERE id = ?1
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(tombstone.former_handle, '') AS former_handle,
+       COALESCE(tombstone.deleted_at, '') AS deleted_at
+FROM users u
+LEFT JOIN bot_tombstones tombstone ON tombstone.bot_user_id = u.id
+WHERE u.id = ?1
 `
 
 type GetUserRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID           string         `json:"id"`
+	Kind         string         `json:"kind"`
+	OwnerUserID  sql.NullString `json:"owner_user_id"`
+	DisplayName  string         `json:"display_name"`
+	Handle       string         `json:"handle"`
+	AvatarUrl    string         `json:"avatar_url"`
+	CreatedAt    string         `json:"created_at"`
+	FormerHandle string         `json:"former_handle"`
+	DeletedAt    string         `json:"deleted_at"`
 }
 
 func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
@@ -1481,6 +1486,8 @@ func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.FormerHandle,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -2581,12 +2588,82 @@ FROM (
   FROM slash_commands sc
   WHERE sc.bot_user_id = ?1
     AND sc.revoked_at IS NULL
+  UNION
+  SELECT es.workspace_id
+  FROM event_subscriptions es
+  JOIN app_installations ai ON ai.id = es.app_installation_id
+  WHERE ai.bot_user_id = ?1
+    AND es.revoked_at IS NULL
+  UNION
+  SELECT ca.workspace_id
+  FROM connected_accounts ca
+  WHERE ca.user_id = ?1
+    AND ca.revoked_at IS NULL
 ) AS governed
 ORDER BY workspace_id
 `
 
 func (q *Queries) ListBotGovernedWorkspaces(ctx context.Context, botUserID string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listBotGovernedWorkspaces, botUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workspace_id string
+		if err := rows.Scan(&workspace_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workspace_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBotHistoricalWorkspaces = `-- name: ListBotHistoricalWorkspaces :many
+SELECT DISTINCT workspace_id
+FROM (
+  SELECT bt.workspace_id
+  FROM bot_tokens bt
+  WHERE bt.bot_user_id = ?1
+  UNION
+  SELECT ai.workspace_id
+  FROM app_installations ai
+  WHERE ai.bot_user_id = ?1
+  UNION
+  SELECT sc.workspace_id
+  FROM slash_commands sc
+  WHERE sc.bot_user_id = ?1
+  UNION
+  SELECT es.workspace_id
+  FROM event_subscriptions es
+  JOIN app_installations ai ON ai.id = es.app_installation_id
+  WHERE ai.bot_user_id = ?1
+  UNION
+  SELECT ca.workspace_id
+  FROM connected_accounts ca
+  WHERE ca.user_id = ?1
+  UNION
+  SELECT m.workspace_id
+  FROM messages m
+  WHERE m.author_id = ?1
+  UNION
+  SELECT dc.workspace_id
+  FROM direct_conversations dc
+  JOIN direct_conversation_members dcm ON dcm.conversation_id = dc.id
+  WHERE dcm.user_id = ?1
+) AS historical
+ORDER BY workspace_id
+`
+
+func (q *Queries) ListBotHistoricalWorkspaces(ctx context.Context, botUserID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listBotHistoricalWorkspaces, botUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -4032,6 +4109,26 @@ type RevokeAllBotAppInstallationsParams struct {
 
 func (q *Queries) RevokeAllBotAppInstallations(ctx context.Context, arg RevokeAllBotAppInstallationsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, revokeAllBotAppInstallations, arg.RevokedAt, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeAllBotConnectedAccounts = `-- name: RevokeAllBotConnectedAccounts :execrows
+UPDATE connected_accounts
+SET revoked_at = COALESCE(revoked_at, ?1)
+WHERE user_id = ?2
+  AND revoked_at IS NULL
+`
+
+type RevokeAllBotConnectedAccountsParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	BotUserID string         `json:"bot_user_id"`
+}
+
+func (q *Queries) RevokeAllBotConnectedAccounts(ctx context.Context, arg RevokeAllBotConnectedAccountsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAllBotConnectedAccounts, arg.RevokedAt, arg.BotUserID)
 	if err != nil {
 		return 0, err
 	}

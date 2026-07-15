@@ -422,6 +422,7 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	if deletedService.DeletedBot.ID != serviceBot.Bot.ID || deletedService.DeletedBot.FormerHandle != serviceBot.Bot.Handle || deletedService.DeletedBot.DeletedAt == "" {
 		t.Fatalf("unexpected deleted service bot payload: %#v", deletedService.DeletedBot)
 	}
+	expectStatusAsUser(t, serviceBot.Bot.ID, http.MethodGet, server.URL+"/api/me", nil, http.StatusUnauthorized)
 	serviceReplacement := postJSONAsUser[struct {
 		Bot store.User `json:"bot"`
 	}](t, manager.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{

@@ -675,6 +675,12 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 			return store.DeletedBot{}, botDeletionCounts{}, err
 		}
 		if len(workspaceIDs) == 0 {
+			workspaceIDs, err = qtx.ListBotHistoricalWorkspaces(ctx, bot.ID)
+			if err != nil {
+				return store.DeletedBot{}, botDeletionCounts{}, err
+			}
+		}
+		if len(workspaceIDs) == 0 {
 			return store.DeletedBot{}, botDeletionCounts{}, store.ErrNotWorkspaceManager
 		}
 		for _, workspaceID := range workspaceIDs {
@@ -713,6 +719,12 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 		return store.DeletedBot{}, botDeletionCounts{}, err
 	}
 	counts.eventSubscriptions = int(subscriptionCount)
+	if _, err := qtx.RevokeAllBotConnectedAccounts(ctx, storedb.RevokeAllBotConnectedAccountsParams{
+		RevokedAt: sqlText(deletedAt),
+		BotUserID: bot.ID,
+	}); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
 	if _, err := qtx.RevokeAllBotAppInstallations(ctx, storedb.RevokeAllBotAppInstallationsParams{
 		RevokedAt: sqlText(deletedAt),
 		BotUserID: bot.ID,

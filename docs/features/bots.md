@@ -287,10 +287,14 @@ workspace. The bot user row remains for history and future installs.
 Deleting a bot is a separate global action through
 `DELETE /api/bots/{bot_user_id}`. It revokes all tokens, app installations,
 slash commands, event subscriptions, command menus, and workspace memberships
-for that bot in one transaction. It then records a tombstone and releases the
-active handle. User-owned bots can be deleted only by their owner. Service bots
-require the requester to be an owner or moderator in every workspace where the
-bot still has active resources.
+for that bot in one transaction, along with connected-account bindings owned by
+the bot. It then records a tombstone and releases the active handle. User-owned
+bots can be deleted only by their owner. Service bots require the requester to
+be an owner or moderator in every workspace where the bot still has active
+resources. If the bot is already orphaned with no active resources, deletion
+falls back to every workspace found in its retained token, integration,
+message, and DM history so an ordinary member cannot retire the global
+identity.
 
 Deletion returns `{deleted_bot: {id, display_name, former_handle, deleted_at}}`.
 Repeating it returns `404`; it never targets a replacement bot that later

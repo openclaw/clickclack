@@ -63,8 +63,9 @@ Rules:
 - A bot can have its own `display_name`, `handle`, and `avatar_url`.
 - A bot may not own another bot.
 - Deleting a human owner revokes/deletes user-owned bots and tokens.
-- `messages.author_id` stays a plain `users.id`; old messages keep rendering
-  even after token revocation.
+- `messages.author_id` stays a plain `users.id`. Deleting a bot retires that
+  immutable ID instead of reassigning it, so old messages keep rendering while
+  the former handle becomes available to a new bot ID.
 
 API `User` payloads include:
 
@@ -78,6 +79,10 @@ API `User` payloads include:
 }
 ```
 
+Historical payloads for a deleted bot clear `handle` and add `former_handle`
+plus `deleted_at`. A newly created bot that reuses the handle has a different
+ID and does not inherit the deleted marker.
+
 UI:
 
 - Profile panes show a `Bot` badge for all bots.
@@ -86,6 +91,9 @@ UI:
 - Service bot profiles show `Service bot`.
 - Sidebar People can either include bots with badges or split into `People` and
   `Bots`; the API must expose enough metadata for either UI.
+- Historical messages, threads, quotes, search results, and DMs show the former
+  handle with a `deleted bot` marker. Deleted identities are not profile or
+  mention targets.
 
 ## Token Model
 
@@ -220,6 +228,7 @@ HTTP API:
 - `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`
 - `GET /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
 - `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
+- `DELETE /api/bots/{bot_user_id}`
 - `GET /api/bots/{bot_user_id}/tokens`
 - `POST /api/bots/{bot_user_id}/tokens`
 - `POST /api/bot-tokens/{token_id}/revoke`
@@ -274,6 +283,18 @@ Workspace owners and moderators can remove any bot from a workspace with
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this
 removes the workspace membership and revokes that bot's tokens for that
 workspace. The bot user row remains for history and future installs.
+
+Deleting a bot is a separate global action through
+`DELETE /api/bots/{bot_user_id}`. It revokes all tokens, app installations,
+slash commands, event subscriptions, command menus, and workspace memberships
+for that bot in one transaction. It then records a tombstone and releases the
+active handle. User-owned bots can be deleted only by their owner. Service bots
+require the requester to be an owner or moderator in every workspace where the
+bot still has active resources.
+
+Deletion returns `{deleted_bot: {id, display_name, former_handle, deleted_at}}`.
+Repeating it returns `404`; it never targets a replacement bot that later
+reuses the former handle because deletion is always by immutable bot ID.
 
 ## Runtime Contract
 

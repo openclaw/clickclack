@@ -252,7 +252,7 @@ Post a smoke message with the SDK example or the OpenClaw extension. In the UI,
 the message author should show the bot display name and a bot badge. A
 user-owned bot profile should also show that it belongs to its owner.
 
-## Rotate or remove
+## Rotate, remove, or delete
 
 Rotate by creating a new workspace-scoped token, moving the runtime to the new
 secret, then revoking the old token through
@@ -262,6 +262,12 @@ Remove a bot from a workspace through
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`. This
 revokes only that workspace's tokens for the bot. It does not delete the bot
 identity, so old messages keep rendering.
+
+Delete a bot everywhere through `DELETE /api/bots/{bot_user_id}` or the
+**Delete bot** action in workspace settings. Deletion revokes every credential
+and integration for that bot, preserves old messages under a deleted marker,
+and releases the former handle for a newly created bot ID. Deleting a shared
+service bot requires owner or moderator access in every affected workspace.
 
 Keep these rules:
 

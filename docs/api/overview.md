@@ -37,7 +37,7 @@ The value is not stored on message rows or exported as a metrics label.
 | Profile       | `/api/me`, `/api/me/bots` | [profiles](../features/profiles.md) |
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
-| Bots          | `/api/workspaces/{id}/{bots,bot-commands}`, `/api/workspaces/{id}/bots/{bot_id}/{tokens,membership}`, `/api/bots/{id}/tokens`, `/api/bots/self/commands`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
+| Bots          | `/api/workspaces/{id}/{bots,bot-commands}`, `/api/workspaces/{id}/bots/{bot_id}/{tokens,membership}`, `/api/bots/{id}`, `/api/bots/{id}/tokens`, `/api/bots/self/commands`, `/api/bot-tokens/{id}/revoke` | [bots](../features/bots.md) |
 | Event types   | `/api/event-types` | [integrations](../features/integrations.md) |
 | App installs  | `/api/workspaces/{id}/app-installations`, `/api/app-installations/{id}/revoke` | [integrations](../features/integrations.md) |
 | Slash commands | `/api/workspaces/{id}/slash-commands`, `/api/slash-commands/{id}/{revoke,rotate-secret}`, `/api/hooks/slash/{channel}` | [integrations](../features/integrations.md) |

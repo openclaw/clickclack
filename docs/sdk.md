@@ -67,7 +67,7 @@ See [features/auth.md](features/auth.md).
 | `me()`, `updateMe()` | get or edit the current user's profile |
 | `workspaces`  | `list`, `create`, `get`, `update`, `transferOwnership`, `delete` |
 | `topics`      | `list`, `create` |
-| `bots`        | `listMine`, `list`, `create`, `removeMembership`, `listWorkspaceTokens`, `createWorkspaceToken`, `listTokens`, `createToken`, `revokeToken` |
+| `bots`        | `listMine`, `list`, `create`, `removeMembership`, `delete`, `listWorkspaceTokens`, `createWorkspaceToken`, `listTokens`, `createToken`, `revokeToken` |
 | `apps`        | `list`, `install`, `revoke(id, options?)` |
 | `slashCommands` | `list`, `create`, `revoke`, `rotateSecret` |
 | `eventSubscriptions` | `list`, `create`, `revoke`, `rotateSecret`, `deliveries(id, options?)` |
@@ -143,6 +143,10 @@ const { bot, bot_token } = await client.bots.create(workspaceId, {
 const tokens = await client.bots.listWorkspaceTokens(workspaceId, bot.id);
 await client.bots.revokeToken(tokens[0].id);
 ```
+
+`client.bots.removeMembership(workspaceId, bot.id)` removes only one workspace
+membership. `client.bots.delete(bot.id)` globally retires the bot, revokes all
+of its resources, preserves historical attribution, and releases its handle.
 
 Use `createWorkspaceToken(workspaceId, bot.id, input)` for rotation. The older
 `listTokens` and `createToken` helpers call the legacy bot-only routes and only

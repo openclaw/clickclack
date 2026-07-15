@@ -50,12 +50,18 @@ Behavior:
 - Its optional body fields are `revoke_slash_commands` (default `true`),
   `revoke_event_subscriptions` (default `true`), and `revoke_bot_tokens`
   (default `false`).
+- `delete_bot` is also optional and defaults to `false`. When enabled, uninstall
+  globally retires the bound bot, revokes all of that bot's resources across
+  workspaces, preserves historical attribution, and releases its handle.
+  User-owned bots require their owner; service bots require manager access in
+  every affected workspace.
 - Bot tokens for the installation's bot remain active unless
   `revoke_bot_tokens` is explicitly `true`, because the bot may serve other
   integrations.
 - The revoke response contains the installation plus exact counts for revoked
-  slash commands, event subscriptions, and bot tokens. Repeating the revoke
-  returns zero counts.
+  slash commands, event subscriptions, and bot tokens. A successful
+  `delete_bot` response also contains `deleted_bot`. Repeating an ordinary
+  revoke returns zero counts.
 
 The TypeScript SDK exposes this as `client.apps.list(workspaceId)`,
 `client.apps.install(workspaceId, input)`, and

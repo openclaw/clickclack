@@ -213,17 +213,34 @@
         delete_bot: deleteBot,
       });
       markMutation();
-      installations = [
-        result.installation,
-        ...installations.filter((entry) => entry.id !== installation.id),
-      ];
-      commands = commands.filter((entry) => entry.app_installation_id !== installation.id);
-      subscriptions = subscriptions.filter(
-        (entry) => entry.app_installation_id !== installation.id,
-      );
       if (result.deleted_bot) {
-        bots = bots.filter((entry) => entry.bot.id !== result.deleted_bot?.id);
-      } else if (revokeTokens) {
+        const deletedBotID = result.deleted_bot.id;
+        const deletedInstallationIDs = new Set(
+          installations
+            .filter((entry) => entry.bot_user_id === deletedBotID)
+            .map((entry) => entry.id),
+        );
+        installations = installations.filter((entry) => entry.bot_user_id !== deletedBotID);
+        commands = commands.filter((entry) => entry.bot_user_id !== deletedBotID);
+        subscriptions = subscriptions.filter(
+          (entry) =>
+            !entry.app_installation_id ||
+            !deletedInstallationIDs.has(entry.app_installation_id),
+        );
+        connectedAccounts = connectedAccounts.filter((entry) => entry.user_id !== deletedBotID);
+        bots = bots.filter((entry) => entry.bot.id !== deletedBotID);
+        await refresh();
+      } else {
+        installations = [
+          result.installation,
+          ...installations.filter((entry) => entry.id !== installation.id),
+        ];
+        commands = commands.filter((entry) => entry.app_installation_id !== installation.id);
+        subscriptions = subscriptions.filter(
+          (entry) => entry.app_installation_id !== installation.id,
+        );
+      }
+      if (!result.deleted_bot && revokeTokens) {
         const revokedAt = new Date().toISOString();
         bots = bots.map((entry) =>
           entry.bot.id === installation.bot_user_id

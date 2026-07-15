@@ -8,11 +8,6 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
-type searchPageRow struct {
-	hit  store.SearchHit
-	rank float64
-}
-
 func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequest) (store.SearchPage, error) {
 	req, err := store.NormalizeSearchPageRequest(page)
 	if err != nil {
@@ -119,13 +114,13 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	}
 	defer rows.Close()
 
-	resultRows := make([]searchPageRow, 0, req.Limit+1)
+	resultRows := make([]store.SearchPageEntry, 0, req.Limit+1)
 	for rows.Next() {
 		row, markedSnippet, err := scanSearchPageRow(rows)
 		if err != nil {
 			return store.SearchPage{}, err
 		}
-		row.hit.Snippet, row.hit.Highlights, err = store.ParseSearchSnippetWithMarkers(markedSnippet, markers)
+		row.Hit.Snippet, row.Hit.Highlights, err = store.ParseSearchSnippetWithMarkers(markedSnippet, markers)
 		if err != nil {
 			return store.SearchPage{}, err
 		}
@@ -137,7 +132,7 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if err := tx.Commit(); err != nil {
 		return store.SearchPage{}, err
 	}
-	return searchPageFromRows(req, resultRows)
+	return store.BuildSearchPage(req, resultRows)
 }
 
 func sqliteSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRequest, role string) (string, []any, error) {
@@ -177,80 +172,58 @@ func sqliteSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRequ
 	}
 }
 
-func scanSearchPageRow(row scanner) (searchPageRow, string, error) {
-	var result searchPageRow
+func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
+	var result store.SearchPageEntry
 	var parentMessageID, editedAt, authorFormerHandle, authorDeletedAt, lastReplyAt sql.NullString
 	var channelSeq, threadSeq sql.NullInt64
 	var markedSnippet string
 	err := row.Scan(
-		&result.hit.ID,
-		&result.hit.WorkspaceID,
-		&result.hit.ChannelID,
-		&result.hit.ChannelName,
-		&result.hit.DirectConversationID,
-		&result.hit.Author.ID,
-		&result.hit.Author.Kind,
-		&result.hit.Author.DisplayName,
-		&result.hit.Author.Handle,
-		&result.hit.Author.AvatarURL,
+		&result.Hit.ID,
+		&result.Hit.WorkspaceID,
+		&result.Hit.ChannelID,
+		&result.Hit.ChannelName,
+		&result.Hit.DirectConversationID,
+		&result.Hit.Author.ID,
+		&result.Hit.Author.Kind,
+		&result.Hit.Author.DisplayName,
+		&result.Hit.Author.Handle,
+		&result.Hit.Author.AvatarURL,
 		&authorFormerHandle,
 		&authorDeletedAt,
 		&parentMessageID,
-		&result.hit.ThreadRootID,
+		&result.Hit.ThreadRootID,
 		&channelSeq,
 		&threadSeq,
-		&result.hit.CreatedAt,
+		&result.Hit.CreatedAt,
 		&editedAt,
-		&result.hit.ReplyCount,
+		&result.Hit.ReplyCount,
 		&lastReplyAt,
-		&result.rank,
+		&result.Rank,
 		&markedSnippet,
 	)
 	if err != nil {
-		return searchPageRow{}, "", err
+		return store.SearchPageEntry{}, "", err
 	}
 	if parentMessageID.Valid {
-		result.hit.ParentMessageID = &parentMessageID.String
+		result.Hit.ParentMessageID = &parentMessageID.String
 	}
 	if channelSeq.Valid {
-		result.hit.ChannelSeq = &channelSeq.Int64
+		result.Hit.ChannelSeq = &channelSeq.Int64
 	}
 	if threadSeq.Valid {
-		result.hit.ThreadSeq = &threadSeq.Int64
+		result.Hit.ThreadSeq = &threadSeq.Int64
 	}
 	if editedAt.Valid {
-		result.hit.EditedAt = &editedAt.String
+		result.Hit.EditedAt = &editedAt.String
 	}
 	if authorFormerHandle.Valid {
-		result.hit.Author.FormerHandle = authorFormerHandle.String
+		result.Hit.Author.FormerHandle = authorFormerHandle.String
 	}
 	if authorDeletedAt.Valid {
-		result.hit.Author.DeletedAt = &authorDeletedAt.String
+		result.Hit.Author.DeletedAt = &authorDeletedAt.String
 	}
 	if lastReplyAt.Valid {
-		result.hit.LastReplyAt = &lastReplyAt.String
+		result.Hit.LastReplyAt = &lastReplyAt.String
 	}
 	return result, markedSnippet, nil
-}
-
-func searchPageFromRows(req store.SearchPageRequest, rows []searchPageRow) (store.SearchPage, error) {
-	page := store.SearchPage{
-		Results: make([]store.SearchHit, 0, min(len(rows), req.Limit)),
-	}
-	hasMore := len(rows) > req.Limit
-	if hasMore {
-		rows = rows[:req.Limit]
-	}
-	for _, row := range rows {
-		page.Results = append(page.Results, row.hit)
-	}
-	if hasMore && len(rows) > 0 {
-		last := rows[len(rows)-1]
-		cursor, err := store.EncodeSearchCursor(req, last.rank, last.hit.CreatedAt, last.hit.ID)
-		if err != nil {
-			return store.SearchPage{}, err
-		}
-		page.NextCursor = &cursor
-	}
-	return page, nil
 }

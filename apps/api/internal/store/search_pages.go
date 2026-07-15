@@ -48,6 +48,11 @@ type SearchCursor struct {
 	MessageID   string     `json:"m"`
 }
 
+type SearchPageEntry struct {
+	Hit  SearchHit
+	Rank float64
+}
+
 func NormalizeSearchPageRequest(req SearchPageRequest) (SearchPageRequest, error) {
 	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
 	req.ChannelID = strings.TrimSpace(req.ChannelID)
@@ -137,6 +142,28 @@ func EncodeSearchCursor(req SearchPageRequest, rank float64, createdAt, messageI
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func BuildSearchPage(req SearchPageRequest, entries []SearchPageEntry) (SearchPage, error) {
+	page := SearchPage{
+		Results: make([]SearchHit, 0, min(len(entries), req.Limit)),
+	}
+	hasMore := len(entries) > req.Limit
+	if hasMore {
+		entries = entries[:req.Limit]
+	}
+	for _, entry := range entries {
+		page.Results = append(page.Results, entry.Hit)
+	}
+	if hasMore && len(entries) > 0 {
+		last := entries[len(entries)-1]
+		cursor, err := EncodeSearchCursor(req, last.Rank, last.Hit.CreatedAt, last.Hit.ID)
+		if err != nil {
+			return SearchPage{}, err
+		}
+		page.NextCursor = &cursor
+	}
+	return page, nil
 }
 
 func searchRequestFingerprint(req SearchPageRequest) string {

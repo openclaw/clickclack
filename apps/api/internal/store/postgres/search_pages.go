@@ -59,8 +59,10 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	args = append(args, scopeArgs...)
 
 	rankExpression := "ts_rank_cd(to_tsvector('simple', m.body), plainto_tsquery('simple', $1))"
+	rankSelectExpression := rankExpression
 	cursorWhere := ""
-	orderBy := "rank DESC, created_at_key DESC, m.id DESC"
+	innerOrderBy := "rank DESC, created_at_key DESC, m.id DESC"
+	outerOrderBy := "ranked.rank DESC, ranked.created_at_key DESC, m.id DESC"
 	if req.Cursor != "" {
 		start := len(args) + 1
 		switch req.Sort {
@@ -84,12 +86,28 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		}
 	}
 	if req.Sort == store.SearchSortNewest {
-		orderBy = "created_at_key DESC, m.id DESC"
+		rankSelectExpression = "0.0::double precision"
+		innerOrderBy = "created_at_key DESC, m.id DESC"
+		outerOrderBy = "ranked.created_at_key DESC, m.id DESC"
 	}
 	limitPlaceholder := len(args) + 1
 	args = append(args, req.Limit+1)
 
 	rows, err := tx.QueryContext(ctx, `
+		WITH ranked AS (
+			SELECT m.id AS message_id,
+			       `+postgresSearchCreatedAtKey+` AS created_at_key,
+			       `+rankSelectExpression+` AS rank
+			FROM messages m
+			WHERE m.workspace_id = $3
+			  AND to_tsvector('simple', m.body) @@ plainto_tsquery('simple', $1)
+			  AND m.deleted_at IS NULL
+			  AND m.kind = 'message'
+			  `+scopeWhere+`
+			  `+cursorWhere+`
+			ORDER BY `+innerOrderBy+`
+			LIMIT $`+fmt.Sprint(limitPlaceholder)+`
+		)
 		SELECT m.id,
 		       m.workspace_id,
 		       COALESCE(m.channel_id, ''),
@@ -109,30 +127,24 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		       m.channel_seq,
 		       m.thread_seq,
 		       m.created_at,
-		       `+postgresSearchCreatedAtKey+` AS created_at_key,
+		       ranked.created_at_key,
 		       m.edited_at,
 		       COALESCE(thread_state.reply_count, 0),
 		       thread_state.last_reply_at,
-		       `+rankExpression+` AS rank,
+		       ranked.rank,
 		       ts_headline(
 		         'simple',
 		         m.body,
 		         plainto_tsquery('simple', $1),
 		         $2
 		       ) AS snippet
-		FROM messages m
+		FROM ranked
+		JOIN messages m ON m.id = ranked.message_id
 		LEFT JOIN channels c ON c.id = m.channel_id AND c.workspace_id = m.workspace_id
 		JOIN users u ON u.id = m.author_id
 		LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
 		LEFT JOIN thread_state ON thread_state.root_message_id = m.id
-		WHERE m.workspace_id = $3
-		  AND to_tsvector('simple', m.body) @@ plainto_tsquery('simple', $1)
-		  AND m.deleted_at IS NULL
-		  AND m.kind = 'message'
-		  `+scopeWhere+`
-		  `+cursorWhere+`
-		ORDER BY `+orderBy+`
-		LIMIT $`+fmt.Sprint(limitPlaceholder), args...)
+		ORDER BY `+outerOrderBy, args...)
 	if err != nil {
 		return store.SearchPage{}, err
 	}
@@ -190,7 +202,11 @@ func postgresSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRe
 			)`, firstPlaceholder, firstPlaceholder+1), []any{req.DirectConversationID, req.UserID}, nil
 	default:
 		if role == store.WorkspaceRoleGuest {
-			return fmt.Sprintf("AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL AND c.name = $%d", firstPlaceholder), []any{store.GuestChannelName}, nil
+			var guestChannelID string
+			if err := tx.QueryRowContext(ctx, `SELECT id FROM channels WHERE workspace_id = $1 AND name = $2`, req.WorkspaceID, store.GuestChannelName).Scan(&guestChannelID); err != nil {
+				return "", nil, err
+			}
+			return fmt.Sprintf("AND m.direct_conversation_id IS NULL AND m.channel_id = $%d", firstPlaceholder), []any{guestChannelID}, nil
 		}
 		return "AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL", nil, nil
 	}

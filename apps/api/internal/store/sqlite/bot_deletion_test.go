@@ -524,6 +524,14 @@ func TestRevokeInstallationCanDeleteBotAndReleaseHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	revoked, err := st.RevokeAppInstallation(ctx, installation.ID, owner.ID, store.RevokeAppInstallationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked.Installation.RevokedAt == nil {
+		t.Fatalf("ordinary uninstall did not revoke the installation: %#v", revoked)
+	}
+	originalRevokedAt := *revoked.Installation.RevokedAt
 	result, err := st.RevokeAppInstallation(ctx, installation.ID, owner.ID, store.RevokeAppInstallationOptions{
 		DeleteBot: true,
 	})
@@ -532,7 +540,10 @@ func TestRevokeInstallationCanDeleteBotAndReleaseHandle(t *testing.T) {
 	}
 	if result.DeletedBot == nil || result.DeletedBot.ID != bot.ID ||
 		result.DeletedBot.FormerHandle != bot.Handle || result.Installation.RevokedAt == nil {
-		t.Fatalf("integration uninstall did not delete its bot: %#v", result)
+		t.Fatalf("later bot deletion did not retire the installation bot: %#v", result)
+	}
+	if *result.Installation.RevokedAt != originalRevokedAt {
+		t.Fatalf("later bot deletion changed the installation revocation time: %#v", result)
 	}
 	replacement, _, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,

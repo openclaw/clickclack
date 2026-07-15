@@ -158,22 +158,24 @@ func (s *Store) RevokeAppInstallation(ctx context.Context, installationID, reque
 		return store.RevokeAppInstallationResult{}, err
 	}
 	result := store.RevokeAppInstallationResult{Installation: installation}
-	if installation.RevokedAt != nil {
-		if err := tx.Commit(); err != nil {
-			return store.RevokeAppInstallationResult{}, err
-		}
-		return result, nil
-	}
 	if options.DeleteBot {
 		deleted, counts, err := s.deleteBotTx(ctx, tx, installation.BotUserID, requesterID)
 		if err != nil {
 			return store.RevokeAppInstallationResult{}, err
 		}
-		result.Installation.RevokedAt = &deleted.DeletedAt
+		if result.Installation.RevokedAt == nil {
+			result.Installation.RevokedAt = &deleted.DeletedAt
+		}
 		result.Revoked.SlashCommands = counts.slashCommands
 		result.Revoked.EventSubscriptions = counts.eventSubscriptions
 		result.Revoked.BotTokens = counts.botTokens
 		result.DeletedBot = &deleted
+		if err := tx.Commit(); err != nil {
+			return store.RevokeAppInstallationResult{}, err
+		}
+		return result, nil
+	}
+	if installation.RevokedAt != nil {
 		if err := tx.Commit(); err != nil {
 			return store.RevokeAppInstallationResult{}, err
 		}

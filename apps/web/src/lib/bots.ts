@@ -264,10 +264,18 @@ export function buildOpenClawShellSnippet(opts: {
   botHandle: string;
   token: string;
   mode: OpenClawAccountMode;
+  workspace: string;
+  baseURL?: string;
 }): string {
-  const envName =
-    opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(opts.botHandle);
-  return `openclaw plugins install @openclaw/clickclack
-export ${envName}=${shellQuote(opts.token)}
-openclaw gateway`;
+  const base =
+    (opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")).replace(
+      /\/$/,
+      "",
+    ) || "https://your-clickclack.example.com";
+  const handle = opts.botHandle.replace(/^@/, "");
+  const accountLine = opts.mode === "named" ? ` \\\n  --account ${shellQuote(handle)}` : "";
+  return `openclaw channels add clickclack${accountLine} \\
+  --base-url ${shellQuote(base)} \\
+  --token ${shellQuote(opts.token)} \\
+  --workspace ${shellQuote(opts.workspace)}`;
 }

@@ -98,6 +98,7 @@ export const APP_CATALOG: AppManifest[] = [
         botHandle: input.botHandle,
         token: input.token,
         mode: input.mode,
+        workspace: input.workspace,
       }),
   },
   {

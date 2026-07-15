@@ -237,9 +237,25 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
     botHandle: "release-bot",
     token: "ccb_test'value",
     mode: "single",
+    workspace,
+    baseURL: "https://chat.example.com",
   });
-  expect(shell).toContain("openclaw plugins install @openclaw/clickclack");
-  expect(shell).toContain(`export CLICKCLACK_BOT_TOKEN='ccb_test'"'"'value'`);
+  expect(shell).toContain("openclaw channels add clickclack");
+  expect(shell).toContain("--base-url 'https://chat.example.com'");
+  expect(shell).toContain(`--token 'ccb_test'"'"'value'`);
+  expect(shell).toContain("--workspace 'team-chat'");
+  expect(shell).not.toContain("openclaw gateway");
+  expect(shell).not.toContain("export ");
+
+  const namedShell = buildOpenClawShellSnippet({
+    botHandle: "@release-bot",
+    token: "ccb_named",
+    mode: "named",
+    workspace,
+    baseURL: "https://chat.example.com/",
+  });
+  expect(namedShell).toContain("--account 'release-bot'");
+  expect(namedShell).toContain("--base-url 'https://chat.example.com'");
 });
 
 test("channels can be reordered accessibly and persist locally", async ({ page, browser }) => {

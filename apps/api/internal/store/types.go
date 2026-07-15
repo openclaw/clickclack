@@ -312,10 +312,11 @@ type BotWithTokens struct {
 }
 
 type DeletedBot struct {
-	ID           string `json:"id"`
-	DisplayName  string `json:"display_name"`
-	FormerHandle string `json:"former_handle"`
-	DeletedAt    string `json:"deleted_at"`
+	ID           string   `json:"id"`
+	DisplayName  string   `json:"display_name"`
+	FormerHandle string   `json:"former_handle"`
+	DeletedAt    string   `json:"deleted_at"`
+	WorkspaceIDs []string `json:"-"`
 }
 
 type BotCommandInput struct {

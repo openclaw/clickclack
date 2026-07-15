@@ -403,7 +403,10 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
+	hub := realtime.NewHub()
+	events, unsubscribe := hub.Subscribe(workspace.ID)
+	t.Cleanup(unsubscribe)
+	server := httptest.NewServer(New(st, hub, Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
 	t.Cleanup(server.Close)
 
 	serviceBot := postJSONAsUser[struct {
@@ -422,6 +425,7 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	if deletedService.DeletedBot.ID != serviceBot.Bot.ID || deletedService.DeletedBot.FormerHandle != serviceBot.Bot.Handle || deletedService.DeletedBot.DeletedAt == "" {
 		t.Fatalf("unexpected deleted service bot payload: %#v", deletedService.DeletedBot)
 	}
+	expectBotDeletedEvent(t, events, workspace.ID, deletedService.DeletedBot)
 	expectStatusAsUser(t, serviceBot.Bot.ID, http.MethodGet, server.URL+"/api/me", nil, http.StatusUnauthorized)
 	serviceReplacement := postJSONAsUser[struct {
 		Bot store.User `json:"bot"`
@@ -448,6 +452,7 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	if deletedUser.DeletedBot.ID != userBot.Bot.ID || deletedUser.DeletedBot.FormerHandle != userBot.Bot.Handle {
 		t.Fatalf("unexpected deleted user-owned bot payload: %#v", deletedUser.DeletedBot)
 	}
+	expectBotDeletedEvent(t, events, workspace.ID, deletedUser.DeletedBot)
 	userReplacement := postJSONAsUser[struct {
 		Bot store.User `json:"bot"`
 	}](t, botOwner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
@@ -457,6 +462,25 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	})
 	if userReplacement.Bot.ID == userBot.Bot.ID || userReplacement.Bot.Handle != userBot.Bot.Handle || userReplacement.Bot.DeletedAt != nil {
 		t.Fatalf("expected a new active user-owned bot identity to reuse the handle: %#v", userReplacement.Bot)
+	}
+}
+
+func expectBotDeletedEvent(t *testing.T, events <-chan store.Event, workspaceID string, deleted store.DeletedBot) {
+	t.Helper()
+	select {
+	case event := <-events:
+		if event.Type != "bot.deleted" || event.WorkspaceID != workspaceID || event.ID != "" || event.Cursor != "" || store.IsDurableEventType(event.Type) {
+			t.Fatalf("unexpected bot deletion realtime event: %#v", event)
+		}
+		payload, ok := event.Payload.(map[string]string)
+		if !ok ||
+			payload["bot_user_id"] != deleted.ID ||
+			payload["former_handle"] != deleted.FormerHandle ||
+			payload["deleted_at"] != deleted.DeletedAt {
+			t.Fatalf("unexpected bot deletion realtime payload: %#v", event.Payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for bot deletion realtime event")
 	}
 }
 

@@ -804,6 +804,7 @@ func (s *Server) deleteBot(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
+	s.publishBotDeleted(deleted)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted_bot": deleted})
 }
 
@@ -915,7 +916,26 @@ func (s *Server) revokeAppInstallation(w http.ResponseWriter, r *http.Request) {
 		options.DeleteBot = *body.DeleteBot
 	}
 	result, err := s.store.RevokeAppInstallation(r.Context(), chi.URLParam(r, "installation_id"), act.user.ID, options)
+	if err == nil && result.DeletedBot != nil {
+		s.publishBotDeleted(*result.DeletedBot)
+	}
 	writeResult(w, result, err)
+}
+
+func (s *Server) publishBotDeleted(deleted store.DeletedBot) {
+	for _, workspaceID := range deleted.WorkspaceIDs {
+		s.hub.Publish(store.Event{
+			Type:        "bot.deleted",
+			WorkspaceID: workspaceID,
+			CreatedAt:   deleted.DeletedAt,
+			Payload: map[string]string{
+				"bot_user_id":   deleted.ID,
+				"display_name":  deleted.DisplayName,
+				"former_handle": deleted.FormerHandle,
+				"deleted_at":    deleted.DeletedAt,
+			},
+		})
+	}
 }
 
 func (s *Server) listSlashCommands(w http.ResponseWriter, r *http.Request) {

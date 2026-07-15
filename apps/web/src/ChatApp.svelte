@@ -2393,6 +2393,10 @@
       if (event.workspace_id === selectedWorkspaceID) await loadBotCommands(event.workspace_id);
       return;
     }
+    if (event.type === "bot.deleted") {
+      if (event.workspace_id === selectedWorkspaceID) await handleBotDeletedEvent(event);
+      return;
+    }
     if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {
       await loadChannels(false, false, false);
       return;
@@ -2475,6 +2479,43 @@
     } else if (event.type !== "thread.reply_created" && selectedThread && rootID === selectedThread.id) {
       await refreshThread(selectedThread.id, selectedThread);
     }
+  }
+
+  async function handleBotDeletedEvent(event: RealtimeEvent) {
+    const botUserID = event.payload.bot_user_id || "";
+    if (!botUserID) return;
+    const deletedAt = event.payload.deleted_at || event.created_at;
+    const formerHandle = event.payload.former_handle || "";
+    const deletedMember = (member: User): User =>
+      member.id === botUserID
+        ? {
+            ...member,
+            handle: "",
+            former_handle: formerHandle,
+            deleted_at: deletedAt,
+          }
+        : member;
+
+    directConversations = directConversations.map((conversation) => ({
+      ...conversation,
+      members: conversation.members.map(deletedMember),
+    }));
+    moderationMembers = moderationMembers.filter((member) => member.user.id !== botUserID);
+    slashCommands = slashCommands.filter((command) => command.bot_user_id !== botUserID);
+    botCommands = botCommands.filter((command) => command.bot.id !== botUserID);
+    typingEntries = typingEntries.filter((entry) => entry.userID !== botUserID);
+    searchResults = [];
+    if (selectedProfile?.id === botUserID) selectedProfile = null;
+
+    const selectedThreadID = selectedThread?.id || "";
+    await Promise.all([
+      loadDirectConversations(),
+      loadModerationMembers(),
+      loadSlashCommands(),
+      loadBotCommands(),
+    ]);
+    await loadMessages();
+    if (selectedThreadID) await refreshThread(selectedThreadID);
   }
 
   function handleReadEvent(event: RealtimeEvent) {

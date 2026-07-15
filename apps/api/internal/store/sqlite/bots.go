@@ -665,20 +665,23 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 		return store.DeletedBot{}, botDeletionCounts{}, err
 	}
 	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	governedWorkspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	historicalWorkspaceIDs, err := qtx.ListBotHistoricalWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
+	affectedWorkspaceIDs := mergeBotWorkspaceIDs(governedWorkspaceIDs, historicalWorkspaceIDs)
 	if bot.OwnerUserID != "" {
 		if requesterID != bot.OwnerUserID {
 			return store.DeletedBot{}, botDeletionCounts{}, store.ErrBotOwnerRequired
 		}
 	} else {
-		workspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, bot.ID)
-		if err != nil {
-			return store.DeletedBot{}, botDeletionCounts{}, err
-		}
+		workspaceIDs := governedWorkspaceIDs
 		if len(workspaceIDs) == 0 {
-			workspaceIDs, err = qtx.ListBotHistoricalWorkspaces(ctx, bot.ID)
-			if err != nil {
-				return store.DeletedBot{}, botDeletionCounts{}, err
-			}
+			workspaceIDs = historicalWorkspaceIDs
 		}
 		if len(workspaceIDs) == 0 {
 			return store.DeletedBot{}, botDeletionCounts{}, store.ErrNotWorkspaceManager
@@ -751,7 +754,17 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 		DisplayName:  bot.DisplayName,
 		FormerHandle: bot.Handle,
 		DeletedAt:    deletedAt,
+		WorkspaceIDs: affectedWorkspaceIDs,
 	}, counts, nil
+}
+
+func mergeBotWorkspaceIDs(groups ...[]string) []string {
+	var workspaceIDs []string
+	for _, group := range groups {
+		workspaceIDs = append(workspaceIDs, group...)
+	}
+	slices.Sort(workspaceIDs)
+	return slices.Compact(workspaceIDs)
 }
 
 func (s *Store) ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]store.OwnedBotEntry, error) {

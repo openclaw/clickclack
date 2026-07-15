@@ -220,6 +220,10 @@ export type EventPayload = {
   seq?: number;
   kind?: Message["kind"];
   turn_id?: string;
+  bot_user_id?: string;
+  display_name?: string;
+  former_handle?: string;
+  deleted_at?: string;
 };
 
 export type RealtimeEvent = {

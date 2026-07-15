@@ -146,6 +146,44 @@ func TestPostgresDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	}
 }
 
+func TestPostgresDeleteBotWithoutHandle(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "postgres-handleless-bot-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspaces[0].ID,
+		DisplayName: "Handleless Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bot.Handle != "" {
+		t.Fatalf("expected handleless bot, got %#v", bot)
+	}
+
+	deleted, err := st.DeleteBot(ctx, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.ID != bot.ID || deleted.FormerHandle != "" || deleted.DeletedAt == "" {
+		t.Fatalf("unexpected deleted bot: %#v", deleted)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, token.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleted handleless bot token still authenticates: %v", err)
+	}
+}
+
 func TestPostgresDeleteServiceBotRequiresManagementForPreservedSubscriptionWorkspace(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)

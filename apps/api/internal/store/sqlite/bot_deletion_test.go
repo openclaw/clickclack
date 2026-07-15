@@ -156,6 +156,43 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	}
 }
 
+func TestDeleteBotWithoutHandle(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "handleless-bot-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspaces[0].ID,
+		DisplayName: "Handleless Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bot.Handle != "" {
+		t.Fatalf("expected handleless bot, got %#v", bot)
+	}
+
+	deleted, err := st.DeleteBot(ctx, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.ID != bot.ID || deleted.FormerHandle != "" || deleted.DeletedAt == "" {
+		t.Fatalf("unexpected deleted bot: %#v", deleted)
+	}
+	if _, err := st.GetBotTokenAuth(ctx, token.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleted handleless bot token still authenticates: %v", err)
+	}
+}
+
 func TestDeleteServiceBotRequiresManagementAcrossEveryWorkspace(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -689,10 +689,6 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 			}
 		}
 	}
-	if bot.Handle == "" {
-		return store.DeletedBot{}, botDeletionCounts{}, errors.New("bot handle is empty")
-	}
-
 	deletedAt := now()
 	counts := botDeletionCounts{}
 	tokenCount, err := qtx.RevokeAllBotTokens(ctx, storedb.RevokeAllBotTokensParams{

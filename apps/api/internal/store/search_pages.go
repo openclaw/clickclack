@@ -92,13 +92,21 @@ func NormalizeSearchPageRequest(req SearchPageRequest) (SearchPageRequest, error
 	return req, nil
 }
 
-func CompileSQLiteSearchQuery(query string) string {
+func CompileSQLiteSearchQuery(workspaceID, query string) string {
 	terms := strings.Fields(query)
 	compiled := make([]string, 0, len(terms))
 	for _, term := range terms {
-		compiled = append(compiled, `"`+strings.ReplaceAll(term, `"`, `""`)+`"`)
+		compiled = append(compiled, quoteSQLiteFTSTerm(term))
 	}
-	return strings.Join(compiled, " AND ")
+	if len(compiled) == 0 {
+		return ""
+	}
+	return "workspace_id : " + quoteSQLiteFTSTerm(workspaceID) +
+		" AND body : (" + strings.Join(compiled, " AND ") + ")"
+}
+
+func quoteSQLiteFTSTerm(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
 
 func DecodeSearchCursor(value string, req SearchPageRequest) (SearchCursor, bool, error) {

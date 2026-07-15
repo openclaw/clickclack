@@ -44,7 +44,7 @@ func TestNormalizeSearchPageRequestRejectsInvalidInputs(t *testing.T) {
 
 func TestCompileSQLiteSearchQueryQuotesTerms(t *testing.T) {
 	t.Parallel()
-	if got := CompileSQLiteSearchQuery(`hello OR "quoted"`); got != `"hello" AND "OR" AND """quoted"""` {
+	if got := CompileSQLiteSearchQuery("wsp_1", `hello OR "quoted"`); got != `workspace_id : "wsp_1" AND body : ("hello" AND "OR" AND """quoted""")` {
 		t.Fatalf("unexpected compiled query %q", got)
 	}
 }

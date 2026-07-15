@@ -20,7 +20,7 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 	if req.Query == "" {
 		return store.SearchPage{Results: []store.SearchHit{}}, nil
 	}
-	compiledQuery := store.CompileSQLiteSearchQuery(req.Query)
+	compiledQuery := store.CompileSQLiteSearchQuery(req.WorkspaceID, req.Query)
 	if compiledQuery == "" {
 		return store.SearchPage{Results: []store.SearchHit{}}, nil
 	}

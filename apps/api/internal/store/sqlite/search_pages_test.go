@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -227,6 +228,86 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 		Query:                "needle",
 	}); err == nil || errors.Is(err, store.ErrInvalidSearch) {
 		t.Fatalf("expected direct membership rejection, got %v", err)
+	}
+}
+
+func TestSearchWorkspaceFTSMigrationPreservesAndScopesRows(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "search-migration.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	applySQLiteMigrationsBefore(t, ctx, st, "0033_search_workspace_fts.sql")
+
+	owner, err := st.EnsureBootstrap(ctx, "Migration Owner", "search-migration@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstWorkspace := workspaces[0]
+	firstChannels, err := st.ListChannels(ctx, firstWorkspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: firstChannels[0].ID,
+		AuthorID:  owner.ID,
+		Body:      "migrationneedle preserved",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{
+		Name: "Search Migration Other",
+		Slug: "search-migration-other",
+	}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondChannel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID: secondWorkspace.ID,
+		Name:        "Search Migration",
+		UserID:      owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: secondChannel.ID,
+		AuthorID:  owner.ID,
+		Body:      "migrationneedle separate",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	compiled := store.CompileSQLiteSearchQuery(firstWorkspace.ID, "migrationneedle")
+	var indexedMatches int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM messages_fts
+		WHERE messages_fts MATCH ?`, compiled).Scan(&indexedMatches); err != nil {
+		t.Fatal(err)
+	}
+	if indexedMatches != 1 {
+		t.Fatalf("expected workspace filter inside FTS index, got %d matches", indexedMatches)
+	}
+	page, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: firstWorkspace.ID,
+		UserID:      owner.ID,
+		Query:       "migrationneedle",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Results) != 1 || page.Results[0].ID != firstMessage.ID {
+		t.Fatalf("migration did not preserve searchable rows: %#v", page)
 	}
 }
 

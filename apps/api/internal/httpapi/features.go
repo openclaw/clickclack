@@ -125,6 +125,9 @@ func parseSearchPageRequest(r *http.Request, userID string) (store.SearchPageReq
 		if err != nil {
 			return store.SearchPageRequest{}, fmt.Errorf("%w: limit must be an integer", store.ErrInvalidSearch)
 		}
+		if parsed <= 0 {
+			return store.SearchPageRequest{}, fmt.Errorf("%w: limit must be positive", store.ErrInvalidSearch)
+		}
 		limit = parsed
 	}
 	return store.SearchPageRequest{

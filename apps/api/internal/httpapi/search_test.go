@@ -104,6 +104,7 @@ func TestSearchHTTPContract(t *testing.T) {
 		"&channel_id=" + url.QueryEscape(channel.ID)
 	for _, invalid := range []string{
 		"&q=httpneedle&limit=bad",
+		"&q=httpneedle&limit=0",
 		"&q=httpneedle&sort=oldest",
 		"&q=httpneedle&direct_conversation_id=dm_conflict",
 		"&q=httpneedle&cursor=not-base64!",

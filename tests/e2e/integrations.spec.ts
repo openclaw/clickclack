@@ -31,9 +31,18 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByRole("button", { name: "Add app" }).click();
   await page.locator(".ws-intg__catalog-card", { hasText: "OpenClaw" }).click();
 
-  // Bot step: manifest prefills the identity; keep the defaults.
+  // Bot step: identity is suggested as a placeholder only; Continue stays
+  // disabled until the fields are filled in.
   const displayName = page.getByRole("textbox", { name: "Display name" });
-  await expect(displayName).toHaveValue("OpenClaw");
+  await expect(displayName).toHaveValue("");
+  await expect(displayName).toHaveAttribute("placeholder", "OpenClaw");
+  await expect(page.getByRole("textbox", { name: "Handle" })).toHaveAttribute(
+    "placeholder",
+    "openclaw",
+  );
+  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
+  await displayName.fill("OpenClaw");
+  await expect(page.getByRole("textbox", { name: "Handle" })).toHaveValue("openclaw");
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Config step: default channel + agent activity opt-in.
@@ -479,6 +488,7 @@ test("requires a real active channel for OpenClaw installs", async ({ page }) =>
   await page.goto(`/app/${workspace.route_id}/settings/integrations`);
   await page.getByRole("button", { name: "Add app" }).click();
   await page.locator(".ws-intg__catalog-card", { hasText: "OpenClaw" }).click();
+  await page.getByRole("textbox", { name: "Display name" }).fill("OpenClaw");
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(

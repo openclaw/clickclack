@@ -121,8 +121,8 @@
     memberSearchGeneration += 1;
     manifest = next;
     botMode = "create";
-    displayName = next.suggestedBotName;
-    handle = next.suggestedBotHandle || suggestHandleFrom(next.suggestedBotName);
+    displayName = "";
+    handle = "";
     handleEdited = false;
     ownership = "service";
     tokenName = "default";

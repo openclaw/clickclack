@@ -103,6 +103,48 @@ func TestSearchMessagePagePostgresParity(t *testing.T) {
 		t.Fatalf("root thread summary missing from %#v", second.Results[0])
 	}
 
+	relevanceRequest := store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		UserID:      owner.ID,
+		Query:       "tieprobe",
+		Limit:       1,
+	}
+	relevanceIDs := make(map[string]bool, 3)
+	for i := 0; i < 3; i++ {
+		message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+			ChannelID: channel.ID,
+			AuthorID:  owner.ID,
+			Body:      "tieprobe identical",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		relevanceIDs[message.ID] = false
+	}
+	for {
+		page, err := st.SearchMessagePage(ctx, relevanceRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, result := range page.Results {
+			seen, ok := relevanceIDs[result.ID]
+			if !ok || seen {
+				t.Fatalf("relevance pagination returned an unexpected or duplicate result %#v", result)
+			}
+			relevanceIDs[result.ID] = true
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		relevanceRequest.Cursor = *page.NextCursor
+	}
+	for id, seen := range relevanceIDs {
+		if !seen {
+			t.Fatalf("relevance pagination skipped %s", id)
+		}
+	}
+
 	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Search Member", Email: "postgres-search-member@example.com"})
 	if err != nil {
 		t.Fatal(err)

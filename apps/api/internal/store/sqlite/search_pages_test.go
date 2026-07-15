@@ -107,6 +107,48 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 		t.Fatalf("root thread summary missing from %#v", second.Results[1])
 	}
 
+	relevanceRequest := store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   general.ID,
+		UserID:      owner.ID,
+		Query:       "tieprobe",
+		Limit:       1,
+	}
+	relevanceIDs := make(map[string]bool, 3)
+	for i := 0; i < 3; i++ {
+		message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+			ChannelID: general.ID,
+			AuthorID:  owner.ID,
+			Body:      "tieprobe identical",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		relevanceIDs[message.ID] = false
+	}
+	for {
+		page, err := st.SearchMessagePage(ctx, relevanceRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, result := range page.Results {
+			seen, ok := relevanceIDs[result.ID]
+			if !ok || seen {
+				t.Fatalf("relevance pagination returned an unexpected or duplicate result %#v", result)
+			}
+			relevanceIDs[result.ID] = true
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		relevanceRequest.Cursor = *page.NextCursor
+	}
+	for id, seen := range relevanceIDs {
+		if !seen {
+			t.Fatalf("relevance pagination skipped %s", id)
+		}
+	}
+
 	channelPage, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
 		WorkspaceID: workspace.ID,
 		ChannelID:   other.ID,
@@ -185,5 +227,34 @@ func TestSearchMessagePageScopesPaginationAndRouting(t *testing.T) {
 		Query:                "needle",
 	}); err == nil || errors.Is(err, store.ErrInvalidSearch) {
 		t.Fatalf("expected direct membership rejection, got %v", err)
+	}
+}
+
+func TestSearchMessagePageUsesFTSIndex(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	plan := explainQueryPlan(t, ctx, st, `
+		EXPLAIN QUERY PLAN
+		SELECT m.id
+		FROM messages_fts
+		JOIN messages m ON m.id = messages_fts.message_id
+		WHERE messages_fts.workspace_id = ?
+		  AND messages_fts MATCH ?
+		  AND m.channel_id = ?
+		  AND m.direct_conversation_id IS NULL
+		  AND m.deleted_at IS NULL
+		  AND m.kind = 'message'
+		ORDER BY bm25(messages_fts), m.created_at DESC, m.id DESC
+		LIMIT ?`,
+		"wsp_search", `"needle"`, "chn_search", store.DefaultSearchPageLimit+1,
+	)
+	if !strings.Contains(plan, "SCAN messages_fts VIRTUAL TABLE INDEX") {
+		t.Fatalf("expected FTS5 virtual table search, got:\n%s", plan)
+	}
+	for line := range strings.SplitSeq(plan, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "SCAN m ") {
+			t.Fatalf("search should not scan the messages table, got:\n%s", plan)
+		}
 	}
 }

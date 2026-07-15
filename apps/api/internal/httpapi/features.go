@@ -113,6 +113,12 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if strings.TrimSpace(pageRequest.DirectConversationID) != "" {
+		if err := act.requireScope("dms:read"); err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+	}
 	page, err := s.store.SearchMessagePage(r.Context(), pageRequest)
 	writeResult(w, page, err)
 }

@@ -154,4 +154,46 @@ func TestSearchHTTPContract(t *testing.T) {
 	if len(workspacePage.Results) != 0 {
 		t.Fatalf("workspace channel search leaked direct messages %#v", workspacePage)
 	}
+
+	bot, messageToken, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: owner.ID,
+		DisplayName: "Search Scope Bot",
+		Scopes:      []string{"messages:read"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	botConversation, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{bot.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+		ConversationID: botConversation.ID,
+		AuthorID:       owner.ID,
+		Body:           "bot scope httpneedle",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	botSearchURL := server.URL + "/api/search?workspace_id=" + url.QueryEscape(workspace.ID) +
+		"&direct_conversation_id=" + url.QueryEscape(botConversation.ID) +
+		"&q=httpneedle"
+	expectStatusWithBearer(t, messageToken.Token, http.MethodGet, botSearchURL, nil, http.StatusForbidden)
+
+	directToken, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "direct search",
+		Scopes:      []string{"messages:read", "dms:read"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectStatusWithBearer(t, directToken.Token, http.MethodGet, botSearchURL, nil, http.StatusOK)
 }

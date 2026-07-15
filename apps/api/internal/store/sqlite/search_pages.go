@@ -1,0 +1,256 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	"github.com/openclaw/clickclack/apps/api/internal/store"
+)
+
+type searchPageRow struct {
+	hit  store.SearchHit
+	rank float64
+}
+
+func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequest) (store.SearchPage, error) {
+	req, err := store.NormalizeSearchPageRequest(page)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	cursor, _, err := store.DecodeSearchCursor(req.Cursor, req)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	if req.Query == "" {
+		return store.SearchPage{Results: []store.SearchHit{}}, nil
+	}
+	compiledQuery := store.CompileSQLiteSearchQuery(req.Query)
+	if compiledQuery == "" {
+		return store.SearchPage{Results: []store.SearchHit{}}, nil
+	}
+	markers, err := store.NewSearchMarkers()
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	defer tx.Rollback()
+
+	role, err := memberRoleTx(ctx, tx, req.WorkspaceID, req.UserID)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	scopeWhere, scopeArgs, err := sqliteSearchScope(ctx, tx, req, role)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+
+	cursorWhere := ""
+	cursorArgs := []any{}
+	orderBy := "rank ASC, m.created_at DESC, m.id DESC"
+	if req.Cursor != "" {
+		switch req.Sort {
+		case store.SearchSortRelevance:
+			cursorWhere = `AND (
+				bm25(messages_fts) > ?
+				OR (bm25(messages_fts) = ? AND m.created_at < ?)
+				OR (bm25(messages_fts) = ? AND m.created_at = ? AND m.id < ?)
+			)`
+			cursorArgs = append(cursorArgs, cursor.Rank, cursor.Rank, cursor.CreatedAt, cursor.Rank, cursor.CreatedAt, cursor.MessageID)
+		case store.SearchSortNewest:
+			cursorWhere = `AND (
+				m.created_at < ?
+				OR (m.created_at = ? AND m.id < ?)
+			)`
+			cursorArgs = append(cursorArgs, cursor.CreatedAt, cursor.CreatedAt, cursor.MessageID)
+		}
+	}
+	if req.Sort == store.SearchSortNewest {
+		orderBy = "m.created_at DESC, m.id DESC"
+	}
+
+	args := []any{markers.Start, markers.End, req.WorkspaceID, compiledQuery}
+	args = append(args, scopeArgs...)
+	args = append(args, cursorArgs...)
+	args = append(args, req.Limit+1)
+	rows, err := tx.QueryContext(ctx, `
+		SELECT m.id,
+		       m.workspace_id,
+		       COALESCE(m.channel_id, ''),
+		       COALESCE(c.name, ''),
+		       COALESCE(m.direct_conversation_id, ''),
+		       m.author_id,
+		       u.kind,
+		       u.display_name,
+		       u.handle,
+		       u.avatar_url,
+		       author_tombstone.former_handle,
+		       author_tombstone.deleted_at,
+		       m.parent_message_id,
+		       m.thread_root_id,
+		       m.channel_seq,
+		       m.thread_seq,
+		       m.created_at,
+		       m.edited_at,
+		       COALESCE(thread_state.reply_count, 0),
+		       thread_state.last_reply_at,
+		       bm25(messages_fts) AS rank,
+		       snippet(messages_fts, 2, ?, ?, '…', 32) AS snippet
+		FROM messages_fts
+		JOIN messages m ON m.id = messages_fts.message_id
+		LEFT JOIN channels c ON c.id = m.channel_id AND c.workspace_id = m.workspace_id
+		JOIN users u ON u.id = m.author_id
+		LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
+		LEFT JOIN thread_state ON thread_state.root_message_id = m.id
+		WHERE messages_fts.workspace_id = ?
+		  AND messages_fts MATCH ?
+		  AND m.deleted_at IS NULL
+		  AND m.kind = 'message'
+		  `+scopeWhere+`
+		  `+cursorWhere+`
+		ORDER BY `+orderBy+`
+		LIMIT ?`, args...)
+	if err != nil {
+		return store.SearchPage{}, err
+	}
+	defer rows.Close()
+
+	resultRows := make([]searchPageRow, 0, req.Limit+1)
+	for rows.Next() {
+		row, markedSnippet, err := scanSearchPageRow(rows)
+		if err != nil {
+			return store.SearchPage{}, err
+		}
+		row.hit.Snippet, row.hit.Highlights, err = store.ParseSearchSnippetWithMarkers(markedSnippet, markers)
+		if err != nil {
+			return store.SearchPage{}, err
+		}
+		resultRows = append(resultRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return store.SearchPage{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.SearchPage{}, err
+	}
+	return searchPageFromRows(req, resultRows)
+}
+
+func sqliteSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRequest, role string) (string, []any, error) {
+	switch {
+	case req.ChannelID != "":
+		var channelName string
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM channels WHERE id = ? AND workspace_id = ?`, req.ChannelID, req.WorkspaceID).Scan(&channelName); err != nil {
+			return "", nil, err
+		}
+		if role == store.WorkspaceRoleGuest && channelName != store.GuestChannelName {
+			return "", nil, store.ErrModerationRestricted
+		}
+		return "AND m.channel_id = ? AND m.direct_conversation_id IS NULL", []any{req.ChannelID}, nil
+	case req.DirectConversationID != "":
+		var workspaceID string
+		if err := tx.QueryRowContext(ctx, `SELECT workspace_id FROM direct_conversations WHERE id = ?`, req.DirectConversationID).Scan(&workspaceID); err != nil {
+			return "", nil, err
+		}
+		if workspaceID != req.WorkspaceID {
+			return "", nil, fmt.Errorf("%w: direct conversation is not in workspace", store.ErrInvalidSearch)
+		}
+		if err := requireDirectAccessTx(ctx, tx, req.DirectConversationID, req.UserID); err != nil {
+			return "", nil, err
+		}
+		return `AND m.direct_conversation_id = ?
+			AND EXISTS (
+				SELECT 1
+				FROM direct_conversation_members dcm
+				WHERE dcm.conversation_id = m.direct_conversation_id
+				  AND dcm.user_id = ?
+			)`, []any{req.DirectConversationID, req.UserID}, nil
+	default:
+		if role == store.WorkspaceRoleGuest {
+			return "AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL AND c.name = ?", []any{store.GuestChannelName}, nil
+		}
+		return "AND m.direct_conversation_id IS NULL AND m.channel_id IS NOT NULL", nil, nil
+	}
+}
+
+func scanSearchPageRow(row scanner) (searchPageRow, string, error) {
+	var result searchPageRow
+	var parentMessageID, editedAt, authorFormerHandle, authorDeletedAt, lastReplyAt sql.NullString
+	var channelSeq, threadSeq sql.NullInt64
+	var markedSnippet string
+	err := row.Scan(
+		&result.hit.ID,
+		&result.hit.WorkspaceID,
+		&result.hit.ChannelID,
+		&result.hit.ChannelName,
+		&result.hit.DirectConversationID,
+		&result.hit.Author.ID,
+		&result.hit.Author.Kind,
+		&result.hit.Author.DisplayName,
+		&result.hit.Author.Handle,
+		&result.hit.Author.AvatarURL,
+		&authorFormerHandle,
+		&authorDeletedAt,
+		&parentMessageID,
+		&result.hit.ThreadRootID,
+		&channelSeq,
+		&threadSeq,
+		&result.hit.CreatedAt,
+		&editedAt,
+		&result.hit.ReplyCount,
+		&lastReplyAt,
+		&result.rank,
+		&markedSnippet,
+	)
+	if err != nil {
+		return searchPageRow{}, "", err
+	}
+	if parentMessageID.Valid {
+		result.hit.ParentMessageID = &parentMessageID.String
+	}
+	if channelSeq.Valid {
+		result.hit.ChannelSeq = &channelSeq.Int64
+	}
+	if threadSeq.Valid {
+		result.hit.ThreadSeq = &threadSeq.Int64
+	}
+	if editedAt.Valid {
+		result.hit.EditedAt = &editedAt.String
+	}
+	if authorFormerHandle.Valid {
+		result.hit.Author.FormerHandle = authorFormerHandle.String
+	}
+	if authorDeletedAt.Valid {
+		result.hit.Author.DeletedAt = &authorDeletedAt.String
+	}
+	if lastReplyAt.Valid {
+		result.hit.LastReplyAt = &lastReplyAt.String
+	}
+	return result, markedSnippet, nil
+}
+
+func searchPageFromRows(req store.SearchPageRequest, rows []searchPageRow) (store.SearchPage, error) {
+	page := store.SearchPage{
+		Results: make([]store.SearchHit, 0, min(len(rows), req.Limit)),
+	}
+	hasMore := len(rows) > req.Limit
+	if hasMore {
+		rows = rows[:req.Limit]
+	}
+	for _, row := range rows {
+		page.Results = append(page.Results, row.hit)
+	}
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		cursor, err := store.EncodeSearchCursor(req, last.rank, last.hit.CreatedAt, last.hit.ID)
+		if err != nil {
+			return store.SearchPage{}, err
+		}
+		page.NextCursor = &cursor
+	}
+	return page, nil
+}

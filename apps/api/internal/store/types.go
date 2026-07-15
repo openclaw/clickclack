@@ -737,6 +737,40 @@ type SearchHighlight struct {
 	End   int `json:"end"`
 }
 
+type SearchAuthor struct {
+	ID           string  `json:"id"`
+	Kind         string  `json:"kind"`
+	DisplayName  string  `json:"display_name"`
+	Handle       string  `json:"handle"`
+	FormerHandle string  `json:"former_handle,omitempty"`
+	AvatarURL    string  `json:"avatar_url"`
+	DeletedAt    *string `json:"deleted_at,omitempty"`
+}
+
+type SearchHit struct {
+	ID                   string            `json:"id"`
+	WorkspaceID          string            `json:"workspace_id"`
+	ChannelID            string            `json:"channel_id,omitempty"`
+	ChannelName          string            `json:"channel_name,omitempty"`
+	DirectConversationID string            `json:"direct_conversation_id,omitempty"`
+	Author               SearchAuthor      `json:"author"`
+	ParentMessageID      *string           `json:"parent_message_id,omitempty"`
+	ThreadRootID         string            `json:"thread_root_id"`
+	ChannelSeq           *int64            `json:"channel_seq,omitempty"`
+	ThreadSeq            *int64            `json:"thread_seq,omitempty"`
+	CreatedAt            string            `json:"created_at"`
+	EditedAt             *string           `json:"edited_at,omitempty"`
+	ReplyCount           int               `json:"reply_count"`
+	LastReplyAt          *string           `json:"last_reply_at,omitempty"`
+	Snippet              string            `json:"snippet"`
+	Highlights           []SearchHighlight `json:"highlights"`
+}
+
+type SearchPage struct {
+	Results    []SearchHit `json:"results"`
+	NextCursor *string     `json:"next_cursor"`
+}
+
 type DirectConversation struct {
 	ID          string `json:"id"`
 	RouteID     string `json:"route_id"`

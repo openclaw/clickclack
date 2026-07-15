@@ -128,8 +128,27 @@ Current MVP scopes are documented in [features/bots.md](features/bots.md).
 
 ## Install into OpenClaw
 
-OpenClaw's ClickClack extension reads ClickClack accounts from
-`channels.clickclack`. Keep tokens in env-backed secret refs:
+The fastest path is one command (OpenClaw installs the extension and writes
+the config for you):
+
+```sh
+openclaw channels add clickclack \
+  --base-url https://app.clickclack.chat \
+  --token ccb_... \
+  --workspace clickclack
+```
+
+A running OpenClaw gateway picks up the new account automatically (the
+ClickClack extension hot-reloads on `channels.clickclack` changes). If the
+gateway is not running yet, start it with `openclaw gateway`.
+
+Or run `openclaw onboard` for the guided setup. The Integrations wizard in
+workspace settings (Integrations → OpenClaw) generates this exact command
+with the freshly minted token filled in.
+
+For manual configuration, OpenClaw's ClickClack extension reads ClickClack
+accounts from `channels.clickclack`. Tokens may be plain strings or
+env-backed secret refs:
 
 ```json5
 {
@@ -146,14 +165,16 @@ OpenClaw's ClickClack extension reads ClickClack accounts from
 }
 ```
 
-Then set the environment on the OpenClaw process:
+When using an env-backed ref, set the environment on the OpenClaw process:
 
 ```sh
 export CLICKCLACK_BOT_TOKEN="ccb_..."
 openclaw gateway
 ```
 
-For multiple bots in one OpenClaw install, use named accounts:
+For multiple bots in one OpenClaw install, add each bot as a named account
+(`openclaw channels add clickclack --account <name> …`) or use named
+accounts in config:
 
 ```json5
 {

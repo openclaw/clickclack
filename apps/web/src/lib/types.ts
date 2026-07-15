@@ -130,8 +130,20 @@ export type Upload = {
 };
 
 export type SearchResult = {
-  message: Message;
-  rank: number;
+  id: string;
+  workspace_id: string;
+  channel_id?: string;
+  channel_name?: string;
+  direct_conversation_id?: string;
+  author: User;
+  parent_message_id?: string;
+  thread_root_id: string;
+  channel_seq?: number;
+  thread_seq?: number;
+  created_at: string;
+  edited_at?: string;
+  reply_count: number;
+  last_reply_at?: string;
   snippet: string;
   highlights: SearchHighlight[];
 };

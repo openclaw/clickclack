@@ -202,10 +202,8 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 		t.Fatalf("unexpected thread payload: %#v", thread)
 	}
 
-	search := getJSON[struct {
-		Results []store.SearchResult `json:"results"`
-	}](t, server.URL+"/api/search?workspace_id="+url.QueryEscape(workspace.ID)+"&q=lobster")
-	if len(search.Results) != 1 || search.Results[0].Message.ID != created.Message.ID {
+	search := getJSON[store.SearchPage](t, server.URL+"/api/search?workspace_id="+url.QueryEscape(workspace.ID)+"&q=lobster")
+	if len(search.Results) != 1 || search.Results[0].ID != created.Message.ID || search.NextCursor != nil {
 		t.Fatalf("unexpected search results: %#v", search.Results)
 	}
 

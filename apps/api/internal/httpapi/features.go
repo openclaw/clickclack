@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -107,8 +108,35 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	results, err := s.store.SearchMessages(r.Context(), workspaceID, r.URL.Query().Get("channel_id"), act.user.ID, r.URL.Query().Get("q"), queryInt(r, "limit", 50))
-	writeResult(w, map[string]any{"results": results}, err)
+	pageRequest, err := parseSearchPageRequest(r, act.user.ID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	page, err := s.store.SearchMessagePage(r.Context(), pageRequest)
+	writeResult(w, page, err)
+}
+
+func parseSearchPageRequest(r *http.Request, userID string) (store.SearchPageRequest, error) {
+	values := r.URL.Query()
+	limit := 0
+	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			return store.SearchPageRequest{}, fmt.Errorf("%w: limit must be an integer", store.ErrInvalidSearch)
+		}
+		limit = parsed
+	}
+	return store.SearchPageRequest{
+		WorkspaceID:          values.Get("workspace_id"),
+		ChannelID:            values.Get("channel_id"),
+		DirectConversationID: values.Get("direct_conversation_id"),
+		UserID:               userID,
+		Query:                values.Get("q"),
+		Sort:                 store.SearchSort(values.Get("sort")),
+		Limit:                limit,
+		Cursor:               values.Get("cursor"),
+	}, nil
 }
 
 func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {

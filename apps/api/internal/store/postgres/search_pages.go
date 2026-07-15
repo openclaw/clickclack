@@ -84,9 +84,11 @@ func (s *Store) SearchMessagePage(ctx context.Context, page store.SearchPageRequ
 		       COALESCE(m.direct_conversation_id, ''),
 		       m.author_id,
 		       u.kind,
+		       u.owner_user_id,
 		       u.display_name,
 		       u.handle,
 		       u.avatar_url,
+		       u.created_at,
 		       author_tombstone.former_handle,
 		       author_tombstone.deleted_at,
 		       m.parent_message_id,
@@ -182,7 +184,7 @@ func postgresSearchScope(ctx context.Context, tx *sql.Tx, req store.SearchPageRe
 
 func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
 	var result store.SearchPageEntry
-	var parentMessageID, editedAt, authorFormerHandle, authorDeletedAt, lastReplyAt sql.NullString
+	var parentMessageID, editedAt, authorOwnerID, authorFormerHandle, authorDeletedAt, lastReplyAt sql.NullString
 	var channelSeq, threadSeq sql.NullInt64
 	var markedSnippet string
 	err := row.Scan(
@@ -193,9 +195,11 @@ func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
 		&result.Hit.DirectConversationID,
 		&result.Hit.Author.ID,
 		&result.Hit.Author.Kind,
+		&authorOwnerID,
 		&result.Hit.Author.DisplayName,
 		&result.Hit.Author.Handle,
 		&result.Hit.Author.AvatarURL,
+		&result.Hit.Author.CreatedAt,
 		&authorFormerHandle,
 		&authorDeletedAt,
 		&parentMessageID,
@@ -223,6 +227,9 @@ func scanSearchPageRow(row scanner) (store.SearchPageEntry, string, error) {
 	}
 	if editedAt.Valid {
 		result.Hit.EditedAt = &editedAt.String
+	}
+	if authorOwnerID.Valid {
+		result.Hit.Author.OwnerUserID = authorOwnerID.String
 	}
 	if authorFormerHandle.Valid {
 		result.Hit.Author.FormerHandle = authorFormerHandle.String

@@ -2173,13 +2173,10 @@
       searchResults = [];
       return;
     }
-    if (selectedDirectID) {
-      searchResults = [];
-      return;
-    }
     const params = new URLSearchParams({ workspace_id: selectedWorkspaceID, q: searchQuery.trim() });
-    if (selectedChannelID) params.set("channel_id", selectedChannelID);
-    const data = await api<{ results: SearchResult[] }>(`/api/search?${params.toString()}`);
+    if (selectedDirectID) params.set("direct_conversation_id", selectedDirectID);
+    else if (selectedChannelID) params.set("channel_id", selectedChannelID);
+    const data = await api<{ results: SearchResult[]; next_cursor: string | null }>(`/api/search?${params.toString()}`);
     searchResults = data.results;
   }
 
@@ -2190,13 +2187,23 @@
 
   async function openSearchResult(result: SearchResult) {
     searchResults = [];
-    const targetID = result.message.channel_id || result.message.direct_conversation_id || "";
+    const targetID = result.channel_id || result.direct_conversation_id || "";
     if (!selectedWorkspaceID || !targetID) return;
     if (currentConversationKey() !== targetID) {
       await navigateToApp(selectedWorkspaceID, targetID);
       await applyRoute(selectedWorkspaceID, targetID);
     }
-    if (currentConversationKey() === targetID) await loadMessagesAround(result.message);
+    if (currentConversationKey() !== targetID) return;
+    if (result.parent_message_id) {
+      await refreshThread(result.thread_root_id);
+      await highlightMessage(result.id);
+      return;
+    }
+    if (result.channel_seq && result.channel_seq > 0) {
+      await loadMessagesAroundSeq(result.channel_seq, result.id);
+      return;
+    }
+    await loadMessages();
   }
 
   async function loadMessagesAround(target: Message) {

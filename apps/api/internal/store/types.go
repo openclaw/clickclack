@@ -740,10 +740,12 @@ type SearchHighlight struct {
 type SearchAuthor struct {
 	ID           string  `json:"id"`
 	Kind         string  `json:"kind"`
+	OwnerUserID  string  `json:"owner_user_id,omitempty"`
 	DisplayName  string  `json:"display_name"`
 	Handle       string  `json:"handle"`
 	FormerHandle string  `json:"former_handle,omitempty"`
 	AvatarURL    string  `json:"avatar_url"`
+	CreatedAt    string  `json:"created_at"`
 	DeletedAt    *string `json:"deleted_at,omitempty"`
 }
 

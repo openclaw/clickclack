@@ -34,25 +34,25 @@
       <strong>{results.length} {results.length === 1 ? "result" : "results"}</strong>
       <button type="button" onclick={onClose}>Close</button>
     </div>
-    {#each results as result (result.message.id)}
+    {#each results as result (result.id)}
       <button class="search-result" onclick={() => onOpenResult(result)}>
         <Avatar
           class="dm-avatar"
-          id={result.message.author?.id || result.message.author_id}
-          name={result.message.author?.display_name}
-          src={isDeletedBot(result.message.author) ? undefined : result.message.author?.avatar_url}
+          id={result.author.id}
+          name={result.author.display_name}
+          src={isDeletedBot(result.author) ? undefined : result.author.avatar_url}
           size={30}
         />
         <div class="search-result-body">
           <div>
-            <strong>{result.message.author?.display_name || "Local User"}</strong>
-            {#if isDeletedBot(result.message.author)}
+            <strong>{result.author.display_name || "Local User"}</strong>
+            {#if isDeletedBot(result.author)}
               <span class="bot-chip bot-chip--deleted">deleted bot</span>
             {/if}
-            {#if userHandle(result.message.author)}
-              <span>{handleLabel(userHandle(result.message.author))}</span>
+            {#if userHandle(result.author)}
+              <span>{handleLabel(userHandle(result.author))}</span>
             {/if}
-            <time>{time(result.message.created_at)}</time>
+            <time>{time(result.created_at)}</time>
           </div>
           <span class="search-result-snippet">
             {#each snippetParts(result.snippet, result.highlights) as part}

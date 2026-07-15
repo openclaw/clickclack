@@ -440,7 +440,9 @@
   place-items: center;
   font-size: 26px;
   font-weight: 800;
-  box-shadow: var(--key-edge), 0 18px 40px -16px color-mix(in srgb, var(--brand-b) 60%, transparent);
+  box-shadow:
+    var(--key-edge),
+    0 18px 40px -16px color-mix(in srgb, var(--brand-b) 60%, transparent);
 }
 
 .empty strong {
@@ -905,12 +907,19 @@
 }
 
 @keyframes preamble-live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .preamble-state.is-live { animation: none; }
+  .preamble-state.is-live {
+    animation: none;
+  }
 }
 
 .preamble-action {
@@ -1773,4 +1782,108 @@
     grid-template-columns: minmax(0, 1fr);
     max-width: 100%;
   }
+}
+
+/* Optional outlined-chain layout. The standard layout above remains the
+   default; this device-local appearance mode gives every participant a clear
+   message boundary and lets one agent turn read as a single two-part chain.
+   Final-only agent messages use the same delivery width as chained answers,
+   so a turn does not shrink merely because it emitted activity first. */
+:root[data-message-layout="outlined"] .message-group .group-body {
+  width: 100%;
+}
+
+:root[data-message-layout="outlined"] .message-group .message-row {
+  margin-left: 0;
+  padding: 0;
+}
+
+:root[data-message-layout="outlined"][data-user-align="right"]
+  .message-group.is-self
+  .message-content,
+:root[data-message-layout="outlined"][data-other-align="right"]
+  .message-group:not(.is-self)
+  .message-content,
+:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .markdown,
+:root[data-message-layout="outlined"][data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown {
+  text-align: start;
+}
+
+:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .thread-hint,
+:root[data-message-layout="outlined"][data-other-align="right"]
+  .message-group:not(.is-self)
+  .thread-hint {
+  display: flex;
+  width: fit-content;
+  margin-left: auto;
+}
+
+/* The standard row extends into the avatar gutter, where its hover timestamp
+   naturally lives. Outlined rows no longer extend, so keep the timestamp in
+   that same gutter explicitly instead of letting it overlap the boundary. */
+:root[data-message-layout="outlined"] .message-group .row-stamp {
+  left: -48px;
+}
+
+:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .row-stamp,
+:root[data-message-layout="outlined"][data-other-align="right"]
+  .message-group:not(.is-self)
+  .row-stamp {
+  right: -48px;
+  left: auto;
+}
+
+:root[data-message-layout="outlined"] .message-group .message-row:not(:first-child) {
+  margin-top: 4px;
+}
+
+:root[data-message-layout="outlined"] .message-group .message-content {
+  position: relative;
+  width: fit-content;
+  max-width: min(96%, 1100px);
+  margin-top: 2px;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+}
+
+/* Outlined mode adds a theme-native boundary to ordinary messages without
+   replacing any role or board surface. Agent activity and delivered-answer
+   bubbles keep the fills, accents, and shadows defined by the active theme. */
+:root[data-message-layout="outlined"]
+  .message-group
+  .message-row:not(.is-preamble):not(.after-preamble)
+  .message-content {
+  border: 1px solid var(--line-strong);
+}
+
+:root[data-message-layout="outlined"] .message-group.is-agent .message-content {
+  width: 96%;
+  max-width: 1100px;
+}
+
+/* The completed amber preamble and its adjacent final answer share an outline.
+   The negative seam overlaps the two hairlines without hiding either state. */
+:root[data-message-layout="outlined"]
+  .message-group
+  .message-row.before-final-message
+  + .message-row.after-preamble {
+  margin-top: -1px;
+}
+
+:root[data-message-layout="outlined"]
+  .message-group.is-agent
+  .message-row.before-final-message
+  .message-content {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+:root[data-message-layout="outlined"]
+  .message-group.is-agent
+  .message-row.after-preamble
+  .message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }

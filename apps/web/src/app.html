@@ -7,8 +7,8 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>ClickClack</title>
     <script>
-      // Apply the stored appearance prefs before first paint so a forced
-      // color mode or non-default board never flashes. Keys and attribute
+      // Apply stored appearance prefs before first paint so forced color,
+      // board, and message-layout choices never flash. Keys and attribute
       // names mirror src/lib/appearance.ts, which owns them afterwards.
       try {
         var ccMode = localStorage.getItem("clickclack:color-mode:v1");
@@ -18,6 +18,10 @@
         var ccBoard = localStorage.getItem("clickclack:board-theme:v1");
         if (ccBoard === "ember" || ccBoard === "moss" || ccBoard === "iris") {
           document.documentElement.setAttribute("data-board", ccBoard);
+        }
+        var ccMessageLayout = localStorage.getItem("clickclack:message-layout:v1");
+        if (ccMessageLayout === "outlined") {
+          document.documentElement.setAttribute("data-message-layout", ccMessageLayout);
         }
       } catch (e) {}
     </script>

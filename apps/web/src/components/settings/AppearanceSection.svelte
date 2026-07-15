@@ -2,18 +2,23 @@
   import {
     BOARD_THEMES,
     COLOR_MODES,
+    MESSAGE_LAYOUTS,
     loadBoardTheme,
     loadColorMode,
+    loadMessageLayout,
     setBoardTheme,
     setColorMode,
+    setMessageLayout,
     type BoardTheme,
     type ColorMode,
+    type MessageLayout,
   } from "../../lib/appearance";
 
   // Appearance is a device-local pref with no server state, so the section
   // owns it directly instead of prop-drilling through ChatApp.
   let colorMode = $state<ColorMode>(loadColorMode());
   let boardTheme = $state<BoardTheme>(loadBoardTheme());
+  let messageLayout = $state<MessageLayout>(loadMessageLayout());
 
   function pickMode(mode: ColorMode) {
     colorMode = mode;
@@ -24,14 +29,19 @@
     boardTheme = board;
     setBoardTheme(board);
   }
+
+  function pickMessageLayout(layout: MessageLayout) {
+    messageLayout = layout;
+    setMessageLayout(layout);
+  }
 </script>
 
 <header class="settings-page__header">
   <p class="settings-page__eyebrow">Account</p>
   <h2 class="settings-page__h1">Appearance</h2>
   <p class="settings-page__lead">
-    Pick a color mode and a board. Changes apply instantly, everywhere in the app, and stay on
-    this device.
+    Pick a color mode, board, and message layout. Changes apply instantly, everywhere in the
+    app, and stay on this device.
   </p>
 </header>
 
@@ -98,4 +108,27 @@
   <p class="settings-field__hint">
     Every board comes tuned for light and dark; the swatches preview whichever mode is active.
   </p>
+
+  <h3 class="settings-rows__head">Message layout</h3>
+  <div class="message-layout-grid" role="radiogroup" aria-label="Message layout">
+    {#each MESSAGE_LAYOUTS as layout (layout.id)}
+      <button
+        type="button"
+        class="message-layout-option"
+        class:is-active={messageLayout === layout.id}
+        role="radio"
+        aria-checked={messageLayout === layout.id}
+        onclick={() => pickMessageLayout(layout.id)}
+      >
+        <span class="message-layout-option__preview" data-layout={layout.id} aria-hidden="true">
+          <span class="message-layout-option__activity"></span>
+          <span class="message-layout-option__answer"></span>
+        </span>
+        <span class="message-layout-option__meta">
+          <strong>{layout.label}</strong>
+          <span>{layout.blurb}</span>
+        </span>
+      </button>
+    {/each}
+  </div>
 </div>

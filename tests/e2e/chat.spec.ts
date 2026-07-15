@@ -447,6 +447,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const me = (await meResponse.json()) as { user: { id: string } };
   const notificationStorageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
   await page.addInitScript((storageKey) => {
+    localStorage.setItem("clickclack:message-layout:v1", "outlined");
     type CapturedNotification = { title: string; close: () => void };
     const target = window as unknown as {
       __clickclackNotifications: CapturedNotification[];
@@ -505,7 +506,14 @@ test("coalesces durable agent activity and applies activity preferences", async 
   for (const data of [
     { body: "Checking the deployment boundary.", kind: "agent_commentary", turn_id: turnId },
     { body: "**bash inspect**\n\nvalidated local target", kind: "agent_tool", turn_id: turnId },
+    {
+      body: "Commentary after the first tool remains in sequence.",
+      kind: "agent_commentary",
+      turn_id: turnId,
+    },
+    { body: "**read verify**\n\nconfirmed final input", kind: "agent_tool", turn_id: turnId },
     { body: "Deployment boundary is healthy." },
+    { body: "A final-only agent response keeps the same delivery width." },
   ]) {
     const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
       headers: botHeaders,
@@ -551,6 +559,44 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preamble.getByText("bash")).toBeVisible();
   await preamble.getByRole("button", { name: /bash/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
+  const preambleItems = preamble.locator(".preamble-flow > *");
+  await expect(preambleItems).toHaveCount(4);
+  await expect(preambleItems.nth(0)).toContainText("Checking the deployment boundary.");
+  await expect(preambleItems.nth(1)).toContainText("bash");
+  await expect(preambleItems.nth(2)).toContainText("Commentary after the first tool");
+  await expect(preambleItems.nth(3)).toContainText("read");
+
+  const chainAnswer = page.locator(".message-row.after-preamble", {
+    has: page.getByText("Deployment boundary is healthy.", { exact: true }),
+  });
+  const finalOnlyAnswer = page.locator(".message-row:not(.after-preamble)", {
+    has: page.getByText("A final-only agent response keeps the same delivery width.", {
+      exact: true,
+    }),
+  });
+  const chainGeometry = await chainAnswer.locator(".message-content").boundingBox();
+  const finalOnlyGeometry = await finalOnlyAnswer.locator(".message-content").boundingBox();
+  expect(chainGeometry).not.toBeNull();
+  expect(finalOnlyGeometry).not.toBeNull();
+  expect(Math.abs((chainGeometry?.width ?? 0) - (finalOnlyGeometry?.width ?? 0))).toBeLessThan(1);
+  expect(Math.abs((chainGeometry?.x ?? 0) - (finalOnlyGeometry?.x ?? 0))).toBeLessThan(1);
+
+  const capRow = preamble.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-row ')][1]",
+  );
+  await expect(capRow).toHaveClass(/before-final-message/);
+  const capGeometry = await capRow.locator(".message-content").boundingBox();
+  expect(capGeometry).not.toBeNull();
+  expect(Math.abs((capGeometry?.width ?? 0) - (chainGeometry?.width ?? 0))).toBeLessThan(1);
+  const chainRadii = await chainAnswer.locator(".message-content").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      topLeft: parseFloat(style.borderTopLeftRadius),
+      bottomLeft: parseFloat(style.borderBottomLeftRadius),
+    };
+  });
+  expect(chainRadii.topLeft).toBe(0);
+  expect(chainRadii.bottomLeft).toBeGreaterThan(0);
 
   // A live turn is one synthetic row anchored at its first activity message.
   // Later same-turn rows grow that existing virtual item without changing the
@@ -815,6 +861,55 @@ test("aligns self and other messages independently", async ({ page }) => {
           ? "left"
           : "right";
       });
+  const messageTextAlign = async (message: string) =>
+    page
+      .locator(".message-row", { has: page.getByText(message, { exact: true }) })
+      .locator(":scope > .message-content")
+      .evaluate((content) => getComputedStyle(content).textAlign);
+  const rowStampSide = async (message: string) =>
+    page
+      .locator(".message-row", { has: page.getByText(message, { exact: true }) })
+      .evaluate((row) => {
+        const stamp = row.querySelector<HTMLElement>(":scope > .row-stamp");
+        const content = row.querySelector<HTMLElement>(":scope > .message-content");
+        if (!stamp || !content) return "missing";
+        const stampRect = stamp.getBoundingClientRect();
+        const contentRect = content.getBoundingClientRect();
+        if (stampRect.right <= contentRect.left) return "left";
+        if (stampRect.left >= contentRect.right) return "right";
+        return "overlap";
+      });
+  const messageSurface = async (message: string) =>
+    page
+      .locator(".message-row", { has: page.getByText(message, { exact: true }) })
+      .locator(":scope > .message-content")
+      .evaluate((content) => {
+        const style = getComputedStyle(content);
+        return {
+          backgroundColor: style.backgroundColor,
+          color: style.color,
+          boxShadow: style.boxShadow,
+        };
+      });
+
+  const standardSurfaces = await Promise.all(
+    [selfMessage, humanMessage, agentMessage].map(messageSurface),
+  );
+  await userAlign.selectOption("right");
+  await otherAlign.selectOption("right");
+  await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
+  for (const body of [selfMessage, humanMessage, agentMessage]) {
+    await expect.poll(() => messageTextAlign(body)).toBe("right");
+  }
+  await page.evaluate(() => {
+    localStorage.setItem("clickclack:message-layout:v1", "outlined");
+    document.documentElement.setAttribute("data-message-layout", "outlined");
+  });
+  await expect(page.locator("html")).toHaveAttribute("data-message-layout", "outlined");
+  await expect
+    .poll(() => Promise.all([selfMessage, humanMessage, agentMessage].map(messageSurface)))
+    .toEqual(standardSurfaces);
+
   const expectLayout = async (selfSide: "left" | "right", otherSide: "left" | "right") => {
     await userAlign.selectOption(selfSide);
     await otherAlign.selectOption(otherSide);
@@ -826,6 +921,12 @@ test("aligns self and other messages independently", async ({ page }) => {
     await expect.poll(() => threadControlSide(selfMessage)).toBe(selfSide);
     await expect.poll(() => threadControlSide(humanMessage)).toBe(otherSide);
     await expect.poll(() => threadControlSide(agentMessage)).toBe(otherSide);
+    await expect.poll(() => rowStampSide(selfMessage)).toBe(selfSide);
+    await expect.poll(() => rowStampSide(humanMessage)).toBe(otherSide);
+    await expect.poll(() => rowStampSide(agentMessage)).toBe(otherSide);
+    for (const body of [selfMessage, humanMessage, agentMessage]) {
+      await expect.poll(() => messageTextAlign(body)).toMatch(/^(left|start)$/);
+    }
   };
 
   await expectLayout("left", "left");
@@ -834,6 +935,30 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expectLayout("right", "right");
 
   await settings.getByRole("button", { name: "Close" }).click();
+  for (const body of [selfMessage, humanMessage, agentMessage]) {
+    const outline = await page
+      .locator(".message-row", { has: page.getByText(body, { exact: true }) })
+      .locator(".message-content")
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          border: Math.max(
+            parseFloat(style.borderTopWidth),
+            parseFloat(style.borderRightWidth),
+            parseFloat(style.borderBottomWidth),
+            parseFloat(style.borderLeftWidth),
+          ),
+          radius: Math.max(
+            parseFloat(style.borderTopLeftRadius),
+            parseFloat(style.borderTopRightRadius),
+            parseFloat(style.borderBottomLeftRadius),
+            parseFloat(style.borderBottomRightRadius),
+          ),
+        };
+      });
+    expect(outline.border).toBeGreaterThan(0);
+    expect(outline.radius).toBeGreaterThan(0);
+  }
   const selfGroup = page.locator(".message-group", {
     has: page.getByText(selfMessage, { exact: true }),
   });

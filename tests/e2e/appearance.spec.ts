@@ -67,3 +67,30 @@ test("board theme retunes the app palette and survives reload", async ({ page })
   await expect(html).not.toHaveAttribute("data-board");
   await expect.poll(accentOf).toBe(signalAccent);
 });
+
+test("message layout switches to outlined chains and survives reload", async ({ page }) => {
+  await openAppearanceSettings(page);
+
+  const html = page.locator("html");
+  await expect(html).not.toHaveAttribute("data-message-layout");
+  await expect(page.getByRole("radio", { name: /^Standard/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+
+  await page.getByRole("radio", { name: /^Outlined chains/ }).click();
+  await expect(html).toHaveAttribute("data-message-layout", "outlined");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("clickclack:message-layout:v1")))
+    .toBe("outlined");
+
+  await page.reload();
+  await expect(html).toHaveAttribute("data-message-layout", "outlined");
+
+  await openAppearanceSettings(page);
+  await page.getByRole("radio", { name: /^Standard/ }).click();
+  await expect(html).not.toHaveAttribute("data-message-layout");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("clickclack:message-layout:v1")))
+    .toBeNull();
+});

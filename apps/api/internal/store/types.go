@@ -1007,6 +1007,7 @@ type Store interface {
 	UploadHasDirectMessageAttachment(ctx context.Context, uploadID string) (bool, error)
 	UploadHasOtherDirectMessageAttachment(ctx context.Context, uploadID, messageID string) (bool, error)
 	AttachUpload(ctx context.Context, input AttachUploadInput) (Event, error)
+	SearchMessagePage(ctx context.Context, page SearchPageRequest) (SearchPage, error)
 	SearchMessages(ctx context.Context, workspaceID, channelID, userID, query string, limit int) ([]SearchResult, error)
 	ListDirectConversations(ctx context.Context, workspaceID, userID string) ([]DirectConversation, error)
 	GetDirectConversation(ctx context.Context, conversationID, userID string) (DirectConversation, error)

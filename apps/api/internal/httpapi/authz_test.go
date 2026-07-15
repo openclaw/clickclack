@@ -436,6 +436,8 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	if serviceReplacement.Bot.ID == serviceBot.Bot.ID || serviceReplacement.Bot.Handle != serviceBot.Bot.Handle || serviceReplacement.Bot.DeletedAt != nil {
 		t.Fatalf("expected a new active bot identity to reuse the handle: %#v", serviceReplacement.Bot)
 	}
+	expectStatusAsUser(t, manager.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceReplacement.Bot.ID+"/membership", nil, http.StatusNoContent)
+	expectBotMembershipRemovedEvent(t, events, workspace.ID, serviceReplacement.Bot.ID)
 
 	userBot := postJSONAsUser[struct {
 		Bot store.User `json:"bot"`
@@ -481,6 +483,22 @@ func expectBotDeletedEvent(t *testing.T, events <-chan store.Event, workspaceID 
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for bot deletion realtime event")
+	}
+}
+
+func expectBotMembershipRemovedEvent(t *testing.T, events <-chan store.Event, workspaceID, botUserID string) {
+	t.Helper()
+	select {
+	case event := <-events:
+		if event.Type != "bot.membership_removed" || event.WorkspaceID != workspaceID || event.ID != "" || event.Cursor != "" || store.IsDurableEventType(event.Type) {
+			t.Fatalf("unexpected bot membership realtime event: %#v", event)
+		}
+		payload, ok := event.Payload.(map[string]string)
+		if !ok || payload["bot_user_id"] != botUserID {
+			t.Fatalf("unexpected bot membership realtime payload: %#v", event.Payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for bot membership realtime event")
 	}
 }
 

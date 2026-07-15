@@ -782,6 +782,7 @@ func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, err)
 		return
 	}
+	s.publishBotMembershipRemoved(chi.URLParam(r, "workspace_id"), chi.URLParam(r, "bot_user_id"))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -936,6 +937,17 @@ func (s *Server) publishBotDeleted(deleted store.DeletedBot) {
 			},
 		})
 	}
+}
+
+func (s *Server) publishBotMembershipRemoved(workspaceID, botUserID string) {
+	s.hub.Publish(store.Event{
+		Type:        "bot.membership_removed",
+		WorkspaceID: workspaceID,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		Payload: map[string]string{
+			"bot_user_id": botUserID,
+		},
+	})
 }
 
 func (s *Server) listSlashCommands(w http.ResponseWriter, r *http.Request) {

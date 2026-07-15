@@ -158,8 +158,11 @@
   let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
+  let directConversationsLoadSerial = 0;
+  let moderationMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
+  let realtimeReconcileSerial = 0;
   let slashDispatchGeneration = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
   let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
@@ -833,14 +836,20 @@
     if (loadInitialMessages) await loadMessages();
   }
 
-  async function loadModerationMembers() {
-    moderationMembers = [];
-    if (!selectedWorkspaceID || (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "moderator")) return;
+  async function loadModerationMembers(workspaceID = selectedWorkspaceID) {
+    const serial = ++moderationMembersLoadSerial;
+    if (!workspaceID || workspaceID !== selectedWorkspaceID || (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "moderator")) {
+      if (serial === moderationMembersLoadSerial) moderationMembers = [];
+      return;
+    }
     try {
-      const data = await api<{ members: MemberModeration[] }>(`/api/workspaces/${selectedWorkspaceID}/moderation/members`);
+      const data = await api<{ members: MemberModeration[] }>(`/api/workspaces/${workspaceID}/moderation/members`);
+      if (serial !== moderationMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
       moderationMembers = data.members;
     } catch {
-      moderationMembers = [];
+      if (serial === moderationMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+        moderationMembers = [];
+      }
     }
   }
 
@@ -2240,9 +2249,14 @@
     input.value = "";
   }
 
-  async function loadDirectConversations() {
-    if (!selectedWorkspaceID) return;
-    const data = await api<{ conversations: DirectConversation[] }>(`/api/dms?workspace_id=${selectedWorkspaceID}`);
+  async function loadDirectConversations(workspaceID = selectedWorkspaceID) {
+    const serial = ++directConversationsLoadSerial;
+    if (!workspaceID) {
+      directConversations = [];
+      return;
+    }
+    const data = await api<{ conversations: DirectConversation[] }>(`/api/dms?workspace_id=${workspaceID}`);
+    if (serial !== directConversationsLoadSerial || workspaceID !== selectedWorkspaceID) return;
     directConversations = data.conversations;
   }
 
@@ -2363,19 +2377,55 @@
   }
 
   function connectRealtimeSocket() {
+    realtimeReconcileSerial += 1;
     socket?.close();
     socket = null;
     connected = false;
     if (!selectedWorkspaceID) return;
+    const workspaceID = selectedWorkspaceID;
     socket = connectRealtime({
-      workspaceID: selectedWorkspaceID,
+      workspaceID,
       onEvent: (event) => {
         void handleEvent(event).catch((error) => {
           status = error instanceof Error ? error.message : "Could not process realtime event";
         });
       },
-      onStatusChange: (next) => (connected = next),
+      onStatusChange: (next) => {
+        connected = next;
+        if (!next) return;
+        void reconcileRealtimeState(workspaceID).catch((error) => {
+          if (workspaceID === selectedWorkspaceID && status === "ready") {
+            status = error instanceof Error ? error.message : "Could not refresh after reconnect";
+          }
+        });
+      },
     });
+  }
+
+  async function reconcileRealtimeState(workspaceID: string) {
+    const serial = ++realtimeReconcileSerial;
+    if (!workspaceID || workspaceID !== selectedWorkspaceID) return;
+    const selectedThreadID = selectedThread?.id || "";
+    const selectedBotProfileID = selectedProfile?.kind === "bot" ? selectedProfile.id : "";
+    searchResults = [];
+    typingEntries = [];
+    agentProgressTurns = [];
+    await Promise.all([
+      loadDirectConversations(workspaceID),
+      loadModerationMembers(workspaceID),
+      loadSlashCommands(workspaceID),
+      loadBotCommands(workspaceID),
+    ]);
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID) return;
+    await loadMessages();
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID) return;
+    if (selectedThreadID && selectedThread?.id === selectedThreadID) {
+      await refreshThread(selectedThreadID, selectedThread);
+    }
+    if (selectedBotProfileID && selectedProfile?.id === selectedBotProfileID) {
+      const refreshed = lookupUser(selectedBotProfileID);
+      selectedProfile = refreshed && !refreshed.deleted_at ? refreshed : null;
+    }
   }
 
   async function handleEvent(event: RealtimeEvent) {
@@ -2397,6 +2447,10 @@
     }
     if (event.type === "bot.deleted") {
       if (event.workspace_id === selectedWorkspaceID) await handleBotDeletedEvent(event);
+      return;
+    }
+    if (event.type === "bot.membership_removed") {
+      if (event.workspace_id === selectedWorkspaceID) await handleBotMembershipRemovedEvent(event);
       return;
     }
     if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {
@@ -2518,6 +2572,21 @@
     ]);
     await loadMessages();
     if (selectedThreadID) await refreshThread(selectedThreadID);
+  }
+
+  async function handleBotMembershipRemovedEvent(event: RealtimeEvent) {
+    const botUserID = event.payload.bot_user_id || "";
+    if (!botUserID) return;
+    moderationMembers = moderationMembers.filter((member) => member.user.id !== botUserID);
+    slashCommands = slashCommands.filter((command) => command.bot_user_id !== botUserID);
+    botCommands = botCommands.filter((command) => command.bot.id !== botUserID);
+    if (selectedProfile?.id === botUserID) selectedProfile = null;
+    await Promise.all([
+      loadDirectConversations(event.workspace_id),
+      loadModerationMembers(event.workspace_id),
+      loadSlashCommands(event.workspace_id),
+      loadBotCommands(event.workspace_id),
+    ]);
   }
 
   function handleReadEvent(event: RealtimeEvent) {
@@ -2695,6 +2764,11 @@
     if (user?.id === userID) return user;
     const fromMessages = messages.find((msg) => msg.author?.id === userID)?.author;
     if (fromMessages) return fromMessages;
+    const fromReplies = replies.find((msg) => msg.author?.id === userID)?.author;
+    if (fromReplies) return fromReplies;
+    if (selectedThread?.author?.id === userID) return selectedThread.author;
+    const fromModeration = moderationMembers.find((member) => member.user.id === userID)?.user;
+    if (fromModeration) return fromModeration;
     for (const dm of directConversations) {
       const member = dm.members.find((m) => m.id === userID);
       if (member) return member;

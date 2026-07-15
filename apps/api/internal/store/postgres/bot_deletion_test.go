@@ -16,6 +16,18 @@ func TestPostgresDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	var historyIndexCount int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM pg_indexes
+		WHERE schemaname = current_schema()
+		  AND indexname = 'idx_messages_author_workspace'
+		  AND indexdef LIKE '%(author_id, workspace_id)%'`).Scan(&historyIndexCount); err != nil {
+		t.Fatal(err)
+	}
+	if historyIndexCount != 1 {
+		t.Fatalf("expected bot history author index, got %d", historyIndexCount)
+	}
 	owner, err := st.EnsureBootstrap(ctx, "Owner", "postgres-bot-delete-owner@example.com")
 	if err != nil {
 		t.Fatal(err)

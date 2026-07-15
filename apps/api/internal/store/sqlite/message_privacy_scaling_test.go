@@ -650,6 +650,12 @@ func TestMessagePrivacyScalingHotPathQueryPlans(t *testing.T) {
 			wantIndex: "idx_direct_conversation_members_user",
 		},
 		{
+			name:      "bot historical workspaces",
+			query:     `EXPLAIN QUERY PLAN SELECT m.workspace_id FROM messages m WHERE m.author_id = ?`,
+			args:      []any{"usr_x"},
+			wantIndex: "idx_messages_author_workspace",
+		},
+		{
 			name:      "attachment hydration",
 			query:     `EXPLAIN QUERY PLAN SELECT u.id FROM message_attachments ma JOIN uploads u ON u.id = ma.upload_id WHERE ma.message_id = ? ORDER BY ma.created_at`,
 			args:      []any{"msg_x"},

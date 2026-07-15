@@ -154,6 +154,7 @@ CREATE INDEX idx_messages_channel_root_page ON messages(channel_id, parent_messa
 CREATE INDEX idx_messages_direct_page ON messages(direct_conversation_id, parent_message_id, channel_seq)
   WHERE direct_conversation_id IS NOT NULL AND parent_message_id IS NULL;
 CREATE UNIQUE INDEX idx_messages_author_client_nonce ON messages(author_id, client_nonce) WHERE client_nonce <> '';
+CREATE INDEX idx_messages_author_workspace ON messages(author_id, workspace_id);
 CREATE UNIQUE INDEX idx_messages_workspace_route_id ON messages(workspace_id, route_id) WHERE route_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_messages_channel_root_unique_seq ON messages(channel_id, channel_seq)
   WHERE channel_id IS NOT NULL AND parent_message_id IS NULL AND channel_seq IS NOT NULL;

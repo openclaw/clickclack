@@ -2074,12 +2074,15 @@
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedProfile = null;
-    if (optimisticRoot) selectedThread = optimisticRoot;
-    activeComposerContext = "thread";
+    if (optimisticRoot) {
+      selectedThread = optimisticRoot;
+      activeComposerContext = "thread";
+    }
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
     if (!shouldCommit()) return false;
     const root = { ...data.root, thread_state: data.thread_state };
     selectedThread = root;
+    activeComposerContext = "thread";
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
     replies = data.replies;
     selectedThreadState = data.thread_state;

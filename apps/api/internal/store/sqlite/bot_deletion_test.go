@@ -132,13 +132,18 @@ func TestDeleteBotReleasesHandleAndPreservesHistory(t *testing.T) {
 		reloadedQuote.QuotedAuthor.DeletedAt == nil {
 		t.Fatalf("quoted author did not preserve deleted bot identity: %#v", reloadedQuote.QuotedAuthor)
 	}
-	searchResults, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "historical bot", 10)
+	searchResults, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "historical bot",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(searchResults) != 1 || searchResults[0].Message.Author == nil ||
-		searchResults[0].Message.Author.FormerHandle != bot.Handle ||
-		searchResults[0].Message.Author.DeletedAt == nil {
+	if len(searchResults.Results) != 1 ||
+		searchResults.Results[0].Author.FormerHandle != bot.Handle ||
+		searchResults.Results[0].Author.DeletedAt == nil {
 		t.Fatalf("search did not preserve deleted bot identity: %#v", searchResults)
 	}
 	reloadedDirect, err := st.GetDirectConversation(ctx, direct.ID, owner.ID)

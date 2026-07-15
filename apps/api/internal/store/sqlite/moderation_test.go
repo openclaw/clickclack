@@ -555,14 +555,25 @@ func TestGuestSearchOnlyReturnsWaitingRoomMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := st.SearchMessages(ctx, workspace.ID, "", guest.ID, "needle", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      guest.ID,
+		Query:       "needle",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Message.ChannelID != guestChannelID {
+	if len(results.Results) != 1 || results.Results[0].ChannelID != guestChannelID {
 		t.Fatalf("guest search leaked hidden messages: %#v", results)
 	}
-	if _, err := st.SearchMessages(ctx, workspace.ID, generalChannelID, guest.ID, "needle", 10); !errors.Is(err, store.ErrModerationRestricted) {
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   generalChannelID,
+		UserID:      guest.ID,
+		Query:       "needle",
+		Limit:       10,
+	}); !errors.Is(err, store.ErrModerationRestricted) {
 		t.Fatalf("expected explicit hidden channel search to fail, got %v", err)
 	}
 }

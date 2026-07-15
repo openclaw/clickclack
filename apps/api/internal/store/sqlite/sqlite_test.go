@@ -63,7 +63,11 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: channel.ID, AuthorID: owner.ID, Body: "nope"}); err == nil {
 		t.Fatal("expected missing root message error")
 	}
-	if results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "", 10); err != nil || len(results) != 0 {
+	if results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Limit:       10,
+	}); err != nil || len(results.Results) != 0 {
 		t.Fatalf("expected empty search results, got %#v err=%v", results, err)
 	}
 	invite, err := st.CreateInvite(ctx, workspace.ID, owner.ID)

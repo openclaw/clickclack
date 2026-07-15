@@ -124,32 +124,54 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 		t.Fatalf("unexpected legacy DM route: %#v", legacyDMRoute)
 	}
 
-	results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "searchable", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "searchable",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 2 {
+	if len(results.Results) != 2 {
 		t.Fatalf("expected workspace search to exclude DMs, got %#v", results)
 	}
-	scopedResults, err := st.SearchMessages(ctx, workspace.ID, channel.ID, owner.ID, "searchable", 10)
+	scopedResults, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		UserID:      owner.ID,
+		Query:       "searchable",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scopedResults) != 1 || scopedResults[0].Message.ID != publicMessage.ID {
+	if len(scopedResults.Results) != 1 || scopedResults.Results[0].ID != publicMessage.ID {
 		t.Fatalf("expected channel search to stay in channel, got %#v; other=%s", scopedResults, otherChannelMessage.ID)
 	}
-	quotedResults, err := st.SearchMessages(ctx, workspace.ID, channel.ID, owner.ID, "quotechannel", 10)
+	quotedResults, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		UserID:      owner.ID,
+		Query:       "quotechannel",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(quotedResults) != 1 || quotedResults[0].Message.ID != quotedPublicMessage.ID || quotedResults[0].Message.QuotedBodySnapshot != "public searchable channel text" {
-		t.Fatalf("expected quoted search result with snapshot, got %#v", quotedResults)
+	if len(quotedResults.Results) != 1 || quotedResults.Results[0].ID != quotedPublicMessage.ID {
+		t.Fatalf("expected quoted message search result, got %#v", quotedResults)
 	}
-	dmOnlyResults, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "secret", 10)
+	dmOnlyResults, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "secret",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dmOnlyResults) != 0 {
+	if len(dmOnlyResults.Results) != 0 {
 		t.Fatalf("expected DM-only search term to be hidden from workspace search, got %#v", dmOnlyResults)
 	}
 

@@ -243,22 +243,27 @@ func TestAgentActivityMessagesExcludedFromSearch(t *testing.T) {
 	}
 	channel := channels[0]
 
-	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "zebrafish ordinary"}); err != nil {
+	ordinary, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "zebrafish ordinary"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "zebrafish commentary", Kind: store.MessageKindAgentCommentary, TurnID: "t1"}); err != nil {
 		t.Fatal(err)
 	}
 
-	results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "zebrafish", 50)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "zebrafish",
+		Limit:       50,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected exactly one search hit (the ordinary message), got %d: %#v", len(results), results)
+	if len(results.Results) != 1 {
+		t.Fatalf("expected exactly one search hit (the ordinary message), got %d: %#v", len(results.Results), results)
 	}
-	// The single hit must be the ordinary message, never the activity body.
-	if results[0].Message.Body != "zebrafish ordinary" {
-		t.Fatalf("search returned an unexpected (likely activity) row: %#v", results[0].Message)
+	if results.Results[0].ID != ordinary.ID {
+		t.Fatalf("search returned an unexpected (likely activity) row: %#v", results.Results[0])
 	}
 }

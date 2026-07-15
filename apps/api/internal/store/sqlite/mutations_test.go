@@ -513,11 +513,17 @@ func TestMutationsRejectInvalidInput(t *testing.T) {
 	if reloaded.Body != "" {
 		t.Fatalf("deleted message body changed: %#v", reloaded)
 	}
-	results, err := st.SearchMessages(ctx, workspaces[0].ID, channels[0].ID, owner.ID, "deleted body returns", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspaces[0].ID,
+		ChannelID:   channels[0].ID,
+		UserID:      owner.ID,
+		Query:       "deleted body returns",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 0 {
+	if len(results.Results) != 0 {
 		t.Fatalf("deleted message was searchable: %#v", results)
 	}
 }

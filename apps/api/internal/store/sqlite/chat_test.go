@@ -141,15 +141,20 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 		t.Fatalf("expected empty thread state on root without replies, got %#v", got)
 	}
 
-	results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "searchable", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "searchable",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Message.ID != root.ID {
+	if len(results.Results) != 1 || results.Results[0].ID != root.ID {
 		t.Fatalf("unexpected search results: %#v", results)
 	}
-	if results[0].Snippet == "" || len(results[0].Highlights) == 0 {
-		t.Fatalf("expected highlighted search snippet: %#v", results[0])
+	if results.Results[0].Snippet == "" || len(results.Results[0].Highlights) == 0 {
+		t.Fatalf("expected highlighted search snippet: %#v", results.Results[0])
 	}
 	eventsAfter, err := st.ListEventsAfter(ctx, workspace.ID, owner.ID, channelEvent.Cursor, 10)
 	if err != nil {
@@ -807,7 +812,12 @@ func TestStoreBranchCases(t *testing.T) {
 	if _, err := st.ListMessages(ctx, "chn_missing", owner.ID, store.MessagePageRequest{Limit: 10}); err == nil {
 		t.Fatal("expected missing channel list error")
 	}
-	if results, err := st.SearchMessages(ctx, workspace.ID, "", owner.ID, "missingterm", 999); err != nil || len(results) != 0 {
+	if results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Query:       "missingterm",
+		Limit:       999,
+	}); err != nil || len(results.Results) != 0 {
 		t.Fatalf("expected no search results, got %#v err=%v", results, err)
 	}
 	if _, err := st.ListEventsAfter(ctx, workspace.ID, owner.ID, "", 999); err != nil {
@@ -820,7 +830,12 @@ func TestStoreBranchCases(t *testing.T) {
 	if _, err := st.CreateInvite(ctx, workspace.ID, outsider.ID); err == nil {
 		t.Fatal("expected invite membership error")
 	}
-	if _, err := st.SearchMessages(ctx, workspace.ID, "", outsider.ID, "root", 10); err == nil {
+	if _, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		UserID:      outsider.ID,
+		Query:       "root",
+		Limit:       10,
+	}); err == nil {
 		t.Fatal("expected search membership error")
 	}
 

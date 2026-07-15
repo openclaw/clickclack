@@ -235,11 +235,16 @@ func TestStoreMiscBranches(t *testing.T) {
 	if replies[len(replies)-1].EditedAt == nil || replies[len(replies)-1].DeletedAt == nil {
 		t.Fatalf("expected edited/deleted reply fields, got %#v", replies[len(replies)-1])
 	}
-	results, err := st.SearchMessages(ctx, workspaces[0].ID, "", owner.ID, "reply", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspaces[0].ID,
+		UserID:      owner.ID,
+		Query:       "reply",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) == 0 || results[0].Message.ParentMessageID == nil || results[0].Message.ThreadSeq == nil {
+	if len(results.Results) == 0 || results.Results[0].ParentMessageID == nil || results.Results[0].ThreadSeq == nil {
 		t.Fatalf("expected reply search result with thread fields, got %#v", results)
 	}
 	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspaces[0].ID, owner.ID); err != nil {

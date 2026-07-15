@@ -2196,6 +2196,9 @@
     if (currentConversationKey() !== targetID) return;
     if (result.parent_message_id) {
       await refreshThread(result.thread_root_id);
+      if (selectedThread?.route_id) {
+        await navigateToApp(selectedWorkspaceID, selectedThread.id);
+      }
       await highlightMessage(result.id);
       return;
     }

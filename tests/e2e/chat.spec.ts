@@ -1390,10 +1390,19 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await threadPane.getByRole("button", { name: "Close thread" }).click();
   await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
   await expect(threadPane.getByText("No thread open")).toBeVisible();
-  await threadedRow.locator(".markdown").click();
+  await page.getByLabel("Search messages").fill("thread");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page
+    .getByLabel("Search results")
+    .locator(".search-result")
+    .filter({ hasText: "thread _reply_" })
+    .click();
   await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/M[A-Z0-9]{16}$/);
 
   await page.reload();
+  await expect(page.getByLabel("Thread pane")).toBeVisible();
+  await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page).toHaveURL(/\/app\/T[A-Z0-9]{16}\/C[A-Z0-9]{16}$/);
   await expect(

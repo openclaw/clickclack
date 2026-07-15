@@ -195,13 +195,19 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if len(threadPage.Messages) != 1 || threadPage.Messages[0].ThreadState == nil || threadPage.Messages[0].ThreadState.ReplyCount != 1 {
 		t.Fatalf("expected hydrated thread state in postgres message page, got %#v", threadPage.Messages)
 	}
-	results, err := st.SearchMessages(ctx, workspace.ID, channel.ID, owner.ID, "postgres", 10)
+	results, err := st.SearchMessagePage(ctx, store.SearchPageRequest{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		UserID:      owner.ID,
+		Query:       "postgres",
+		Limit:       10,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	foundCreated := false
-	for _, result := range results {
-		if result.Message.ID == created.ID {
+	for _, result := range results.Results {
+		if result.ID == created.ID {
 			foundCreated = true
 			if result.Snippet == "" || len(result.Highlights) == 0 {
 				t.Fatalf("expected highlighted search snippet: %#v", result)

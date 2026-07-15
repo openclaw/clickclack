@@ -153,6 +153,25 @@ export type SearchHighlight = {
   end: number;
 };
 
+export type SearchScope = {
+  workspaceID: string;
+  channelID: string;
+  directConversationID: string;
+  label: string;
+};
+
+export type SearchSession = {
+  query: string;
+  scope: SearchScope;
+  results: SearchResult[];
+  nextCursor: string | null;
+  state: "loading" | "ready" | "error";
+  error: string;
+  loadingMore: boolean;
+  moreError: string;
+  activeResultID: string;
+};
+
 export type DirectConversation = {
   id: string;
   route_id: string;

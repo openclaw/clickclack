@@ -23,6 +23,7 @@
     mentionPeople?: User[];
     replyDisabled?: boolean;
     onClose: () => void;
+    onBack?: () => void;
     onReplyBody: (value: string) => void;
     onSubmitReply: () => void;
     onReplyKeydown: (event: KeyboardEvent) => void;
@@ -50,6 +51,7 @@
     mentionPeople = [],
     replyDisabled = false,
     onClose,
+    onBack,
     onReplyBody,
     onSubmitReply,
     onReplyKeydown,
@@ -73,6 +75,19 @@
 </script>
 
 <header>
+  {#if onBack}
+    <button
+      type="button"
+      class="thread-back"
+      aria-label="Back to search results"
+      data-tooltip="Back to search results"
+      onclick={onBack}
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/>
+      </svg>
+    </button>
+  {/if}
   <div>
     <p>Thread</p>
     <strong>{threadState?.reply_count ?? replies.length} {(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"}</strong>

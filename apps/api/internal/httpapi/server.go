@@ -1219,6 +1219,10 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 			}
+			if eventRevokesWorkspaceAccess(event, act.user.ID) {
+				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
+				return
+			}
 			if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
 				continue
 			}
@@ -1278,6 +1282,21 @@ func shouldDeliverEvent(event store.Event, userID string) bool {
 		return payload["user_id"] == userID
 	}
 	return true
+}
+
+func eventRevokesWorkspaceAccess(event store.Event, userID string) bool {
+	if event.Type != "bot.deleted" && event.Type != "bot.membership_removed" {
+		return false
+	}
+	switch payload := event.Payload.(type) {
+	case map[string]string:
+		return payload["bot_user_id"] == userID
+	case map[string]any:
+		botUserID, _ := payload["bot_user_id"].(string)
+		return botUserID == userID
+	default:
+		return false
+	}
 }
 
 func filterEventsForUser(events []store.Event, userID string) []store.Event {

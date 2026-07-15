@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
@@ -416,6 +417,8 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 		"display_name": "Delete Service Bot",
 		"handle":       "delete-service-bot",
 	})
+	serviceBotConn := dialRealtimeWithBotToken(t, server.URL, workspace.ID, serviceBot.BotToken.Token)
+	t.Cleanup(func() { serviceBotConn.CloseNow() })
 	deleteEndpoint := server.URL + "/api/bots/" + serviceBot.Bot.ID
 	expectStatusAsUser(t, member.ID, http.MethodDelete, deleteEndpoint, nil, http.StatusForbidden)
 	expectStatusWithBearer(t, serviceBot.BotToken.Token, http.MethodDelete, deleteEndpoint, nil, http.StatusForbidden)
@@ -426,9 +429,11 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 		t.Fatalf("unexpected deleted service bot payload: %#v", deletedService.DeletedBot)
 	}
 	expectBotDeletedEvent(t, events, workspace.ID, deletedService.DeletedBot)
+	expectWorkspaceAccessRevokedClose(t, serviceBotConn)
 	expectStatusAsUser(t, serviceBot.Bot.ID, http.MethodGet, server.URL+"/api/me", nil, http.StatusUnauthorized)
 	serviceReplacement := postJSONAsUser[struct {
-		Bot store.User `json:"bot"`
+		Bot      store.User     `json:"bot"`
+		BotToken store.BotToken `json:"bot_token"`
 	}](t, manager.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
 		"display_name": "Replacement Service Bot",
 		"handle":       serviceBot.Bot.Handle,
@@ -436,8 +441,11 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	if serviceReplacement.Bot.ID == serviceBot.Bot.ID || serviceReplacement.Bot.Handle != serviceBot.Bot.Handle || serviceReplacement.Bot.DeletedAt != nil {
 		t.Fatalf("expected a new active bot identity to reuse the handle: %#v", serviceReplacement.Bot)
 	}
+	replacementConn := dialRealtimeWithBotToken(t, server.URL, workspace.ID, serviceReplacement.BotToken.Token)
+	t.Cleanup(func() { replacementConn.CloseNow() })
 	expectStatusAsUser(t, manager.ID, http.MethodDelete, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+serviceReplacement.Bot.ID+"/membership", nil, http.StatusNoContent)
 	expectBotMembershipRemovedEvent(t, events, workspace.ID, serviceReplacement.Bot.ID)
+	expectWorkspaceAccessRevokedClose(t, replacementConn)
 
 	userBot := postJSONAsUser[struct {
 		Bot store.User `json:"bot"`
@@ -464,6 +472,29 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	})
 	if userReplacement.Bot.ID == userBot.Bot.ID || userReplacement.Bot.Handle != userBot.Bot.Handle || userReplacement.Bot.DeletedAt != nil {
 		t.Fatalf("expected a new active user-owned bot identity to reuse the handle: %#v", userReplacement.Bot)
+	}
+}
+
+func dialRealtimeWithBotToken(t *testing.T, serverURL, workspaceID, token string) *websocket.Conn {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	wsURL := strings.Replace(serverURL, "http://", "ws://", 1) + "/api/realtime/ws?workspace_id=" + url.QueryEscape(workspaceID)
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		Subprotocols: []string{websocketBearerProtocolPrefix + token},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
+func expectWorkspaceAccessRevokedClose(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("expected workspace access revocation to close websocket, got %v", err)
 	}
 }
 

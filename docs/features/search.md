@@ -1,69 +1,53 @@
 ---
 read_when:
-  - changing search, FTS5 triggers, or query parsing
+  - changing search, FTS5 triggers, Postgres text indexes, or search pagination
 ---
 
 # Search
 
-Workspace-scoped full-text search. SQLite uses FTS5; Postgres uses native
-text search.
+`GET /api/search` searches messages visible to the authenticated actor. It
+requires `workspace_id` and `q`.
 
-## Endpoint
+Optional parameters:
 
-```http
-GET /api/search?workspace_id=&channel_id=&q=&limit=
-```
+- `channel_id`: search one channel.
+- `direct_conversation_id`: search one direct conversation. The actor must be a
+  conversation member.
+- `sort`: `relevance` (default) or `newest`.
+- `limit`: page size, default 50 and capped at 100.
+- `cursor`: opaque `next_cursor` from the previous page.
 
-Returns bounded plain-text excerpts with Unicode code-point highlight ranges:
+`channel_id` and `direct_conversation_id` are mutually exclusive. Without
+either parameter, search covers visible channel messages in the workspace and
+does not include direct messages.
 
-```jsonc
-{
-  "results": [
-    {
-      "message": Message,
-      "rank": <backend score>,
-      "snippet": "the matched message excerpt",
-      "highlights": [{ "start": 4, "end": 11 }]
-    }
-  ]
-}
-```
+The response is `{ "results": [...], "next_cursor": "..." | null }`. Results
+contain routing metadata, author identity, thread summary fields, a bounded
+plain-text snippet, and Unicode code-point highlight ranges. They do not embed
+the full message body or expose backend rank values. Clients should render the
+snippet as text and emphasize each `[start, end)` range.
 
-Clients render `snippet` as text and may emphasize each `[start, end)` range.
-Offsets count Unicode code points rather than UTF-8 bytes. The web client does
-not inject search-generated HTML.
+Cursors are bound to the authenticated user, workspace, scope, query, and sort.
+A cursor cannot be reused for a different search. Search uses stable
+rank/time/id ordering and fetches one extra row to determine whether another
+page exists; it does not run a total-count query.
 
-`limit` is clamped to `1..100` (default 50). Empty `q` returns an empty list
-without hitting FTS. Membership is required for `workspace_id`.
+## Query behavior
 
-Search is channel-message-only. DM rows are explicitly excluded from this
-endpoint. When `channel_id` is supplied, results are limited to that channel;
-without it, results span channel messages in the workspace.
+Whitespace-separated terms are matched together. Search operators and quoting
+characters are treated as text so SQLite and Postgres expose the same safe
+query behavior. Empty `q` returns an empty page without running full-text
+search. Queries longer than 500 Unicode code points are rejected.
+
+Deleted messages and agent activity rows are excluded. Guest searches remain
+limited to the guest channel.
 
 ## Indexing
 
-SQLite: a virtual table `messages_fts` mirrors `messages.body` with the
-`porter unicode61` tokenizer. Three triggers keep it in sync:
+SQLite uses the `messages_fts` FTS5 table with the `porter unicode61` tokenizer.
+Triggers keep ordinary message rows synchronized when bodies are inserted,
+updated, or deleted.
 
-- After `INSERT` on `messages`: insert into `messages_fts`.
-- After `DELETE`: delete from `messages_fts`.
-- After `UPDATE OF body`: delete + reinsert.
-
-Soft-deleted messages remain in the index because the row stays around with
-`deleted_at` set, but both stores exclude them from search results.
-
-Postgres: the store queries `to_tsvector('simple', body)` with
-`websearch_to_tsquery('simple', q)` and orders by `ts_rank_cd`.
-
-## Query syntax
-
-SQLite forwards `q` to FTS5 as a `MATCH` expression. Standard FTS5 operators
-work (`"exact phrase"`, `term1 OR term2`, `term*` prefix). Postgres uses
-web-search syntax. Clients should still treat user input as backend-specific
-search text and surface errors cleanly.
-
-## What is intentionally missing
-
-- Cross-workspace global search.
-- DM search. It needs a separate endpoint scoped to direct conversation
-  membership.
+Postgres uses `to_tsvector('simple', body)` with partial GIN indexes for channel
+messages and direct messages. A separate direct-conversation scope index keeps
+DM filtering bounded.

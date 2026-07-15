@@ -785,6 +785,28 @@ func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) deleteBot(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot delete bots"))
+		return
+	}
+	deleted, err := s.store.DeleteBot(r.Context(), chi.URLParam(r, "bot_user_id"), act.user.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted_bot": deleted})
+}
+
 func (s *Server) revokeBotToken(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {
@@ -874,6 +896,7 @@ func (s *Server) revokeAppInstallation(w http.ResponseWriter, r *http.Request) {
 		RevokeSlashCommands      *bool `json:"revoke_slash_commands"`
 		RevokeEventSubscriptions *bool `json:"revoke_event_subscriptions"`
 		RevokeBotTokens          *bool `json:"revoke_bot_tokens"`
+		DeleteBot                *bool `json:"delete_bot"`
 	}
 	if err := readJSON(w, r, &body); err != nil && !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, err)
@@ -887,6 +910,9 @@ func (s *Server) revokeAppInstallation(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.RevokeBotTokens != nil {
 		options.RevokeBotTokens = *body.RevokeBotTokens
+	}
+	if body.DeleteBot != nil {
+		options.DeleteBot = *body.DeleteBot
 	}
 	result, err := s.store.RevokeAppInstallation(r.Context(), chi.URLParam(r, "installation_id"), act.user.ID, options)
 	writeResult(w, result, err)

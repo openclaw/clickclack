@@ -20,6 +20,13 @@ export type BotWithTokens = {
   tokens: BotToken[];
 };
 
+export type DeletedBot = {
+  id: string;
+  display_name: string;
+  former_handle: string;
+  deleted_at: string;
+};
+
 export type OwnedBotWorkspace = {
   id: string;
   route_id: string;
@@ -138,6 +145,13 @@ export async function removeBotFromWorkspace(
   await api(`/api/workspaces/${workspaceID}/bots/${botUserID}/membership`, {
     method: "DELETE",
   });
+}
+
+export async function deleteBot(botUserID: string): Promise<DeletedBot> {
+  const data = await api<{ deleted_bot: DeletedBot }>(`/api/bots/${botUserID}`, {
+    method: "DELETE",
+  });
+  return data.deleted_bot;
 }
 
 export async function listMyBots(): Promise<OwnedBotEntry[]> {

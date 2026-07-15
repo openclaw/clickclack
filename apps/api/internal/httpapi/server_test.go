@@ -2187,6 +2187,29 @@ func deleteJSON(t *testing.T, endpoint string) {
 	}
 }
 
+func deleteJSONAsUser[T any](t *testing.T, userID, endpoint string) T {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-ClickClack-User", userID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("DELETE %s: %s %s", endpoint, resp.Status, string(body))
+	}
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func expectStatus(t *testing.T, method, endpoint string, body io.Reader, status int) {
 	t.Helper()
 	req, err := http.NewRequest(method, endpoint, body)

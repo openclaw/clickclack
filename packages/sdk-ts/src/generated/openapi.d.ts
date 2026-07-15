@@ -408,6 +408,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/bots/{bot_user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Permanently retire a bot identity and release its handle */
+    delete: operations["deleteBot"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/bots/{bot_user_id}/tokens": {
     parameters: {
       query?: never;
@@ -1083,6 +1100,13 @@ export interface components {
       owner_user_id?: string;
       display_name: string;
       handle: string;
+      /** @description Last active handle for a deleted bot identity. Present only on historical records. */
+      former_handle?: string;
+      /**
+       * Format: date-time
+       * @description Present only when the immutable bot identity has been retired.
+       */
+      deleted_at?: string;
       avatar_url: string;
       /** Format: date-time */
       created_at: string;
@@ -1215,6 +1239,16 @@ export interface components {
       /** @description Retry key that returns the original installation instead of creating a duplicate. */
       setup_nonce?: string;
     };
+    DeletedBot: {
+      id: string;
+      display_name: string;
+      former_handle: string;
+      /** Format: date-time */
+      deleted_at: string;
+    };
+    DeleteBotResponse: {
+      deleted_bot: components["schemas"]["DeletedBot"];
+    };
     AppInstallationResponse: {
       app_installation: components["schemas"]["AppInstallation"];
     };
@@ -1237,6 +1271,11 @@ export interface components {
        * @example false
        */
       revoke_bot_tokens?: boolean;
+      /**
+       * @description Defaults to false. When true, globally retires the installation bot, revokes all of its resources, preserves historical attribution, and releases its handle.
+       * @example false
+       */
+      delete_bot?: boolean;
     };
     AppInstallationRevokedCounts: {
       slash_commands: number;
@@ -1246,6 +1285,7 @@ export interface components {
     RevokeAppInstallationResponse: {
       installation: components["schemas"]["AppInstallation"];
       revoked: components["schemas"]["AppInstallationRevokedCounts"];
+      deleted_bot?: components["schemas"]["DeletedBot"];
     };
     SlashCommand: {
       id: string;
@@ -2695,6 +2735,42 @@ export interface operations {
       };
       /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  deleteBot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bot retired, credentials revoked, history preserved, and handle released */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeleteBotResponse"];
+        };
+      };
+      /** @description User-owned bots require their owner. Service bots require manager permission in every affected workspace. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Active bot not found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

@@ -4,6 +4,7 @@
 // Mirrors the lib/bots.ts pattern: one request fn per endpoint, thin
 // helpers, backend remains the authorization source of truth.
 import { api, APIError } from "./api";
+import type { DeletedBot } from "./bots";
 
 export type AppInstallation = {
   id: string;
@@ -77,6 +78,7 @@ export type RevokeInstallationOptions = {
   revoke_slash_commands?: boolean;
   revoke_event_subscriptions?: boolean;
   revoke_bot_tokens?: boolean;
+  delete_bot?: boolean;
 };
 
 export type RevokeInstallationResult = {
@@ -86,6 +88,7 @@ export type RevokeInstallationResult = {
     event_subscriptions: number;
     bot_tokens: number;
   };
+  deleted_bot?: DeletedBot;
 };
 
 export type DeliveriesPage = {

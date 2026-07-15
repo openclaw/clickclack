@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.listWorkspaceBotTokens)
 		r.Post("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.createWorkspaceBotToken)
 		r.Put("/bots/self/commands", s.setBotCommands)
+		r.Delete("/bots/{bot_user_id}", s.deleteBot)
 		r.Get("/bots/{bot_user_id}/tokens", s.listBotTokens)
 		r.Post("/bots/{bot_user_id}/tokens", s.createBotToken)
 		r.Post("/bot-tokens/{token_id}/revoke", s.revokeBotToken)

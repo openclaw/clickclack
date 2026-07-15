@@ -368,6 +368,97 @@ func TestHTTPBotManagementAuthorization(t *testing.T) {
 	}
 }
 
+func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "bot-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	manager, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Manager", Email: "bot-delete-manager@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, manager.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "bot-delete-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	botOwner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Bot Owner", Email: "bot-delete-user-owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, botOwner.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	serviceBot := postJSONAsUser[struct {
+		Bot      store.User     `json:"bot"`
+		BotToken store.BotToken `json:"bot_token"`
+	}](t, manager.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"display_name": "Delete Service Bot",
+		"handle":       "delete-service-bot",
+	})
+	deleteEndpoint := server.URL + "/api/bots/" + serviceBot.Bot.ID
+	expectStatusAsUser(t, member.ID, http.MethodDelete, deleteEndpoint, nil, http.StatusForbidden)
+	expectStatusWithBearer(t, serviceBot.BotToken.Token, http.MethodDelete, deleteEndpoint, nil, http.StatusForbidden)
+	deletedService := deleteJSONAsUser[struct {
+		DeletedBot store.DeletedBot `json:"deleted_bot"`
+	}](t, manager.ID, deleteEndpoint)
+	if deletedService.DeletedBot.ID != serviceBot.Bot.ID || deletedService.DeletedBot.FormerHandle != serviceBot.Bot.Handle || deletedService.DeletedBot.DeletedAt == "" {
+		t.Fatalf("unexpected deleted service bot payload: %#v", deletedService.DeletedBot)
+	}
+	serviceReplacement := postJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, manager.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"display_name": "Replacement Service Bot",
+		"handle":       serviceBot.Bot.Handle,
+	})
+	if serviceReplacement.Bot.ID == serviceBot.Bot.ID || serviceReplacement.Bot.Handle != serviceBot.Bot.Handle || serviceReplacement.Bot.DeletedAt != nil {
+		t.Fatalf("expected a new active bot identity to reuse the handle: %#v", serviceReplacement.Bot)
+	}
+
+	userBot := postJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, botOwner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"owner_user_id": botOwner.ID,
+		"display_name":  "Delete User Bot",
+		"handle":        "delete-user-bot",
+	})
+	userDeleteEndpoint := server.URL + "/api/bots/" + userBot.Bot.ID
+	expectStatusAsUser(t, manager.ID, http.MethodDelete, userDeleteEndpoint, nil, http.StatusForbidden)
+	deletedUser := deleteJSONAsUser[struct {
+		DeletedBot store.DeletedBot `json:"deleted_bot"`
+	}](t, botOwner.ID, userDeleteEndpoint)
+	if deletedUser.DeletedBot.ID != userBot.Bot.ID || deletedUser.DeletedBot.FormerHandle != userBot.Bot.Handle {
+		t.Fatalf("unexpected deleted user-owned bot payload: %#v", deletedUser.DeletedBot)
+	}
+	userReplacement := postJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, botOwner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"owner_user_id": botOwner.ID,
+		"display_name":  "Replacement User Bot",
+		"handle":        userBot.Bot.Handle,
+	})
+	if userReplacement.Bot.ID == userBot.Bot.ID || userReplacement.Bot.Handle != userBot.Bot.Handle || userReplacement.Bot.DeletedAt != nil {
+		t.Fatalf("expected a new active user-owned bot identity to reuse the handle: %#v", userReplacement.Bot)
+	}
+}
+
 func TestHTTPIntegrationManagementAuthorization(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -531,6 +622,7 @@ func TestHTTPAppInstallationRevokeCascade(t *testing.T) {
 	bot, initialToken, err := st.CreateBot(ctx, store.CreateBotInput{
 		WorkspaceID: workspace.ID,
 		DisplayName: "Installation HTTP Bot",
+		Handle:      "installation-http-bot",
 		CreatedBy:   owner.ID,
 	})
 	if err != nil {
@@ -621,6 +713,28 @@ func TestHTTPAppInstallationRevokeCascade(t *testing.T) {
 	})
 	if repeated.Revoked != (store.AppInstallationRevokedCounts{}) {
 		t.Fatalf("expected repeated revoke counts to be zero, got %#v", repeated.Revoked)
+	}
+
+	third := postJSONAsUser[struct {
+		AppInstallation store.AppInstallation `json:"app_installation"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/app-installations", map[string]any{
+		"app_slug":    "cascade-delete-bot",
+		"bot_user_id": bot.ID,
+	})
+	deleteResult := postJSONAsUser[store.RevokeAppInstallationResult](t, owner.ID, server.URL+"/api/app-installations/"+third.AppInstallation.ID+"/revoke", map[string]any{
+		"delete_bot": true,
+	})
+	if deleteResult.DeletedBot == nil || deleteResult.DeletedBot.ID != bot.ID || deleteResult.DeletedBot.FormerHandle != bot.Handle {
+		t.Fatalf("unexpected installation bot deletion result: %#v", deleteResult)
+	}
+	replacement := postJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots", map[string]any{
+		"display_name": "Replacement Installation Bot",
+		"handle":       bot.Handle,
+	})
+	if replacement.Bot.ID == bot.ID || replacement.Bot.Handle != bot.Handle || replacement.Bot.DeletedAt != nil {
+		t.Fatalf("expected installation bot handle to be reusable: %#v", replacement.Bot)
 	}
 }
 

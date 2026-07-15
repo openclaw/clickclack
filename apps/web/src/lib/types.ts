@@ -4,6 +4,8 @@ export type User = {
   owner_user_id?: string;
   display_name: string;
   handle: string;
+  former_handle?: string;
+  deleted_at?: string;
   avatar_url: string;
   created_at: string;
   notification_settings?: NotificationSettings;

@@ -6,8 +6,17 @@ export type User = {
   owner_user_id?: string;
   display_name: string;
   handle: string;
+  former_handle?: string;
+  deleted_at?: string;
   avatar_url: string;
   created_at: string;
+};
+
+export type DeletedBot = {
+  id: string;
+  display_name: string;
+  former_handle: string;
+  deleted_at: string;
 };
 
 export type BotToken = {
@@ -91,6 +100,7 @@ export type RevokeAppInstallationOptions = {
   revoke_slash_commands?: boolean;
   revoke_event_subscriptions?: boolean;
   revoke_bot_tokens?: boolean;
+  delete_bot?: boolean;
 };
 
 export type AppInstallationRevokedCounts = {
@@ -102,6 +112,7 @@ export type AppInstallationRevokedCounts = {
 export type RevokeAppInstallationResult = {
   installation: AppInstallation;
   revoked: AppInstallationRevokedCounts;
+  deleted_bot?: DeletedBot;
 };
 
 export type SlashCommand = {
@@ -511,6 +522,12 @@ export class ClickClackClient {
       await this.request(`/api/workspaces/${workspaceId}/bots/${botUserId}/membership`, {
         method: "DELETE",
       });
+    },
+    delete: async (botUserId: string): Promise<DeletedBot> => {
+      const data = await this.request<{ deleted_bot: DeletedBot }>(`/api/bots/${botUserId}`, {
+        method: "DELETE",
+      });
+      return data.deleted_bot;
     },
     listWorkspaceTokens: async (workspaceId: string, botUserId: string): Promise<BotToken[]> => {
       const data = await this.request<{ bot_tokens: BotToken[] }>(

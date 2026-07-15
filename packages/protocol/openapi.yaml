@@ -605,6 +605,27 @@ paths:
                 $ref: "#/components/schemas/BotTokenResponse"
         "403":
           description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+  /api/bots/{bot_user_id}:
+    delete:
+      operationId: deleteBot
+      summary: Permanently retire a bot identity and release its handle
+      parameters:
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bot retired, credentials revoked, history preserved, and handle released
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteBotResponse"
+        "403":
+          description: User-owned bots require their owner. Service bots require manager permission in every affected workspace.
+        "404":
+          description: Active bot not found
   /api/bots/{bot_user_id}/tokens:
     get:
       operationId: listBotTokens
@@ -1580,6 +1601,13 @@ components:
           type: string
         handle:
           type: string
+        former_handle:
+          type: string
+          description: Last active handle for a deleted bot identity. Present only on historical records.
+        deleted_at:
+          type: string
+          format: date-time
+          description: Present only when the immutable bot identity has been retired.
         avatar_url:
           type: string
         created_at:
@@ -1850,6 +1878,25 @@ components:
           minLength: 16
           maxLength: 128
           description: Retry key that returns the original installation instead of creating a duplicate.
+    DeletedBot:
+      type: object
+      required: [id, display_name, former_handle, deleted_at]
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        former_handle:
+          type: string
+        deleted_at:
+          type: string
+          format: date-time
+    DeleteBotResponse:
+      type: object
+      required: [deleted_bot]
+      properties:
+        deleted_bot:
+          $ref: "#/components/schemas/DeletedBot"
     AppInstallationResponse:
       type: object
       required: [app_installation]
@@ -1879,6 +1926,10 @@ components:
           type: boolean
           description: Defaults to false when omitted.
           example: false
+        delete_bot:
+          type: boolean
+          description: Defaults to false. When true, globally retires the installation bot, revokes all of its resources, preserves historical attribution, and releases its handle.
+          example: false
     AppInstallationRevokedCounts:
       type: object
       required: [slash_commands, event_subscriptions, bot_tokens]
@@ -1900,6 +1951,8 @@ components:
           $ref: "#/components/schemas/AppInstallation"
         revoked:
           $ref: "#/components/schemas/AppInstallationRevokedCounts"
+        deleted_bot:
+          $ref: "#/components/schemas/DeletedBot"
     SlashCommand:
       type: object
       required: [id, workspace_id, command, description, callback_url, bot_user_id, created_at]

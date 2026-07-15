@@ -80,6 +80,10 @@
     return bots.find((entry) => entry.bot.id === installation.bot_user_id)?.bot;
   }
 
+  function botLabel(bot: User): string {
+    return bot.handle ? `@${bot.handle}` : bot.display_name || "this bot";
+  }
+
   function settledErrors(results: PromiseSettledResult<unknown>[]): string {
     const messages = results
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
@@ -411,7 +415,7 @@
                 <code class="ws-members__handle">{installation.app_slug}</code>
                 {#if bot}
                   <span class="ws-members__dot" aria-hidden="true">·</span>
-                  <span>@{bot.handle}</span>
+                  <span>{botLabel(bot)}</span>
                 {/if}
                 <span class="ws-members__dot" aria-hidden="true">·</span>
                 <span>Installed {formatDate(installation.created_at)}</span>
@@ -435,7 +439,7 @@
                     {#if !loaded.bots}
                       Bot details are unavailable. Refresh to load the current binding.
                     {:else if bot}
-                      Connected as <a href={`/app/${workspaceID}/settings/bots`}>@{bot.handle}</a>
+                      Connected as <a href={`/app/${workspaceID}/settings/bots`}>{botLabel(bot)}</a>
                       — tokens are managed on the Bots page.
                     {:else}
                       The bound bot is no longer in this workspace.
@@ -491,7 +495,9 @@
                       <input type="checkbox" bind:checked={revokePending.deleteBot} />
                       <span>
                         <span class="ws-bots__choice-title">
-                          Also delete @{bot.handle} everywhere and release the handle
+                          Also delete {botLabel(bot)} everywhere{bot.handle
+                            ? " and release the handle"
+                            : ""}
                         </span>
                         <span class="ws-bots__choice-hint">
                           This retires the bot identity and revokes all of its tokens and

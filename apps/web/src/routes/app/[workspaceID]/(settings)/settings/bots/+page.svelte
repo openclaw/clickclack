@@ -122,7 +122,7 @@
   }
 
   async function removeBot(bot: BotWithTokens["bot"]) {
-    const message = `Remove @${bot.handle} from this workspace? Its tokens here will be revoked.`;
+    const message = `Remove ${botLabel(bot)} from this workspace? Its tokens here will be revoked.`;
     if (!confirm(message)) return;
     pendingAction = { botID: bot.id, kind: "remove" };
     actionError = "";
@@ -138,8 +138,9 @@
   }
 
   async function deleteBotEverywhere(bot: BotWithTokens["bot"]) {
-    const handle = formatHandle(bot.handle);
-    const message = `Delete ${handle} everywhere? This permanently retires this bot identity, revokes all of its tokens and integrations in every workspace, and releases ${handle} for reuse. Existing messages keep the old identity marked as deleted.`;
+    const label = botLabel(bot);
+    const release = bot.handle ? `, and releases ${formatHandle(bot.handle)} for reuse` : "";
+    const message = `Delete ${label} everywhere? This permanently retires this bot identity and revokes all of its tokens and integrations in every workspace${release}. Existing messages keep the old identity marked as deleted.`;
     if (!confirm(message)) return;
     pendingAction = { botID: bot.id, kind: "delete" };
     actionError = "";
@@ -165,6 +166,10 @@
 
   function formatHandle(handle: string): string {
     return handle.startsWith("@") ? handle : `@${handle}`;
+  }
+
+  function botLabel(bot: BotWithTokens["bot"]): string {
+    return bot.handle ? formatHandle(bot.handle) : bot.display_name || "this bot";
   }
 
   function initials(name: string): string {
@@ -278,8 +283,10 @@
             <div class="ws-bots__row-text">
               <div class="ws-bots__row-name">{bot.display_name || bot.handle}</div>
               <div class="ws-bots__row-meta">
-                <code class="ws-members__handle">{formatHandle(bot.handle)}</code>
-                <span class="ws-members__dot" aria-hidden="true">·</span>
+                {#if bot.handle}
+                  <code class="ws-members__handle">{formatHandle(bot.handle)}</code>
+                  <span class="ws-members__dot" aria-hidden="true">·</span>
+                {/if}
                 <span>Created {formatDate(bot.created_at)}</span>
                 <span class="ws-members__dot" aria-hidden="true">·</span>
                 <span>{tokens.length} active {tokens.length === 1 ? "token" : "tokens"}</span>

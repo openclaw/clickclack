@@ -63,12 +63,18 @@ func TestPostgresBotSetupCodes(t *testing.T) {
 		t.Fatalf("expected member mint to require manager, got %v", err)
 	}
 
+	agentActivity := true
 	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
 		WorkspaceID: workspace.ID,
 		BotUserID:   bot.ID,
 		Name:        "gateway",
-		Scopes:      []string{"messages:write"},
-		CreatedBy:   owner.ID,
+		Scopes:      []string{"messages:write", store.AgentActivityWriteScope},
+		Defaults: store.BotSetupCodeDefaults{
+			DefaultTo:     " channel:ops ",
+			AllowFrom:     []string{"usr_member", "*", "usr_member"},
+			AgentActivity: &agentActivity,
+		},
+		CreatedBy: owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,8 +90,11 @@ func TestPostgresBotSetupCodes(t *testing.T) {
 	if claim.BotToken.Token == "" || claim.Bot.ID != bot.ID || claim.Workspace.ID != workspace.ID {
 		t.Fatalf("unexpected claim result: %#v", claim)
 	}
-	if claim.Defaults.DefaultTo != "channel:general" {
-		t.Fatalf("expected general channel suggestion, got %#v", claim.Defaults)
+	if claim.Defaults.DefaultTo != "channel:ops" ||
+		len(claim.Defaults.AllowFrom) != 2 ||
+		claim.Defaults.AgentActivity == nil ||
+		!*claim.Defaults.AgentActivity {
+		t.Fatalf("expected captured setup defaults, got %#v", claim.Defaults)
 	}
 	auth, err := st.GetBotTokenAuth(ctx, claim.BotToken.Token)
 	if err != nil {

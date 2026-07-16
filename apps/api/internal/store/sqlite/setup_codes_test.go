@@ -57,12 +57,18 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 		t.Fatalf("expected member mint to require manager, got %v", err)
 	}
 
+	agentActivity := true
 	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
 		WorkspaceID: workspace.ID,
 		BotUserID:   bot.ID,
 		Name:        "gateway",
-		Scopes:      []string{"messages:write"},
-		CreatedBy:   owner.ID,
+		Scopes:      []string{"messages:write", store.AgentActivityWriteScope},
+		Defaults: store.BotSetupCodeDefaults{
+			DefaultTo:     " channel:ops ",
+			AllowFrom:     []string{"usr_member", "*", "usr_member"},
+			AgentActivity: &agentActivity,
+		},
+		CreatedBy: owner.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -72,6 +78,12 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 	}
 	if setup.ExpiresAt == "" || setupCodePlaintextAtRest(t, st, setup.Code) {
 		t.Fatalf("unexpected setup code state: %#v", setup)
+	}
+	if setup.Defaults.DefaultTo != "channel:ops" ||
+		len(setup.Defaults.AllowFrom) != 2 ||
+		setup.Defaults.AgentActivity == nil ||
+		!*setup.Defaults.AgentActivity {
+		t.Fatalf("expected normalized setup defaults, got %#v", setup.Defaults)
 	}
 
 	// No new token exists until claim (CreateBot minted the initial one).
@@ -99,10 +111,13 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 	if claim.Bot.ID != bot.ID || claim.Workspace.ID != workspace.ID {
 		t.Fatalf("unexpected claim context: %#v", claim)
 	}
-	if claim.Defaults.DefaultTo != "channel:general" {
-		t.Fatalf("expected general channel suggestion, got %#v", claim.Defaults)
+	if claim.Defaults.DefaultTo != "channel:ops" ||
+		len(claim.Defaults.AllowFrom) != 2 ||
+		claim.Defaults.AgentActivity == nil ||
+		!*claim.Defaults.AgentActivity {
+		t.Fatalf("expected captured setup defaults, got %#v", claim.Defaults)
 	}
-	if claim.BotToken.Name != "gateway" || len(claim.BotToken.Scopes) != 1 || claim.BotToken.Scopes[0] != "messages:write" {
+	if claim.BotToken.Name != "gateway" || len(claim.BotToken.Scopes) != 2 {
 		t.Fatalf("expected captured name/scopes, got %#v", claim.BotToken)
 	}
 	auth, err := st.GetBotTokenAuth(ctx, claim.BotToken.Token)
@@ -116,6 +131,32 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 	// Single use.
 	if _, err := st.ClaimBotSetupCode(ctx, setup.Code); !errors.Is(err, store.ErrSetupCodeInvalid) {
 		t.Fatalf("expected second claim to fail uniformly, got %v", err)
+	}
+}
+
+func TestBotSetupCodeDefaultsRequireMatchingScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, workspace, owner, _ := setupCodeFixture(t)
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Defaults Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentActivity := true
+	if _, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Scopes:      []string{"messages:write"},
+		Defaults: store.BotSetupCodeDefaults{
+			AgentActivity: &agentActivity,
+		},
+		CreatedBy: owner.ID,
+	}); err == nil || err.Error() != "defaults.agentActivity requires agent_activity:write" {
+		t.Fatalf("expected agent activity scope validation, got %v", err)
 	}
 }
 

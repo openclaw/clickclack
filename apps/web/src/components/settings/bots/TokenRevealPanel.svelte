@@ -88,9 +88,15 @@
   });
 
   $effect(() => {
-    if (!setupCode) return;
+    const activeCode = setupCode;
+    const startedAtMs = mintedAtMs;
+    if (!activeCode) return;
+    const ttl = Date.parse(activeCode.expires_at) - Date.parse(activeCode.created_at);
+    if (!Number.isFinite(ttl) || ttl <= 0) return;
     const timer = setInterval(() => {
-      nowMs = Date.now();
+      const currentMs = Date.now();
+      nowMs = currentMs;
+      if (currentMs - startedAtMs >= ttl) clearInterval(timer);
     }, 1000);
     return () => clearInterval(timer);
   });

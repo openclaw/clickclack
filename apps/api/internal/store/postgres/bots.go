@@ -429,6 +429,7 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		return store.BotToken{}, err
 	}
 	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
 	createdBy := strings.TrimSpace(input.CreatedBy)
 	if createdBy == "" {
 		return store.BotToken{}, errors.New("created_by is required")
@@ -472,6 +473,14 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 		}
 		if !errors.Is(replayErr, sql.ErrNoRows) {
 			return store.BotToken{}, replayErr
+		}
+		if _, requestErr := qtx.GetBotSetupRequest(ctx, storedb.GetBotSetupRequestParams{
+			CreatedBy:  createdBy,
+			SetupNonce: setupNonce,
+		}); requestErr == nil {
+			return store.BotToken{}, store.ErrSetupNonceConflict
+		} else if !errors.Is(requestErr, sql.ErrNoRows) {
+			return store.BotToken{}, requestErr
 		}
 	}
 	token := newID("ccb")

@@ -34,6 +34,40 @@
     messageLayout = layout;
     setMessageLayout(layout);
   }
+
+  function moveRadioSelection(
+    event: KeyboardEvent,
+    optionCount: number,
+    currentIndex: number,
+    select: (index: number) => void,
+  ) {
+    let nextIndex: number;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        nextIndex = (currentIndex + 1) % optionCount;
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        nextIndex = (currentIndex - 1 + optionCount) % optionCount;
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = optionCount - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    select(nextIndex);
+    const radios = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>(
+      '[role="radio"]',
+    );
+    radios?.item(nextIndex).focus();
+  }
 </script>
 
 <header class="settings-page__header">
@@ -48,14 +82,19 @@
 <div class="settings-form">
   <h3 class="settings-rows__head">Color mode</h3>
   <div class="appearance-modes" role="radiogroup" aria-label="Color mode">
-    {#each COLOR_MODES as mode (mode.id)}
+    {#each COLOR_MODES as mode, index (mode.id)}
       <button
         type="button"
         class="appearance-mode"
         class:is-active={colorMode === mode.id}
         role="radio"
         aria-checked={colorMode === mode.id}
+        tabindex={colorMode === mode.id ? 0 : -1}
         onclick={() => pickMode(mode.id)}
+        onkeydown={(event) =>
+          moveRadioSelection(event, COLOR_MODES.length, index, (nextIndex) =>
+            pickMode(COLOR_MODES[nextIndex].id),
+          )}
       >
         <span class="appearance-mode__icon" aria-hidden="true">
           {#if mode.id === "light"}
@@ -81,15 +120,20 @@
 
   <h3 class="settings-rows__head">Board</h3>
   <div class="board-grid" role="radiogroup" aria-label="Board theme">
-    {#each BOARD_THEMES as board (board.id)}
+    {#each BOARD_THEMES as board, index (board.id)}
       <button
         type="button"
         class="board-swatch"
         class:is-active={boardTheme === board.id}
         role="radio"
         aria-checked={boardTheme === board.id}
+        tabindex={boardTheme === board.id ? 0 : -1}
         data-board={board.id}
         onclick={() => pickBoard(board.id)}
+        onkeydown={(event) =>
+          moveRadioSelection(event, BOARD_THEMES.length, index, (nextIndex) =>
+            pickBoard(BOARD_THEMES[nextIndex].id),
+          )}
       >
         <span class="board-swatch__preview" aria-hidden="true">
           <span class="board-swatch__rail"></span>
@@ -111,14 +155,19 @@
 
   <h3 class="settings-rows__head">Message layout</h3>
   <div class="message-layout-grid" role="radiogroup" aria-label="Message layout">
-    {#each MESSAGE_LAYOUTS as layout (layout.id)}
+    {#each MESSAGE_LAYOUTS as layout, index (layout.id)}
       <button
         type="button"
         class="message-layout-option"
         class:is-active={messageLayout === layout.id}
         role="radio"
         aria-checked={messageLayout === layout.id}
+        tabindex={messageLayout === layout.id ? 0 : -1}
         onclick={() => pickMessageLayout(layout.id)}
+        onkeydown={(event) =>
+          moveRadioSelection(event, MESSAGE_LAYOUTS.length, index, (nextIndex) =>
+            pickMessageLayout(MESSAGE_LAYOUTS[nextIndex].id),
+          )}
       >
         <span class="message-layout-option__preview" data-layout={layout.id} aria-hidden="true">
           <span class="message-layout-option__activity"></span>

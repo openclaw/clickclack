@@ -94,3 +94,40 @@ test("message layout switches to outlined chains and survives reload", async ({ 
     .poll(() => page.evaluate(() => localStorage.getItem("clickclack:message-layout:v1")))
     .toBeNull();
 });
+
+test("appearance choices support radio keyboard navigation", async ({ page }) => {
+  await openAppearanceSettings(page);
+
+  const colorModes = page.getByRole("radiogroup", { name: "Color mode" });
+  const system = colorModes.getByRole("radio", { name: "System" });
+  const light = colorModes.getByRole("radio", { name: "Light" });
+  await expect(system).toHaveAttribute("tabindex", "0");
+  await expect(light).toHaveAttribute("tabindex", "-1");
+  await system.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(light).toBeFocused();
+  await expect(light).toHaveAttribute("aria-checked", "true");
+  await expect(system).toHaveAttribute("tabindex", "-1");
+
+  const boards = page.getByRole("radiogroup", { name: "Board theme" });
+  const signal = boards.getByRole("radio", { name: /^Signal/ });
+  const iris = boards.getByRole("radio", { name: /^Iris/ });
+  await signal.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(iris).toBeFocused();
+  await expect(iris).toHaveAttribute("aria-checked", "true");
+
+  const messageLayouts = page.getByRole("radiogroup", { name: "Message layout" });
+  const standard = messageLayouts.getByRole("radio", { name: /^Standard/ });
+  const outlined = messageLayouts.getByRole("radio", { name: /^Outlined chains/ });
+  await standard.focus();
+  await page.keyboard.press("End");
+  await expect(outlined).toBeFocused();
+  await expect(outlined).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Home");
+  await expect(standard).toBeFocused();
+  await expect(standard).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("ArrowUp");
+  await expect(outlined).toBeFocused();
+  await expect(outlined).toHaveAttribute("tabindex", "0");
+});

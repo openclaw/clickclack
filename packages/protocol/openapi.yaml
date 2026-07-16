@@ -605,6 +605,53 @@ paths:
                 $ref: "#/components/schemas/BotTokenResponse"
         "403":
           description: Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner.
+  /api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes:
+    post:
+      operationId: createWorkspaceBotSetupCode
+      summary: Mint a short-lived single-use setup code that defers bot token creation to claim time
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBotSetupCodeRequest"
+      responses:
+        "201":
+          description: Pending setup code. The plaintext code is returned once and only its hash is stored. No bot token exists until the code is claimed. Re-minting for the same bot and token name replaces any pending code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotSetupCodeResponse"
+        "403":
+          description: Service bot setup codes require a workspace manager. User-owned bot setup codes require the bot owner. Bot tokens are rejected.
+  /api/bot-setup-codes/claim:
+    post:
+      operationId: claimBotSetupCode
+      summary: Claim a setup code, minting the bot token at claim time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimBotSetupCodeRequest"
+      responses:
+        "200":
+          description: Setup code claimed. The minted one-time raw token and installer context are returned. Codes are single use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotSetupCodeClaimResponse"
+        "404":
+          description: Unknown, expired, or already claimed code. The response is deliberately uniform.
+        "429":
+          description: Too many claim attempts from this address.
   /api/bots/{bot_user_id}:
     delete:
       operationId: deleteBot
@@ -1867,6 +1914,67 @@ components:
           minLength: 16
           maxLength: 128
           description: Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token.
+    CreateBotSetupCodeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Token name captured at mint time. Defaults to "default".
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes captured and validated at mint time.
+    BotSetupCode:
+      type: object
+      required: [id, bot_user_id, workspace_id, token_name, scopes, created_at, expires_at]
+      properties:
+        id:
+          type: string
+        bot_user_id:
+          type: string
+        workspace_id:
+          type: string
+        token_name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        code:
+          type: string
+          description: One-time plaintext setup code (XXXX-XXXX-XXXX). Present only in the mint response; only a hash is stored.
+    BotSetupCodeResponse:
+      type: object
+      required: [setup_code]
+      properties:
+        setup_code:
+          $ref: "#/components/schemas/BotSetupCode"
+    ClaimBotSetupCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: Setup code. Case-insensitive; separators are ignored.
+    BotSetupCodeClaimResponse:
+      type: object
+      required: [bot_token, bot, workspace]
+      properties:
+        bot_token:
+          $ref: "#/components/schemas/BotToken"
+        bot:
+          $ref: "#/components/schemas/User"
+        workspace:
+          $ref: "#/components/schemas/Workspace"
     AppInstallation:
       type: object
       required: [id, workspace_id, app_slug, display_name, bot_user_id, config, created_at]

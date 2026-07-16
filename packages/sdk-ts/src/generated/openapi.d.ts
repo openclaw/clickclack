@@ -408,6 +408,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mint a short-lived single-use setup code that defers bot token creation to claim time */
+    post: operations["createWorkspaceBotSetupCode"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/bot-setup-codes/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Claim a setup code, minting the bot token at claim time */
+    post: operations["claimBotSetupCode"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/bots/{bot_user_id}": {
     parameters: {
       query?: never;
@@ -1214,6 +1248,38 @@ export interface components {
       scopes?: string[];
       /** @description Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token. */
       setup_nonce?: string;
+    };
+    CreateBotSetupCodeRequest: {
+      /** @description Token name captured at mint time. Defaults to "default". */
+      name?: string;
+      /** @description Scopes captured and validated at mint time. */
+      scopes?: string[];
+    };
+    BotSetupCode: {
+      id: string;
+      bot_user_id: string;
+      workspace_id: string;
+      token_name: string;
+      scopes: string[];
+      created_by?: string;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      expires_at: string;
+      /** @description One-time plaintext setup code (XXXX-XXXX-XXXX). Present only in the mint response; only a hash is stored. */
+      code?: string;
+    };
+    BotSetupCodeResponse: {
+      setup_code: components["schemas"]["BotSetupCode"];
+    };
+    ClaimBotSetupCodeRequest: {
+      /** @description Setup code. Case-insensitive; separators are ignored. */
+      code: string;
+    };
+    BotSetupCodeClaimResponse: {
+      bot_token: components["schemas"]["BotToken"];
+      bot: components["schemas"]["User"];
+      workspace: components["schemas"]["Workspace"];
     };
     AppInstallation: {
       id: string;
@@ -2779,6 +2845,78 @@ export interface operations {
       };
     };
   };
+  createWorkspaceBotSetupCode: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateBotSetupCodeRequest"];
+      };
+    };
+    responses: {
+      /** @description Pending setup code. The plaintext code is returned once and only its hash is stored. No bot token exists until the code is claimed. Re-minting for the same bot and token name replaces any pending code. */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotSetupCodeResponse"];
+        };
+      };
+      /** @description Service bot setup codes require a workspace manager. User-owned bot setup codes require the bot owner. Bot tokens are rejected. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  claimBotSetupCode: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ClaimBotSetupCodeRequest"];
+      };
+    };
+    responses: {
+      /** @description Setup code claimed. The minted one-time raw token and installer context are returned. Codes are single use. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotSetupCodeClaimResponse"];
+        };
+      };
+      /** @description Unknown, expired, or already claimed code. The response is deliberately uniform. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Too many claim attempts from this address. */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   deleteBot: {
     parameters: {
       query?: never;
@@ -3835,7 +3973,7 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description Required scope, workspace binding, or conversation access is missing */
+      /** @description Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search. */
       403: {
         headers: {
           [name: string]: unknown;

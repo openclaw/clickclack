@@ -44,6 +44,7 @@
   let connect = $state<ConnectMethod>("code");
   let tokenName = $state("default");
   let selectedScope = $state<BotScopeBundle>("bot:write");
+  let setupNonce = $state(crypto.randomUUID());
   let submitting = $state(false);
   let error = $state("");
 
@@ -73,6 +74,7 @@
         display_name: displayName.trim(),
         handle: handle.trim(),
         owner_user_id: ownership === "user" ? currentUserID : undefined,
+        setup_nonce: setupNonce,
         // Code mode creates the bot without a credential; the setup code
         // mints the token when OpenClaw claims it.
         ...(connect === "code"

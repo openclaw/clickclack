@@ -68,7 +68,7 @@ export type CreateBotInput = {
   scopes?: string[];
   setup_nonce?: string;
   // false skips the initial token mint (setup-code installs mint the
-  // token at claim time instead). Cannot be combined with setup_nonce.
+  // token at claim time instead).
   initial_token?: boolean;
 };
 

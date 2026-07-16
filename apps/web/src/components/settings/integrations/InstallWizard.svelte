@@ -255,15 +255,13 @@
             owner_user_id: ownership === "user" ? currentUserID : undefined,
             // Code mode: no credential at creation — the setup code shown on
             // the reveal step mints the token when OpenClaw claims it.
-            // setup_nonce requires an initial token, so it's token-mode only;
-            // handle uniqueness backstops lost-response retries in code mode.
             ...(needsToken
               ? {
                   token_name: tokenName.trim() || "default",
                   scopes,
                   setup_nonce: botSetupNonce,
                 }
-              : { initial_token: false }),
+              : { initial_token: false, setup_nonce: botSetupNonce }),
           });
           bot = response.bot;
           token = response.bot_token ?? null;

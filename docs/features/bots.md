@@ -75,7 +75,7 @@ API `User` payloads include:
   "kind": "bot",
   "owner_user_id": "usr_owner...", // omitted for humans and service bots
   "display_name": "Peter's OpenClaw",
-  "handle": "peter-openclaw"
+  "handle": "peter-openclaw",
 }
 ```
 
@@ -272,6 +272,12 @@ Re-minting a code for the same bot and token name replaces the pending code,
 and removing or deleting the bot invalidates its pending codes. An expired,
 unclaimed code never creates a token.
 
+The web app's token reveal panel (bot creation, token minting, and the
+OpenClaw install wizard) generates a setup code automatically and shows the
+one-liner `openclaw channels add clickclack --code "https://server/#XXXX-XXXX-XXXX"`
+as the recommended connect path, with a countdown and one-click regeneration
+after expiry. The raw token stays available for manual setups.
+
 ## Command Menus
 
 Bots publish command discovery metadata with
@@ -372,9 +378,9 @@ Config:
       "token": "$CLICKCLACK_BOT_TOKEN",
       "workspace": "clickclack",
       "defaultTo": "channel:general",
-      "allowFrom": ["*"]
-    }
-  }
+      "allowFrom": ["*"],
+    },
+  },
 }
 ```
 

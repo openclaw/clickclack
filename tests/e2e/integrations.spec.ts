@@ -75,17 +75,25 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await expect(page.locator("#ws-bots-reveal-token")).toHaveCount(0);
   await expect(page.getByText("Manual setup with the token")).toHaveCount(0);
   await expect(page.getByText("agent_activity:write")).toBeVisible();
+  const codeCommand = await codeSnippet.innerText();
+  const setupCode = codeCommand.match(/\/#([A-Z0-9-]+)/)?.[1];
+  expect(setupCode).toBeTruthy();
+  const claimResponse = await page.request.post("/api/bot-setup-codes/claim", {
+    data: { code: setupCode },
+  });
+  expect(claimResponse.ok()).toBe(true);
   await page
     .getByText("I've run the command, or I'll generate a new code", { exact: false })
     .click();
   await page.getByRole("button", { name: "Done" }).click();
 
-  // Code mode creates the bot with zero tokens; the claim mints the first one.
+  // The claim mints the first token, and dismissing the reveal refreshes the
+  // local bot snapshot before uninstall impact is assessed.
   const botsAfterCode = (await (
     await page.request.get(`/api/workspaces/${workspace.id}/bots`)
   ).json()) as { bots: Array<{ bot: { handle: string }; tokens: unknown[] }> };
   expect(botsAfterCode.bots.find((entry) => entry.bot.handle === "openclaw")?.tokens).toHaveLength(
-    0,
+    1,
   );
 
   // Installed row is live.
@@ -137,11 +145,14 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await expect(page.getByText("1 app installed")).toBeVisible();
 
   // The first OpenClaw installation is independent and can be removed
-  // separately. Its bot has no tokens (code mode, never claimed), so no
-  // token-revocation opt-in is offered.
+  // separately. The claimed code's token is present in the live uninstall
+  // impact and can be revoked with the installation.
   await row.locator(".ws-bots__row-main").click();
   await page.getByRole("button", { name: "Uninstall", exact: true }).click();
-  await expect(page.getByText("Also revoke the bot's", { exact: false })).toHaveCount(0);
+  await expect(
+    page.getByText("Also revoke the bot's 1 active token", { exact: false }),
+  ).toBeVisible();
+  await page.getByText("Also revoke the bot's 1 active token", { exact: false }).click();
   await page.getByRole("button", { name: "Uninstall app" }).click();
   await expect(page.getByText("No apps installed", { exact: false })).toBeVisible();
 });
@@ -159,8 +170,20 @@ test("bot reveal mints a setup code that regenerates after expiry", async ({ pag
   await expect(page.getByText("Your bot is ready to connect")).toBeVisible();
   const snippet = page.locator(".ws-bots__reveal-snippet").first();
   await expect(snippet).toContainText("openclaw channels add clickclack --code");
-  const firstCode = await snippet.innerText();
+  let currentCode = await snippet.innerText();
   await expect(page.getByText("Expires in", { exact: false })).toBeVisible();
+
+  // Replacing the active reveal with another setup-code request remounts the
+  // panel and mints for the new request instead of retaining the prior code.
+  const row = page.locator(".ws-bots__row", {
+    has: page.locator(".ws-bots__row-name", { hasText: /^Code Bot$/ }),
+  });
+  await row.getByRole("button", { name: "New setup code" }).click();
+  await page.getByRole("textbox", { name: "Token name" }).fill("replacement");
+  await page.getByRole("button", { name: "Generate code" }).click();
+  await expect(snippet).toContainText("openclaw channels add clickclack --code");
+  expect(await snippet.innerText()).not.toBe(currentCode);
+  currentCode = await snippet.innerText();
 
   // After the 10-minute TTL the code is replaced by an expired notice, and
   // regeneration mints a fresh code without leaving the panel.
@@ -180,7 +203,7 @@ test("bot reveal mints a setup code that regenerates after expiry", async ({ pag
   await expect(page.getByRole("alert")).toContainText("forced setup code failure");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(snippet).toContainText("openclaw channels add clickclack --code");
-  expect(await snippet.innerText()).not.toBe(firstCode);
+  expect(await snippet.innerText()).not.toBe(currentCode);
   await expect(page.getByText("Expires in", { exact: false })).toBeVisible();
 
   // Code mode never mints a raw token; the reveal has no token field.
@@ -192,9 +215,6 @@ test("bot reveal mints a setup code that regenerates after expiry", async ({ pag
 
   // Safety net: an expired unclaimed code leaves a zero-credential bot, and
   // the bot row can mint a fresh setup code without recreating the bot.
-  const row = page.locator(".ws-bots__row", {
-    has: page.locator(".ws-bots__row-name", { hasText: /^Code Bot$/ }),
-  });
   await expect(row).toContainText("0 active tokens");
   // Creation auto-expanded the row, so the detail actions are already open.
   await expect(row.locator(".ws-bots__row-main")).toHaveAttribute("aria-expanded", "true");

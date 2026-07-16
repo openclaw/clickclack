@@ -1415,3 +1415,44 @@ JOIN workspace_members wm
  AND wm.role = 'bot'
 WHERE bc.workspace_id = sqlc.arg(workspace_id)
 ORDER BY u.handle, bc.command;
+
+-- name: InsertBotSetupCode :exec
+INSERT INTO bot_setup_codes (id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at)
+VALUES (sqlc.arg(id), sqlc.arg(code_hash), sqlc.arg(workspace_id), sqlc.arg(bot_user_id), sqlc.arg(token_name), sqlc.arg(scopes_json), sqlc.arg(created_by), sqlc.arg(created_at), sqlc.arg(expires_at));
+
+-- name: GetBotSetupCodeByHash :one
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+FROM bot_setup_codes
+WHERE code_hash = sqlc.arg(code_hash);
+
+-- name: MarkBotSetupCodeClaimed :execrows
+UPDATE bot_setup_codes
+SET claimed_at = sqlc.arg(claimed_at), claimed_token_id = sqlc.arg(claimed_token_id)
+WHERE id = sqlc.arg(id) AND claimed_at IS NULL;
+
+-- name: DeleteUnclaimedBotSetupCodesForTokenName :execrows
+DELETE FROM bot_setup_codes
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND bot_user_id = sqlc.arg(bot_user_id)
+  AND token_name = sqlc.arg(token_name)
+  AND claimed_at IS NULL;
+
+-- name: DeleteBotSetupCodesForWorkspaceBot :execrows
+DELETE FROM bot_setup_codes
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND bot_user_id = sqlc.arg(bot_user_id)
+  AND claimed_at IS NULL;
+
+-- name: DeleteBotSetupCodesForBot :execrows
+DELETE FROM bot_setup_codes
+WHERE bot_user_id = sqlc.arg(bot_user_id)
+  AND claimed_at IS NULL;
+
+-- name: DeleteExpiredBotSetupCodes :execrows
+DELETE FROM bot_setup_codes
+WHERE claimed_at IS NULL AND expires_at <= sqlc.arg(now);
+
+-- name: GetWorkspaceForSetupClaim :one
+SELECT id, route_id, name, slug, icon_url, created_at
+FROM workspaces
+WHERE id = sqlc.arg(workspace_id);

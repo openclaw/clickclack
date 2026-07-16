@@ -382,6 +382,40 @@ func (q *Queries) DeleteBotCommandsForBot(ctx context.Context, arg DeleteBotComm
 	return err
 }
 
+const deleteBotSetupCodesForBot = `-- name: DeleteBotSetupCodesForBot :execrows
+DELETE FROM bot_setup_codes
+WHERE bot_user_id = $1
+  AND claimed_at IS NULL
+`
+
+func (q *Queries) DeleteBotSetupCodesForBot(ctx context.Context, botUserID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteBotSetupCodesForBot, botUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteBotSetupCodesForWorkspaceBot = `-- name: DeleteBotSetupCodesForWorkspaceBot :execrows
+DELETE FROM bot_setup_codes
+WHERE workspace_id = $1
+  AND bot_user_id = $2
+  AND claimed_at IS NULL
+`
+
+type DeleteBotSetupCodesForWorkspaceBotParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+}
+
+func (q *Queries) DeleteBotSetupCodesForWorkspaceBot(ctx context.Context, arg DeleteBotSetupCodesForWorkspaceBotParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteBotSetupCodesForWorkspaceBot, arg.WorkspaceID, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteDesktopOAuthGrant = `-- name: DeleteDesktopOAuthGrant :execrows
 DELETE FROM desktop_oauth_grants
 WHERE id = $1 AND grant_hash = $2
@@ -394,6 +428,19 @@ type DeleteDesktopOAuthGrantParams struct {
 
 func (q *Queries) DeleteDesktopOAuthGrant(ctx context.Context, arg DeleteDesktopOAuthGrantParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteDesktopOAuthGrant, arg.ID, arg.GrantHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteExpiredBotSetupCodes = `-- name: DeleteExpiredBotSetupCodes :execrows
+DELETE FROM bot_setup_codes
+WHERE claimed_at IS NULL AND expires_at <= $1
+`
+
+func (q *Queries) DeleteExpiredBotSetupCodes(ctx context.Context, now string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredBotSetupCodes, now)
 	if err != nil {
 		return 0, err
 	}
@@ -483,6 +530,28 @@ WHERE id = $1
 func (q *Queries) DeletePendingUploadCleanup(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deletePendingUploadCleanup, id)
 	return err
+}
+
+const deleteUnclaimedBotSetupCodesForTokenName = `-- name: DeleteUnclaimedBotSetupCodesForTokenName :execrows
+DELETE FROM bot_setup_codes
+WHERE workspace_id = $1
+  AND bot_user_id = $2
+  AND token_name = $3
+  AND claimed_at IS NULL
+`
+
+type DeleteUnclaimedBotSetupCodesForTokenNameParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	BotUserID   string `json:"bot_user_id"`
+	TokenName   string `json:"token_name"`
+}
+
+func (q *Queries) DeleteUnclaimedBotSetupCodesForTokenName(ctx context.Context, arg DeleteUnclaimedBotSetupCodesForTokenNameParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUnclaimedBotSetupCodesForTokenName, arg.WorkspaceID, arg.BotUserID, arg.TokenName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteUploadQuotaReservation = `-- name: DeleteUploadQuotaReservation :execrows
@@ -795,6 +864,32 @@ func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string)
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getBotSetupCodeByHash = `-- name: GetBotSetupCodeByHash :one
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+FROM bot_setup_codes
+WHERE code_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetBotSetupCodeByHash(ctx context.Context, codeHash string) (BotSetupCode, error) {
+	row := q.db.QueryRowContext(ctx, getBotSetupCodeByHash, codeHash)
+	var i BotSetupCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeHash,
+		&i.WorkspaceID,
+		&i.BotUserID,
+		&i.TokenName,
+		&i.ScopesJson,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ClaimedAt,
+		&i.ClaimedTokenID,
 	)
 	return i, err
 }
@@ -1650,6 +1745,35 @@ func (q *Queries) GetWorkspaceByRouteID(ctx context.Context, routeID sql.NullStr
 	return i, err
 }
 
+const getWorkspaceForSetupClaim = `-- name: GetWorkspaceForSetupClaim :one
+SELECT id, route_id, name, slug, icon_url, created_at
+FROM workspaces
+WHERE id = $1
+`
+
+type GetWorkspaceForSetupClaimRow struct {
+	ID        string         `json:"id"`
+	RouteID   sql.NullString `json:"route_id"`
+	Name      string         `json:"name"`
+	Slug      string         `json:"slug"`
+	IconUrl   string         `json:"icon_url"`
+	CreatedAt string         `json:"created_at"`
+}
+
+func (q *Queries) GetWorkspaceForSetupClaim(ctx context.Context, workspaceID string) (GetWorkspaceForSetupClaimRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceForSetupClaim, workspaceID)
+	var i GetWorkspaceForSetupClaimRow
+	err := row.Scan(
+		&i.ID,
+		&i.RouteID,
+		&i.Name,
+		&i.Slug,
+		&i.IconUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const hideDirectConversation = `-- name: HideDirectConversation :exec
 INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
 VALUES ($1, $2, $3)
@@ -1698,6 +1822,38 @@ func (q *Queries) InsertBotCommand(ctx context.Context, arg InsertBotCommandPara
 		arg.ArgsHint,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+	)
+	return err
+}
+
+const insertBotSetupCode = `-- name: InsertBotSetupCode :exec
+INSERT INTO bot_setup_codes (id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+`
+
+type InsertBotSetupCodeParams struct {
+	ID          string         `json:"id"`
+	CodeHash    string         `json:"code_hash"`
+	WorkspaceID string         `json:"workspace_id"`
+	BotUserID   string         `json:"bot_user_id"`
+	TokenName   string         `json:"token_name"`
+	ScopesJson  string         `json:"scopes_json"`
+	CreatedBy   sql.NullString `json:"created_by"`
+	CreatedAt   string         `json:"created_at"`
+	ExpiresAt   string         `json:"expires_at"`
+}
+
+func (q *Queries) InsertBotSetupCode(ctx context.Context, arg InsertBotSetupCodeParams) error {
+	_, err := q.db.ExecContext(ctx, insertBotSetupCode,
+		arg.ID,
+		arg.CodeHash,
+		arg.WorkspaceID,
+		arg.BotUserID,
+		arg.TokenName,
+		arg.ScopesJson,
+		arg.CreatedBy,
+		arg.CreatedAt,
+		arg.ExpiresAt,
 	)
 	return err
 }
@@ -3874,6 +4030,26 @@ SELECT id FROM workspaces WHERE id = $1 FOR UPDATE
 func (q *Queries) LockWorkspaceForUpdate(ctx context.Context, workspaceID string) error {
 	_, err := q.db.ExecContext(ctx, lockWorkspaceForUpdate, workspaceID)
 	return err
+}
+
+const markBotSetupCodeClaimed = `-- name: MarkBotSetupCodeClaimed :execrows
+UPDATE bot_setup_codes
+SET claimed_at = $1, claimed_token_id = $2
+WHERE id = $3 AND claimed_at IS NULL
+`
+
+type MarkBotSetupCodeClaimedParams struct {
+	ClaimedAt      sql.NullString `json:"claimed_at"`
+	ClaimedTokenID sql.NullString `json:"claimed_token_id"`
+	ID             string         `json:"id"`
+}
+
+func (q *Queries) MarkBotSetupCodeClaimed(ctx context.Context, arg MarkBotSetupCodeClaimedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markBotSetupCodeClaimed, arg.ClaimedAt, arg.ClaimedTokenID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const markMagicLinkUsed = `-- name: MarkMagicLinkUsed :execrows

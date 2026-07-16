@@ -54,6 +54,20 @@ type BotCommand struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type BotSetupCode struct {
+	ID             string         `json:"id"`
+	CodeHash       string         `json:"code_hash"`
+	WorkspaceID    string         `json:"workspace_id"`
+	BotUserID      string         `json:"bot_user_id"`
+	TokenName      string         `json:"token_name"`
+	ScopesJson     string         `json:"scopes_json"`
+	CreatedBy      sql.NullString `json:"created_by"`
+	CreatedAt      string         `json:"created_at"`
+	ExpiresAt      string         `json:"expires_at"`
+	ClaimedAt      sql.NullString `json:"claimed_at"`
+	ClaimedTokenID sql.NullString `json:"claimed_token_id"`
+}
+
 type BotToken struct {
 	ID          string         `json:"id"`
 	TokenHash   string         `json:"token_hash"`

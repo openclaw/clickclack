@@ -50,18 +50,23 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByText("Stream agent activity").click();
   await page.getByRole("button", { name: "Install", exact: true }).click();
 
-  // Reveal: one-time token, connect command first, config collapsed below.
-  await expect(page.getByText("Your new token is ready")).toBeVisible();
-  const shellSnippet = page.locator(".ws-bots__reveal-snippet").first();
+  // Reveal: setup-code one-liner first, token + manual setup collapsed below.
+  await expect(page.getByText("Your bot is ready to connect")).toBeVisible();
+  const codeSnippet = page.locator(".ws-bots__reveal-snippet").first();
+  await expect(codeSnippet).toContainText("openclaw channels add clickclack --code");
+  await expect(codeSnippet).toContainText("/#");
+  await expect(page.getByText("Expires in", { exact: false })).toBeVisible();
+  const shellSnippet = page.locator(".ws-bots__reveal-snippet").nth(1);
+  const configSnippet = page.locator(".ws-bots__reveal-snippet").nth(2);
+  await expect(shellSnippet).not.toBeVisible();
+  await expect(configSnippet).not.toBeVisible();
+  await page.getByText("Manual setup with the token").click();
   await expect(shellSnippet).toContainText("openclaw channels add clickclack");
   await expect(shellSnippet).toContainText(`--workspace '${workspace.slug}'`);
-  const configSnippet = page.locator(".ws-bots__reveal-snippet").nth(1);
-  await expect(configSnippet).not.toBeVisible();
-  await page.getByText("OpenClaw config (optional)").click();
   await expect(configSnippet).toContainText(`workspace: "${workspace.slug}"`);
   await expect(configSnippet).toContainText("agentActivity: true");
   await expect(page.getByText("agent_activity:write")).toBeVisible();
-  await page.getByText("I've copied this token somewhere safe.").click();
+  await page.getByText("I've run the command or copied the token somewhere safe.").click();
   await page.getByRole("button", { name: "Done" }).click();
 
   // Installed row is live.
@@ -78,8 +83,8 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByRole("textbox", { name: "Handle" }).fill(`openclaw-secondary-${stamp}`);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Install", exact: true }).click();
-  await expect(page.getByText("Your new token is ready")).toBeVisible();
-  await page.getByText("I've copied this token somewhere safe.").click();
+  await expect(page.getByText("Your bot is ready to connect")).toBeVisible();
+  await page.getByText("I've run the command or copied the token somewhere safe.").click();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText("2 apps installed")).toBeVisible();
   await expect(
@@ -103,6 +108,32 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   await page.getByText("Also revoke the bot's", { exact: false }).click();
   await page.getByRole("button", { name: "Uninstall app" }).click();
   await expect(page.getByText("No apps installed", { exact: false })).toBeVisible();
+});
+
+test("bot reveal mints a setup code that regenerates after expiry", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Code", stamp);
+  await page.clock.install();
+  await page.goto(`/app/${workspace.route_id}/settings/bots`);
+  await page.getByRole("button", { name: "Add bot" }).click();
+  await page.getByRole("textbox", { name: "Display name" }).fill("Code Bot");
+  await page.getByRole("button", { name: /Create bot/i }).click();
+
+  // The reveal auto-mints a one-time code and shows the connect one-liner.
+  await expect(page.getByText("Your bot is ready to connect")).toBeVisible();
+  const snippet = page.locator(".ws-bots__reveal-snippet").first();
+  await expect(snippet).toContainText("openclaw channels add clickclack --code");
+  const firstCode = await snippet.innerText();
+  await expect(page.getByText("Expires in", { exact: false })).toBeVisible();
+
+  // After the 10-minute TTL the code is replaced by an expired notice, and
+  // regeneration mints a fresh code without leaving the panel.
+  await page.clock.fastForward("11:00");
+  await expect(page.getByText("That setup code expired", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Generate new code" }).click();
+  await expect(snippet).toContainText("openclaw channels add clickclack --code");
+  expect(await snippet.innerText()).not.toBe(firstCode);
+  await expect(page.getByText("Expires in", { exact: false })).toBeVisible();
 });
 
 test("keeps successful integration data when one initial request fails", async ({ page }) => {
@@ -220,7 +251,7 @@ test("retries lost setup responses without duplicate resources", async ({ page }
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Retry install" }).click();
-  await expect(page.getByText("Your new token is ready")).toBeVisible();
+  await expect(page.getByText("Your bot is ready to connect")).toBeVisible();
 
   const botsResponse = await page.request.get(`/api/workspaces/${workspace.id}/bots`);
   expect(botsResponse.ok()).toBe(true);

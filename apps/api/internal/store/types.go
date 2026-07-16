@@ -43,6 +43,12 @@ var ErrDirectConversationNoActivePeer = errors.New("direct conversation has no a
 // daily post budget.
 var ErrPostRateLimited = errors.New("waiting room post limit reached")
 
+// ErrSetupCodeInvalid is returned for any unusable bot setup code — unknown,
+// expired, already claimed, or pointing at a bot that is no longer eligible.
+// The single error keeps claim responses uniform so callers cannot probe
+// which condition failed.
+var ErrSetupCodeInvalid = errors.New("setup code is invalid or expired")
+
 // ErrUploadQuotaExceeded is returned when a user has exhausted their upload
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
@@ -372,6 +378,38 @@ type CreateBotTokenInput struct {
 	Scopes      []string
 	SetupNonce  string
 	CreatedBy   string
+}
+
+// BotSetupCode is a pending bot-token grant. Creating one does not mint a
+// token; the token is minted when the code is claimed. Code carries the
+// plaintext only in the mint response — at rest only the hash is stored.
+type BotSetupCode struct {
+	ID          string   `json:"id"`
+	BotUserID   string   `json:"bot_user_id"`
+	WorkspaceID string   `json:"workspace_id"`
+	TokenName   string   `json:"token_name"`
+	Scopes      []string `json:"scopes"`
+	CreatedBy   string   `json:"created_by,omitempty"`
+	CreatedAt   string   `json:"created_at"`
+	ExpiresAt   string   `json:"expires_at"`
+	Code        string   `json:"code,omitempty"`
+}
+
+type CreateBotSetupCodeInput struct {
+	WorkspaceID string
+	BotUserID   string
+	Name        string
+	Scopes      []string
+	CreatedBy   string
+}
+
+// BotSetupCodeClaim is the result of claiming a setup code: the freshly
+// minted token (plaintext included once) plus the context an installer
+// needs to write its configuration.
+type BotSetupCodeClaim struct {
+	BotToken  BotToken  `json:"bot_token"`
+	Bot       User      `json:"bot"`
+	Workspace Workspace `json:"workspace"`
 }
 
 type AppInstallation struct {
@@ -916,6 +954,8 @@ type Store interface {
 	CreateBot(ctx context.Context, input CreateBotInput) (User, BotToken, error)
 	ListBots(ctx context.Context, workspaceID, requesterID string) ([]BotWithTokens, error)
 	CreateBotToken(ctx context.Context, input CreateBotTokenInput) (BotToken, error)
+	CreateBotSetupCode(ctx context.Context, input CreateBotSetupCodeInput) (BotSetupCode, error)
+	ClaimBotSetupCode(ctx context.Context, code string) (BotSetupCodeClaim, error)
 	ListBotTokens(ctx context.Context, botUserID, requesterID string) ([]BotToken, error)
 	ListBotTokensForWorkspace(ctx context.Context, workspaceID, botUserID, requesterID string) ([]BotToken, error)
 	RevokeBotToken(ctx context.Context, tokenID, requesterID string) (BotToken, error)

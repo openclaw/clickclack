@@ -673,6 +673,12 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 		WHERE bot_user_id = $2 AND workspace_id = $3`, revokedAt, botUserID, workspaceID); err != nil {
 		return err
 	}
+	if _, err := qtx.DeleteBotSetupCodesForWorkspaceBot(ctx, storedb.DeleteBotSetupCodesForWorkspaceBotParams{
+		WorkspaceID: workspaceID,
+		BotUserID:   botUserID,
+	}); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -753,6 +759,9 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 		return store.DeletedBot{}, botDeletionCounts{}, err
 	}
 	counts.botTokens = int(tokenCount)
+	if _, err := qtx.DeleteBotSetupCodesForBot(ctx, bot.ID); err != nil {
+		return store.DeletedBot{}, botDeletionCounts{}, err
+	}
 	commandCount, err := qtx.RevokeAllBotSlashCommands(ctx, storedb.RevokeAllBotSlashCommandsParams{
 		RevokedAt: sqlText(deletedAt),
 		BotUserID: bot.ID,

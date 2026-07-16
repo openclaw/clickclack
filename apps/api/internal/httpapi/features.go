@@ -708,30 +708,37 @@ func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		OwnerUserID string   `json:"owner_user_id"`
-		DisplayName string   `json:"display_name"`
-		Handle      string   `json:"handle"`
-		AvatarURL   string   `json:"avatar_url"`
-		TokenName   string   `json:"token_name"`
-		Scopes      []string `json:"scopes"`
-		SetupNonce  string   `json:"setup_nonce"`
+		OwnerUserID  string   `json:"owner_user_id"`
+		DisplayName  string   `json:"display_name"`
+		Handle       string   `json:"handle"`
+		AvatarURL    string   `json:"avatar_url"`
+		TokenName    string   `json:"token_name"`
+		Scopes       []string `json:"scopes"`
+		SetupNonce   string   `json:"setup_nonce"`
+		InitialToken *bool    `json:"initial_token"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	skipInitialToken := body.InitialToken != nil && !*body.InitialToken
 	bot, token, err := s.store.CreateBot(r.Context(), store.CreateBotInput{
-		WorkspaceID: chi.URLParam(r, "workspace_id"),
-		OwnerUserID: body.OwnerUserID,
-		DisplayName: body.DisplayName,
-		Handle:      body.Handle,
-		AvatarURL:   body.AvatarURL,
-		TokenName:   body.TokenName,
-		Scopes:      body.Scopes,
-		SetupNonce:  body.SetupNonce,
-		CreatedBy:   act.user.ID,
+		WorkspaceID:      chi.URLParam(r, "workspace_id"),
+		OwnerUserID:      body.OwnerUserID,
+		DisplayName:      body.DisplayName,
+		Handle:           body.Handle,
+		AvatarURL:        body.AvatarURL,
+		TokenName:        body.TokenName,
+		Scopes:           body.Scopes,
+		SetupNonce:       body.SetupNonce,
+		CreatedBy:        act.user.ID,
+		SkipInitialToken: skipInitialToken,
 	})
-	writeResultStatus(w, http.StatusCreated, map[string]any{"bot": bot, "bot_token": token}, err)
+	result := map[string]any{"bot": bot}
+	if !skipInitialToken {
+		result["bot_token"] = token
+	}
+	writeResultStatus(w, http.StatusCreated, result, err)
 }
 
 func (s *Server) listBotTokens(w http.ResponseWriter, r *http.Request) {

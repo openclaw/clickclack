@@ -1458,6 +1458,11 @@ VALUES (sqlc.arg(id), sqlc.arg(code_hash), sqlc.arg(workspace_id), sqlc.arg(bot_
 -- name: GetBotSetupCodeByHash :one
 SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes
+WHERE code_hash = sqlc.arg(code_hash);
+
+-- name: LockBotSetupCodeByHash :one
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+FROM bot_setup_codes
 WHERE code_hash = sqlc.arg(code_hash)
 FOR UPDATE;
 

@@ -159,12 +159,32 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
-	row, err := qtx.GetBotSetupCodeByHash(ctx, hashBotSetupCode(normalized))
+	codeHash := hashBotSetupCode(normalized)
+	candidate, err := qtx.GetBotSetupCodeByHash(ctx, codeHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}
 	if err != nil {
 		return store.BotSetupCodeClaim{}, err
+	}
+	// Take the lifecycle lock before locking the code row. Bot removal and
+	// deletion use the same order, preventing a code-row/lifecycle deadlock.
+	bot, err := lockActiveBotTx(ctx, tx, candidate.BotUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
+	}
+	if err != nil {
+		return store.BotSetupCodeClaim{}, err
+	}
+	row, err := qtx.LockBotSetupCodeByHash(ctx, codeHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
+	}
+	if err != nil {
+		return store.BotSetupCodeClaim{}, err
+	}
+	if row.BotUserID != bot.ID {
+		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}
 	if row.ClaimedAt.Valid {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
@@ -172,13 +192,6 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 	expiresAt, err := time.Parse(time.RFC3339Nano, row.ExpiresAt)
 	if err != nil || !time.Now().UTC().Before(expiresAt) {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
-	}
-	bot, err := lockActiveBotTx(ctx, tx, row.BotUserID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
-	}
-	if err != nil {
-		return store.BotSetupCodeClaim{}, err
 	}
 	workspaceID, err := botWorkspaceForTokenTx(ctx, tx, bot.ID, row.WorkspaceID)
 	if errors.Is(err, sql.ErrNoRows) {

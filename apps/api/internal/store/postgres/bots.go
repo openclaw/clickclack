@@ -644,6 +644,9 @@ func (s *Store) RemoveBotFromWorkspace(ctx context.Context, workspaceID, botUser
 	if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
 		return err
 	}
+	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+		return err
+	}
 	qtx := s.q.WithTx(tx)
 	if _, err := qtx.LockBotWorkspaceMembership(ctx, storedb.LockBotWorkspaceMembershipParams{
 		WorkspaceID: workspaceID,

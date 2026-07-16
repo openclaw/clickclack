@@ -872,7 +872,6 @@ const getBotSetupCodeByHash = `-- name: GetBotSetupCodeByHash :one
 SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes
 WHERE code_hash = $1
-FOR UPDATE
 `
 
 func (q *Queries) GetBotSetupCodeByHash(ctx context.Context, codeHash string) (BotSetupCode, error) {
@@ -4016,6 +4015,32 @@ func (q *Queries) LockBotCommandSet(ctx context.Context, arg LockBotCommandSetPa
 	var user_id string
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const lockBotSetupCodeByHash = `-- name: LockBotSetupCodeByHash :one
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+FROM bot_setup_codes
+WHERE code_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockBotSetupCodeByHash(ctx context.Context, codeHash string) (BotSetupCode, error) {
+	row := q.db.QueryRowContext(ctx, lockBotSetupCodeByHash, codeHash)
+	var i BotSetupCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeHash,
+		&i.WorkspaceID,
+		&i.BotUserID,
+		&i.TokenName,
+		&i.ScopesJson,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ClaimedAt,
+		&i.ClaimedTokenID,
+	)
+	return i, err
 }
 
 const lockBotWorkspaceMembership = `-- name: LockBotWorkspaceMembership :one

@@ -33,7 +33,7 @@
     bots: BotWithTokens[];
     boundBotIDs: Set<string>;
     channels: Channel[];
-    onInstalled: (installation: AppInstallation, bot: User, token: BotToken) => void;
+    onInstalled: (installation: AppInstallation, bot: User, token?: BotToken) => void;
     onClose: () => void;
   };
 
@@ -55,6 +55,7 @@
 
   // Bot step
   let botMode = $state<"create" | "existing">("create");
+  let connect = $state<"code" | "token">("code");
   let displayName = $state("");
   let handle = $state("");
   let handleEdited = $state(false);
@@ -80,11 +81,15 @@
   // so retrying doesn't create a second bot or token.
   let createdBot = $state<User | null>(null);
   let createdToken = $state<BotToken | null>(null);
-  let result = $state<{ installation: AppInstallation; bot: User; token: BotToken } | null>(null);
+  let result = $state<{ installation: AppInstallation; bot: User; token: BotToken | null } | null>(
+    null,
+  );
   let credentialsAttempted = $state(false);
   let botSetupNonce = $state(crypto.randomUUID());
   let installationSetupNonce = $state(crypto.randomUUID());
-  const hasPartialCredentials = $derived(!!createdBot && !!createdToken);
+  const hasPartialCredentials = $derived(
+    !!createdBot && (connect === "code" || !!createdToken),
+  );
   const credentialsLocked = $derived(credentialsAttempted || hasPartialCredentials);
 
   const availableBots = $derived(
@@ -121,6 +126,9 @@
     memberSearchGeneration += 1;
     manifest = next;
     botMode = "create";
+    // Only manifests with a code snippet (OpenClaw) support the setup-code
+    // connect path; everything else stays token-only.
+    connect = next.buildCodeSnippet ? "code" : "token";
     displayName = "";
     handle = "";
     handleEdited = false;
@@ -222,6 +230,12 @@
 
   const defaultToValue = $derived(`channel:${defaultChannel}`);
 
+  const revealScopes = $derived.by(() => {
+    const scopes = [scopeBundle as string];
+    if (agentActivity) scopes.push(AGENT_ACTIVITY_SCOPE);
+    return scopes;
+  });
+
   async function submit() {
     if (!manifest || submitting || (hasConfigStep && !configStepValid)) return;
     submitting = true;
@@ -229,7 +243,8 @@
     try {
       let bot = createdBot;
       let token = createdToken;
-      if (!bot || !token) {
+      const needsToken = connect === "token";
+      if (!bot || (needsToken && !token)) {
         credentialsAttempted = true;
         const scopes = [scopeBundle as string];
         if (agentActivity) scopes.push(AGENT_ACTIVITY_SCOPE);
@@ -238,21 +253,31 @@
             display_name: displayName.trim(),
             handle: handle.trim(),
             owner_user_id: ownership === "user" ? currentUserID : undefined,
-            token_name: tokenName.trim() || "default",
-            scopes,
-            setup_nonce: botSetupNonce,
+            // Code mode: no credential at creation — the setup code shown on
+            // the reveal step mints the token when OpenClaw claims it.
+            // setup_nonce requires an initial token, so it's token-mode only;
+            // handle uniqueness backstops lost-response retries in code mode.
+            ...(needsToken
+              ? {
+                  token_name: tokenName.trim() || "default",
+                  scopes,
+                  setup_nonce: botSetupNonce,
+                }
+              : { initial_token: false }),
           });
           bot = response.bot;
-          token = response.bot_token;
+          token = response.bot_token ?? null;
         } else {
           const entry = availableBots.find((candidate) => candidate.bot.id === existingBotID);
           if (!entry) throw new Error("Pick a bot to bind this app to.");
           bot = entry.bot;
-          token = await createWorkspaceBotToken(workspaceID, entry.bot.id, {
-            name: tokenName.trim() || "default",
-            scopes,
-            setup_nonce: botSetupNonce,
-          });
+          if (needsToken) {
+            token = await createWorkspaceBotToken(workspaceID, entry.bot.id, {
+              name: tokenName.trim() || "default",
+              scopes,
+              setup_nonce: botSetupNonce,
+            });
+          }
         }
         createdBot = bot;
         createdToken = token;
@@ -273,7 +298,7 @@
       });
       result = { installation, bot, token };
       step = "reveal";
-      onInstalled(installation, bot, token);
+      onInstalled(installation, bot, token ?? undefined);
     } catch (err) {
       const credentialRequestWasRejected =
         !createdBot && err instanceof APIError && err.status >= 400 && err.status < 500;
@@ -282,8 +307,8 @@
         botSetupNonce = crypto.randomUUID();
       }
       error = createdBot
-        ? `${integrationsLoadErrorMessage(err)} The bot and token are ready — retrying reuses them and the same installation request.`
-        : credentialsAttempted
+        ? `${integrationsLoadErrorMessage(err)} The bot is ready — retrying reuses it and the same installation request.`
+        : credentialsAttempted && connect === "token"
           ? `${botLoadErrorMessage(err)} Retrying reuses the same bot and token row.`
           : botLoadErrorMessage(err);
     } finally {
@@ -323,8 +348,13 @@
           How the agent behaves in this workspace. This shapes the config you'll paste into the
           platform.
         {:else}
-          The app is installed. Copy the token and setup below — this is the only time the raw
-          token is visible.
+          {#if result?.token}
+            The app is installed. Copy the token and setup below — this is the only time the raw
+            token is visible.
+          {:else}
+            The app is installed. Run the setup command below to connect it — the one-time code
+            mints the bot's token.
+          {/if}
         {/if}
       </p>
     </div>
@@ -457,6 +487,30 @@
             {/each}
           </select>
         </label>
+      {/if}
+
+      {#if manifest?.buildCodeSnippet}
+        <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
+          <legend class="ws-bots__form-label">How will you connect it?</legend>
+          <div class="ws-bots__choices">
+            <label class="ws-bots__choice" class:is-active={connect === "code"}>
+              <input type="radio" name="intg-connect" value="code" bind:group={connect} />
+              <span class="ws-bots__choice-title">Setup code (recommended)</span>
+              <span class="ws-bots__choice-hint">
+                One command on the OpenClaw machine. The one-time code mints the token there —
+                nothing to copy by hand.
+              </span>
+            </label>
+            <label class="ws-bots__choice" class:is-active={connect === "token"}>
+              <input type="radio" name="intg-connect" value="token" bind:group={connect} />
+              <span class="ws-bots__choice-title">Manual token</span>
+              <span class="ws-bots__choice-hint">
+                Mint a raw token now and wire it up yourself — for hand-written config or other
+                clients.
+              </span>
+            </label>
+          </div>
+        </fieldset>
       {/if}
 
       <fieldset class="ws-bots__form-field" disabled={credentialsLocked}>
@@ -635,7 +689,11 @@
     </form>
   {:else if step === "reveal" && result && manifest}
     <TokenRevealPanel
+      connect={result.token ? "token" : "code"}
       token={result.token}
+      {workspaceID}
+      tokenName={tokenName.trim() || "default"}
+      scopes={revealScopes}
       botHandle={result.bot.handle}
       botUserID={result.bot.id}
       workspace={workspaceIdentifier}

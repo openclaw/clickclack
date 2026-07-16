@@ -182,17 +182,15 @@
     ];
   }
 
-  function handleInstalled(installation: AppInstallation, bot: User, token: BotToken) {
+  function handleInstalled(installation: AppInstallation, bot: User, token?: BotToken) {
     markMutation();
-    const { token: _, ...tokenMetadata } = token;
     const existingBot = bots.find((entry) => entry.bot.id === bot.id);
-    const updatedBot = {
-      bot,
-      tokens: [
-        tokenMetadata,
-        ...(existingBot?.tokens.filter((entry) => entry.id !== token.id) ?? []),
-      ],
-    };
+    let updatedTokens = existingBot?.tokens ?? [];
+    if (token) {
+      const { token: _, ...tokenMetadata } = token;
+      updatedTokens = [tokenMetadata, ...updatedTokens.filter((entry) => entry.id !== token.id)];
+    }
+    const updatedBot = { bot, tokens: updatedTokens };
     installations = [installation, ...installations];
     bots = [updatedBot, ...bots.filter((entry) => entry.bot.id !== bot.id)];
     expandedID = installation.id;

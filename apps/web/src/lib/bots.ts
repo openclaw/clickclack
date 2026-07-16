@@ -67,11 +67,15 @@ export type CreateBotInput = {
   token_name?: string;
   scopes?: string[];
   setup_nonce?: string;
+  // false skips the initial token mint (setup-code installs mint the
+  // token at claim time instead). Cannot be combined with setup_nonce.
+  initial_token?: boolean;
 };
 
 export type CreateBotResponse = {
   bot: User;
-  bot_token: BotToken;
+  // Omitted when the bot was created with initial_token: false.
+  bot_token?: BotToken;
 };
 
 export type BotSetupCode = {

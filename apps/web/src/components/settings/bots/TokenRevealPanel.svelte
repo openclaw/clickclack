@@ -14,7 +14,15 @@
   type SnippetBuilder = (input: AppSnippetInput) => string;
 
   type Props = {
-    token: BotToken;
+    // Which single credential this reveal presents. "code" shows only the
+    // one-time setup code (no token exists yet); "token" shows only the
+    // freshly minted raw token.
+    connect?: "code" | "token";
+    token?: BotToken | null;
+    // Required in code mode, where no token carries these along.
+    workspaceID?: string;
+    tokenName?: string;
+    scopes?: string[];
     botHandle: string;
     botUserID: string;
     workspace: string;
@@ -28,7 +36,11 @@
   };
 
   let {
-    token,
+    connect = "token",
+    token = null,
+    workspaceID,
+    tokenName,
+    scopes,
     botHandle,
     botUserID,
     workspace,
@@ -46,6 +58,9 @@
     onDismiss,
   }: Props = $props();
 
+  const codeMode = $derived(connect === "code" && !!codeSnippetBuilder);
+  const scopeChips = $derived(token?.scopes ?? scopes ?? []);
+
   let acknowledged = $state(false);
   let mode = $state<OpenClawAccountMode>("single");
   let copied = $state<"token" | "config" | "shell" | "code" | null>(null);
@@ -59,16 +74,21 @@
   let nowMs = $state(Date.now());
 
   async function mintSetupCode() {
-    if (!codeSnippetBuilder || mintingCode) return;
+    if (!codeMode || mintingCode) return;
+    const mintWorkspaceID = workspaceID ?? token?.workspace_id;
+    if (!mintWorkspaceID) {
+      codeError = "Missing workspace for this setup code. Mint one from the bot's row instead.";
+      return;
+    }
     const requestedAtMs = Date.now();
     mintingCode = true;
     codeError = "";
     setupCode = null;
     copied = copied === "code" ? null : copied;
     try {
-      const minted = await createWorkspaceBotSetupCode(token.workspace_id, botUserID, {
-        name: token.name || "default",
-        scopes: token.scopes,
+      const minted = await createWorkspaceBotSetupCode(mintWorkspaceID, botUserID, {
+        name: tokenName ?? token?.name ?? "default",
+        scopes: scopes ?? token?.scopes,
       });
       if (!minted.code) throw new Error("The server did not return a setup code. Try again.");
       setupCode = minted;
@@ -84,7 +104,7 @@
   }
 
   onMount(() => {
-    if (codeSnippetBuilder) void mintSetupCode();
+    if (codeMode) void mintSetupCode();
   });
 
   $effect(() => {
@@ -119,7 +139,7 @@
     workspace,
     botHandle,
     botUserID,
-    token: token.token ?? "",
+    token: token?.token ?? "",
     mode,
     defaultTo,
     allowFrom,
@@ -149,12 +169,11 @@
 <section class="ws-bots__reveal" aria-live="polite">
   <header class="ws-bots__reveal-header">
     <div>
-      {#if codeSnippetBuilder}
+      {#if codeMode}
         <h3 class="ws-bots__reveal-title">Your bot is ready to connect</h3>
         <p class="ws-bots__reveal-hint">
-          Run the command below on the machine where OpenClaw lives — the one-time code mints the
-          bot's token for you. Prefer to wire it up by hand? The raw token is further down, visible
-          only this once.
+          Run the command below on the machine where OpenClaw lives. The one-time code mints the
+          bot's token there — no credential to copy by hand.
         </p>
       {:else}
         <h3 class="ws-bots__reveal-title">Your new token is ready</h3>
@@ -166,7 +185,7 @@
     </div>
   </header>
 
-  {#if codeSnippetBuilder}
+  {#if codeMode}
     <div class="ws-bots__reveal-field">
       <div class="ws-bots__reveal-snippet-header">
         <span class="ws-bots__reveal-label">Add to OpenClaw</span>
@@ -205,7 +224,7 @@
     </div>
   {/if}
 
-  {#if configSnippetBuilder || shellSnippetBuilder || codeSnippetBuilder}
+  {#if codeMode || ((configSnippetBuilder || shellSnippetBuilder) && token)}
   <div class="ws-bots__reveal-field">
     <span class="ws-bots__reveal-label">OpenClaw account shape</span>
     <div class="ws-bots__setup-mode" role="group" aria-label="OpenClaw account shape">
@@ -227,83 +246,76 @@
   </div>
   {/if}
 
-  <div class="ws-bots__reveal-field">
-    <label class="ws-bots__reveal-label" for="ws-bots-reveal-token">Token</label>
-    <div class="ws-bots__reveal-row">
-      <input
-        id="ws-bots-reveal-token"
-        class="ws-bots__reveal-input"
-        type="text"
-        readonly
-        value={token.token ?? ""}
-      />
-      <button
-        type="button"
-        class="ws-btn"
-        class:ws-btn--primary={!codeSnippetBuilder}
-        onclick={() => copyTo(token.token ?? "", "token")}
-      >
-        {copied === "token" ? "Copied" : "Copy"}
-      </button>
-    </div>
-    {#if codeSnippetBuilder}
-      <p class="ws-bots__reveal-hint">
-        Only needed for manual setup or other API clients — the setup code above mints its own
-        token. Visible this once; ClickClack stores only a hash.
-      </p>
-    {/if}
-  </div>
-
-  {#if shellSnippetBuilder || configSnippetBuilder}
-    <details class="ws-bots__reveal-details">
-      <summary class="ws-bots__reveal-summary">
-        {codeSnippetBuilder ? "Manual setup with the token" : "OpenClaw setup"}
-      </summary>
-      <div class="ws-bots__reveal-details-body">
-        {#if shellSnippetBuilder}
-          <div class="ws-bots__reveal-snippet-header">
-            <span class="ws-bots__reveal-label">Add to OpenClaw with the token</span>
-            <button
-              type="button"
-              class="ws-btn"
-              onclick={() => copyTo(shellSnippet, "shell")}
-            >
-              {copied === "shell" ? "Copied" : "Copy commands"}
-            </button>
-          </div>
-          <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
-          <p class="ws-bots__reveal-hint">
-            A running OpenClaw gateway picks this up automatically. Not running yet? Start it with
-            <code>openclaw gateway</code>.
-          </p>
-        {/if}
-
-        {#if configSnippetBuilder}
-          <div class="ws-bots__reveal-snippet-header">
-            <span class="ws-bots__reveal-label">OpenClaw config</span>
-            <button
-              type="button"
-              class="ws-btn"
-              onclick={() => copyTo(configSnippet, "config")}
-            >
-              {copied === "config" ? "Copied" : "Copy config"}
-            </button>
-          </div>
-          <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
-          <p class="ws-bots__reveal-hint">
-            The commands above write this config for you. Use it for manual installs, or to add
-            options the commands do not cover (agent activity, default channel, allowlist).
-          </p>
-        {/if}
+  {#if !codeMode && token}
+    <div class="ws-bots__reveal-field">
+      <label class="ws-bots__reveal-label" for="ws-bots-reveal-token">Token</label>
+      <div class="ws-bots__reveal-row">
+        <input
+          id="ws-bots-reveal-token"
+          class="ws-bots__reveal-input"
+          type="text"
+          readonly
+          value={token.token ?? ""}
+        />
+        <button
+          type="button"
+          class="ws-btn ws-btn--primary"
+          onclick={() => copyTo(token?.token ?? "", "token")}
+        >
+          {copied === "token" ? "Copied" : "Copy"}
+        </button>
       </div>
-    </details>
+    </div>
+
+    {#if shellSnippetBuilder || configSnippetBuilder}
+      <details class="ws-bots__reveal-details">
+        <summary class="ws-bots__reveal-summary">OpenClaw setup</summary>
+        <div class="ws-bots__reveal-details-body">
+          {#if shellSnippetBuilder}
+            <div class="ws-bots__reveal-snippet-header">
+              <span class="ws-bots__reveal-label">Add to OpenClaw with the token</span>
+              <button
+                type="button"
+                class="ws-btn"
+                onclick={() => copyTo(shellSnippet, "shell")}
+              >
+                {copied === "shell" ? "Copied" : "Copy commands"}
+              </button>
+            </div>
+            <pre class="ws-bots__reveal-snippet"><code>{shellSnippet}</code></pre>
+            <p class="ws-bots__reveal-hint">
+              A running OpenClaw gateway picks this up automatically. Not running yet? Start it with
+              <code>openclaw gateway</code>.
+            </p>
+          {/if}
+
+          {#if configSnippetBuilder}
+            <div class="ws-bots__reveal-snippet-header">
+              <span class="ws-bots__reveal-label">OpenClaw config</span>
+              <button
+                type="button"
+                class="ws-btn"
+                onclick={() => copyTo(configSnippet, "config")}
+              >
+                {copied === "config" ? "Copied" : "Copy config"}
+              </button>
+            </div>
+            <pre class="ws-bots__reveal-snippet"><code>{configSnippet}</code></pre>
+            <p class="ws-bots__reveal-hint">
+              The commands above write this config for you. Use it for manual installs, or to add
+              options the commands do not cover (agent activity, default channel, allowlist).
+            </p>
+          {/if}
+        </div>
+      </details>
+    {/if}
   {/if}
 
-  {#if token.scopes?.length}
+  {#if scopeChips.length}
     <div class="ws-bots__reveal-field">
       <span class="ws-bots__reveal-label">Scopes</span>
       <div class="ws-bots__scope-row">
-        {#each token.scopes as scope (scope)}
+        {#each scopeChips as scope (scope)}
           <span class="ws-bots__scope-chip">{scope}</span>
         {/each}
       </div>
@@ -312,8 +324,8 @@
 
   <label class="ws-bots__reveal-ack">
     <input type="checkbox" bind:checked={acknowledged} />
-    {#if codeSnippetBuilder}
-      <span>I've run the command or copied the token somewhere safe.</span>
+    {#if codeMode}
+      <span>I've run the command, or I'll generate a new code from the bot's row later.</span>
     {:else}
       <span>I've copied this token somewhere safe.</span>
     {/if}

@@ -1277,9 +1277,26 @@ export interface components {
       code: string;
     };
     BotSetupCodeClaimResponse: {
-      bot_token: components["schemas"]["BotToken"];
-      bot: components["schemas"]["User"];
-      workspace: components["schemas"]["Workspace"];
+      /** @description One-time plaintext bot token minted by this claim. */
+      token: string;
+      bot: components["schemas"]["BotSetupCodeClaimBot"];
+      workspace: components["schemas"]["BotSetupCodeClaimWorkspace"];
+      defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
+    };
+    BotSetupCodeClaimBot: {
+      id: string;
+      handle: string;
+      display_name: string;
+    };
+    BotSetupCodeClaimWorkspace: {
+      id: string;
+      route_id: string;
+      slug: string;
+      name: string;
+    };
+    BotSetupCodeClaimDefaults: {
+      /** @description Suggested OpenClaw outbound target, such as channel:general. Omitted when the workspace has no active channels. */
+      defaultTo?: string;
     };
     AppInstallation: {
       id: string;

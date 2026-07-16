@@ -264,8 +264,9 @@ hash. No bot token exists yet.
 The installer claims the code with the unauthenticated, rate-limited
 `POST /api/bot-setup-codes/claim` (`{"code": "XXXX-XXXX-XXXX"}`). The claim
 atomically consumes the code and mints the bot token at that moment,
-returning `{bot_token, bot, workspace}` with the one-time raw token and the
-context needed to write installer configuration. Codes are single use;
+returning `{token, bot, workspace, defaults}` with the one-time raw token,
+minimal bot and workspace identity, and a suggested `defaultTo` channel when
+one exists. Codes are single use;
 unknown, expired, and already-claimed codes all answer with the same `404`.
 Re-minting a code for the same bot and token name replaces the pending code,
 and removing or deleting the bot invalidates its pending codes. An expired,

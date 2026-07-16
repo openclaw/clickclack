@@ -52,9 +52,21 @@ export type BotSetupCode = {
 };
 
 export type BotSetupCodeClaim = {
-  bot_token: BotToken;
-  bot: User;
-  workspace: Workspace;
+  token: string;
+  bot: {
+    id: string;
+    handle: string;
+    display_name: string;
+  };
+  workspace: {
+    id: string;
+    route_id: string;
+    slug: string;
+    name: string;
+  };
+  defaults: {
+    defaultTo?: string;
+  };
 };
 
 export type BotCommandInput = {

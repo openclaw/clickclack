@@ -1967,14 +1967,45 @@ components:
           description: Setup code. Case-insensitive; separators are ignored.
     BotSetupCodeClaimResponse:
       type: object
-      required: [bot_token, bot, workspace]
+      required: [token, bot, workspace, defaults]
       properties:
-        bot_token:
-          $ref: "#/components/schemas/BotToken"
+        token:
+          type: string
+          description: One-time plaintext bot token minted by this claim.
         bot:
-          $ref: "#/components/schemas/User"
+          $ref: "#/components/schemas/BotSetupCodeClaimBot"
         workspace:
-          $ref: "#/components/schemas/Workspace"
+          $ref: "#/components/schemas/BotSetupCodeClaimWorkspace"
+        defaults:
+          $ref: "#/components/schemas/BotSetupCodeClaimDefaults"
+    BotSetupCodeClaimBot:
+      type: object
+      required: [id, handle, display_name]
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+        display_name:
+          type: string
+    BotSetupCodeClaimWorkspace:
+      type: object
+      required: [id, route_id, slug, name]
+      properties:
+        id:
+          type: string
+        route_id:
+          type: string
+        slug:
+          type: string
+        name:
+          type: string
+    BotSetupCodeClaimDefaults:
+      type: object
+      properties:
+        defaultTo:
+          type: string
+          description: Suggested OpenClaw outbound target, such as channel:general. Omitted when the workspace has no active channels.
     AppInstallation:
       type: object
       required: [id, workspace_id, app_slug, display_name, bot_user_id, config, created_at]

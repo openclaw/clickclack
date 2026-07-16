@@ -851,14 +851,24 @@ func (s *Server) claimBotSetupCode(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	s.recordAudit(r.Context(), claim.Workspace.ID, claim.BotToken.CreatedBy, "bot_setup_code.claimed", "bot_token", claim.BotToken.ID, map[string]any{
+	s.recordAudit(r.Context(), claim.Workspace.ID, claim.Bot.ID, "bot_setup_code.claimed", "bot_token", claim.BotToken.ID, map[string]any{
 		"bot_user_id": claim.Bot.ID,
 		"token_name":  claim.BotToken.Name,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
-		"bot_token": claim.BotToken,
-		"bot":       claim.Bot,
-		"workspace": claim.Workspace,
+		"token": claim.BotToken.Token,
+		"bot": map[string]string{
+			"id":           claim.Bot.ID,
+			"handle":       claim.Bot.Handle,
+			"display_name": claim.Bot.DisplayName,
+		},
+		"workspace": map[string]string{
+			"id":       claim.Workspace.ID,
+			"route_id": claim.Workspace.RouteID,
+			"slug":     claim.Workspace.Slug,
+			"name":     claim.Workspace.Name,
+		},
+		"defaults": claim.Defaults,
 	})
 }
 

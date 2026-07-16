@@ -128,8 +128,22 @@ Current MVP scopes are documented in [features/bots.md](features/bots.md).
 
 ## Install into OpenClaw
 
-The fastest path is one command (OpenClaw installs the extension and writes
-the config for you):
+The fastest path is the one-time setup command shown after creating an
+OpenClaw app or bot in the ClickClack web app:
+
+```sh
+openclaw channels add clickclack --code "https://app.clickclack.chat/#XXXX-XXXX-XXXX"
+```
+
+OpenClaw claims the short-lived code, receives the new bot token directly, and
+writes the account configuration. The token does not pass through the
+clipboard or shell history.
+
+A running OpenClaw gateway picks up the new account automatically (the
+ClickClack extension hot-reloads on `channels.clickclack` changes). If the
+gateway is not running yet, start it with `openclaw gateway`.
+
+For manual token setup, use the fallback command shown beneath the raw token:
 
 ```sh
 openclaw channels add clickclack \
@@ -138,13 +152,7 @@ openclaw channels add clickclack \
   --workspace clickclack
 ```
 
-A running OpenClaw gateway picks up the new account automatically (the
-ClickClack extension hot-reloads on `channels.clickclack` changes). If the
-gateway is not running yet, start it with `openclaw gateway`.
-
-Or run `openclaw onboard` for the guided setup. The Integrations wizard in
-workspace settings (Integrations → OpenClaw) generates this exact command
-with the freshly minted token filled in.
+You can also run `openclaw onboard` for guided manual setup.
 
 For manual configuration, OpenClaw's ClickClack extension reads ClickClack
 accounts from `channels.clickclack`. Tokens may be plain strings or

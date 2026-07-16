@@ -800,6 +800,68 @@ func (s *Server) createBotTokenForWorkspace(w http.ResponseWriter, r *http.Reque
 	writeResultStatus(w, http.StatusCreated, map[string]any{"bot_token": token}, err)
 }
 
+func (s *Server) createWorkspaceBotSetupCode(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot create bot setup codes"))
+		return
+	}
+	var body struct {
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	code, err := s.store.CreateBotSetupCode(r.Context(), store.CreateBotSetupCodeInput{
+		WorkspaceID: chi.URLParam(r, "workspace_id"),
+		BotUserID:   chi.URLParam(r, "bot_user_id"),
+		Name:        body.Name,
+		Scopes:      body.Scopes,
+		CreatedBy:   act.user.ID,
+	})
+	if err == nil {
+		s.recordAudit(r.Context(), code.WorkspaceID, act.user.ID, "bot_setup_code.created", "bot_setup_code", code.ID, map[string]any{
+			"bot_user_id": code.BotUserID,
+			"token_name":  code.TokenName,
+		})
+	}
+	writeResultStatus(w, http.StatusCreated, map[string]any{"setup_code": code}, err)
+}
+
+func (s *Server) claimBotSetupCode(w http.ResponseWriter, r *http.Request) {
+	if !s.setupCodeClaimLimiter.allow(clientIPKey(r)) {
+		writeError(w, http.StatusTooManyRequests, errors.New("too many setup code attempts, retry later"))
+		return
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	claim, err := s.store.ClaimBotSetupCode(r.Context(), body.Code)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.recordAudit(r.Context(), claim.Workspace.ID, claim.BotToken.CreatedBy, "bot_setup_code.claimed", "bot_token", claim.BotToken.ID, map[string]any{
+		"bot_user_id": claim.Bot.ID,
+		"token_name":  claim.BotToken.Name,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bot_token": claim.BotToken,
+		"bot":       claim.Bot,
+		"workspace": claim.Workspace,
+	})
+}
+
 func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {

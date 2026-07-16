@@ -26,16 +26,17 @@ import (
 )
 
 type Server struct {
-	store          store.Store
-	hub            *realtime.Hub
-	uploadDir      string
-	uploadStorage  uploadstore.Store
-	githubOAuth    GitHubOAuthConfig
-	cookies        authpolicy.CookieNames
-	disableDevAuth bool
-	pushNotifier   PushNotifier
-	metrics        *metricsRegistry
-	build          buildMetadata
+	store                 store.Store
+	hub                   *realtime.Hub
+	uploadDir             string
+	uploadStorage         uploadstore.Store
+	githubOAuth           GitHubOAuthConfig
+	cookies               authpolicy.CookieNames
+	disableDevAuth        bool
+	pushNotifier          PushNotifier
+	metrics               *metricsRegistry
+	build                 buildMetadata
+	setupCodeClaimLimiter *slidingWindowLimiter
 }
 
 const (
@@ -46,6 +47,10 @@ const (
 	httpRequestTimeout            = 30 * time.Second
 	idleTimeout                   = 120 * time.Second
 	uploadCleanupSweepLimit       = 100
+	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
+	// claim attempts per client IP.
+	setupCodeClaimLimit  = 10
+	setupCodeClaimWindow = time.Minute
 )
 
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
@@ -84,15 +89,16 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		cookieNames = authpolicy.DefaultCookieNames()
 	}
 	return &Server{
-		store:          st,
-		hub:            hub,
-		uploadDir:      options.UploadDir,
-		uploadStorage:  uploadStorage,
-		githubOAuth:    options.GitHubOAuth.withDefaults(),
-		cookies:        cookieNames,
-		disableDevAuth: options.DisableDevAuth,
-		pushNotifier:   options.PushNotifier,
-		metrics:        metrics,
+		store:                 st,
+		hub:                   hub,
+		uploadDir:             options.UploadDir,
+		uploadStorage:         uploadStorage,
+		githubOAuth:           options.GitHubOAuth.withDefaults(),
+		cookies:               cookieNames,
+		disableDevAuth:        options.DisableDevAuth,
+		pushNotifier:          options.PushNotifier,
+		metrics:               metrics,
+		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,
@@ -146,6 +152,8 @@ func (s *Server) Handler() http.Handler {
 		r.Delete("/workspaces/{workspace_id}/bots/{bot_user_id}/membership", s.removeBotFromWorkspace)
 		r.Get("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.listWorkspaceBotTokens)
 		r.Post("/workspaces/{workspace_id}/bots/{bot_user_id}/tokens", s.createWorkspaceBotToken)
+		r.Post("/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes", s.createWorkspaceBotSetupCode)
+		r.Post("/bot-setup-codes/claim", s.claimBotSetupCode)
 		r.Put("/bots/self/commands", s.setBotCommands)
 		r.Delete("/bots/{bot_user_id}", s.deleteBot)
 		r.Get("/bots/{bot_user_id}/tokens", s.listBotTokens)
@@ -1530,6 +1538,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrSetupNonceConflict):
 		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, store.ErrSetupCodeInvalid):
+		writeError(w, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrModerationRestricted):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):

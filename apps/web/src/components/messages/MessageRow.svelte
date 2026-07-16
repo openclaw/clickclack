@@ -7,6 +7,7 @@
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Upload } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
+  import MessageEditor from "./MessageEditor.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
 
@@ -23,6 +24,12 @@
     reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
     deleting?: boolean;
+    editing?: boolean;
+    editingDraft?: string;
+    editingError?: string;
+    editingSaving?: boolean;
+    onEditDraft?: (body: string) => void;
+    onEditError?: (message: string) => void;
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
@@ -31,6 +38,8 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    onEditMessage?: (message: Message) => void;
+    onSaveEdit?: (message: Message, body: string) => Promise<void>;
   };
 
   let {
@@ -46,6 +55,12 @@
     reactionsDisabled = false,
     canDeleteAnyMessage = false,
     deleting = false,
+    editing = false,
+    editingDraft = "",
+    editingError = "",
+    editingSaving = false,
+    onEditDraft,
+    onEditError,
     onReply,
     onOpenThread,
     onJumpToQuote,
@@ -54,7 +69,17 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    onEditMessage,
+    onSaveEdit,
   }: Props = $props();
+
+  function handleEditStart() {
+    onEditMessage?.(message);
+  }
+
+  function handleEditCancel() {
+    onEditMessage?.(message);
+  }
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
@@ -62,6 +87,9 @@
   let canDeleteMessage = $derived(
     canDeleteAnyMessage ||
       (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID),
+  );
+  let canEditMessage = $derived(
+    Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID,
   );
   // Coalesced agent activity: consecutive same-turn agent_commentary/agent_tool
   // rows are collapsed (client-side) into one synthetic row carrying a
@@ -124,6 +152,7 @@
   class:before-final-message={precedesFinalMessage}
   class:after-preamble={followsPreamble}
   class:can-open-thread={canOpenThread}
+  class:editing={editing}
   data-message-id={message.id}
   use:openThreadOnClick
 >
@@ -133,9 +162,25 @@
       <PreambleBlock block={preambleBlock} />
     {:else if isDeleted}
       <div class="message-deleted">This message was deleted.</div>
+    {:else if editing}
+      {#if onSaveEdit}
+        <MessageEditor
+          {message}
+          body={editingDraft}
+          errorMessage={editingError}
+          saving={editingSaving}
+          onBody={(body) => onEditDraft?.(body)}
+          onError={(message) => onEditError?.(message)}
+          onCancel={handleEditCancel}
+          onSave={onSaveEdit}
+        />
+      {/if}
     {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdown>{@html markdown(message.body)}</div>
+    {#if message.edited_at}
+      <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
+    {/if}
     {#if !isPending && !isFailed}
       <ReactionsBar
         messageId={message.id}
@@ -218,19 +263,33 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
       </svg>
     </button>
+    {#if canEditMessage && onEditMessage && !editing}
+        <button
+          type="button"
+          aria-label="Edit message"
+          class="tooltip message-action-edit"
+          data-tooltip="Edit message"
+          disabled={isPending || isFailed}
+          onclick={handleEditStart}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+          </svg>
+        </button>
+    {/if}
     {#if canDeleteMessage && onDeleteMessage}
-      <button
-        type="button"
-        aria-label="Delete message"
-        class="tooltip message-action-danger"
-        data-tooltip="Delete message"
-        disabled={isPending || isFailed || deleting}
-        onclick={() => onDeleteMessage?.(message)}
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
-        </svg>
-      </button>
+        <button
+          type="button"
+          aria-label="Delete message"
+          class="tooltip message-action-danger"
+          data-tooltip="Delete message"
+          disabled={isPending || isFailed || deleting}
+          onclick={() => onDeleteMessage?.(message)}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
+          </svg>
+        </button>
     {/if}
   </div>
   {/if}

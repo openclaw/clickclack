@@ -12,6 +12,7 @@
   import type { Message, ThreadState, Upload, User } from "../../lib/types";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
+  import MessageEditor from "../messages/MessageEditor.svelte";
   import QuoteBlock from "../messages/QuoteBlock.svelte";
   import ReactionsBar from "../messages/ReactionsBar.svelte";
 
@@ -40,6 +41,15 @@
     deletingMessageIDs?: ReadonlySet<string>;
     onSetReplyTarget: (message: Message, context: "thread") => void;
     onDeleteMessage?: (message: Message) => void;
+    editingMessageID?: string;
+    editingMessageSurface?: "timeline" | "thread" | "";
+    editingDraft?: string;
+    editingError?: string;
+    editingSaving?: boolean;
+    onEditDraft?: (body: string) => void;
+    onEditError?: (message: string) => void;
+    onEditMessage?: (message: Message) => void;
+    onSaveEdit?: (message: Message, body: string) => Promise<void>;
     onClearReply: () => void;
     onActivateThreadComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;
@@ -73,6 +83,15 @@
     deletingMessageIDs = new Set<string>(),
     onSetReplyTarget,
     onDeleteMessage,
+    editingMessageID = "",
+    editingMessageSurface = "",
+    editingDraft = "",
+    editingError = "",
+    editingSaving = false,
+    onEditDraft,
+    onEditError,
+    onEditMessage,
+    onSaveEdit,
     onClearReply,
     onActivateThreadComposer,
     onInlineImagePointerUp,
@@ -84,6 +103,10 @@
   const canDelete = (message: Message) =>
     canDeleteAnyMessage ||
     (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID);
+  const canEdit = (message: Message) =>
+    Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID;
+  const isEditing = (message: Message) =>
+    editingMessageSurface === "thread" && editingMessageID === message.id;
 </script>
 
 <header>
@@ -138,7 +161,7 @@
         {/if}
         {#if userHandle(root.author)}<span>{handleLabel(userHandle(root.author))}</span>{/if}
         <time>{time(root.created_at)}</time>
-        {#if !root.deleted_at}
+        {#if !root.deleted_at && !isEditing(root)}
           <button
             type="button"
             class="reply-quote-btn"
@@ -150,6 +173,19 @@
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
             </svg>
           </button>
+          {#if canEdit(root) && onEditMessage}
+            <button
+              type="button"
+              class="thread-action-btn"
+              aria-label="Edit message"
+              data-tooltip="Edit message"
+              onclick={() => onEditMessage?.(root)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              </svg>
+            </button>
+          {/if}
           {#if canDelete(root) && onDeleteMessage}
             <button
               type="button"
@@ -168,8 +204,22 @@
       </header>
       {#if root.deleted_at}
         <div class="message-deleted">This message was deleted.</div>
+      {:else if isEditing(root) && onSaveEdit && onEditMessage}
+        <MessageEditor
+          message={root}
+          body={editingDraft}
+          errorMessage={editingError}
+          saving={editingSaving}
+          onBody={(body) => onEditDraft?.(body)}
+          onError={(message) => onEditError?.(message)}
+          onCancel={() => onEditMessage?.(root)}
+          onSave={onSaveEdit}
+        />
       {:else}
         <div class="markdown" use:enhanceMarkdown>{@html markdown(root.body)}</div>
+        {#if root.edited_at}
+          <span class="message-edit__indicator" title="Edited {time(root.edited_at)}">(edited)</span>
+        {/if}
         <ReactionsBar
           messageId={root.id}
           reactions={reactionController.reactionsFor(root)}
@@ -212,7 +262,7 @@
             {/if}
             {#if userHandle(reply.author)}<span>{handleLabel(userHandle(reply.author))}</span>{/if}
             <time>{time(reply.created_at)}</time>
-            {#if !reply.deleted_at}
+            {#if !reply.deleted_at && !isEditing(reply)}
               <button
                 type="button"
                 class="reply-quote-btn"
@@ -224,6 +274,20 @@
                   <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
                 </svg>
               </button>
+              {#if canEdit(reply) && onEditMessage}
+                <button
+                  type="button"
+                  class="thread-action-btn"
+                  aria-label="Edit message"
+                  data-tooltip="Edit message"
+                  disabled={reply.status === "pending" || reply.status === "failed"}
+                  onclick={() => onEditMessage?.(reply)}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                  </svg>
+                </button>
+              {/if}
               {#if canDelete(reply) && onDeleteMessage}
                 <button
                   type="button"
@@ -242,9 +306,23 @@
           </header>
           {#if reply.deleted_at}
             <div class="message-deleted">This message was deleted.</div>
+          {:else if isEditing(reply) && onSaveEdit && onEditMessage}
+            <MessageEditor
+              message={reply}
+              body={editingDraft}
+              errorMessage={editingError}
+              saving={editingSaving}
+              onBody={(body) => onEditDraft?.(body)}
+              onError={(message) => onEditError?.(message)}
+              onCancel={() => onEditMessage?.(reply)}
+              onSave={onSaveEdit}
+            />
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />
             <div class="markdown" use:enhanceMarkdown>{@html markdown(reply.body)}</div>
+            {#if reply.edited_at}
+              <span class="message-edit__indicator" title="Edited {time(reply.edited_at)}">(edited)</span>
+            {/if}
             <ReactionsBar
               messageId={reply.id}
               reactions={reactionController.reactionsFor(reply)}

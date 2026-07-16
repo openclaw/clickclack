@@ -25,6 +25,15 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    editingMessageID?: string;
+    editingMessageSurface?: "timeline" | "thread" | "";
+    editingDraft?: string;
+    editingError?: string;
+    editingSaving?: boolean;
+    onEditDraft?: (body: string) => void;
+    onEditError?: (message: string) => void;
+    onEditMessage?: (message: Message) => void;
+    onSaveEdit?: (message: Message, body: string) => Promise<void>;
   };
 
   let {
@@ -45,6 +54,15 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    editingMessageID = "",
+    editingMessageSurface = "",
+    editingDraft = "",
+    editingError = "",
+    editingSaving = false,
+    onEditDraft,
+    onEditError,
+    onEditMessage,
+    onSaveEdit,
   }: Props = $props();
 
   const author = $derived(group.messages[0]?.author);
@@ -96,6 +114,12 @@
         {reactionsDisabled}
         {canDeleteAnyMessage}
         deleting={deletingMessageIDs.has(message.id)}
+        editing={editingMessageSurface === "timeline" && editingMessageID === message.id}
+        {editingDraft}
+        {editingError}
+        {editingSaving}
+        {onEditDraft}
+        {onEditError}
         {onReply}
         {onOpenThread}
         {onJumpToQuote}
@@ -104,6 +128,8 @@
         {onRetry}
         {onDiscard}
         {onDeleteMessage}
+        {onEditMessage}
+        {onSaveEdit}
       />
     {/each}
   </div>

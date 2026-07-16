@@ -177,6 +177,12 @@
   let deletingMessageIDs = new Set<string>();
   let pendingDeleteMessage: Message | null = null;
   let deleteMessageError = "";
+  let editingMessageID = "";
+  let editingMessageSurface: "timeline" | "thread" | "" = "";
+  let editingSessionGeneration = 0;
+  let editingSaveInFlight = false;
+  let editingDraft = "";
+  let editingError = "";
 
   type MessageWindow = Omit<MessagePage, "messages"> & {
     messages: Message[];
@@ -2037,6 +2043,96 @@
     setActiveMessages(messages.filter((m) => m.id !== message.id));
   }
 
+  async function restoreEditFocus(messageID: string, surface: "timeline" | "thread") {
+    await tick();
+    const surfaceRoot = document.querySelector(
+      surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
+    );
+    const messageRow = surfaceRoot?.querySelector(
+      `[data-message-id="${CSS.escape(messageID)}"]`,
+    );
+    messageRow?.querySelector<HTMLButtonElement>('button[aria-label="Edit message"]')?.focus();
+  }
+
+  function hasMountedEditor(messageID: string, surface: "timeline" | "thread") {
+    const surfaceRoot = document.querySelector(
+      surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
+    );
+    return Boolean(
+      surfaceRoot
+        ?.querySelector(`[data-message-id="${CSS.escape(messageID)}"]`)
+        ?.querySelector('textarea[aria-label="Edit message"]'),
+    );
+  }
+
+  $: if (!selectedThread && editingMessageSurface === "thread") {
+    editingSessionGeneration += 1;
+    editingMessageID = "";
+    editingMessageSurface = "";
+    editingDraft = "";
+    editingError = "";
+  }
+
+  function handleEditMessage(message: Message, surface: "timeline" | "thread") {
+    if (editingSaveInFlight) return;
+    if (editingMessageID === message.id && editingMessageSurface === surface) {
+      editingSessionGeneration += 1;
+      editingMessageID = "";
+      editingMessageSurface = "";
+      editingDraft = "";
+      editingError = "";
+      void restoreEditFocus(message.id, surface);
+      return;
+    }
+    if (editingMessageID && editingMessageSurface) {
+      if (hasMountedEditor(editingMessageID, editingMessageSurface)) return;
+      editingMessageID = "";
+      editingMessageSurface = "";
+      editingDraft = "";
+      editingError = "";
+    }
+    editingSessionGeneration += 1;
+    editingMessageID = message.id;
+    editingMessageSurface = surface;
+    editingDraft = message.body;
+    editingError = "";
+  }
+
+  async function handleSaveEdit(message: Message, body: string): Promise<void> {
+    if (!message.id) return;
+    if (editingSaveInFlight) throw new Error("An edit is already being saved");
+    editingSaveInFlight = true;
+    const editSessionMessageID = editingMessageID;
+    const editSessionSurface = editingMessageSurface;
+    const editSessionGeneration = editingSessionGeneration;
+    try {
+      const data = await api<{ message: Message }>(`/api/messages/${message.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ body }),
+      });
+      const updated = data.message;
+      setActiveMessages(messages.map((current) => (current.id === updated.id ? { ...current, ...updated } : current)));
+      replies = replies.map((reply) => (reply.id === updated.id ? { ...reply, ...updated } : reply));
+      if (selectedThread?.id === updated.id) selectedThread = { ...selectedThread, ...updated };
+      if (
+        editingMessageID === editSessionMessageID &&
+        editingMessageSurface === editSessionSurface &&
+        editingSessionGeneration === editSessionGeneration
+      ) {
+        editingMessageID = "";
+        editingMessageSurface = "";
+        editingDraft = "";
+        editingError = "";
+        if (editSessionSurface) void restoreEditFocus(editSessionMessageID, editSessionSurface);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Could not edit message";
+      throw new Error(msg);
+    } finally {
+      editingSaveInFlight = false;
+    }
+  }
+
   function requestMessageDelete(message: Message) {
     if (!message.id || message.deleted_at || deletingMessageIDs.has(message.id)) return;
     pendingDeleteMessage = message;
@@ -3445,6 +3541,15 @@
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
       onDeleteMessage={requestMessageDelete}
+      {editingMessageID}
+      {editingMessageSurface}
+      {editingDraft}
+      {editingError}
+      editingSaving={editingSaveInFlight}
+      onEditDraft={(body) => (editingDraft = body)}
+      onEditError={(message) => (editingError = message)}
+      onEditMessage={(message) => handleEditMessage(message, "timeline")}
+      onSaveEdit={handleSaveEdit}
     />
 
     <AgentProgress turns={agentProgressTurns} />
@@ -3568,6 +3673,15 @@
         canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
         {deletingMessageIDs}
         onDeleteMessage={requestMessageDelete}
+        {editingMessageID}
+        {editingMessageSurface}
+        {editingDraft}
+        {editingError}
+        editingSaving={editingSaveInFlight}
+        onEditDraft={(body) => (editingDraft = body)}
+        onEditError={(message) => (editingError = message)}
+        onEditMessage={(message) => handleEditMessage(message, "thread")}
+        onSaveEdit={handleSaveEdit}
         onActivateThreadComposer={() => (activeComposerContext = "thread")}
         onInlineImagePointerUp={handleInlineImagePointerUp}
         onJumpToQuote={(message) => void jumpToQuotedMessage(message)}

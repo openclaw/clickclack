@@ -77,6 +77,15 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    editingMessageID?: string;
+    editingMessageSurface?: "timeline" | "thread" | "";
+    editingDraft?: string;
+    editingError?: string;
+    editingSaving?: boolean;
+    onEditDraft?: (body: string) => void;
+    onEditError?: (message: string) => void;
+    onEditMessage?: (message: Message) => void;
+    onSaveEdit?: (message: Message, body: string) => Promise<void>;
   };
 
   let {
@@ -119,6 +128,15 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    editingMessageID = "",
+    editingMessageSurface = "",
+    editingDraft = "",
+    editingError = "",
+    editingSaving = false,
+    onEditDraft,
+    onEditError,
+    onEditMessage,
+    onSaveEdit,
   }: Props = $props();
 
   // Sub-pixel tolerance — matches virtua's official chat example (FIXME comment
@@ -871,6 +889,15 @@
               {replyContext}
               {canDeleteAnyMessage}
               {deletingMessageIDs}
+              {editingMessageID}
+              {editingMessageSurface}
+              {editingDraft}
+              {editingError}
+              {editingSaving}
+              {onEditDraft}
+              {onEditError}
+              {onEditMessage}
+              {onSaveEdit}
               {onOpenProfile}
               {onReply}
               {onOpenThread}

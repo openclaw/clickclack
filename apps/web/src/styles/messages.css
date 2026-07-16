@@ -1140,8 +1140,15 @@
 }
 
 .message-row:hover .message-actions,
+.message-row:focus-within .message-actions,
 .message-row.selected .message-actions {
   opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .message-actions {
+    opacity: 1;
+  }
 }
 
 .message-actions button {
@@ -1163,6 +1170,112 @@
 .message-actions .message-action-danger:hover {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
+}
+
+.message-actions .message-action-edit:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* ---------- MESSAGE EDITING ---------- */
+
+.message-edit {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.message-edit__textarea {
+  width: 100%;
+  min-height: 56px;
+  max-height: 240px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.message-edit__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.message-edit__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-edit__footer .message-edit__save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.message-edit__footer .message-edit__save:hover {
+  filter: brightness(1.1);
+}
+
+.message-edit__footer .message-edit__save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message-edit__footer .message-edit__cancel {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.message-edit__footer .message-edit__cancel:hover {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.message-edit__error {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin: 0;
+}
+
+.message-edit__shortcut {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message-edit__indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message-row.editing .message-actions {
+  display: none;
 }
 
 .message-deleted {

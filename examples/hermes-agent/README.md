@@ -6,8 +6,9 @@ and executes tools on the Hermes server.
 
 ## Behavior
 
-- Direct messages always dispatch to Hermes.
-- Top-level channel messages dispatch only when they mention the bot handle.
+- Direct messages dispatch only when the sender ID is explicitly allowed.
+- Channel messages require both an allowed sender ID and an allowed channel ID;
+  top-level messages must also mention the bot handle.
 - The first channel answer is posted in a thread.
 - Later human replies continue without another mention while the bot appears in the
   latest 200 replies; older dormant threads require a fresh mention.
@@ -20,12 +21,17 @@ and executes tools on the Hermes server.
 - Final replies use a deterministic ClickClack message nonce derived from the
   source message ID.
 
-On a fresh process, the connector captures ClickClack's atomic current event tail
-and does not replay old messages. After a transient disconnect, it drains events
-from the last completed in-memory cursor before reconnecting. Socket read-ahead is
-capped at 32 durable events; hitting the cap closes and resumes the socket from the
-committed cursor. A process crash can skip those admitted in-memory events, but it
-will not replay older messages and rerun side-effecting tools.
+On the first process start, the connector captures and atomically persists
+ClickClack's current event tail, so it does not replay old messages. Reconnects and
+process restarts resume from the last contiguous successfully completed cursor.
+Socket read-ahead is capped at 32 durable events; hitting the cap closes and
+resumes the socket from that committed cursor.
+
+Delivery is at least once across crashes. If the process exits after Hermes
+finishes but before the cursor file is committed, that event is replayed. The
+deterministic ClickClack reply nonce prevents a duplicate final message, but a
+side-effecting Hermes tool may run again. Use Hermes approval policies and
+idempotent tools for externally mutating work.
 
 ## Requirements
 
@@ -94,6 +100,9 @@ pnpm install --frozen-lockfile
 CLICKCLACK_BASE_URL=https://app.clickclack.chat \
 CLICKCLACK_BOT_TOKEN=ccb_... \
 CLICKCLACK_WORKSPACE_ID=wsp_... \
+HERMES_CONNECTOR_ALLOWED_USER_IDS=usr_manager \
+HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS=chn_ops \
+HERMES_CONNECTOR_CURSOR_FILE=/var/lib/clickclack-hermes/cursor.json \
 HERMES_API_URL=http://127.0.0.1:8642 \
 HERMES_API_KEY=replace-with-a-long-random-secret \
 pnpm --filter @clickclack/example-hermes-agent start
@@ -111,6 +120,9 @@ non-loopback Hermes URL.
 | `CLICKCLACK_BOT_TOKEN` | yes | — | Workspace-scoped `ccb_...` token |
 | `CLICKCLACK_WORKSPACE_ID` | yes | — | Workspace watched by the bot |
 | `CLICKCLACK_CONNECTOR_ALLOW_INSECURE_REMOTE_HTTP` | no | `false` | Allow remote plaintext ClickClack only on trusted dev networks |
+| `HERMES_CONNECTOR_ALLOWED_USER_IDS` | yes | — | Comma-separated human user IDs allowed to invoke Hermes; wildcards are rejected |
+| `HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS` | no | empty | Comma-separated channel IDs allowed to invoke Hermes; empty denies every channel |
+| `HERMES_CONNECTOR_CURSOR_FILE` | yes | — | Absolute path for workspace-bound durable cursor state |
 | `HERMES_API_URL` | no | `http://127.0.0.1:8642` | Hermes API server origin |
 | `HERMES_API_KEY` | remote Hermes only | — | Hermes bearer key |
 | `HERMES_CONNECTOR_HISTORY_LIMIT` | no | `20` | Prior DM/thread messages, `0-200` |
@@ -135,6 +147,10 @@ seconds, so an unresponsive Hermes stop endpoint cannot pin the slot.
 ## Operational notes
 
 - Run one connector process per bot token/workspace pair.
+- Keep the cursor file on persistent local storage. Give the connector user write
+  access to its parent directory; cursor files are created with mode `0600`.
+- Do not reuse a cursor file across workspaces. The connector fails closed when
+  the stored workspace ID differs from `CLICKCLACK_WORKSPACE_ID`.
 - Use a process supervisor and restart on non-zero exit.
 - Rotate the ClickClack and Hermes keys independently.
 - Do not expose an unsandboxed Hermes API directly to the public internet.

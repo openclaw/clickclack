@@ -60,6 +60,8 @@ export type HermesClickClackConnectorOptions = {
   runTimeoutMs?: number;
   stopTimeoutMs?: number;
   instructions?: string;
+  allowedUserIds: ReadonlySet<string>;
+  allowedChannelIds: ReadonlySet<string>;
   signal?: AbortSignal;
   logger?: ConnectorLogger;
 };
@@ -115,6 +117,8 @@ export class HermesClickClackConnector {
   private readonly runTimeoutMs: number;
   private readonly stopTimeoutMs: number;
   private readonly instructions: string;
+  private readonly allowedUserIds: ReadonlySet<string>;
+  private readonly allowedChannelIds: ReadonlySet<string>;
   private readonly signal?: AbortSignal;
   private readonly logger: ConnectorLogger;
   private readonly inFlight = new Set<string>();
@@ -133,6 +137,8 @@ export class HermesClickClackConnector {
     this.runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
     this.stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS;
     this.instructions = options.instructions?.trim() || DEFAULT_INSTRUCTIONS;
+    this.allowedUserIds = new Set(options.allowedUserIds);
+    this.allowedChannelIds = new Set(options.allowedChannelIds);
     this.signal = options.signal;
     this.logger = options.logger ?? defaultLogger;
     if (this.historyLimit < 0 || !Number.isSafeInteger(this.historyLimit)) {
@@ -192,6 +198,15 @@ export class HermesClickClackConnector {
         this.inFlight.delete(messageId);
         return undefined;
       }
+      if (!this.isAuthorized(message)) {
+        this.inFlight.delete(messageId);
+        this.logger.warn("Ignoring unauthorized ClickClack message", {
+          messageId: message.id,
+          authorId: message.author_id,
+          channelId: message.channel_id,
+        });
+        return undefined;
+      }
       const conversationKey = this.conversationKeyFor(message);
       if (!conversationKey) {
         this.inFlight.delete(messageId);
@@ -203,6 +218,15 @@ export class HermesClickClackConnector {
       this.logger.error("ClickClack event preparation failed", error);
       throw error;
     }
+  }
+
+  private isAuthorized(message: Message): boolean {
+    if (message.workspace_id !== this.workspaceId) return false;
+    if (!this.allowedUserIds.has(message.author_id)) return false;
+    const isDirect = Boolean(message.direct_conversation_id);
+    const isChannel = Boolean(message.channel_id);
+    if (isDirect === isChannel) return false;
+    return isDirect || this.allowedChannelIds.has(message.channel_id!);
   }
 
   private conversationKeyFor(message: Message): string | undefined {
@@ -217,7 +241,7 @@ export class HermesClickClackConnector {
 
   private async executePrepared(prepared: PreparedEvent): Promise<void> {
     try {
-      if (this.signal?.aborted) return;
+      throwIfAborted(this.signal);
       const context = await this.resolveConversation(prepared.event, prepared.message);
       if (!context) return;
       await this.withRunSlot(() => this.runAndReply(prepared.message, context));
@@ -232,7 +256,8 @@ export class HermesClickClackConnector {
   private async withRunSlot(task: () => Promise<void>): Promise<void> {
     await this.acquireRunSlot();
     try {
-      if (!this.signal?.aborted) await task();
+      throwIfAborted(this.signal);
+      await task();
     } finally {
       this.releaseRunSlot();
     }
@@ -314,6 +339,7 @@ export class HermesClickClackConnector {
     const runAbort = new AbortController();
     const abortFromParent = () => runAbort.abort(this.signal?.reason);
     this.signal?.addEventListener("abort", abortFromParent, { once: true });
+    if (this.signal?.aborted) abortFromParent();
     const timeout = setTimeout(
       () => runAbort.abort(new Error(`Hermes run exceeded ${this.runTimeoutMs}ms`)),
       this.runTimeoutMs,
@@ -335,15 +361,16 @@ export class HermesClickClackConnector {
       await progress.finish("completed");
     } catch (error) {
       if (runId && runAbort.signal.aborted) await this.stopQuietly(runId);
-      if (this.signal?.aborted) return;
+      throwIfAborted(this.signal);
 
       this.logger.error("Hermes run or reply delivery failed", error);
       await progress.finish("failed");
-      if (error instanceof ReplyDeliveryError) return;
+      if (error instanceof ReplyDeliveryError) throw error;
       try {
         await this.sendWithRetry(context.target, message.id, GENERIC_FAILURE);
       } catch (deliveryError) {
         this.logger.error("ClickClack failure reply delivery exhausted retries", deliveryError);
+        throw deliveryError;
       }
     } finally {
       clearTimeout(timeout);
@@ -396,6 +423,7 @@ export class HermesClickClackConnector {
     const nonce = `hermes:${sourceMessageId}`;
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      throwIfAborted(this.signal);
       try {
         if (target.kind === "dm") {
           await this.clickclack.dms.sendMessage(target.conversationId, { body, nonce });
@@ -628,6 +656,12 @@ async function sleepWithSignal(milliseconds: number, signal?: AbortSignal): Prom
     }
     signal?.addEventListener("abort", done, { once: true });
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Connector shutdown interrupted event", { cause: signal.reason });
 }
 
 function safeToolName(value: unknown): string {

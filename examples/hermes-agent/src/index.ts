@@ -2,6 +2,7 @@ import { ClickClackClient } from "@clickclack/sdk-ts";
 
 import { loadConfig } from "./config.ts";
 import { HermesClickClackConnector, type ConnectorLogger } from "./connector.ts";
+import { FileCursorStore } from "./cursor-store.ts";
 import { runEventGateway } from "./gateway.ts";
 import { HermesClient } from "./hermes-client.ts";
 
@@ -48,6 +49,8 @@ async function main(): Promise<void> {
     maxReplyChars: config.maxReplyChars,
     maxConcurrentRuns: config.maxConcurrentRuns,
     runTimeoutMs: config.runTimeoutMs,
+    allowedUserIds: config.allowedUserIds,
+    allowedChannelIds: config.allowedChannelIds,
     instructions: config.instructions,
     signal: abort.signal,
     logger,
@@ -59,6 +62,7 @@ async function main(): Promise<void> {
       workspaceId: config.clickclackWorkspaceId,
       signal: abort.signal,
       reconnectMs: config.reconnectMs,
+      cursorStore: new FileCursorStore(config.cursorFile, config.clickclackWorkspaceId),
       onEvent: (event) => connector.scheduleEvent(event),
       logger,
     });

@@ -7,6 +7,8 @@ const required = {
   CLICKCLACK_BASE_URL: "https://clickclack.example/",
   CLICKCLACK_BOT_TOKEN: "ccb_test",
   CLICKCLACK_WORKSPACE_ID: "wsp_1",
+  HERMES_CONNECTOR_ALLOWED_USER_IDS: "usr_1, usr_2",
+  HERMES_CONNECTOR_CURSOR_FILE: "/var/lib/clickclack-hermes/cursor.json",
 };
 
 test("loadConfig normalizes URLs and parses bounded integer options", () => {
@@ -27,12 +29,31 @@ test("loadConfig normalizes URLs and parses bounded integer options", () => {
   assert.equal(config.maxConcurrentRuns, 6);
   assert.equal(config.runTimeoutMs, 9000);
   assert.equal(config.reconnectMs, 250);
+  assert.deepEqual(config.allowedUserIds, new Set(["usr_1", "usr_2"]));
+  assert.deepEqual(config.allowedChannelIds, new Set<string>());
+  assert.equal(config.cursorFile, "/var/lib/clickclack-hermes/cursor.json");
 });
 
-test("loadConfig reports every missing required ClickClack variable", () => {
+test("loadConfig reports every missing required security variable", () => {
   assert.throws(
     () => loadConfig({}),
-    /CLICKCLACK_BASE_URL, CLICKCLACK_BOT_TOKEN, CLICKCLACK_WORKSPACE_ID/,
+    /CLICKCLACK_BASE_URL, CLICKCLACK_BOT_TOKEN, CLICKCLACK_WORKSPACE_ID, HERMES_CONNECTOR_ALLOWED_USER_IDS, HERMES_CONNECTOR_CURSOR_FILE/,
+  );
+});
+
+test("loadConfig parses an explicit channel allowlist", () => {
+  const config = loadConfig({
+    ...required,
+    HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS: "chn_1,chn_2, chn_1",
+  });
+
+  assert.deepEqual(config.allowedChannelIds, new Set(["chn_1", "chn_2"]));
+});
+
+test("loadConfig requires an absolute cursor file path", () => {
+  assert.throws(
+    () => loadConfig({ ...required, HERMES_CONNECTOR_CURSOR_FILE: "state/cursor.json" }),
+    /HERMES_CONNECTOR_CURSOR_FILE must be an absolute path/,
   );
 });
 

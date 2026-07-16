@@ -1,6 +1,7 @@
 import type { RealtimeEvent, RealtimeEventPage } from "@clickclack/sdk-ts";
 
 import type { ConnectorLogger } from "./connector.ts";
+import type { CursorStore } from "./cursor-store.ts";
 
 const EVENT_PAGE_LIMIT = 500;
 export const MAX_SOCKET_READ_AHEAD = 32;
@@ -69,6 +70,7 @@ export async function drainEventBacklog(options: {
   afterCursor: string;
   signal: AbortSignal;
   onEvent(event: RealtimeEvent): Promise<ScheduledGatewayEvent>;
+  commitCursor(cursor: string): Promise<void>;
 }): Promise<string> {
   let afterCursor = options.afterCursor;
   while (!options.signal.aborted) {
@@ -83,9 +85,11 @@ export async function drainEventBacklog(options: {
       if (!event.cursor || event.cursor === afterCursor) {
         throw new GatewayProtocolError("ClickClack event backlog returned a non-advancing cursor");
       }
-      afterCursor = event.cursor;
+      const eventCursor = event.cursor;
       const scheduled = await options.onEvent(event);
       await scheduled.completion;
+      await options.commitCursor(eventCursor);
+      afterCursor = eventCursor;
     }
   }
   return afterCursor;
@@ -96,29 +100,35 @@ export async function runEventGateway(options: {
   workspaceId: string;
   signal: AbortSignal;
   reconnectMs: number;
+  cursorStore: CursorStore;
   onEvent(event: RealtimeEvent): Promise<ScheduledGatewayEvent>;
   logger: ConnectorLogger;
 }): Promise<void> {
-  let initialized = false;
-  let afterCursor = "";
+  let afterCursor = await options.cursorStore.load();
+  if (afterCursor === undefined) {
+    afterCursor = await captureInitialCursor(options.client, options.workspaceId);
+    await options.cursorStore.save(afterCursor);
+    options.logger.info("ClickClack initial event tail captured and persisted");
+  } else {
+    options.logger.info("ClickClack persisted event cursor loaded");
+  }
 
   while (!options.signal.aborted) {
     try {
-      if (!initialized) {
-        afterCursor = await captureInitialCursor(options.client, options.workspaceId);
-        initialized = true;
-        options.logger.info("ClickClack initial event tail captured");
-      } else {
-        afterCursor = await drainEventBacklog({
-          client: options.client,
-          workspaceId: options.workspaceId,
-          afterCursor,
-          signal: options.signal,
-          onEvent: options.onEvent,
-        });
-      }
+      afterCursor = await drainEventBacklog({
+        client: options.client,
+        workspaceId: options.workspaceId,
+        afterCursor,
+        signal: options.signal,
+        onEvent: options.onEvent,
+        commitCursor: (cursor) => options.cursorStore.save(cursor),
+      });
       if (options.signal.aborted) return;
-      afterCursor = await runSocketCycle({ ...options, afterCursor });
+      afterCursor = await runSocketCycle({
+        ...options,
+        afterCursor,
+        commitCursor: (cursor) => options.cursorStore.save(cursor),
+      });
     } catch (error) {
       if (options.signal.aborted) return;
       if (error instanceof GatewayProtocolError) throw error;
@@ -134,6 +144,7 @@ export async function runSocketCycle(options: {
   afterCursor: string;
   signal: AbortSignal;
   onEvent(event: RealtimeEvent): Promise<ScheduledGatewayEvent>;
+  commitCursor(cursor: string): Promise<void>;
   logger: ConnectorLogger;
 }): Promise<string> {
   let afterCursor = options.afterCursor;
@@ -189,7 +200,8 @@ export async function runSocketCycle(options: {
         const completed = admitted.then((scheduled) => scheduled.completion);
         commitQueue = commitQueue
           .then(() => completed)
-          .then(() => {
+          .then(async () => {
+            await options.commitCursor(eventCursor);
             afterCursor = eventCursor;
           })
           .finally(() => {

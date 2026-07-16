@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 export type HermesConnectorConfig = {
   clickclackBaseUrl: string;
   clickclackBotToken: string;
@@ -9,6 +11,9 @@ export type HermesConnectorConfig = {
   maxConcurrentRuns: number;
   runTimeoutMs: number;
   reconnectMs: number;
+  allowedUserIds: ReadonlySet<string>;
+  allowedChannelIds: ReadonlySet<string>;
+  cursorFile: string;
   instructions?: string;
 };
 
@@ -21,6 +26,8 @@ export function loadConfig(env: Environment): HermesConnectorConfig {
     "CLICKCLACK_BASE_URL",
     "CLICKCLACK_BOT_TOKEN",
     "CLICKCLACK_WORKSPACE_ID",
+    "HERMES_CONNECTOR_ALLOWED_USER_IDS",
+    "HERMES_CONNECTOR_CURSOR_FILE",
   ] as const;
   const missing = required.filter((key) => !env[key]?.trim());
   if (missing.length > 0) {
@@ -43,6 +50,10 @@ export function loadConfig(env: Environment): HermesConnectorConfig {
     "HERMES_API_URL",
   );
   const hermesApiKey = env.HERMES_API_KEY?.trim() || undefined;
+  const cursorFile = env.HERMES_CONNECTOR_CURSOR_FILE!.trim();
+  if (!isAbsolute(cursorFile)) {
+    throw new Error("HERMES_CONNECTOR_CURSOR_FILE must be an absolute path");
+  }
   const hermesUrl = new URL(hermesBaseUrl);
   const remoteHermes = !isLoopbackHost(hermesUrl.hostname);
   if (!hermesApiKey && remoteHermes) {
@@ -75,10 +86,29 @@ export function loadConfig(env: Environment): HermesConnectorConfig {
       86_400_000,
     ),
     reconnectMs: parseInteger(env, "HERMES_CONNECTOR_RECONNECT_MS", 2_000, 50, 60_000),
+    allowedUserIds: parseIdList(
+      env.HERMES_CONNECTOR_ALLOWED_USER_IDS!,
+      "HERMES_CONNECTOR_ALLOWED_USER_IDS",
+    ),
+    allowedChannelIds: parseIdList(
+      env.HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS ?? "",
+      "HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS",
+    ),
+    cursorFile,
     ...(env.HERMES_CONNECTOR_INSTRUCTIONS?.trim()
       ? { instructions: env.HERMES_CONNECTOR_INSTRUCTIONS.trim() }
       : {}),
   };
+}
+
+function parseIdList(value: string, name: string): ReadonlySet<string> {
+  const raw = value.trim();
+  if (!raw) return new Set();
+  const values = raw.split(",").map((entry) => entry.trim());
+  if (values.some((entry) => !entry || entry === "*" || /\s/u.test(entry))) {
+    throw new Error(`${name} must be a comma-separated list of explicit IDs`);
+  }
+  return new Set(values);
 }
 
 function normalizeHttpUrl(value: string, name: string): string {

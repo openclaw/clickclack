@@ -255,6 +255,11 @@ function connector(
   maxConcurrentRuns = 4,
   runTimeoutMs = 1_800_000,
   stopTimeoutMs = 5_000,
+  policy: {
+    allowedUserIds?: string[];
+    allowedChannelIds?: string[];
+    signal?: AbortSignal;
+  } = {},
 ) {
   return new HermesClickClackConnector({
     clickclack: client,
@@ -265,6 +270,9 @@ function connector(
     maxConcurrentRuns,
     runTimeoutMs,
     stopTimeoutMs,
+    allowedUserIds: new Set(policy.allowedUserIds ?? ["usr_human"]),
+    allowedChannelIds: new Set(policy.allowedChannelIds ?? ["chn_1"]),
+    signal: policy.signal,
     logger: {
       info: () => {},
       warn: () => {},
@@ -272,6 +280,63 @@ function connector(
     },
   });
 }
+
+test("rejects a DM from a sender outside the explicit allowlist", async () => {
+  const client = new FakeClickClack();
+  const hermes = new FakeHermes();
+  const current = message("msg_denied_dm", "run a tool", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    channel_seq: 1,
+  });
+  client.byId.set(current.id, current);
+  client.dmHistory.set("dm_1", [current]);
+
+  await connector(client, hermes, [], 4, 1_800_000, 5_000, {
+    allowedUserIds: ["usr_someone_else"],
+  }).handleEvent(eventFor(current));
+
+  assert.equal(hermes.starts.length, 0);
+  assert.equal(client.dmSends.length, 0);
+});
+
+test("rejects a channel mention outside the explicit channel allowlist", async () => {
+  const client = new FakeClickClack();
+  const hermes = new FakeHermes();
+  const current = message("msg_denied_channel", "@hermes run a tool");
+  client.byId.set(current.id, current);
+
+  await connector(client, hermes, [], 4, 1_800_000, 5_000, {
+    allowedChannelIds: ["chn_somewhere_else"],
+  }).handleEvent(eventFor(current));
+
+  assert.equal(hermes.starts.length, 0);
+  assert.equal(client.threadSends.length, 0);
+});
+
+test("rejects malformed dual-target and cross-workspace messages", async () => {
+  const client = new FakeClickClack();
+  const hermes = new FakeHermes();
+  const dualTarget = message("msg_dual_target", "hello", {
+    channel_id: "chn_1",
+    direct_conversation_id: "dm_1",
+  });
+  const wrongWorkspace = message("msg_wrong_workspace", "hello", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    workspace_id: "wsp_other",
+  });
+  client.byId.set(dualTarget.id, dualTarget);
+  client.byId.set(wrongWorkspace.id, wrongWorkspace);
+
+  const instance = connector(client, hermes);
+  await instance.handleEvent(eventFor(dualTarget));
+  await instance.handleEvent(eventFor(wrongWorkspace));
+
+  assert.equal(hermes.starts.length, 0);
+  assert.equal(client.dmSends.length, 0);
+  assert.equal(client.threadSends.length, 0);
+});
 
 test("ignores self-authored, bot-authored, activity, and unmentioned channel messages", async () => {
   const client = new FakeClickClack();
@@ -585,6 +650,75 @@ test("retries transient final reply delivery with one deterministic nonce", asyn
     .findLast((payload) => payload.op === "finalize" && payload.line.id === "lifecycle");
   if (!lifecycle || lifecycle.op !== "finalize") throw new Error("missing lifecycle finalization");
   assert.equal(lifecycle.line.status, "completed");
+});
+
+test("rejects completion when final reply delivery exhausts retries", async () => {
+  const client = new FakeClickClack();
+  const hermes = new FakeHermes();
+  const current = message("msg_reply_exhausted", "hello", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    channel_seq: 1,
+  });
+  client.byId.set(current.id, current);
+  client.dmHistory.set("dm_1", [current]);
+  client.dmFailuresRemaining = 3;
+
+  const scheduled = await connector(client, hermes).scheduleEvent(eventFor(current));
+
+  await assert.rejects(scheduled.completion, /reply delivery exhausted retries/i);
+  assert.equal(client.dmSends.length, 3);
+});
+
+test("rejects completion when generic failure delivery exhausts retries", async () => {
+  const client = new FakeClickClack();
+  const hermes = new FakeHermes();
+  const current = message("msg_failure_exhausted", "hello", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    channel_seq: 1,
+  });
+  client.byId.set(current.id, current);
+  client.dmHistory.set("dm_1", [current]);
+  client.dmFailuresRemaining = 3;
+  hermes.startError = new Error("provider failed");
+
+  const scheduled = await connector(client, hermes).scheduleEvent(eventFor(current));
+
+  await assert.rejects(scheduled.completion, /reply delivery exhausted retries/i);
+  assert.equal(client.dmSends.length, 3);
+});
+
+test("rejects active and queued completions interrupted by shutdown", async () => {
+  const client = new FakeClickClack();
+  const hermes = new TimeoutHermes();
+  const abort = new AbortController();
+  const first = message("msg_abort_1", "first", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    channel_seq: 1,
+  });
+  const second = message("msg_abort_2", "second", {
+    channel_id: undefined,
+    direct_conversation_id: "dm_1",
+    channel_seq: 2,
+  });
+  client.byId.set(first.id, first);
+  client.byId.set(second.id, second);
+  client.dmHistory.set("dm_1", [first, second]);
+  const instance = connector(client, hermes, [], 4, 1_800_000, 5_000, {
+    signal: abort.signal,
+  });
+
+  const firstTask = await instance.scheduleEvent(eventFor(first));
+  const secondTask = await instance.scheduleEvent(eventFor(second));
+  await waitForCondition(() => hermes.starts.length === 1);
+  abort.abort(new Error("connector shutdown"));
+
+  await assert.rejects(firstTask.completion, /connector shutdown/i);
+  await assert.rejects(secondTask.completion, /connector shutdown/i);
+  assert.equal(hermes.starts.length, 1);
+  assert.equal(client.dmSends.length, 0);
 });
 
 test("times out a stalled run, stops it, and reports a generic failure", async () => {

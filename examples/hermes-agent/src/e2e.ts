@@ -61,6 +61,9 @@ async function main(): Promise<void> {
     const [owner, workspaces] = await Promise.all([human.me(), human.workspaces.list()]);
     const workspace = workspaces[0];
     assert.ok(workspace, "dev bootstrap did not create a workspace");
+    const channels = await human.channels.list(workspace.id);
+    const channel = channels[0];
+    assert.ok(channel, "dev bootstrap did not create a channel");
 
     const created = await human.bots.create(workspace.id, {
       display_name: "Hermes Integration Bot",
@@ -90,6 +93,9 @@ async function main(): Promise<void> {
         CLICKCLACK_BASE_URL: clickclackBaseUrl,
         CLICKCLACK_BOT_TOKEN: created.bot_token.token,
         CLICKCLACK_WORKSPACE_ID: workspace.id,
+        HERMES_CONNECTOR_ALLOWED_USER_IDS: owner.id,
+        HERMES_CONNECTOR_ALLOWED_CHANNEL_IDS: channel.id,
+        HERMES_CONNECTOR_CURSOR_FILE: join(temp, "connector-cursor.json"),
         HERMES_API_URL: `http://127.0.0.1:${hermesPort}`,
         HERMES_API_KEY: hermesSecret,
         HERMES_CONNECTOR_RECONNECT_MS: "50",
@@ -111,9 +117,6 @@ async function main(): Promise<void> {
     await human.dms.sendMessage(dm.id, { body: "second question", nonce: "e2e-human-2" });
     await waitForBotDm(human, dm.id, created.bot.id, "Hermes reply 2");
 
-    const channels = await human.channels.list(workspace.id);
-    const channel = channels[0];
-    assert.ok(channel, "dev bootstrap did not create a channel");
     const root = await human.channels.sendMessage(channel.id, {
       body: "@hermes channel question",
       nonce: "e2e-human-channel",

@@ -130,7 +130,19 @@ test("bot reveal mints a setup code that regenerates after expiry", async ({ pag
   // regeneration mints a fresh code without leaving the panel.
   await page.clock.fastForward("11:00");
   await expect(page.getByText("That setup code expired", { exact: false })).toBeVisible();
+
+  let failNextMint = true;
+  await page.route(`**/api/workspaces/${workspace.id}/bots/*/setup-codes`, async (route) => {
+    if (failNextMint) {
+      failNextMint = false;
+      await route.fulfill({ status: 500, json: { error: "forced setup code failure" } });
+      return;
+    }
+    await route.continue();
+  });
   await page.getByRole("button", { name: "Generate new code" }).click();
+  await expect(page.getByRole("alert")).toContainText("forced setup code failure");
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect(snippet).toContainText("openclaw channels add clickclack --code");
   expect(await snippet.innerText()).not.toBe(firstCode);
   await expect(page.getByText("Expires in", { exact: false })).toBeVisible();

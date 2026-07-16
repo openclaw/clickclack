@@ -60,15 +60,22 @@
 
   async function mintSetupCode() {
     if (!codeSnippetBuilder || mintingCode) return;
+    const requestedAtMs = Date.now();
     mintingCode = true;
     codeError = "";
+    setupCode = null;
+    copied = copied === "code" ? null : copied;
     try {
-      setupCode = await createWorkspaceBotSetupCode(token.workspace_id, botUserID, {
+      const minted = await createWorkspaceBotSetupCode(token.workspace_id, botUserID, {
         name: token.name || "default",
         scopes: token.scopes,
       });
-      mintedAtMs = Date.now();
-      nowMs = mintedAtMs;
+      if (!minted.code) throw new Error("The server did not return a setup code. Try again.");
+      setupCode = minted;
+      // Starting at request dispatch is conservative: a slow response may make
+      // the UI expire early, but can never leave an already-expired code visible.
+      mintedAtMs = requestedAtMs;
+      nowMs = Date.now();
     } catch (err) {
       codeError = botLoadErrorMessage(err);
     } finally {

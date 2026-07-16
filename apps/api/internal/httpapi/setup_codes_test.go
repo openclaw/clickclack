@@ -240,15 +240,10 @@ func TestHTTPCreateBotWithoutInitialToken(t *testing.T) {
 	server, st, workspace, owner, _ := newSetupCodeTestServer(t)
 	ctx := context.Background()
 
-	// setup_nonce cannot be combined with initial_token:false.
-	expectStatusAsUser(t, owner.ID, http.MethodPost,
-		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
-		strings.NewReader(`{"display_name":"nonce bot","initial_token":false,"setup_nonce":"0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f"}`),
-		http.StatusBadRequest)
-
+	requestBody := `{"display_name":"codeless bot","initial_token":false,"setup_nonce":"0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f"}`
 	resp, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
-		strings.NewReader(`{"display_name":"codeless bot","initial_token":false}`))
+		strings.NewReader(requestBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +268,22 @@ func TestHTTPCreateBotWithoutInitialToken(t *testing.T) {
 	var bot store.User
 	if err := json.Unmarshal(created["bot"], &bot); err != nil {
 		t.Fatal(err)
+	}
+	replayed := postJSONAsUser[map[string]json.RawMessage](
+		t,
+		owner.ID,
+		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
+		json.RawMessage(requestBody),
+	)
+	var replayedBot store.User
+	if err := json.Unmarshal(replayed["bot"], &replayedBot); err != nil {
+		t.Fatal(err)
+	}
+	if replayedBot.ID != bot.ID {
+		t.Fatalf("expected retry to reuse bot %q, got %q", bot.ID, replayedBot.ID)
+	}
+	if _, ok := replayed["bot_token"]; ok {
+		t.Fatalf("expected replay to omit bot_token, got %s", replayed["bot_token"])
 	}
 
 	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)

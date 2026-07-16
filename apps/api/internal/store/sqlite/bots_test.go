@@ -227,27 +227,36 @@ func TestCreateBotWithoutInitialToken(t *testing.T) {
 	}
 	workspace := workspaces[0]
 
-	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
-		WorkspaceID:      workspace.ID,
-		DisplayName:      "Nonce Bot",
-		CreatedBy:        owner.ID,
-		SetupNonce:       "0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f",
-		SkipInitialToken: true,
-	}); err == nil || err.Error() != "setup_nonce requires an initial token" {
-		t.Fatalf("expected setup_nonce rejection with skipped token, got %v", err)
-	}
-
-	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+	input := store.CreateBotInput{
 		WorkspaceID:      workspace.ID,
 		DisplayName:      "Codeless Bot",
 		CreatedBy:        owner.ID,
+		SetupNonce:       "0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f",
 		SkipInitialToken: true,
-	})
+	}
+	bot, token, err := st.CreateBot(ctx, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if token.ID != "" || token.Token != "" {
 		t.Fatalf("expected no initial token, got %#v", token)
+	}
+	replayed, replayedToken, err := st.CreateBot(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.ID != bot.ID || replayedToken.ID != "" {
+		t.Fatalf("expected tokenless replay to reuse bot, got %#v / %#v", replayed, replayedToken)
+	}
+	conflicting := input
+	conflicting.DisplayName = "Different Bot"
+	if _, _, err := st.CreateBot(ctx, conflicting); !errors.Is(err, store.ErrSetupNonceConflict) {
+		t.Fatalf("expected changed tokenless replay to conflict, got %v", err)
+	}
+	conflicting = input
+	conflicting.SkipInitialToken = false
+	if _, _, err := st.CreateBot(ctx, conflicting); !errors.Is(err, store.ErrSetupNonceConflict) {
+		t.Fatalf("expected token mode reuse of tokenless nonce to conflict, got %v", err)
 	}
 	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
 	if err != nil {

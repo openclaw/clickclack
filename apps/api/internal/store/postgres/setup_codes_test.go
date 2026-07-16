@@ -35,6 +35,14 @@ func TestPostgresBotSetupCodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		Name:        "general",
+		Kind:        "public",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Setup Code Member", Email: "pg-setup-member-" + suffix + "@example.com"})
 	if err != nil {
 		t.Fatal(err)

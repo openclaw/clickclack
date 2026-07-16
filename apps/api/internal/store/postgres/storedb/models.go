@@ -68,6 +68,18 @@ type BotSetupCode struct {
 	ClaimedTokenID sql.NullString `json:"claimed_token_id"`
 }
 
+type BotSetupRequest struct {
+	CreatedBy   string         `json:"created_by"`
+	SetupNonce  string         `json:"setup_nonce"`
+	BotUserID   sql.NullString `json:"bot_user_id"`
+	WorkspaceID string         `json:"workspace_id"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+}
+
 type BotToken struct {
 	ID          string         `json:"id"`
 	TokenHash   string         `json:"token_hash"`

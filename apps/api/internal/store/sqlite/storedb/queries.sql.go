@@ -889,6 +889,36 @@ func (q *Queries) GetBotSetupCodeByHash(ctx context.Context, codeHash string) (B
 	return i, err
 }
 
+const getBotSetupRequest = `-- name: GetBotSetupRequest :one
+SELECT created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
+       display_name, handle, avatar_url, created_at
+FROM bot_setup_requests
+WHERE created_by = ?1
+  AND setup_nonce = ?2
+`
+
+type GetBotSetupRequestParams struct {
+	CreatedBy  string `json:"created_by"`
+	SetupNonce string `json:"setup_nonce"`
+}
+
+func (q *Queries) GetBotSetupRequest(ctx context.Context, arg GetBotSetupRequestParams) (BotSetupRequest, error) {
+	row := q.db.QueryRowContext(ctx, getBotSetupRequest, arg.CreatedBy, arg.SetupNonce)
+	var i BotSetupRequest
+	err := row.Scan(
+		&i.CreatedBy,
+		&i.SetupNonce,
+		&i.BotUserID,
+		&i.WorkspaceID,
+		&i.OwnerUserID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getBotTokenAuth = `-- name: GetBotTokenAuth :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
        bt.id AS token_id, bt.workspace_id, bt.scopes_json
@@ -1863,6 +1893,44 @@ func (q *Queries) InsertBotSetupCode(ctx context.Context, arg InsertBotSetupCode
 		arg.CreatedBy,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertBotSetupRequest = `-- name: InsertBotSetupRequest :exec
+INSERT INTO bot_setup_requests (
+  created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
+  display_name, handle, avatar_url, created_at
+) VALUES (
+  ?1, ?2, ?3,
+  ?4, ?5, ?6,
+  ?7, ?8, ?9
+)
+`
+
+type InsertBotSetupRequestParams struct {
+	CreatedBy   string         `json:"created_by"`
+	SetupNonce  string         `json:"setup_nonce"`
+	BotUserID   sql.NullString `json:"bot_user_id"`
+	WorkspaceID string         `json:"workspace_id"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+}
+
+func (q *Queries) InsertBotSetupRequest(ctx context.Context, arg InsertBotSetupRequestParams) error {
+	_, err := q.db.ExecContext(ctx, insertBotSetupRequest,
+		arg.CreatedBy,
+		arg.SetupNonce,
+		arg.BotUserID,
+		arg.WorkspaceID,
+		arg.OwnerUserID,
+		arg.DisplayName,
+		arg.Handle,
+		arg.AvatarUrl,
+		arg.CreatedAt,
 	)
 	return err
 }

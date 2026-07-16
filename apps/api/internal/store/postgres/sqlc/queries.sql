@@ -498,6 +498,24 @@ VALUES (sqlc.arg(id), 'bot', sqlc.arg(owner_user_id), sqlc.arg(display_name), sq
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, setup_nonce, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(token_hash), sqlc.arg(bot_user_id), sqlc.arg(workspace_id), sqlc.arg(owner_user_id), sqlc.arg(name), sqlc.arg(scopes_json), sqlc.arg(created_by), sqlc.arg(setup_nonce), sqlc.arg(created_at));
 
+-- name: InsertBotSetupRequest :exec
+INSERT INTO bot_setup_requests (
+  created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
+  display_name, handle, avatar_url, created_at
+) VALUES (
+  sqlc.arg(created_by), sqlc.arg(setup_nonce), sqlc.arg(bot_user_id),
+  sqlc.arg(workspace_id), sqlc.arg(owner_user_id), sqlc.arg(display_name),
+  sqlc.arg(handle), sqlc.arg(avatar_url), sqlc.arg(created_at)
+);
+
+-- name: GetBotSetupRequest :one
+SELECT created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
+       display_name, handle, avatar_url, created_at
+FROM bot_setup_requests
+WHERE created_by = sqlc.arg(created_by)
+  AND setup_nonce = sqlc.arg(setup_nonce)
+FOR UPDATE;
+
 -- name: ListWorkspaceBots :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id,
        u.display_name, u.handle, u.avatar_url, u.created_at

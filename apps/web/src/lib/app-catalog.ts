@@ -6,6 +6,7 @@
 // setup snippet. Adding support for a new agent platform means adding
 // one manifest here — no core changes.
 import {
+  buildOpenClawCodeSnippet,
   buildOpenClawConfigSnippet,
   buildOpenClawShellSnippet,
   type BotScopeBundle,
@@ -34,6 +35,8 @@ export type AppSnippetInput = {
   defaultTo?: string;
   allowFrom?: string[];
   agentActivity?: boolean;
+  // One-time setup code, set when rendering the code-based connect snippet.
+  setupCode?: string;
 };
 
 export type AppManifest = {
@@ -49,6 +52,8 @@ export type AppManifest = {
   // null → no platform snippet (generic install; the token reveal is enough).
   buildConfigSnippet: ((input: AppSnippetInput) => string) | null;
   buildShellSnippet: ((input: AppSnippetInput) => string) | null;
+  // Setup-code one-liner (input.setupCode set). null → no code-based connect.
+  buildCodeSnippet: ((input: AppSnippetInput) => string) | null;
 };
 
 export const APP_CATALOG: AppManifest[] = [
@@ -100,6 +105,12 @@ export const APP_CATALOG: AppManifest[] = [
         mode: input.mode,
         workspace: input.workspace,
       }),
+    buildCodeSnippet: (input) =>
+      buildOpenClawCodeSnippet({
+        code: input.setupCode ?? "",
+        botHandle: input.botHandle,
+        mode: input.mode,
+      }),
   },
   {
     slug: "custom",
@@ -115,6 +126,7 @@ export const APP_CATALOG: AppManifest[] = [
     configFields: [],
     buildConfigSnippet: null,
     buildShellSnippet: null,
+    buildCodeSnippet: null,
   },
 ];
 
@@ -137,6 +149,7 @@ export function manifestForInstallation(appSlug: string): AppManifest {
       configFields: [],
       buildConfigSnippet: null,
       buildShellSnippet: null,
+      buildCodeSnippet: null,
     }
   );
 }

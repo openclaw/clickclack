@@ -644,6 +644,7 @@
       agentActivity={hasConfigStep ? agentActivity : undefined}
       configSnippetBuilder={manifest.buildConfigSnippet}
       shellSnippetBuilder={manifest.buildShellSnippet}
+      codeSnippetBuilder={manifest.buildCodeSnippet}
       onDismiss={onClose}
     />
   {/if}

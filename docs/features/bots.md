@@ -282,10 +282,13 @@ exists per install. Choosing the recommended setup code creates the bot with
 `initial_token: false` and the reveal panel shows only the one-liner
 `openclaw channels add clickclack --code "https://server/#XXXX-XXXX-XXXX"`
 with a countdown and one-click regeneration after expiry — the token is
-minted when the code is claimed. Choosing the manual token mints the raw
-token immediately and no setup code is created. If a code expires unclaimed,
-the bot row's "New setup code" action mints a fresh one without recreating
-the bot.
+minted when the code is claimed. Codes created by the Integrations wizard
+also carry its selected `defaultTo`, `allowFrom`, and `agentActivity` values
+so the claiming client can write the same configuration. Generic codes fall
+back to the workspace's active default channel when no `defaultTo` was
+captured. Choosing the manual token mints the raw token immediately and no
+setup code is created. If a code expires unclaimed, the bot row's "New setup
+code" action mints a fresh one without recreating the bot.
 
 ## Command Menus
 

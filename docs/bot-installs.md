@@ -136,8 +136,9 @@ openclaw channels add clickclack --code "https://app.clickclack.chat/#XXXX-XXXX-
 ```
 
 OpenClaw claims the short-lived code, receives the new bot token directly, and
-writes the account configuration. The token does not pass through the
-clipboard or shell history.
+writes the account configuration selected in the ClickClack wizard, including
+the default channel, sender allowlist, and agent-activity setting. The token
+does not pass through the clipboard or shell history.
 
 A running OpenClaw gateway picks up the new account automatically (the
 ClickClack extension hot-reloads on `channels.clickclack` changes). If the

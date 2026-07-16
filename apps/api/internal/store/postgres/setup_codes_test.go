@@ -338,3 +338,83 @@ func TestPostgresWorkspaceDeletionUsesUserBotLifecycleLock(t *testing.T) {
 		t.Fatalf("workspace deletion left its user-owned bot setup code claimable: %v", err)
 	}
 }
+
+func TestPostgresCreateBotWithoutInitialToken(t *testing.T) {
+	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set CLICKCLACK_POSTGRES_TEST_DSN to run Postgres integration smoke")
+	}
+	ctx := context.Background()
+	st, err := Open(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	suffix := time.Now().UTC().Format("20060102150405.000000000")
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Skip Token Owner", Email: "pg-skip-owner-" + suffix + "@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Skip Token " + suffix}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID:      workspace.ID,
+		DisplayName:      "Nonce Bot",
+		CreatedBy:        owner.ID,
+		SetupNonce:       "0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f",
+		SkipInitialToken: true,
+	}); err == nil || err.Error() != "setup_nonce requires an initial token" {
+		t.Fatalf("expected setup_nonce rejection with skipped token, got %v", err)
+	}
+
+	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID:      workspace.ID,
+		DisplayName:      "Codeless Bot",
+		CreatedBy:        owner.ID,
+		SkipInitialToken: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token.ID != "" || token.Token != "" {
+		t.Fatalf("expected no initial token, got %#v", token)
+	}
+	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("expected zero tokens for bot, got %d", len(tokens))
+	}
+
+	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "gateway",
+		Scopes:      []string{"messages:write"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := st.ClaimBotSetupCode(ctx, setup.Code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claim.Bot.ID != bot.ID {
+		t.Fatalf("claim bot mismatch: %#v", claim.Bot)
+	}
+	tokens, err = st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected exactly one token after claim, got %d", len(tokens))
+	}
+}

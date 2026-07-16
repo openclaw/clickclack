@@ -211,3 +211,75 @@ func listedBotTokenCount(bots []store.BotWithTokens, botUserID string) int {
 	}
 	return -1
 }
+
+func TestCreateBotWithoutInitialToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+
+	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID:      workspace.ID,
+		DisplayName:      "Nonce Bot",
+		CreatedBy:        owner.ID,
+		SetupNonce:       "0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f",
+		SkipInitialToken: true,
+	}); err == nil || err.Error() != "setup_nonce requires an initial token" {
+		t.Fatalf("expected setup_nonce rejection with skipped token, got %v", err)
+	}
+
+	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID:      workspace.ID,
+		DisplayName:      "Codeless Bot",
+		CreatedBy:        owner.ID,
+		SkipInitialToken: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token.ID != "" || token.Token != "" {
+		t.Fatalf("expected no initial token, got %#v", token)
+	}
+	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("expected zero tokens for bot, got %d", len(tokens))
+	}
+
+	// The zero-credential bot gains its first token through a setup code claim.
+	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "gateway",
+		Scopes:      []string{"messages:write"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := st.ClaimBotSetupCode(ctx, setup.Code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claim.Bot.ID != bot.ID {
+		t.Fatalf("claim bot mismatch: %#v", claim.Bot)
+	}
+	tokens, err = st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected exactly one token after claim, got %d", len(tokens))
+	}
+}

@@ -117,6 +117,9 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
+	if input.SkipInitialToken && setupNonce != "" {
+		return store.User{}, store.BotToken{}, errors.New("setup_nonce requires an initial token")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
@@ -198,6 +201,9 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		CreatedAt:   bot.CreatedAt,
 	}); err != nil {
 		return store.User{}, store.BotToken{}, err
+	}
+	if input.SkipInitialToken {
+		return bot, store.BotToken{}, tx.Commit()
 	}
 	token := newID("ccb")
 	scopesJSON, err := json.Marshal(scopes)

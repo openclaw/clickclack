@@ -296,6 +296,9 @@ type CreateBotInput struct {
 	Scopes      []string
 	SetupNonce  string
 	CreatedBy   string
+	// SkipInitialToken creates the bot without minting a token, for
+	// installs that hand credentials over via a setup code instead.
+	SkipInitialToken bool
 }
 
 type BotToken struct {

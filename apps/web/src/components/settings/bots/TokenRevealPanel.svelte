@@ -89,6 +89,11 @@
       const minted = await createWorkspaceBotSetupCode(mintWorkspaceID, botUserID, {
         name: tokenName ?? token?.name ?? "default",
         scopes: scopes ?? token?.scopes,
+        defaults: {
+          defaultTo,
+          allowFrom,
+          agentActivity,
+        },
       });
       if (!minted.code) throw new Error("The server did not return a setup code. Try again.");
       setupCode = minted;

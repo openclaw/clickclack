@@ -84,12 +84,19 @@ export type BotSetupCode = {
   workspace_id: string;
   token_name: string;
   scopes: string[];
+  defaults: BotSetupCodeDefaults;
   created_by?: string;
   created_at: string;
   expires_at: string;
   // One-time plaintext code (XXXX-XXXX-XXXX). Present only in the mint
   // response; the server stores just a hash.
   code?: string;
+};
+
+export type BotSetupCodeDefaults = {
+  defaultTo?: string;
+  allowFrom?: string[];
+  agentActivity?: boolean;
 };
 
 export async function listWorkspaceBots(workspaceID: string): Promise<BotWithTokens[]> {
@@ -135,7 +142,7 @@ export async function createWorkspaceBotToken(
 export async function createWorkspaceBotSetupCode(
   workspaceID: string,
   botUserID: string,
-  input: { name?: string; scopes?: string[] },
+  input: { name?: string; scopes?: string[]; defaults?: BotSetupCodeDefaults },
 ): Promise<BotSetupCode> {
   const data = await api<{ setup_code: BotSetupCode }>(
     `/api/workspaces/${workspaceID}/bots/${botUserID}/setup-codes`,

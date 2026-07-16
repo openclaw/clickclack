@@ -158,9 +158,6 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
-	if input.SkipInitialToken && setupNonce != "" {
-		return store.User{}, store.BotToken{}, errors.New("setup_nonce requires an initial token")
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
@@ -196,26 +193,56 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		}
 	}
 	if setupNonce != "" {
-		replayBot, replayToken, replayErr := getSetupBotTokenTx(ctx, tx, createdBy, setupNonce)
-		if replayErr == nil {
-			if replayToken.WorkspaceID != workspaceID ||
-				replayToken.Name != tokenName ||
-				!botSetupScopesMatch(input.Scopes, replayToken.Scopes, scopes) ||
-				replayToken.RevokedAt != nil ||
-				replayBot.OwnerUserID != ownerUserID ||
-				replayBot.DisplayName != displayName ||
-				replayBot.Handle != handle ||
-				replayBot.AvatarURL != avatarURL {
+		if input.SkipInitialToken {
+			replayBot, replayErr := getTokenlessBotSetupTx(ctx, tx, qtx, createdBy, setupNonce)
+			if replayErr == nil {
+				if replayBot.WorkspaceID != workspaceID ||
+					replayBot.Bot.OwnerUserID != ownerUserID ||
+					replayBot.Bot.DisplayName != displayName ||
+					replayBot.Bot.Handle != handle ||
+					replayBot.Bot.AvatarURL != avatarURL {
+					return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
+				}
+				return replayBot.Bot, store.BotToken{}, tx.Commit()
+			}
+			if !errors.Is(replayErr, sql.ErrNoRows) {
+				return store.User{}, store.BotToken{}, replayErr
+			}
+			if _, _, tokenErr := getSetupBotTokenTx(ctx, tx, createdBy, setupNonce); tokenErr == nil {
 				return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
+			} else if !errors.Is(tokenErr, sql.ErrNoRows) {
+				return store.User{}, store.BotToken{}, tokenErr
 			}
-			replayToken, err = rotateSetupBotTokenTx(ctx, tx, replayToken)
-			if err != nil {
-				return store.User{}, store.BotToken{}, err
+		} else {
+			replayBot, replayToken, replayErr := getSetupBotTokenTx(ctx, tx, createdBy, setupNonce)
+			if replayErr == nil {
+				if replayToken.WorkspaceID != workspaceID ||
+					replayToken.Name != tokenName ||
+					!botSetupScopesMatch(input.Scopes, replayToken.Scopes, scopes) ||
+					replayToken.RevokedAt != nil ||
+					replayBot.OwnerUserID != ownerUserID ||
+					replayBot.DisplayName != displayName ||
+					replayBot.Handle != handle ||
+					replayBot.AvatarURL != avatarURL {
+					return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
+				}
+				replayToken, err = rotateSetupBotTokenTx(ctx, tx, replayToken)
+				if err != nil {
+					return store.User{}, store.BotToken{}, err
+				}
+				return replayBot, replayToken, tx.Commit()
 			}
-			return replayBot, replayToken, tx.Commit()
-		}
-		if !errors.Is(replayErr, sql.ErrNoRows) {
-			return store.User{}, store.BotToken{}, replayErr
+			if !errors.Is(replayErr, sql.ErrNoRows) {
+				return store.User{}, store.BotToken{}, replayErr
+			}
+			if _, requestErr := qtx.GetBotSetupRequest(ctx, storedb.GetBotSetupRequestParams{
+				CreatedBy:  createdBy,
+				SetupNonce: setupNonce,
+			}); requestErr == nil {
+				return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
+			} else if !errors.Is(requestErr, sql.ErrNoRows) {
+				return store.User{}, store.BotToken{}, requestErr
+			}
 		}
 	}
 	bot := store.User{
@@ -249,6 +276,21 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		return store.User{}, store.BotToken{}, err
 	}
 	if input.SkipInitialToken {
+		if setupNonce != "" {
+			if err := qtx.InsertBotSetupRequest(ctx, storedb.InsertBotSetupRequestParams{
+				CreatedBy:   createdBy,
+				SetupNonce:  setupNonce,
+				BotUserID:   sqlText(bot.ID),
+				WorkspaceID: workspaceID,
+				OwnerUserID: sqlOptionalText(ownerUserID),
+				DisplayName: displayName,
+				Handle:      handle,
+				AvatarUrl:   avatarURL,
+				CreatedAt:   bot.CreatedAt,
+			}); err != nil {
+				return store.User{}, store.BotToken{}, err
+			}
+		}
 		return bot, store.BotToken{}, tx.Commit()
 	}
 	token := newID("ccb")
@@ -1008,6 +1050,50 @@ func getSetupBotTokenTx(ctx context.Context, tx *sql.Tx, createdBy, setupNonce s
 		token.BotUserID,
 	))
 	return bot, token, err
+}
+
+type tokenlessBotSetupReplay struct {
+	Bot         store.User
+	WorkspaceID string
+}
+
+func getTokenlessBotSetupTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	qtx *storedb.Queries,
+	createdBy, setupNonce string,
+) (tokenlessBotSetupReplay, error) {
+	request, err := qtx.GetBotSetupRequest(ctx, storedb.GetBotSetupRequestParams{
+		CreatedBy:  createdBy,
+		SetupNonce: setupNonce,
+	})
+	if err != nil {
+		return tokenlessBotSetupReplay{}, err
+	}
+	if !request.BotUserID.Valid {
+		return tokenlessBotSetupReplay{}, store.ErrSetupNonceConflict
+	}
+	bot, err := scanUser(tx.QueryRowContext(
+		ctx,
+		`SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		 FROM users u
+		 WHERE u.id = $1
+		   AND NOT EXISTS (SELECT 1 FROM bot_tombstones WHERE bot_user_id = u.id)
+		 FOR UPDATE`,
+		request.BotUserID.String,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return tokenlessBotSetupReplay{}, store.ErrSetupNonceConflict
+	}
+	if err != nil {
+		return tokenlessBotSetupReplay{}, err
+	}
+	if _, err := botWorkspaceForTokenTx(ctx, tx, bot.ID, request.WorkspaceID); errors.Is(err, sql.ErrNoRows) {
+		return tokenlessBotSetupReplay{}, store.ErrSetupNonceConflict
+	} else if err != nil {
+		return tokenlessBotSetupReplay{}, err
+	}
+	return tokenlessBotSetupReplay{Bot: bot, WorkspaceID: request.WorkspaceID}, nil
 }
 
 func rotateSetupBotTokenTx(ctx context.Context, tx *sql.Tx, token store.BotToken) (store.BotToken, error) {

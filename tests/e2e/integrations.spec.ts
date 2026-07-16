@@ -51,7 +51,20 @@ test("installs an OpenClaw app through the wizard and uninstalls with cascade", 
   // Config step: default channel + agent activity opt-in.
   await expect(page.getByText("Default channel")).toBeVisible();
   await page.getByText("Stream agent activity").click();
+  const setupCodeRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().includes(`/api/workspaces/${workspace.id}/bots/`) &&
+      request.url().endsWith("/setup-codes"),
+  );
   await page.getByRole("button", { name: "Install", exact: true }).click();
+  expect((await setupCodeRequest).postDataJSON()).toMatchObject({
+    defaults: {
+      defaultTo: "channel:general",
+      allowFrom: ["*"],
+      agentActivity: true,
+    },
+  });
 
   // Reveal (code mode): only the setup-code one-liner — no raw token exists.
   await expect(page.getByText("Your bot is ready to connect")).toBeVisible();

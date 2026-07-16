@@ -540,6 +540,7 @@ CREATE TABLE bot_setup_codes (
   bot_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_name TEXT NOT NULL,
   scopes_json TEXT NOT NULL,
+  defaults_json TEXT NOT NULL DEFAULT '{}',
   created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,

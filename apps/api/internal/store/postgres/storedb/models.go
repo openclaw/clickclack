@@ -61,6 +61,7 @@ type BotSetupCode struct {
 	BotUserID      string         `json:"bot_user_id"`
 	TokenName      string         `json:"token_name"`
 	ScopesJson     string         `json:"scopes_json"`
+	DefaultsJson   string         `json:"defaults_json"`
 	CreatedBy      sql.NullString `json:"created_by"`
 	CreatedAt      string         `json:"created_at"`
 	ExpiresAt      string         `json:"expires_at"`

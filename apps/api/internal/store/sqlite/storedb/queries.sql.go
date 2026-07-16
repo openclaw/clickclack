@@ -865,7 +865,7 @@ func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string)
 }
 
 const getBotSetupCodeByHash = `-- name: GetBotSetupCodeByHash :one
-SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, defaults_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes
 WHERE code_hash = ?1
 `
@@ -880,6 +880,7 @@ func (q *Queries) GetBotSetupCodeByHash(ctx context.Context, codeHash string) (B
 		&i.BotUserID,
 		&i.TokenName,
 		&i.ScopesJson,
+		&i.DefaultsJson,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.ExpiresAt,
@@ -1866,20 +1867,21 @@ func (q *Queries) InsertBotCommand(ctx context.Context, arg InsertBotCommandPara
 }
 
 const insertBotSetupCode = `-- name: InsertBotSetupCode :exec
-INSERT INTO bot_setup_codes (id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+INSERT INTO bot_setup_codes (id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, defaults_json, created_by, created_at, expires_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 `
 
 type InsertBotSetupCodeParams struct {
-	ID          string         `json:"id"`
-	CodeHash    string         `json:"code_hash"`
-	WorkspaceID string         `json:"workspace_id"`
-	BotUserID   string         `json:"bot_user_id"`
-	TokenName   string         `json:"token_name"`
-	ScopesJson  string         `json:"scopes_json"`
-	CreatedBy   sql.NullString `json:"created_by"`
-	CreatedAt   string         `json:"created_at"`
-	ExpiresAt   string         `json:"expires_at"`
+	ID           string         `json:"id"`
+	CodeHash     string         `json:"code_hash"`
+	WorkspaceID  string         `json:"workspace_id"`
+	BotUserID    string         `json:"bot_user_id"`
+	TokenName    string         `json:"token_name"`
+	ScopesJson   string         `json:"scopes_json"`
+	DefaultsJson string         `json:"defaults_json"`
+	CreatedBy    sql.NullString `json:"created_by"`
+	CreatedAt    string         `json:"created_at"`
+	ExpiresAt    string         `json:"expires_at"`
 }
 
 func (q *Queries) InsertBotSetupCode(ctx context.Context, arg InsertBotSetupCodeParams) error {
@@ -1890,6 +1892,7 @@ func (q *Queries) InsertBotSetupCode(ctx context.Context, arg InsertBotSetupCode
 		arg.BotUserID,
 		arg.TokenName,
 		arg.ScopesJson,
+		arg.DefaultsJson,
 		arg.CreatedBy,
 		arg.CreatedAt,
 		arg.ExpiresAt,

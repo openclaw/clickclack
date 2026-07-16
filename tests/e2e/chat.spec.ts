@@ -447,7 +447,6 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const me = (await meResponse.json()) as { user: { id: string } };
   const notificationStorageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
   await page.addInitScript((storageKey) => {
-    localStorage.setItem("clickclack:message-layout:v1", "outlined");
     type CapturedNotification = { title: string; close: () => void };
     const target = window as unknown as {
       __clickclackNotifications: CapturedNotification[];
@@ -566,6 +565,12 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preambleItems.nth(2)).toContainText("Commentary after the first tool");
   await expect(preambleItems.nth(3)).toContainText("read");
 
+  await page.evaluate(() => {
+    localStorage.setItem("clickclack:message-layout:v1", "outlined");
+    document.documentElement.setAttribute("data-message-layout", "outlined");
+  });
+  await expect(page.locator("html")).toHaveAttribute("data-message-layout", "outlined");
+
   const chainAnswer = page.locator(".message-row.after-preamble", {
     has: page.getByText("Deployment boundary is healthy.", { exact: true }),
   });
@@ -597,6 +602,12 @@ test("coalesces durable agent activity and applies activity preferences", async 
   });
   expect(chainRadii.topLeft).toBe(0);
   expect(chainRadii.bottomLeft).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    localStorage.removeItem("clickclack:message-layout:v1");
+    document.documentElement.removeAttribute("data-message-layout");
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
 
   // A live turn is one synthetic row anchored at its first activity message.
   // Later same-turn rows grow that existing virtual item without changing the

@@ -1243,11 +1243,8 @@ export interface components {
       scopes?: string[];
       /** @description Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token. */
       setup_nonce?: string;
-      /**
-       * @description Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.
-       * @default true
-       */
-      initial_token: boolean;
+      /** @description Optional and true when omitted. Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time. */
+      initial_token?: boolean;
     };
     CreateBotTokenRequest: {
       name?: string;

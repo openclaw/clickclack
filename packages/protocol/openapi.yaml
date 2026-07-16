@@ -1904,8 +1904,7 @@ components:
           description: Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token.
         initial_token:
           type: boolean
-          default: true
-          description: Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.
+          description: Optional and true when omitted. Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.
     CreateBotTokenRequest:
       type: object
       properties:
@@ -2016,6 +2015,7 @@ components:
       properties:
         defaultTo:
           type: string
+          maxLength: 256
           description: OpenClaw outbound target captured at mint time, such as channel:general. When omitted, claim falls back to the workspace's active default channel.
         allowFrom:
           type: array

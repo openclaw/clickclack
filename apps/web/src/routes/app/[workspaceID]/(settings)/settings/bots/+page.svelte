@@ -247,24 +247,26 @@
   {/if}
 
   {#if revealed && me}
-    <TokenRevealPanel
-      connect={revealed.connect}
-      token={revealed.token}
-      workspaceID={workspaceID}
-      tokenName={revealed.tokenName}
-      scopes={revealed.scopes}
-      botHandle={revealed.bot.handle}
-      botUserID={revealed.bot.id}
-      workspace={workspaceIdentifier}
-      onDismiss={() => {
-        const botID = revealed?.bot.id;
-        const wasCode = revealed?.connect === "code";
-        revealed = null;
-        // A claimed code mints a token in the background; refresh so the
-        // row's token count reflects reality.
-        if (wasCode && botID) void refreshOneBotTokens(botID);
-      }}
-    />
+    {#key revealed}
+      <TokenRevealPanel
+        connect={revealed.connect}
+        token={revealed.token}
+        workspaceID={workspaceID}
+        tokenName={revealed.tokenName}
+        scopes={revealed.scopes}
+        botHandle={revealed.bot.handle}
+        botUserID={revealed.bot.id}
+        workspace={workspaceIdentifier}
+        onDismiss={() => {
+          const botID = revealed?.bot.id;
+          const wasCode = revealed?.connect === "code";
+          revealed = null;
+          // A claimed code mints a token in the background; refresh so the
+          // row's token count reflects reality.
+          if (wasCode && botID) void refreshOneBotTokens(botID);
+        }}
+      />
+    {/key}
   {/if}
 
   {#if showCreate && me}

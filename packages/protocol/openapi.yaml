@@ -1834,12 +1834,13 @@ components:
             $ref: "#/components/schemas/WorkspaceBotCommand"
     CreateBotResponse:
       type: object
-      required: [bot, bot_token]
+      required: [bot]
       properties:
         bot:
           $ref: "#/components/schemas/User"
         bot_token:
           $ref: "#/components/schemas/BotToken"
+          description: Omitted when the request set initial_token=false.
     BotTokenResponse:
       type: object
       required: [bot_token]
@@ -1899,7 +1900,11 @@ components:
           type: string
           minLength: 16
           maxLength: 128
-          description: Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token.
+          description: Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. Cannot be combined with initial_token=false.
+        initial_token:
+          type: boolean
+          default: true
+          description: Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.
     CreateBotTokenRequest:
       type: object
       properties:

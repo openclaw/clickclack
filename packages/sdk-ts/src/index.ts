@@ -572,8 +572,9 @@ export class ClickClackClient {
         token_name?: string;
         scopes?: string[];
         setup_nonce?: string;
+        initial_token?: boolean;
       },
-    ): Promise<{ bot: User; bot_token: BotToken }> => {
+    ): Promise<{ bot: User; bot_token?: BotToken }> => {
       return this.request(`/api/workspaces/${workspaceId}/bots`, {
         method: "POST",
         body: JSON.stringify(input),

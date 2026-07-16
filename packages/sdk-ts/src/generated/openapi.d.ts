@@ -1214,7 +1214,8 @@ export interface components {
     };
     CreateBotResponse: {
       bot: components["schemas"]["User"];
-      bot_token: components["schemas"]["BotToken"];
+      /** @description Omitted when the request set initial_token=false. */
+      bot_token?: components["schemas"]["BotToken"];
     };
     BotTokenResponse: {
       bot_token: components["schemas"]["BotToken"];
@@ -1240,8 +1241,13 @@ export interface components {
       avatar_url?: string;
       token_name?: string;
       scopes?: string[];
-      /** @description Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. */
+      /** @description Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. Cannot be combined with initial_token=false. */
       setup_nonce?: string;
+      /**
+       * @description Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.
+       * @default true
+       */
+      initial_token: boolean;
     };
     CreateBotTokenRequest: {
       name?: string;

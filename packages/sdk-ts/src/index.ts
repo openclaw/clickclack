@@ -44,11 +44,18 @@ export type BotSetupCode = {
   workspace_id: string;
   token_name: string;
   scopes: string[];
+  defaults: BotSetupCodeDefaults;
   created_by?: string;
   created_at: string;
   expires_at: string;
   /** One-time plaintext setup code. Present only in the mint response. */
   code?: string;
+};
+
+export type BotSetupCodeDefaults = {
+  defaultTo?: string;
+  allowFrom?: string[];
+  agentActivity?: boolean;
 };
 
 export type BotSetupCodeClaim = {
@@ -64,9 +71,7 @@ export type BotSetupCodeClaim = {
     slug: string;
     name: string;
   };
-  defaults: {
-    defaultTo?: string;
-  };
+  defaults: BotSetupCodeDefaults;
 };
 
 export type BotCommandInput = {
@@ -638,7 +643,7 @@ export class ClickClackClient {
     createSetupCode: async (
       workspaceId: string,
       botUserId: string,
-      input: { name?: string; scopes?: string[] } = {},
+      input: { name?: string; scopes?: string[]; defaults?: BotSetupCodeDefaults } = {},
     ): Promise<BotSetupCode> => {
       const data = await this.request<{ setup_code: BotSetupCode }>(
         `/api/workspaces/${workspaceId}/bots/${botUserId}/setup-codes`,

@@ -1260,6 +1260,7 @@ export interface components {
       name?: string;
       /** @description Scopes captured and validated at mint time. */
       scopes?: string[];
+      defaults?: components["schemas"]["BotSetupCodeClaimDefaults"];
     };
     BotSetupCode: {
       id: string;
@@ -1267,6 +1268,7 @@ export interface components {
       workspace_id: string;
       token_name: string;
       scopes: string[];
+      defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
       created_by?: string;
       /** Format: date-time */
       created_at: string;
@@ -1301,8 +1303,12 @@ export interface components {
       name: string;
     };
     BotSetupCodeClaimDefaults: {
-      /** @description Suggested OpenClaw outbound target, such as channel:general. Omitted when the workspace has no active channels. */
+      /** @description OpenClaw outbound target captured at mint time, such as channel:general. When omitted, claim falls back to the workspace's active default channel. */
       defaultTo?: string;
+      /** @description OpenClaw inbound sender allowlist captured at mint time. */
+      allowFrom?: string[];
+      /** @description Whether OpenClaw agent activity streaming should be enabled. True requires the agent_activity:write scope. */
+      agentActivity?: boolean;
     };
     AppInstallation: {
       id: string;

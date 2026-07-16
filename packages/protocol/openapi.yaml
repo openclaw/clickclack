@@ -1931,9 +1931,12 @@ components:
           items:
             type: string
           description: Scopes captured and validated at mint time.
+        defaults:
+          $ref: "#/components/schemas/BotSetupCodeClaimDefaults"
     BotSetupCode:
       type: object
-      required: [id, bot_user_id, workspace_id, token_name, scopes, created_at, expires_at]
+      required:
+        [id, bot_user_id, workspace_id, token_name, scopes, defaults, created_at, expires_at]
       properties:
         id:
           type: string
@@ -1947,6 +1950,8 @@ components:
           type: array
           items:
             type: string
+        defaults:
+          $ref: "#/components/schemas/BotSetupCodeClaimDefaults"
         created_by:
           type: string
         created_at:
@@ -2011,7 +2016,17 @@ components:
       properties:
         defaultTo:
           type: string
-          description: Suggested OpenClaw outbound target, such as channel:general. Omitted when the workspace has no active channels.
+          description: OpenClaw outbound target captured at mint time, such as channel:general. When omitted, claim falls back to the workspace's active default channel.
+        allowFrom:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            maxLength: 256
+          description: OpenClaw inbound sender allowlist captured at mint time.
+        agentActivity:
+          type: boolean
+          description: Whether OpenClaw agent activity streaming should be enabled. True requires the agent_activity:write scope.
     AppInstallation:
       type: object
       required: [id, workspace_id, app_slug, display_name, bot_user_id, config, created_at]

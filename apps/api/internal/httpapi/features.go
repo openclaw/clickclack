@@ -818,8 +818,9 @@ func (s *Server) createWorkspaceBotSetupCode(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var body struct {
-		Name   string   `json:"name"`
-		Scopes []string `json:"scopes"`
+		Name     string                     `json:"name"`
+		Scopes   []string                   `json:"scopes"`
+		Defaults store.BotSetupCodeDefaults `json:"defaults"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -830,6 +831,7 @@ func (s *Server) createWorkspaceBotSetupCode(w http.ResponseWriter, r *http.Requ
 		BotUserID:   chi.URLParam(r, "bot_user_id"),
 		Name:        body.Name,
 		Scopes:      body.Scopes,
+		Defaults:    body.Defaults,
 		CreatedBy:   act.user.ID,
 	})
 	if err == nil {

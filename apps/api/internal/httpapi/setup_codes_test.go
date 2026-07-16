@@ -69,7 +69,12 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 		SetupCode store.BotSetupCode `json:"setup_code"`
 	}](t, owner.ID, mintURL, map[string]any{
 		"name":   "gateway",
-		"scopes": []string{"bot:write"},
+		"scopes": []string{"bot:write", store.AgentActivityWriteScope},
+		"defaults": map[string]any{
+			"defaultTo":     "channel:ops",
+			"allowFrom":     []string{"usr_member", "*"},
+			"agentActivity": true,
+		},
 	})
 	if minted.SetupCode.Code == "" || strings.Count(minted.SetupCode.Code, "-") != 2 {
 		t.Fatalf("expected plaintext code in mint response, got %#v", minted.SetupCode)
@@ -116,7 +121,9 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 			Name    string `json:"name"`
 		} `json:"workspace"`
 		Defaults struct {
-			DefaultTo string `json:"defaultTo"`
+			DefaultTo     string   `json:"defaultTo"`
+			AllowFrom     []string `json:"allowFrom"`
+			AgentActivity bool     `json:"agentActivity"`
 		} `json:"defaults"`
 	}
 	encodedClaim, err := json.Marshal(rawClaim)
@@ -132,8 +139,10 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 	if claim.Bot.ID != bot.Bot.ID || claim.Workspace.ID != workspace.ID || claim.Workspace.RouteID == "" {
 		t.Fatalf("unexpected claim context: %#v", claim)
 	}
-	if claim.Defaults.DefaultTo != "channel:general" {
-		t.Fatalf("expected default channel suggestion, got %#v", claim.Defaults)
+	if claim.Defaults.DefaultTo != "channel:ops" ||
+		len(claim.Defaults.AllowFrom) != 2 ||
+		!claim.Defaults.AgentActivity {
+		t.Fatalf("expected captured setup defaults, got %#v", claim.Defaults)
 	}
 
 	auditLog := getJSONAsUser[struct {

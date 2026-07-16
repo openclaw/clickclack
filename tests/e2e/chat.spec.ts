@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
+  buildOpenClawCodeSnippet,
   buildOpenClawConfigSnippet,
   buildOpenClawShellSnippet,
   openClawWorkspaceIdentifier,
@@ -256,6 +257,26 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
   });
   expect(namedShell).toContain("--account 'release-bot'");
   expect(namedShell).toContain("--base-url 'https://chat.example.com'");
+
+  const codeSnippet = buildOpenClawCodeSnippet({
+    code: "AB2C-DE3F-GH4J",
+    botHandle: "release-bot",
+    mode: "single",
+    baseURL: "https://chat.example.com/",
+  });
+  expect(codeSnippet).toBe(
+    "openclaw channels add clickclack --code 'https://chat.example.com/#AB2C-DE3F-GH4J'",
+  );
+
+  const namedCodeSnippet = buildOpenClawCodeSnippet({
+    code: "AB2C-DE3F-GH4J",
+    botHandle: "@release-bot",
+    mode: "named",
+    baseURL: "https://chat.example.com",
+  });
+  expect(namedCodeSnippet).toContain("--account 'release-bot'");
+  expect(namedCodeSnippet).toContain("--code 'https://chat.example.com/#AB2C-DE3F-GH4J'");
+  expect(namedCodeSnippet).not.toContain("--token");
 });
 
 test("channels can be reordered accessibly and persist locally", async ({ page, browser }) => {

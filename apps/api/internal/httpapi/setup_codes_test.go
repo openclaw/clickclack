@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -187,4 +188,49 @@ func TestHTTPBotSetupCodeClaimRateLimit(t *testing.T) {
 		expectStatus(t, http.MethodPost, claimURL, strings.NewReader(`{"code":"AAAA-BBBB-CCCC"}`), http.StatusNotFound)
 	}
 	expectStatus(t, http.MethodPost, claimURL, strings.NewReader(`{"code":"AAAA-BBBB-CCCC"}`), http.StatusTooManyRequests)
+}
+
+func TestSetupCodeClaimLimiterBoundsStateAndResets(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	limiter := newSlidingWindowLimiter(2, time.Minute)
+	limiter.nowFn = func() time.Time { return now }
+
+	if !limiter.allow("client") || !limiter.allow("client") || limiter.allow("client") {
+		t.Fatal("expected two attempts per window")
+	}
+	now = now.Add(time.Minute)
+	if !limiter.allow("client") {
+		t.Fatal("expected limiter to reset after the window")
+	}
+	for i := 0; i < rateLimiterMaxKeys+100; i++ {
+		if !limiter.allow(string(rune(i + 1))) {
+			t.Fatalf("new key %d was unexpectedly limited", i)
+		}
+	}
+	if len(limiter.hits) > rateLimiterMaxKeys {
+		t.Fatalf("limiter retained %d keys, max %d", len(limiter.hits), rateLimiterMaxKeys)
+	}
+}
+
+func TestSetupCodeClaimClientIPKey(t *testing.T) {
+	t.Parallel()
+	request := httptest.NewRequest(http.MethodPost, "/api/bot-setup-codes/claim", nil)
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("X-Real-IP", "203.0.113.10")
+	request.Header.Set("X-Forwarded-For", "203.0.113.10")
+	if got := clientIPKey(request); got != "203.0.113.10" {
+		t.Fatalf("expected loopback proxy client IP, got %q", got)
+	}
+
+	request.Header.Set("X-Forwarded-For", "198.51.100.8")
+	if got := clientIPKey(request); got != "127.0.0.1" {
+		t.Fatalf("expected mismatched proxy headers to fall back to peer, got %q", got)
+	}
+
+	request.RemoteAddr = "192.0.2.5:4321"
+	request.Header.Set("X-Real-IP", "203.0.113.10")
+	request.Header.Set("X-Forwarded-For", "203.0.113.10")
+	if got := clientIPKey(request); got != "192.0.2.5" {
+		t.Fatalf("expected public peer to ignore forwarding headers, got %q", got)
+	}
 }

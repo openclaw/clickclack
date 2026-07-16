@@ -31,6 +31,7 @@ http {
   # published address ranges before enabling these limits.
   limit_req_zone $binary_remote_addr zone=clickclack_oauth_start:64m rate=1r/s;
   limit_req_zone $binary_remote_addr zone=clickclack_oauth_consume:64m rate=5r/s;
+  limit_req_zone $binary_remote_addr zone=clickclack_setup_claim:16m rate=10r/m;
 
   upstream clickclack_api {
     server 127.0.0.1:8080;
@@ -93,6 +94,11 @@ http {
 
     location = /api/auth/github/callback {
       error_log /dev/null crit;
+      proxy_pass http://clickclack_api;
+    }
+
+    location = /api/bot-setup-codes/claim {
+      limit_req zone=clickclack_setup_claim burst=3 nodelay;
       proxy_pass http://clickclack_api;
     }
 

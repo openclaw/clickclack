@@ -176,9 +176,12 @@ an origin when configured.
 Terminate TLS only at infrastructure you trust, redirect HTTP to HTTPS, and
 send HSTS from the public HTTPS origin after confirming every subdomain covered
 by the policy is HTTPS-ready. ClickClack intentionally does not trust arbitrary
-`X-Forwarded-For` values for security decisions. Do not add a naive
-application-level IP limiter or derive a security limit from forwarded headers
-without a proven trusted-client identity contract for every proxy path.
+`X-Forwarded-For` values for security decisions. The setup-code claim limiter
+uses the transport peer by default. It accepts a forwarded client IP only when
+the peer is loopback and `X-Real-IP` matches a single-IP `X-Forwarded-For`,
+which is the contract used by the bundled Nginx example. Other proxy topologies
+must enforce their own edge limit or expose a separately verified client
+identity; arbitrary forwarding headers remain ignored.
 
 ### Optional self-hosted Nginx example
 
@@ -188,7 +191,8 @@ deployment. It is not ClickClack's hosted production configuration and does not
 describe or configure the hosted edge.
 
 The example includes TLS, WebSocket proxying, a 64 MiB request limit,
-query-free access logs, explicit forwarding headers, and OAuth rate limits.
+query-free access logs, explicit forwarding headers, and OAuth plus setup-code
+claim rate limits.
 Replace its hostname and certificate paths, confirm the upstream address, run
 `nginx -t`, and reload only after the syntax check succeeds. Its OAuth start
 bucket allows one request per second with a burst of eight, while desktop

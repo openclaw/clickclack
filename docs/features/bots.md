@@ -246,7 +246,12 @@ installed in exactly one workspace.
 
 `POST /api/workspaces/{workspace_id}/bots` returns `{bot, bot_token}`. The
 `bot_token.token` field is the one-time raw `ccb_...` token and is never
-returned by list calls. `GET /api/workspaces/{workspace_id}/bots` returns
+returned by list calls. Passing `"initial_token": false` skips the initial
+token mint entirely — the response then contains only `{bot}` — for
+setup-code installs where the token is minted at claim time.
+`initial_token: false` cannot be combined with `setup_nonce` (nonce replay
+detection lives on the token row). `GET /api/workspaces/{workspace_id}/bots`
+returns
 `{bots: [{bot, tokens}]}` with redacted token metadata for workspace members.
 Raw token values are never returned by list calls. Rotation is create-new, move
 the runtime, then revoke-old through
@@ -272,11 +277,15 @@ Re-minting a code for the same bot and token name replaces the pending code,
 and removing or deleting the bot invalidates its pending codes. An expired,
 unclaimed code never creates a token.
 
-The web app's token reveal panel (bot creation, token minting, and the
-OpenClaw install wizard) generates a setup code automatically and shows the
-one-liner `openclaw channels add clickclack --code "https://server/#XXXX-XXXX-XXXX"`
-as the recommended connect path, with a countdown and one-click regeneration
-after expiry. The raw token stays available for manual setups.
+The web app asks for one connect method up front, so exactly one credential
+exists per install. Choosing the recommended setup code creates the bot with
+`initial_token: false` and the reveal panel shows only the one-liner
+`openclaw channels add clickclack --code "https://server/#XXXX-XXXX-XXXX"`
+with a countdown and one-click regeneration after expiry — the token is
+minted when the code is claimed. Choosing the manual token mints the raw
+token immediately and no setup code is created. If a code expires unclaimed,
+the bot row's "New setup code" action mints a fresh one without recreating
+the bot.
 
 ## Command Menus
 

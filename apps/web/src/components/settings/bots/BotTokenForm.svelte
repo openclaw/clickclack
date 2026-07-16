@@ -10,11 +10,15 @@
   type Props = {
     workspaceID: string;
     botUserID: string;
+    // "token" mints a raw token immediately; "code" defers to a one-time
+    // setup code that mints the token when claimed.
+    mode?: "token" | "code";
     onCreated: (token: BotToken) => void;
+    onCode?: (name: string, scopes: string[]) => void;
     onCancel: () => void;
   };
 
-  let { workspaceID, botUserID, onCreated, onCancel }: Props = $props();
+  let { workspaceID, botUserID, mode = "token", onCreated, onCode, onCancel }: Props = $props();
 
   let tokenName = $state("");
   let selectedScope = $state<BotScopeBundle>("bot:write");
@@ -26,6 +30,11 @@
   async function submit(event: Event) {
     event.preventDefault();
     if (!canSubmit) return;
+    if (mode === "code") {
+      // The reveal panel mints the code itself; just hand over the shape.
+      onCode?.(tokenName.trim(), [selectedScope]);
+      return;
+    }
     submitting = true;
     error = "";
     try {
@@ -44,9 +53,11 @@
 
 <form class="ws-bots__form ws-bots__token-form" onsubmit={submit}>
   <header class="ws-bots__form-header">
-    <h4 class="ws-bots__form-title">Mint new token</h4>
+    <h4 class="ws-bots__form-title">{mode === "code" ? "New setup code" : "Mint new token"}</h4>
     <p class="ws-bots__form-hint">
-      Name the runtime using this credential and grant only the access it needs.
+      {mode === "code"
+        ? "The code mints a fresh token for this bot when OpenClaw claims it. Name the runtime and grant only the access it needs."
+        : "Name the runtime using this credential and grant only the access it needs."}
     </p>
   </header>
 
@@ -82,7 +93,7 @@
   <div class="ws-bots__form-actions">
     <button type="button" class="ws-btn" onclick={onCancel} disabled={submitting}>Cancel</button>
     <button type="submit" class="ws-btn ws-btn--primary" disabled={!canSubmit}>
-      {submitting ? "Minting…" : "Mint token"}
+      {mode === "code" ? "Generate code" : submitting ? "Minting…" : "Mint token"}
     </button>
   </div>
 </form>

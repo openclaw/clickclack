@@ -1,3 +1,13 @@
+<script lang="ts" module>
+  export type ConnectMethod = "code" | "token";
+
+  export type BotCreateDetail = {
+    connect: ConnectMethod;
+    tokenName: string;
+    scopes: string[];
+  };
+</script>
+
 <script lang="ts">
   import { untrack } from "svelte";
   import {
@@ -15,7 +25,7 @@
     workspaceID: string;
     currentUserID: string;
     canCreateService: boolean;
-    onCreated: (response: CreateBotResponse, scopes: string[]) => void;
+    onCreated: (response: CreateBotResponse, detail: BotCreateDetail) => void;
     onCancel: () => void;
   };
 
@@ -31,6 +41,7 @@
   let handle = $state("");
   let handleEdited = $state(false);
   let ownership = $state<Ownership>(untrack(() => (canCreateService ? "service" : "user")));
+  let connect = $state<ConnectMethod>("code");
   let tokenName = $state("default");
   let selectedScope = $state<BotScopeBundle>("bot:write");
   let submitting = $state(false);
@@ -57,14 +68,18 @@
     submitting = true;
     error = "";
     try {
+      const name = tokenName.trim() || "default";
       const response = await createWorkspaceBot(workspaceID, {
         display_name: displayName.trim(),
         handle: handle.trim(),
         owner_user_id: ownership === "user" ? currentUserID : undefined,
-        token_name: tokenName.trim() || "default",
-        scopes: [selectedScope],
+        // Code mode creates the bot without a credential; the setup code
+        // mints the token when OpenClaw claims it.
+        ...(connect === "code"
+          ? { initial_token: false }
+          : { token_name: name, scopes: [selectedScope] }),
       });
-      onCreated(response, [selectedScope]);
+      onCreated(response, { connect, tokenName: name, scopes: [selectedScope] });
     } catch (err) {
       error = botLoadErrorMessage(err);
     } finally {
@@ -135,6 +150,28 @@
   </fieldset>
 
   <fieldset class="ws-bots__form-field">
+    <legend class="ws-bots__form-label">How will you connect it?</legend>
+    <div class="ws-bots__choices">
+      <label class="ws-bots__choice" class:is-active={connect === "code"}>
+        <input type="radio" name="connect" value="code" bind:group={connect} />
+        <span class="ws-bots__choice-title">Setup code (recommended)</span>
+        <span class="ws-bots__choice-hint">
+          One command on the OpenClaw machine. The one-time code mints the token there — nothing to
+          copy by hand.
+        </span>
+      </label>
+      <label class="ws-bots__choice" class:is-active={connect === "token"}>
+        <input type="radio" name="connect" value="token" bind:group={connect} />
+        <span class="ws-bots__choice-title">Manual token</span>
+        <span class="ws-bots__choice-hint">
+          Mint a raw token now and wire it up yourself — for hand-written config or clients other
+          than OpenClaw.
+        </span>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset class="ws-bots__form-field">
     <legend class="ws-bots__form-label">Scope</legend>
     <div class="ws-bots__choices">
       {#each BOT_SCOPE_BUNDLES as bundle (bundle.id)}
@@ -156,6 +193,9 @@
       placeholder="default"
       maxlength="80"
     />
+    {#if connect === "code"}
+      <span class="ws-bots__form-hint">Names the token the setup code mints when it's claimed.</span>
+    {/if}
   </label>
 
   {#if error}

@@ -14,7 +14,9 @@
   } from "$lib/bots";
   import { APIError } from "$lib/api";
   import { isWorkspaceManager } from "$lib/permissions";
-  import BotCreateForm from "../../../../../../components/settings/bots/BotCreateForm.svelte";
+  import BotCreateForm, {
+    type BotCreateDetail,
+  } from "../../../../../../components/settings/bots/BotCreateForm.svelte";
   import BotTokenForm from "../../../../../../components/settings/bots/BotTokenForm.svelte";
   import TokenRevealPanel from "../../../../../../components/settings/bots/TokenRevealPanel.svelte";
   import { untrack } from "svelte";
@@ -27,10 +29,14 @@
   let showCreate = $state(false);
   let revealed = $state<{
     bot: BotWithTokens["bot"];
-    token: BotToken;
+    connect: "code" | "token";
+    token?: BotToken;
+    tokenName?: string;
+    scopes?: string[];
   } | null>(null);
   let expandedBotID = $state<string | null>(null);
   let mintingBotID = $state<string | null>(null);
+  let mintingMode = $state<"token" | "code">("token");
   let pendingAction = $state<
     { botID: string; kind: "revoke" | "remove" | "delete" } | null
   >(null);
@@ -87,22 +93,37 @@
     }
   }
 
-  function handleCreated(response: CreateBotResponse) {
+  function handleCreated(response: CreateBotResponse, detail: BotCreateDetail) {
     showCreate = false;
-    revealed = { bot: response.bot, token: response.bot_token };
-    bots = [{ bot: response.bot, tokens: [response.bot_token] }, ...bots];
+    revealed = {
+      bot: response.bot,
+      connect: detail.connect,
+      token: response.bot_token,
+      tokenName: detail.tokenName,
+      scopes: detail.scopes,
+    };
+    bots = [
+      { bot: response.bot, tokens: response.bot_token ? [response.bot_token] : [] },
+      ...bots,
+    ];
     expandedBotID = response.bot.id;
   }
 
-  function startMinting(botID: string) {
+  function startMinting(botID: string, mode: "token" | "code") {
     actionError = "";
     mintingBotID = botID;
+    mintingMode = mode;
   }
 
   async function handleTokenCreated(bot: BotWithTokens["bot"], token: BotToken) {
     mintingBotID = null;
-    revealed = { bot, token };
+    revealed = { bot, connect: "token", token };
     await refreshOneBotTokens(bot.id);
+  }
+
+  function handleCodeRequested(bot: BotWithTokens["bot"], name: string, scopes: string[]) {
+    mintingBotID = null;
+    revealed = { bot, connect: "code", tokenName: name, scopes };
   }
 
   async function revokeOne(bot: BotWithTokens["bot"], token: BotToken) {
@@ -227,11 +248,22 @@
 
   {#if revealed && me}
     <TokenRevealPanel
+      connect={revealed.connect}
       token={revealed.token}
+      workspaceID={workspaceID}
+      tokenName={revealed.tokenName}
+      scopes={revealed.scopes}
       botHandle={revealed.bot.handle}
       botUserID={revealed.bot.id}
       workspace={workspaceIdentifier}
-      onDismiss={() => (revealed = null)}
+      onDismiss={() => {
+        const botID = revealed?.bot.id;
+        const wasCode = revealed?.connect === "code";
+        revealed = null;
+        // A claimed code mints a token in the background; refresh so the
+        // row's token count reflects reality.
+        if (wasCode && botID) void refreshOneBotTokens(botID);
+      }}
     />
   {/if}
 
@@ -317,7 +349,15 @@
                     <button
                       type="button"
                       class="ws-btn"
-                      onclick={() => startMinting(bot.id)}
+                      onclick={() => startMinting(bot.id, "code")}
+                      disabled={acting || minting}
+                    >
+                      New setup code
+                    </button>
+                    <button
+                      type="button"
+                      class="ws-btn"
+                      onclick={() => startMinting(bot.id, "token")}
                       disabled={acting || minting}
                     >
                       Mint new token
@@ -353,7 +393,9 @@
                   <BotTokenForm
                     {workspaceID}
                     botUserID={bot.id}
+                    mode={mintingMode}
                     onCreated={(token) => handleTokenCreated(bot, token)}
+                    onCode={(name, scopes) => handleCodeRequested(bot, name, scopes)}
                     onCancel={() => (mintingBotID = null)}
                   />
                 </div>

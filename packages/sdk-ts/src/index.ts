@@ -38,6 +38,25 @@ export type BotWithTokens = {
   tokens: BotToken[];
 };
 
+export type BotSetupCode = {
+  id: string;
+  bot_user_id: string;
+  workspace_id: string;
+  token_name: string;
+  scopes: string[];
+  created_by?: string;
+  created_at: string;
+  expires_at: string;
+  /** One-time plaintext setup code. Present only in the mint response. */
+  code?: string;
+};
+
+export type BotSetupCodeClaim = {
+  bot_token: BotToken;
+  bot: User;
+  workspace: Workspace;
+};
+
 export type BotCommandInput = {
   command: string;
   description: string;
@@ -602,6 +621,26 @@ export class ClickClackClient {
         },
       );
       return data.bot_token;
+    },
+    createSetupCode: async (
+      workspaceId: string,
+      botUserId: string,
+      input: { name?: string; scopes?: string[] } = {},
+    ): Promise<BotSetupCode> => {
+      const data = await this.request<{ setup_code: BotSetupCode }>(
+        `/api/workspaces/${workspaceId}/bots/${botUserId}/setup-codes`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      return data.setup_code;
+    },
+    claimSetupCode: async (code: string): Promise<BotSetupCodeClaim> => {
+      return this.request(`/api/bot-setup-codes/claim`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
     },
   };
 

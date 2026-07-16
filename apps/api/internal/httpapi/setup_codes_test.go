@@ -234,3 +234,74 @@ func TestSetupCodeClaimClientIPKey(t *testing.T) {
 		t.Fatalf("expected public peer to ignore forwarding headers, got %q", got)
 	}
 }
+
+func TestHTTPCreateBotWithoutInitialToken(t *testing.T) {
+	t.Parallel()
+	server, st, workspace, owner, _ := newSetupCodeTestServer(t)
+	ctx := context.Background()
+
+	// setup_nonce cannot be combined with initial_token:false.
+	expectStatusAsUser(t, owner.ID, http.MethodPost,
+		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
+		strings.NewReader(`{"display_name":"nonce bot","initial_token":false,"setup_nonce":"0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f"}`),
+		http.StatusBadRequest)
+
+	resp, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
+		strings.NewReader(`{"display_name":"codeless bot","initial_token":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Header.Set("Content-Type", "application/json")
+	resp.Header.Set("X-ClickClack-User", owner.ID)
+	res, err := http.DefaultClient.Do(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("expected 201, got %d: %s", res.StatusCode, body)
+	}
+	var created map[string]json.RawMessage
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := created["bot_token"]; ok {
+		t.Fatalf("expected bot_token to be omitted, got %s", created["bot_token"])
+	}
+	var bot store.User
+	if err := json.Unmarshal(created["bot"], &bot); err != nil {
+		t.Fatal(err)
+	}
+
+	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("expected zero tokens, got %d", len(tokens))
+	}
+
+	// The bot's first credential arrives via setup code claim.
+	minted := postJSONAsUser[struct {
+		SetupCode store.BotSetupCode `json:"setup_code"`
+	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/bots/"+bot.ID+"/setup-codes", map[string]any{
+		"name": "gateway",
+	})
+	claim := postJSON[struct {
+		Token string `json:"token"`
+	}](t, server.URL+"/api/bot-setup-codes/claim", map[string]any{
+		"code": minted.SetupCode.Code,
+	})
+	if !strings.HasPrefix(claim.Token, "ccb_") {
+		t.Fatalf("expected claimed token, got %q", claim.Token)
+	}
+	tokens, err = st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected one token after claim, got %d", len(tokens))
+	}
+}

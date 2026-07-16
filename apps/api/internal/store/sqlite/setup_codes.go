@@ -82,6 +82,10 @@ func (s *Store) CreateBotSetupCode(ctx context.Context, input store.CreateBotSet
 	if err != nil {
 		return store.BotSetupCode{}, err
 	}
+	defaults, err := store.NormalizeBotSetupCodeDefaults(input.Defaults, scopes)
+	if err != nil {
+		return store.BotSetupCode{}, err
+	}
 	code, err := newBotSetupCode()
 	if err != nil {
 		return store.BotSetupCode{}, err
@@ -121,26 +125,32 @@ func (s *Store) CreateBotSetupCode(ctx context.Context, input store.CreateBotSet
 	if err != nil {
 		return store.BotSetupCode{}, err
 	}
+	defaultsJSON, err := json.Marshal(defaults)
+	if err != nil {
+		return store.BotSetupCode{}, err
+	}
 	setup := store.BotSetupCode{
 		ID:          newID("bsc"),
 		BotUserID:   bot.ID,
 		WorkspaceID: workspaceID,
 		TokenName:   tokenName,
 		Scopes:      scopes,
+		Defaults:    defaults,
 		CreatedBy:   createdBy,
 		CreatedAt:   createdAt,
 		ExpiresAt:   time.Now().UTC().Add(botSetupCodeTTL).Format(time.RFC3339Nano),
 	}
 	if err := qtx.InsertBotSetupCode(ctx, storedb.InsertBotSetupCodeParams{
-		ID:          setup.ID,
-		CodeHash:    hashBotSetupCode(strings.ReplaceAll(code, "-", "")),
-		WorkspaceID: setup.WorkspaceID,
-		BotUserID:   setup.BotUserID,
-		TokenName:   setup.TokenName,
-		ScopesJson:  string(scopesJSON),
-		CreatedBy:   sqlOptionalText(setup.CreatedBy),
-		CreatedAt:   setup.CreatedAt,
-		ExpiresAt:   setup.ExpiresAt,
+		ID:           setup.ID,
+		CodeHash:     hashBotSetupCode(strings.ReplaceAll(code, "-", "")),
+		WorkspaceID:  setup.WorkspaceID,
+		BotUserID:    setup.BotUserID,
+		TokenName:    setup.TokenName,
+		ScopesJson:   string(scopesJSON),
+		DefaultsJson: string(defaultsJSON),
+		CreatedBy:    sqlOptionalText(setup.CreatedBy),
+		CreatedAt:    setup.CreatedAt,
+		ExpiresAt:    setup.ExpiresAt,
 	}); err != nil {
 		return store.BotSetupCode{}, err
 	}
@@ -195,6 +205,10 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 	}
 	var scopes []string
 	if err := json.Unmarshal([]byte(row.ScopesJson), &scopes); err != nil {
+		return store.BotSetupCodeClaim{}, err
+	}
+	var defaults store.BotSetupCodeDefaults
+	if err := json.Unmarshal([]byte(row.DefaultsJson), &defaults); err != nil {
 		return store.BotSetupCodeClaim{}, err
 	}
 	token := newID("ccb")
@@ -258,8 +272,9 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 			IconURL:   wsRow.IconUrl,
 			CreatedAt: wsRow.CreatedAt,
 		},
+		Defaults: defaults,
 	}
-	if defaultChannel != "" {
+	if claim.Defaults.DefaultTo == "" && defaultChannel != "" {
 		claim.Defaults.DefaultTo = "channel:" + defaultChannel
 	}
 	return claim, nil

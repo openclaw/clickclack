@@ -386,16 +386,23 @@ type CreateBotTokenInput struct {
 // BotSetupCode is a pending bot-token grant. Creating one does not mint a
 // token; the token is minted when the code is claimed. Code carries the
 // plaintext only in the mint response — at rest only the hash is stored.
+type BotSetupCodeDefaults struct {
+	DefaultTo     string   `json:"defaultTo,omitempty"`
+	AllowFrom     []string `json:"allowFrom,omitempty"`
+	AgentActivity *bool    `json:"agentActivity,omitempty"`
+}
+
 type BotSetupCode struct {
-	ID          string   `json:"id"`
-	BotUserID   string   `json:"bot_user_id"`
-	WorkspaceID string   `json:"workspace_id"`
-	TokenName   string   `json:"token_name"`
-	Scopes      []string `json:"scopes"`
-	CreatedBy   string   `json:"created_by,omitempty"`
-	CreatedAt   string   `json:"created_at"`
-	ExpiresAt   string   `json:"expires_at"`
-	Code        string   `json:"code,omitempty"`
+	ID          string               `json:"id"`
+	BotUserID   string               `json:"bot_user_id"`
+	WorkspaceID string               `json:"workspace_id"`
+	TokenName   string               `json:"token_name"`
+	Scopes      []string             `json:"scopes"`
+	Defaults    BotSetupCodeDefaults `json:"defaults"`
+	CreatedBy   string               `json:"created_by,omitempty"`
+	CreatedAt   string               `json:"created_at"`
+	ExpiresAt   string               `json:"expires_at"`
+	Code        string               `json:"code,omitempty"`
 }
 
 type CreateBotSetupCodeInput struct {
@@ -403,6 +410,7 @@ type CreateBotSetupCodeInput struct {
 	BotUserID   string
 	Name        string
 	Scopes      []string
+	Defaults    BotSetupCodeDefaults
 	CreatedBy   string
 }
 
@@ -410,12 +418,10 @@ type CreateBotSetupCodeInput struct {
 // minted token (plaintext included once) plus the context an installer
 // needs to write its configuration.
 type BotSetupCodeClaim struct {
-	BotToken  BotToken  `json:"bot_token"`
-	Bot       User      `json:"bot"`
-	Workspace Workspace `json:"workspace"`
-	Defaults  struct {
-		DefaultTo string `json:"defaultTo,omitempty"`
-	} `json:"defaults"`
+	BotToken  BotToken             `json:"bot_token"`
+	Bot       User                 `json:"bot"`
+	Workspace Workspace            `json:"workspace"`
+	Defaults  BotSetupCodeDefaults `json:"defaults"`
 }
 
 type AppInstallation struct {

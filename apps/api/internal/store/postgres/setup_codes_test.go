@@ -403,6 +403,16 @@ func TestPostgresCreateBotWithoutInitialToken(t *testing.T) {
 	if _, _, err := st.CreateBot(ctx, conflicting); !errors.Is(err, store.ErrSetupNonceConflict) {
 		t.Fatalf("expected token mode reuse of tokenless nonce to conflict, got %v", err)
 	}
+	if _, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "manual",
+		Scopes:      []string{"messages:write"},
+		SetupNonce:  input.SetupNonce,
+		CreatedBy:   owner.ID,
+	}); !errors.Is(err, store.ErrSetupNonceConflict) {
+		t.Fatalf("expected token mint reuse of tokenless nonce to conflict, got %v", err)
+	}
 	tokens, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
 	if err != nil {
 		t.Fatal(err)

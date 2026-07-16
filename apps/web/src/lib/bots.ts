@@ -74,6 +74,20 @@ export type CreateBotResponse = {
   bot_token: BotToken;
 };
 
+export type BotSetupCode = {
+  id: string;
+  bot_user_id: string;
+  workspace_id: string;
+  token_name: string;
+  scopes: string[];
+  created_by?: string;
+  created_at: string;
+  expires_at: string;
+  // One-time plaintext code (XXXX-XXXX-XXXX). Present only in the mint
+  // response; the server stores just a hash.
+  code?: string;
+};
+
 export async function listWorkspaceBots(workspaceID: string): Promise<BotWithTokens[]> {
   const data = await api<{ bots: BotWithTokens[] }>(`/api/workspaces/${workspaceID}/bots`);
   return data.bots ?? [];
@@ -112,6 +126,21 @@ export async function createWorkspaceBotToken(
     },
   );
   return data.bot_token;
+}
+
+export async function createWorkspaceBotSetupCode(
+  workspaceID: string,
+  botUserID: string,
+  input: { name?: string; scopes?: string[] },
+): Promise<BotSetupCode> {
+  const data = await api<{ setup_code: BotSetupCode }>(
+    `/api/workspaces/${workspaceID}/bots/${botUserID}/setup-codes`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return data.setup_code;
 }
 
 export async function listBotTokens(botUserID: string): Promise<BotToken[]> {
@@ -272,6 +301,22 @@ ${accountLines("      ")}
     },
   },
 }`;
+}
+
+export function buildOpenClawCodeSnippet(opts: {
+  code: string;
+  botHandle: string;
+  mode: OpenClawAccountMode;
+  baseURL?: string;
+}): string {
+  const base =
+    (opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")).replace(
+      /\/$/,
+      "",
+    ) || "https://your-clickclack.example.com";
+  const handle = opts.botHandle.replace(/^@/, "");
+  const accountArg = opts.mode === "named" ? ` --account ${shellQuote(handle)}` : "";
+  return `openclaw channels add clickclack${accountArg} --code ${shellQuote(`${base}/#${opts.code}`)}`;
 }
 
 export function buildOpenClawShellSnippet(opts: {

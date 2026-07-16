@@ -3465,6 +3465,41 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 	return items, nil
 }
 
+const listWorkspaceActiveBotMemberIDs = `-- name: ListWorkspaceActiveBotMemberIDs :many
+SELECT u.id
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+WHERE wm.workspace_id = $1
+  AND u.kind = 'bot'
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
+ORDER BY u.id
+`
+
+func (q *Queries) ListWorkspaceActiveBotMemberIDs(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceActiveBotMemberIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaceActiveServiceBotIDs = `-- name: ListWorkspaceActiveServiceBotIDs :many
 SELECT DISTINCT u.id
 FROM users u

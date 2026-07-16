@@ -267,3 +267,66 @@ func TestPostgresRemoveBotFromWorkspaceUsesLifecycleLock(t *testing.T) {
 		t.Fatal("bot removal did not resume after lifecycle lock release")
 	}
 }
+
+func TestPostgresWorkspaceDeletionUsesUserBotLifecycleLock(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Workspace Owner", "postgres-setup-workspace-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: owner.ID,
+		DisplayName: "Owned Setup Bot",
+		Handle:      "postgres-owned-setup-delete-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "workspace-delete",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocker := mustBeginPostgresTx(t, ctx, st.db)
+	if err := lockBotLifecycleTx(ctx, blocker, bot.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	deleteResult := make(chan error, 1)
+	go func() {
+		_, deleteErr := st.DeleteWorkspace(ctx, workspace.ID, owner.ID)
+		deleteResult <- deleteErr
+	}()
+	waitForBlockedBotLifecycleOperations(t, ctx, st.db, 1)
+	if err := blocker.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-deleteResult:
+		if err != nil {
+			t.Fatalf("workspace deletion failed after lifecycle lock release: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("workspace deletion did not resume after lifecycle lock release")
+	}
+	if _, err := st.ClaimBotSetupCode(ctx, setup.Code); !errors.Is(err, store.ErrSetupCodeInvalid) {
+		t.Fatalf("workspace deletion left its user-owned bot setup code claimable: %v", err)
+	}
+}

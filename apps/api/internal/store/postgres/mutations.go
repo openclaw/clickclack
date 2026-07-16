@@ -114,10 +114,15 @@ func (s *Store) DeleteWorkspace(ctx context.Context, workspaceID, actorUserID st
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
-	candidateBotIDs, err := qtx.ListWorkspaceActiveServiceBotIDs(ctx, workspaceID)
+	serviceBotIDs, err := qtx.ListWorkspaceActiveServiceBotIDs(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
+	memberBotIDs, err := qtx.ListWorkspaceActiveBotMemberIDs(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	candidateBotIDs := mergeBotWorkspaceIDs(serviceBotIDs, memberBotIDs)
 	for _, botUserID := range candidateBotIDs {
 		if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
 			return nil, err

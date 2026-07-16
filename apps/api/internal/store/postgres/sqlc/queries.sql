@@ -367,6 +367,17 @@ WHERE u.kind = 'bot'
   )
 ORDER BY u.id;
 
+-- name: ListWorkspaceActiveBotMemberIDs :many
+SELECT u.id
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND u.kind = 'bot'
+  AND NOT EXISTS (
+    SELECT 1 FROM bot_tombstones tombstone WHERE tombstone.bot_user_id = u.id
+  )
+ORDER BY u.id;
+
 -- name: InsertPendingUploadCleanup :one
 INSERT INTO pending_upload_cleanups (id, workspace_id, storage_path, created_at, updated_at)
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(storage_path), sqlc.arg(created_at), sqlc.arg(updated_at))

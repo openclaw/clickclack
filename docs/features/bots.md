@@ -228,6 +228,8 @@ HTTP API:
 - `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`
 - `GET /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
 - `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
+- `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes`
+- `POST /api/bot-setup-codes/claim`
 - `DELETE /api/bots/{bot_user_id}`
 - `GET /api/bots/{bot_user_id}/tokens`
 - `POST /api/bots/{bot_user_id}/tokens`
@@ -249,6 +251,25 @@ returned by list calls. `GET /api/workspaces/{workspace_id}/bots` returns
 Raw token values are never returned by list calls. Rotation is create-new, move
 the runtime, then revoke-old through
 `POST /api/bot-tokens/{token_id}/revoke`.
+
+## Setup Codes
+
+Setup codes hand a token to an installer without the plaintext ever passing
+through a clipboard or shell history. A setup code is a pending token grant:
+`POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes` (same
+authorization as token creation, human session required) returns a one-time
+plaintext code (`XXXX-XXXX-XXXX`, 10-minute expiry) while storing only its
+hash. No bot token exists yet.
+
+The installer claims the code with the unauthenticated, rate-limited
+`POST /api/bot-setup-codes/claim` (`{"code": "XXXX-XXXX-XXXX"}`). The claim
+atomically consumes the code and mints the bot token at that moment,
+returning `{bot_token, bot, workspace}` with the one-time raw token and the
+context needed to write installer configuration. Codes are single use;
+unknown, expired, and already-claimed codes all answer with the same `404`.
+Re-minting a code for the same bot and token name replaces the pending code,
+and removing or deleting the bot invalidates its pending codes. An expired,
+unclaimed code never creates a token.
 
 ## Command Menus
 

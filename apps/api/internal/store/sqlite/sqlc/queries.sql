@@ -1456,3 +1456,11 @@ WHERE claimed_at IS NULL AND expires_at <= sqlc.arg(now);
 SELECT id, route_id, name, slug, icon_url, created_at
 FROM workspaces
 WHERE id = sqlc.arg(workspace_id);
+
+-- name: GetDefaultChannelForSetupClaim :one
+SELECT name
+FROM channels
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND archived_at IS NULL
+ORDER BY CASE WHEN name = 'general' THEN 0 ELSE 1 END, created_at, id
+LIMIT 1;

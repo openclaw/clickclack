@@ -1055,6 +1055,22 @@ func (q *Queries) GetChannelWorkspace(ctx context.Context, id string) (string, e
 	return workspace_id, err
 }
 
+const getDefaultChannelForSetupClaim = `-- name: GetDefaultChannelForSetupClaim :one
+SELECT name
+FROM channels
+WHERE workspace_id = $1
+  AND archived_at IS NULL
+ORDER BY CASE WHEN name = 'general' THEN 0 ELSE 1 END, created_at, id
+LIMIT 1
+`
+
+func (q *Queries) GetDefaultChannelForSetupClaim(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getDefaultChannelForSetupClaim, workspaceID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getDesktopOAuthGrantForConsume = `-- name: GetDesktopOAuthGrantForConsume :one
 SELECT id, grant_hash, user_id, desktop_challenge, created_at_unix, expires_at_unix
 FROM desktop_oauth_grants

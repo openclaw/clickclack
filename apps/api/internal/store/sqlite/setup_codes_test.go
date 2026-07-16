@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -98,6 +99,9 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 	if claim.Bot.ID != bot.ID || claim.Workspace.ID != workspace.ID {
 		t.Fatalf("unexpected claim context: %#v", claim)
 	}
+	if claim.Defaults.DefaultTo != "channel:general" {
+		t.Fatalf("expected general channel suggestion, got %#v", claim.Defaults)
+	}
 	if claim.BotToken.Name != "gateway" || len(claim.BotToken.Scopes) != 1 || claim.BotToken.Scopes[0] != "messages:write" {
 		t.Fatalf("expected captured name/scopes, got %#v", claim.BotToken)
 	}
@@ -112,6 +116,71 @@ func TestBotSetupCodeMintAndClaim(t *testing.T) {
 	// Single use.
 	if _, err := st.ClaimBotSetupCode(ctx, setup.Code); !errors.Is(err, store.ErrSetupCodeInvalid) {
 		t.Fatalf("expected second claim to fail uniformly, got %v", err)
+	}
+}
+
+func TestBotSetupCodeConcurrentClaimMintsOnce(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, workspace, owner, _ := setupCodeFixture(t)
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Concurrent Claim Bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "concurrent",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, claimErr := st.ClaimBotSetupCode(ctx, setup.Code)
+			results <- claimErr
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var successes, invalid int
+	for claimErr := range results {
+		switch {
+		case claimErr == nil:
+			successes++
+		case errors.Is(claimErr, store.ErrSetupCodeInvalid):
+			invalid++
+		default:
+			t.Fatalf("unexpected concurrent claim error: %v", claimErr)
+		}
+	}
+	if successes != 1 || invalid != 1 {
+		t.Fatalf("expected one success and one uniform rejection, got success=%d invalid=%d", successes, invalid)
+	}
+	after, err := st.ListBotTokensForWorkspace(ctx, workspace.ID, bot.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+1 {
+		t.Fatalf("expected exactly one minted token, got %d -> %d", len(before), len(after))
 	}
 }
 

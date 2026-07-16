@@ -173,7 +173,7 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, row.ExpiresAt)
-	if err != nil || time.Now().UTC().After(expiresAt) {
+	if err != nil || !time.Now().UTC().Before(expiresAt) {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}
 	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, row.BotUserID))
@@ -240,10 +240,14 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 	if err != nil {
 		return store.BotSetupCodeClaim{}, err
 	}
+	defaultChannel, err := qtx.GetDefaultChannelForSetupClaim(ctx, workspaceID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return store.BotSetupCodeClaim{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return store.BotSetupCodeClaim{}, err
 	}
-	return store.BotSetupCodeClaim{
+	claim := store.BotSetupCodeClaim{
 		BotToken: botToken,
 		Bot:      bot,
 		Workspace: store.Workspace{
@@ -254,5 +258,9 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 			IconURL:   wsRow.IconUrl,
 			CreatedAt: wsRow.CreatedAt,
 		},
-	}, nil
+	}
+	if defaultChannel != "" {
+		claim.Defaults.DefaultTo = "channel:" + defaultChannel
+	}
+	return claim, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -75,6 +76,9 @@ func TestPostgresBotSetupCodes(t *testing.T) {
 	if claim.BotToken.Token == "" || claim.Bot.ID != bot.ID || claim.Workspace.ID != workspace.ID {
 		t.Fatalf("unexpected claim result: %#v", claim)
 	}
+	if claim.Defaults.DefaultTo != "channel:general" {
+		t.Fatalf("expected general channel suggestion, got %#v", claim.Defaults)
+	}
 	auth, err := st.GetBotTokenAuth(ctx, claim.BotToken.Token)
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +89,45 @@ func TestPostgresBotSetupCodes(t *testing.T) {
 
 	if _, err := st.ClaimBotSetupCode(ctx, setup.Code); !errors.Is(err, store.ErrSetupCodeInvalid) {
 		t.Fatalf("expected second claim to fail uniformly, got %v", err)
+	}
+
+	concurrent, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{
+		WorkspaceID: workspace.ID,
+		BotUserID:   bot.ID,
+		Name:        "concurrent",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, claimErr := st.ClaimBotSetupCode(ctx, concurrent.Code)
+			results <- claimErr
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	var successes, invalid int
+	for claimErr := range results {
+		switch {
+		case claimErr == nil:
+			successes++
+		case errors.Is(claimErr, store.ErrSetupCodeInvalid):
+			invalid++
+		default:
+			t.Fatalf("unexpected concurrent claim error: %v", claimErr)
+		}
+	}
+	if successes != 1 || invalid != 1 {
+		t.Fatalf("expected one success and one uniform rejection, got success=%d invalid=%d", successes, invalid)
 	}
 
 	expiredCode, err := st.CreateBotSetupCode(ctx, store.CreateBotSetupCodeInput{WorkspaceID: workspace.ID, BotUserID: bot.ID, Name: "expiring", CreatedBy: owner.ID})

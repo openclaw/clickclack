@@ -410,6 +410,9 @@ type BotSetupCodeClaim struct {
 	BotToken  BotToken  `json:"bot_token"`
 	Bot       User      `json:"bot"`
 	Workspace Workspace `json:"workspace"`
+	Defaults  struct {
+		DefaultTo string `json:"defaultTo,omitempty"`
+	} `json:"defaults"`
 }
 
 type AppInstallation struct {

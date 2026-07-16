@@ -21,6 +21,7 @@
   import {
     isServiceBot,
     listWorkspaceBots,
+    listWorkspaceBotTokens,
     type BotToken,
     type BotWithTokens,
   } from "$lib/bots";
@@ -194,6 +195,15 @@
     installations = [installation, ...installations];
     bots = [updatedBot, ...bots.filter((entry) => entry.bot.id !== bot.id)];
     expandedID = installation.id;
+  }
+
+  async function refreshBotTokens(botID: string) {
+    try {
+      const tokens = await listWorkspaceBotTokens(workspaceID, botID);
+      bots = bots.map((entry) => (entry.bot.id === botID ? { ...entry, tokens } : entry));
+    } catch (err) {
+      actionError = integrationsLoadErrorMessage(err);
+    }
   }
 
   function startRevoke(installation: AppInstallation) {
@@ -378,6 +388,7 @@
       {boundBotIDs}
       {channels}
       onInstalled={handleInstalled}
+      onBotTokensChanged={(botID) => void refreshBotTokens(botID)}
       onClose={() => (showWizard = false)}
     />
   {/if}

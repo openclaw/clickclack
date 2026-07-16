@@ -34,6 +34,7 @@
     boundBotIDs: Set<string>;
     channels: Channel[];
     onInstalled: (installation: AppInstallation, bot: User, token?: BotToken) => void;
+    onBotTokensChanged: (botID: string) => void;
     onClose: () => void;
   };
 
@@ -45,6 +46,7 @@
     boundBotIDs,
     channels,
     onInstalled,
+    onBotTokensChanged,
     onClose,
   }: Props = $props();
 
@@ -701,7 +703,10 @@
       configSnippetBuilder={manifest.buildConfigSnippet}
       shellSnippetBuilder={manifest.buildShellSnippet}
       codeSnippetBuilder={manifest.buildCodeSnippet}
-      onDismiss={onClose}
+      onDismiss={() => {
+        if (!result?.token) onBotTokensChanged(result.bot.id);
+        onClose();
+      }}
     />
   {/if}
 </section>

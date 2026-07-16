@@ -4125,29 +4125,15 @@ func (q *Queries) LockBotCommandSet(ctx context.Context, arg LockBotCommandSetPa
 }
 
 const lockBotSetupCodeByHash = `-- name: LockBotSetupCodeByHash :one
-SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
+SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, defaults_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes
 WHERE code_hash = $1
 FOR UPDATE
 `
 
-type LockBotSetupCodeByHashRow struct {
-	ID             string         `json:"id"`
-	CodeHash       string         `json:"code_hash"`
-	WorkspaceID    string         `json:"workspace_id"`
-	BotUserID      string         `json:"bot_user_id"`
-	TokenName      string         `json:"token_name"`
-	ScopesJson     string         `json:"scopes_json"`
-	CreatedBy      sql.NullString `json:"created_by"`
-	CreatedAt      string         `json:"created_at"`
-	ExpiresAt      string         `json:"expires_at"`
-	ClaimedAt      sql.NullString `json:"claimed_at"`
-	ClaimedTokenID sql.NullString `json:"claimed_token_id"`
-}
-
-func (q *Queries) LockBotSetupCodeByHash(ctx context.Context, codeHash string) (LockBotSetupCodeByHashRow, error) {
+func (q *Queries) LockBotSetupCodeByHash(ctx context.Context, codeHash string) (BotSetupCode, error) {
 	row := q.db.QueryRowContext(ctx, lockBotSetupCodeByHash, codeHash)
-	var i LockBotSetupCodeByHashRow
+	var i BotSetupCode
 	err := row.Scan(
 		&i.ID,
 		&i.CodeHash,
@@ -4155,6 +4141,7 @@ func (q *Queries) LockBotSetupCodeByHash(ctx context.Context, codeHash string) (
 		&i.BotUserID,
 		&i.TokenName,
 		&i.ScopesJson,
+		&i.DefaultsJson,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.ExpiresAt,

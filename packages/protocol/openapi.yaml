@@ -1753,7 +1753,8 @@ components:
           maxLength: 100
     BotCommand:
       type: object
-      required: [id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at]
+      required:
+        [id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1900,7 +1901,7 @@ components:
           type: string
           minLength: 16
           maxLength: 128
-          description: Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. Cannot be combined with initial_token=false.
+          description: Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token.
         initial_token:
           type: boolean
           default: true
@@ -2248,7 +2249,18 @@ components:
             $ref: "#/components/schemas/EventSubscription"
     EventDeliveryAttempt:
       type: object
-      required: [id, subscription_id, event_id, workspace_id, event_type, attempt, response_status, created_at, completed_at]
+      required:
+        [
+          id,
+          subscription_id,
+          event_id,
+          workspace_id,
+          event_type,
+          attempt,
+          response_status,
+          created_at,
+          completed_at,
+        ]
       properties:
         id:
           type: string
@@ -2298,7 +2310,8 @@ components:
             type: string
     AuditLogEntry:
       type: object
-      required: [id, workspace_id, actor_user_id, action, target_type, target_id, metadata, created_at]
+      required:
+        [id, workspace_id, actor_user_id, action, target_type, target_id, metadata, created_at]
       properties:
         id:
           type: string
@@ -2320,7 +2333,18 @@ components:
           format: date-time
     ConnectedAccount:
       type: object
-      required: [id, workspace_id, user_id, provider, provider_account_id, display_name, scopes, metadata, created_at]
+      required:
+        [
+          id,
+          workspace_id,
+          user_id,
+          provider,
+          provider_account_id,
+          display_name,
+          scopes,
+          metadata,
+          created_at,
+        ]
       properties:
         id:
           type: string
@@ -2778,7 +2802,8 @@ components:
           description: Exclusive Unicode code-point offset into snippet.
     SearchResult:
       type: object
-      required: [id, workspace_id, author, thread_root_id, created_at, reply_count, snippet, highlights]
+      required:
+        [id, workspace_id, author, thread_root_id, created_at, reply_count, snippet, highlights]
       properties:
         id:
           type: string
@@ -2872,7 +2897,8 @@ components:
           $ref: "#/components/schemas/Upload"
     RouteTarget:
       type: object
-      required: [workspace_id, workspace_route_id, target_type, target_id, target_route_id, canonical_path]
+      required:
+        [workspace_id, workspace_route_id, target_type, target_id, target_route_id, canonical_path]
       properties:
         workspace_id:
           type: string

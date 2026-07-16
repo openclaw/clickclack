@@ -1241,7 +1241,7 @@ export interface components {
       avatar_url?: string;
       token_name?: string;
       scopes?: string[];
-      /** @description Retry key for integration setup. Replays reuse the same bot and token row while returning a fresh raw token. Cannot be combined with initial_token=false. */
+      /** @description Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token. */
       setup_nonce?: string;
       /**
        * @description Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time.

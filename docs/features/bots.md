@@ -249,9 +249,9 @@ installed in exactly one workspace.
 returned by list calls. Passing `"initial_token": false` skips the initial
 token mint entirely — the response then contains only `{bot}` — for
 setup-code installs where the token is minted at claim time.
-`initial_token: false` cannot be combined with `setup_nonce` (nonce replay
-detection lives on the token row). `GET /api/workspaces/{workspace_id}/bots`
-returns
+`setup_nonce` works for both modes: tokenless retries return the same bot,
+while token-mode retries also reuse the token row and rotate its one-time
+plaintext value. `GET /api/workspaces/{workspace_id}/bots` returns
 `{bots: [{bot, tokens}]}` with redacted token metadata for workspace members.
 Raw token values are never returned by list calls. Rotation is create-new, move
 the runtime, then revoke-old through

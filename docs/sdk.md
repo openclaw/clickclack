@@ -80,9 +80,23 @@ See [features/auth.md](features/auth.md).
 | `search(workspaceId, q, options?)` | paginated workspace, channel, or direct-message search |
 | `uploads`     | `create(workspaceId, file, filename?, { nonce? })`, `findByNonce(workspaceId, nonce)`, `attach(messageId, uploadId)` |
 | `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
-| `events`      | `publishEphemeral`, `subscribe` |
+| `events`      | `list`, `publishEphemeral`, `subscribe` |
 
 ## Realtime subscription
+
+Capture the current tail or drain a bounded backlog through the same client:
+
+```ts
+const initial = await client.events.list({ workspaceId, includeTail: true });
+const page = await client.events.list({
+  workspaceId,
+  afterCursor: initial.tailCursor,
+  limit: 500,
+});
+```
+
+`tailCursor` is captured before the initial page query, so events created during
+startup remain eligible for the following WebSocket subscription.
 
 ```ts
 const socket = client.events.subscribe({

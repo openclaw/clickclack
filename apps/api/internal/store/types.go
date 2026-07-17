@@ -1043,6 +1043,7 @@ type Store interface {
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
 	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, Event, error)
 	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
+	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)

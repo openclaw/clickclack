@@ -1046,7 +1046,21 @@ func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:read"); !ok {
 		return
 	}
-	root, replies, state, err := s.store.GetThread(r.Context(), chi.URLParam(r, "message_id"), act.user.ID, queryInt(r, "limit", 100))
+	messageID := chi.URLParam(r, "message_id")
+	limit := queryInt(r, "limit", 100)
+	latest := strings.TrimSpace(r.URL.Query().Get("latest"))
+	if latest != "" && latest != "true" && latest != "false" {
+		writeError(w, http.StatusBadRequest, errors.New("latest must be true or false"))
+		return
+	}
+	var root store.Message
+	var replies []store.Message
+	var state store.ThreadState
+	if latest == "true" {
+		root, replies, state, err = s.store.GetThreadLatest(r.Context(), messageID, act.user.ID, limit)
+	} else {
+		root, replies, state, err = s.store.GetThread(r.Context(), messageID, act.user.ID, limit)
+	}
 	writeResult(w, map[string]any{"root": root, "replies": replies, "thread_state": state}, err)
 }
 

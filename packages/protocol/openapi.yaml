@@ -1153,6 +1153,20 @@ paths:
       operationId: getThread
       parameters:
         - $ref: "#/components/parameters/message_id"
+        - name: limit
+          in: query
+          description: Maximum number of replies to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: latest
+          in: query
+          description: Return the latest bounded reply window in chronological order instead of the earliest window.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: Thread root and replies

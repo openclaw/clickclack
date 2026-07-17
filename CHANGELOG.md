@@ -20,6 +20,7 @@
 - Proxied WebSocket upgrades in the Vite dev server so the local app connects to realtime instead of looping on "Reconnecting…".
 - Added a bounded read-only artifact pane for code, text, Markdown, PDF, and sandboxed HTML attachments, while keeping DOCX download-only and preserving thread routes when the pane closes. Thanks @jjjhenriksen.
 - Added an opt-in realtime tail cursor so fresh clients can skip retained history without racing new events, and applied read-receipt visibility before event pagination. Thanks @shakkernerd.
+- Added SDK helpers for paginated realtime recovery and bounded latest thread-history windows. Thanks @arcabotai for surfacing the integration needs.
 - Preserved validated request correlation IDs as optional metadata on durable message and thread-reply events across replay and realtime delivery, and added canary run/case evidence IDs without changing message storage or gateway traffic.
 - Added an isolated FakeCo small-VM deployment path with idempotent synthetic chat seed data, OpenClaw and ClawRouter SecretRef configuration, correlated health/readiness and metadata-only telemetry, a quoted-reply end-to-end canary, tests, and teardown guidance.
 

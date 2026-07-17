@@ -45,7 +45,7 @@
     "oxfmt": "^0.59.0",
     "oxlint": "^1.74.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "wrangler": "4.110.0"
+    "wrangler": "4.111.0"
   },
   "engines": {
     "node": ">=24"

@@ -189,6 +189,22 @@ work for bots installed in exactly one workspace.
 Only `create`, `createToken`, and `createWorkspaceToken` responses include the
 one-time raw `bot_token.token`. List calls return metadata only.
 
+Setup-code mint and claim helpers expose the versioned endpoint contract:
+
+```ts
+const setup = await client.bots.createSetupCode(workspaceId, bot.id);
+// setup.contract_version === 1
+// setup.claim_url is the exact server-issued endpoint
+
+const claim = await client.bots.claimSetupCode(setup.code!);
+// claim.api_base_url is the canonical base an installer persists
+```
+
+The initialized SDK client still claims against its own base URL. Installers
+that receive a setup URI must initialize the client from the server-issued
+endpoint/base rather than constructing `/api/bot-setup-codes/claim` from the
+frontend origin.
+
 Bot runtimes can atomically publish their command menu with their own token:
 
 ```ts

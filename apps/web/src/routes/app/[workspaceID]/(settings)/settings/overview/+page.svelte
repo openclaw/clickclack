@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation";
-  import { api, APIError } from "$lib/api";
+  import { api, apiResourceURL, APIError } from "$lib/api";
   import { isWorkspaceManager } from "$lib/permissions";
   import type { Upload, Workspace } from "$lib/types";
   import {
@@ -201,7 +201,7 @@
 <div class="ws-strip" aria-label="Current workspace">
   <span class="ws-strip__avatar">
     {#if workspace?.icon_url}
-      <img src={workspace.icon_url} alt="" />
+      <img src={apiResourceURL(workspace.icon_url)} alt="" />
     {:else}
       {initial}
     {/if}

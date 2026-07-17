@@ -35,6 +35,7 @@ hook in `cmd/clickclack/main.go`.
 | `--config`            | —                                | unset       | JSON config file. |
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
+| —                     | `CLICKCLACK_PUBLIC_API_URL`      | public URL  | Canonical external API base. May use a different origin and a normalized base path. |
 | —                     | `CLICKCLACK_COOKIE_NAMESPACE`    | unset       | Stable lowercase cookie namespace for multiple trusted ClickClack instances on one hostname. |
 | —                     | `CLICKCLACK_GITHUB_CLIENT_ID`    | unset       | GitHub OAuth app client ID. |
 | —                     | `CLICKCLACK_GITHUB_CLIENT_SECRET`| unset       | GitHub OAuth app client secret. |
@@ -58,6 +59,7 @@ hook in `cmd/clickclack/main.go`.
   "metrics_enabled": false,
   "dev_bootstrap": false,
   "public_url": "https://chat.example.com",
+  "public_api_url": "https://api.example.com/services/clickclack",
   "cookie_namespace": "production",
   "github_client_id": "Iv1.xxxxxxxxxxxx",
   "github_client_secret": "...",
@@ -74,7 +76,7 @@ Pass with `--config /etc/clickclack/config.json`. Values from the file
 are overridden by environment variables; CLI flags override both when
 explicitly set. The `dev_bootstrap` exception is described above.
 
-## Public origin and cookie namespace
+## Public frontend and API URLs
 
 `CLICKCLACK_PUBLIC_URL` is an origin, not an application base path. It must:
 
@@ -87,6 +89,44 @@ For example, `https://chat.example.com` and `http://127.0.0.1:8080` are valid.
 `https://user@chat.example.com` fail startup validation. GitHub OAuth
 credentials also fail startup validation unless the public URL is set.
 
+`CLICKCLACK_PUBLIC_API_URL` is the canonical address browsers and installers
+use for API calls. It defaults to `CLICKCLACK_PUBLIC_URL`, so existing
+same-origin deployments require no change. Set it only when the API has a
+different public origin or a public base path:
+
+```sh
+CLICKCLACK_PUBLIC_URL=https://chat.example.com
+CLICKCLACK_PUBLIC_API_URL=https://api.example.com/services/clickclack
+```
+
+The API URL follows the same scheme, host, credential, query, and fragment
+rules. It may additionally contain a normalized base path made from ordinary
+URL path segments; trailing slashes are removed. Dot segments, doubled
+slashes, encoded separators, whitespace, and backslashes fail startup
+validation. A path-mounted ingress must route
+`/services/clickclack/api/*` to the Go server's `/api/*` routes by stripping
+the configured prefix.
+
+Loopback split origins must both use HTTP and exactly the same hostname; only
+their ports may differ. This keeps local session cookies same-site. Remote
+origins must use HTTPS.
+
+When both URLs are configured, ClickClack injects the canonical API base into
+the SPA HTML it serves. A separate frontend ingress should proxy the SPA and
+asset routes to the ClickClack server while browsers call the configured API
+origin directly. A separately hosted static build must inject the equivalent
+value before the app modules run:
+
+```html
+<script>window.__CLICKCLACK_CONFIG__ = { apiBaseUrl: "https://api.example.com/services/clickclack" };</script>
+```
+
+That value is browser routing only. The server remains authoritative for setup
+claim URLs and returns only URLs derived from validated administrator
+configuration.
+
+## Cookie namespace
+
 The default cookie names remain `cc_session` and `cc_oauth_binding`. Set
 `CLICKCLACK_COOKIE_NAMESPACE` only when multiple trusted ClickClack instances
 must share one hostname:
@@ -98,7 +138,8 @@ CLICKCLACK_COOKIE_NAMESPACE=production
 
 The namespace must be at most 32 characters and contain lowercase letters,
 digits, and interior hyphens. HTTPS deployments receive `__Host-` cookie names,
-such as `__Host-cc-production-session`; loopback HTTP uses
+such as `__Host-cc-production-session`; path-mounted APIs use the path-compatible
+`__Secure-` prefix and scope cookies to the configured API base path. Loopback HTTP uses
 `cc-production-session`.
 
 Treat the namespace as durable deployment identity:

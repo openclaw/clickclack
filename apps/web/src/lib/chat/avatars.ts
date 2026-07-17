@@ -1,9 +1,11 @@
+import { apiResourceURL } from "../api";
+
 const MAX_AVATAR_SOURCE_CACHE = 512;
 
 const avatarSources = new Map<string, string>();
 
 export function avatarImageSource(url?: string | null): string {
-  const normalized = url?.trim() || "";
+  const normalized = apiResourceURL(url?.trim() || "");
   if (!normalized) return "";
 
   const cached = avatarSources.get(normalized);

@@ -44,7 +44,10 @@ func newSetupCodeTestServer(t *testing.T) (*httptest.Server, store.Store, store.
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{
+		UploadDir:    filepath.Join(dataDir, "uploads"),
+		PublicAPIURL: "https://api.example.com/services/clickclack",
+	}).Handler())
 	t.Cleanup(server.Close)
 	return server, st, workspace, owner, member
 }
@@ -66,7 +69,7 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 	expectStatusAsUser(t, member.ID, http.MethodPost, mintURL, strings.NewReader(`{"name":"gateway"}`), http.StatusForbidden)
 
 	minted := postJSONAsUser[struct {
-		SetupCode store.BotSetupCode `json:"setup_code"`
+		SetupCode botSetupCodeContract `json:"setup_code"`
 	}](t, owner.ID, mintURL, map[string]any{
 		"name":   "gateway",
 		"scopes": []string{"bot:write", store.AgentActivityWriteScope},
@@ -81,6 +84,9 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 	}
 	if minted.SetupCode.ExpiresAt == "" {
 		t.Fatalf("expected expiry in mint response, got %#v", minted.SetupCode)
+	}
+	if minted.SetupCode.ContractVersion != 1 || minted.SetupCode.APIBaseURL != "https://api.example.com/services/clickclack" || minted.SetupCode.ClaimURL != "https://api.example.com/services/clickclack/api/bot-setup-codes/claim" {
+		t.Fatalf("unexpected setup endpoint contract: %#v", minted.SetupCode)
 	}
 
 	// Bot tokens cannot mint setup codes.
@@ -108,8 +114,10 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 		t.Fatalf("claim response leaked internal bot token metadata: %#v", rawClaim)
 	}
 	var claim struct {
-		Token string `json:"token"`
-		Bot   struct {
+		Token           string `json:"token"`
+		ContractVersion int    `json:"contract_version"`
+		APIBaseURL      string `json:"api_base_url"`
+		Bot             struct {
 			ID          string `json:"id"`
 			Handle      string `json:"handle"`
 			DisplayName string `json:"display_name"`
@@ -135,6 +143,9 @@ func TestHTTPBotSetupCodeMintAndClaim(t *testing.T) {
 	}
 	if !strings.HasPrefix(claim.Token, "ccb_") {
 		t.Fatalf("expected plaintext token in claim response, got %#v", claim)
+	}
+	if claim.ContractVersion != 1 || claim.APIBaseURL != minted.SetupCode.APIBaseURL {
+		t.Fatalf("unexpected claimed endpoint contract: %#v", claim)
 	}
 	if claim.Bot.ID != bot.Bot.ID || claim.Workspace.ID != workspace.ID || claim.Workspace.RouteID == "" {
 		t.Fatalf("unexpected claim context: %#v", claim)

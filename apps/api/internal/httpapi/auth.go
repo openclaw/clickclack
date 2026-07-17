@@ -82,14 +82,12 @@ func (s *Server) requireSameOriginJSON(w http.ResponseWriter, r *http.Request) b
 }
 
 func (s *Server) sameOriginBrowserRequest(r *http.Request) bool {
-	if fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); fetchSite != "" && fetchSite != "same-origin" && fetchSite != "none" {
-		return false
-	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
+	if origin != "" {
+		return s.sameOrigin(r, origin)
 	}
-	return s.sameOrigin(r, origin)
+	fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	return fetchSite == "" || fetchSite == "same-origin" || fetchSite == "none"
 }
 
 func (s *Server) sameOrigin(r *http.Request, origin string) bool {
@@ -100,7 +98,8 @@ func (s *Server) sameOrigin(r *http.Request, origin string) bool {
 	if parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https" {
 		return false
 	}
-	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil && publicURL.Scheme != "" && publicURL.Host != "" {
+	publicBrowserURL := firstNonEmpty(s.frontendURL, s.githubOAuth.PublicURL)
+	if publicURL, err := url.Parse(strings.TrimSpace(publicBrowserURL)); err == nil && publicURL.Scheme != "" && publicURL.Host != "" {
 		publicOrigin, ok := canonicalOrigin(publicURL)
 		if !ok {
 			return false

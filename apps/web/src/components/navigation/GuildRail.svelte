@@ -1,5 +1,6 @@
 <script lang="ts">
   import { workspaceInitial } from "../../lib/chat/people";
+  import { apiResourceURL } from "../../lib/api";
   import type { Workspace } from "../../lib/types";
 
   type Props = {
@@ -53,7 +54,7 @@
           }}
         >
           {#if workspace.icon_url}
-            <img class="guild__image" src={workspace.icon_url} alt="" />
+            <img class="guild__image" src={apiResourceURL(workspace.icon_url)} alt="" />
           {:else}
             <span>{workspaceInitial(workspace.name)}</span>
           {/if}

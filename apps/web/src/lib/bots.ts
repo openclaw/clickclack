@@ -1,4 +1,4 @@
-import { api, APIError } from "./api";
+import { api, apiBaseURL, APIError } from "./api";
 import type { User, Workspace } from "./types";
 
 export type BotToken = {
@@ -91,6 +91,9 @@ export type BotSetupCode = {
   // One-time plaintext code (XXXX-XXXX-XXXX). Present only in the mint
   // response; the server stores just a hash.
   code?: string;
+  contract_version?: 1;
+  claim_url?: string;
+  api_base_url?: string;
 };
 
 export type BotSetupCodeDefaults = {
@@ -261,7 +264,9 @@ export function buildOpenClawConfigSnippet(opts: {
   agentActivity?: boolean;
 }): string {
   const base = (
-    opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")
+    opts.baseURL ||
+    apiBaseURL() ||
+    (typeof window !== "undefined" ? window.location.origin : "")
   ).replace(/\/$/, "");
   const handle = opts.botHandle.replace(/^@/, "");
   const envName = opts.mode === "single" ? "CLICKCLACK_BOT_TOKEN" : envNameForHandle(handle);
@@ -319,15 +324,27 @@ export function buildOpenClawCodeSnippet(opts: {
   botHandle: string;
   mode: OpenClawAccountMode;
   baseURL?: string;
+  claimURL?: string;
+  apiBaseURL?: string;
+  frontendURL?: string;
 }): string {
-  const base =
-    (opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")).replace(
-      /\/$/,
-      "",
-    ) || "https://your-clickclack.example.com";
+  const browserOrigin =
+    opts.frontendURL || (typeof window !== "undefined" ? window.location.origin : "");
+  const issuedAPIBase = (opts.apiBaseURL || apiBaseURL()).replace(/\/$/, "");
+  const base = (opts.baseURL || issuedAPIBase || browserOrigin).replace(/\/$/, "");
+  const exactClaimURL = (opts.claimURL || "").replace(/\/$/, "");
+  const endpoint =
+    exactClaimURL && issuedAPIBase && issuedAPIBase !== browserOrigin
+      ? exactClaimURL
+      : base || "https://your-clickclack.example.com/";
   const handle = opts.botHandle.replace(/^@/, "");
   const accountArg = opts.mode === "named" ? ` --account ${shellQuote(handle)}` : "";
-  return `openclaw channels add clickclack${accountArg} --code ${shellQuote(`${base}/#${opts.code}`)}`;
+  const separator = endpoint.endsWith("/") ? "#" : "/#";
+  const setupURI =
+    exactClaimURL && endpoint === exactClaimURL
+      ? `${endpoint}#${opts.code}`
+      : `${endpoint}${separator}${opts.code}`;
+  return `openclaw channels add clickclack${accountArg} --code ${shellQuote(setupURI)}`;
 }
 
 export function buildOpenClawShellSnippet(opts: {
@@ -338,10 +355,11 @@ export function buildOpenClawShellSnippet(opts: {
   baseURL?: string;
 }): string {
   const base =
-    (opts.baseURL || (typeof window !== "undefined" ? window.location.origin : "")).replace(
-      /\/$/,
-      "",
-    ) || "https://your-clickclack.example.com";
+    (
+      opts.baseURL ||
+      apiBaseURL() ||
+      (typeof window !== "undefined" ? window.location.origin : "")
+    ).replace(/\/$/, "") || "https://your-clickclack.example.com";
   const handle = opts.botHandle.replace(/^@/, "");
   const accountLine = opts.mode === "named" ? ` \\\n  --account ${shellQuote(handle)}` : "";
   return `openclaw channels add clickclack${accountLine} \\

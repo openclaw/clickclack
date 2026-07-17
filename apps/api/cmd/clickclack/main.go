@@ -98,7 +98,7 @@ func serve(args []string) error {
 	if err := cfg.ValidateServe(); err != nil {
 		return err
 	}
-	cookieNames, err := authpolicy.NewCookieNames(cfg.CookieNamespace, cfg.PublicURL)
+	cookieNames, err := authpolicy.NewCookieNames(cfg.CookieNamespace, cfg.PublicURL, cfg.PublicAPIURL)
 	if err != nil {
 		return err
 	}
@@ -136,6 +136,8 @@ func serve(args []string) error {
 		UploadStorage:  uploads,
 		DisableDevAuth: !cfg.DevBootstrap,
 		CookieNames:    cookieNames,
+		FrontendURL:    cfg.PublicURL,
+		PublicAPIURL:   cfg.PublicAPIURL,
 		GitHubOAuth: httpapi.GitHubOAuthConfig{
 			ClientID:     cfg.GitHubClientID,
 			ClientSecret: cfg.GitHubClientSecret,

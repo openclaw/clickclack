@@ -269,7 +269,8 @@ hash. No bot token exists yet.
 The installer claims the code with the unauthenticated, rate-limited
 `POST /api/bot-setup-codes/claim` (`{"code": "XXXX-XXXX-XXXX"}`). The claim
 atomically consumes the code and mints the bot token at that moment,
-returning `{token, bot, workspace, defaults}` with the one-time raw token,
+returning `{token, bot, workspace, defaults, contract_version, api_base_url}`
+with the one-time raw token,
 minimal bot and workspace identity, and a suggested `defaultTo` channel when
 one exists. Codes are single use;
 unknown, expired, and already-claimed codes all answer with the same `404`.
@@ -289,6 +290,15 @@ back to the workspace's active default channel when no `defaultTo` was
 captured. Choosing the manual token mints the raw token immediately and no
 setup code is created. If a code expires unclaimed, the bot row's "New setup
 code" action mints a fresh one without recreating the bot.
+
+When a trusted canonical API base is configured, mint responses add the
+versioned fields `contract_version: 1`, `claim_url`, and `api_base_url`.
+`claim_url` is the exact endpoint; consumers must not append a fixed API path.
+The claim response repeats `contract_version` and `api_base_url` so installers
+can persist the server-selected base, including any path prefix. Remote URLs
+come only from validated administrator configuration. Same-origin setup
+commands retain the legacy `https://server/#CODE` shape for installed clients;
+split-origin and path-mounted commands use `https://api/.../claim#CODE`.
 
 ## Command Menus
 

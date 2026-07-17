@@ -2675,7 +2675,7 @@ func TestNamespacedSessionCookiePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookieNames, err := authpolicy.NewCookieNames("prod", "https://chat.example.com")
+	cookieNames, err := authpolicy.NewCookieNames("prod", "https://chat.example.com", "https://chat.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}

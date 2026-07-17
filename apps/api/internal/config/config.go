@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ type Config struct {
 	Environment        string `json:"environment"`
 	MetricsEnabled     bool   `json:"metrics_enabled"`
 	PublicURL          string `json:"public_url"`
+	PublicAPIURL       string `json:"public_api_url"`
 	CookieNamespace    string `json:"cookie_namespace"`
 	DevBootstrap       bool   `json:"dev_bootstrap"`
 	GitHubClientID     string `json:"github_client_id"`
@@ -78,6 +80,9 @@ func Load(path string) (Config, error) {
 	if env := os.Getenv("CLICKCLACK_PUBLIC_URL"); env != "" {
 		cfg.PublicURL = env
 	}
+	if env := os.Getenv("CLICKCLACK_PUBLIC_API_URL"); env != "" {
+		cfg.PublicAPIURL = env
+	}
 	if env := os.Getenv("CLICKCLACK_COOKIE_NAMESPACE"); env != "" {
 		cfg.CookieNamespace = env
 	}
@@ -133,6 +138,16 @@ func (c *Config) ValidateServe() error {
 	if err != nil {
 		return fmt.Errorf("CLICKCLACK_PUBLIC_URL: %w", err)
 	}
+	publicAPIURL, err := authpolicy.CanonicalPublicAPIURL(c.PublicAPIURL)
+	if err != nil {
+		return fmt.Errorf("CLICKCLACK_PUBLIC_API_URL: %w", err)
+	}
+	if publicAPIURL == "" {
+		publicAPIURL = publicURL
+	}
+	if err := validatePublicURLPair(publicURL, publicAPIURL); err != nil {
+		return err
+	}
 	clientID := strings.TrimSpace(c.GitHubClientID)
 	clientSecret := strings.TrimSpace(c.GitHubClientSecret)
 	allowedOrg := strings.TrimSpace(c.GitHubAllowedOrg)
@@ -148,14 +163,37 @@ func (c *Config) ValidateServe() error {
 	if (allowedOrg != "" || moderatorOrg != "") && !hasClientID {
 		return errors.New("GitHub organization settings require GitHub OAuth credentials")
 	}
-	if _, err := authpolicy.NewCookieNames(namespace, publicURL); err != nil {
+	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)
 	}
+	c.PublicAPIURL = publicAPIURL
 	c.CookieNamespace = namespace
 	c.PublicURL = publicURL
 	c.GitHubClientID = clientID
 	c.GitHubClientSecret = clientSecret
 	c.GitHubAllowedOrg = allowedOrg
 	c.GitHubModeratorOrg = moderatorOrg
+	return nil
+}
+
+func validatePublicURLPair(publicURL, publicAPIURL string) error {
+	if publicURL == "" || publicAPIURL == "" {
+		return nil
+	}
+	frontend, err := authpolicy.CanonicalPublicURL(publicURL)
+	if err != nil {
+		return fmt.Errorf("CLICKCLACK_PUBLIC_URL: %w", err)
+	}
+	api, err := authpolicy.CanonicalPublicAPIURL(publicAPIURL)
+	if err != nil {
+		return fmt.Errorf("CLICKCLACK_PUBLIC_API_URL: %w", err)
+	}
+	if strings.HasPrefix(frontend, "http://") || strings.HasPrefix(api, "http://") {
+		frontendURL, _ := url.Parse(frontend)
+		apiURL, _ := url.Parse(api)
+		if frontendURL.Scheme != "http" || apiURL.Scheme != "http" || !strings.EqualFold(frontendURL.Hostname(), apiURL.Hostname()) {
+			return errors.New("loopback split origins must both use HTTP and the same hostname")
+		}
+	}
 	return nil
 }

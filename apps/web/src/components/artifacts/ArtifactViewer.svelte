@@ -180,7 +180,7 @@
   }
 
   async function responseBytes(signal: AbortSignal, limit: number): Promise<Uint8Array> {
-    const response = await fetch(url, { credentials: "same-origin", signal });
+    const response = await fetch(url, { credentials: "include", signal });
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
         throw new Error("You no longer have access to this artifact.");

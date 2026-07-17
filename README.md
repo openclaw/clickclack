@@ -144,6 +144,8 @@ exists. GitHub OAuth is opt-in via:
 
 ```sh
 CLICKCLACK_PUBLIC_URL=https://chat.example.com
+# Optional split API origin or normalized base path; defaults to PUBLIC_URL:
+# CLICKCLACK_PUBLIC_API_URL=https://api.example.com/services/clickclack
 # Optional for multiple trusted instances on one hostname:
 # CLICKCLACK_COOKIE_NAMESPACE=production
 CLICKCLACK_GITHUB_CLIENT_ID=...

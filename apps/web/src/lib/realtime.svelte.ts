@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from "./types";
+import { apiURL } from "./api";
 
 export type RealtimeOptions = {
   workspaceID: string;
@@ -31,8 +32,8 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
 
   function open() {
     if (closed) return;
-    const url = new URL("/api/realtime/ws", window.location.href);
-    url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const url = new URL(apiURL("/api/realtime/ws"), window.location.href);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("workspace_id", workspaceID);
     const lastCursor = localStorage.getItem(cursorKey(workspaceID)) || "";
     if (lastCursor) url.searchParams.set("after_cursor", lastCursor);

@@ -840,7 +840,11 @@ func (s *Server) createWorkspaceBotSetupCode(w http.ResponseWriter, r *http.Requ
 			"token_name":  code.TokenName,
 		})
 	}
-	writeResultStatus(w, http.StatusCreated, map[string]any{"setup_code": code}, err)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"setup_code": s.setupCodeContract(r, code)})
 }
 
 func (s *Server) claimBotSetupCode(w http.ResponseWriter, r *http.Request) {
@@ -864,7 +868,7 @@ func (s *Server) claimBotSetupCode(w http.ResponseWriter, r *http.Request) {
 		"bot_user_id": claim.Bot.ID,
 		"token_name":  claim.BotToken.Name,
 	})
-	writeJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"token": claim.BotToken.Token,
 		"bot": map[string]string{
 			"id":           claim.Bot.ID,
@@ -878,7 +882,31 @@ func (s *Server) claimBotSetupCode(w http.ResponseWriter, r *http.Request) {
 			"name":     claim.Workspace.Name,
 		},
 		"defaults": claim.Defaults,
-	})
+	}
+	if baseURL := s.apiBaseURL(r); baseURL != "" {
+		response["contract_version"] = botSetupContractVersion
+		response["api_base_url"] = baseURL
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+const botSetupContractVersion = 1
+
+type botSetupCodeContract struct {
+	store.BotSetupCode
+	ContractVersion int    `json:"contract_version,omitempty"`
+	ClaimURL        string `json:"claim_url,omitempty"`
+	APIBaseURL      string `json:"api_base_url,omitempty"`
+}
+
+func (s *Server) setupCodeContract(r *http.Request, code store.BotSetupCode) botSetupCodeContract {
+	response := botSetupCodeContract{BotSetupCode: code}
+	if baseURL := s.apiBaseURL(r); baseURL != "" {
+		response.ContractVersion = botSetupContractVersion
+		response.APIBaseURL = baseURL
+		response.ClaimURL = baseURL + "/api/bot-setup-codes/claim"
+	}
+	return response
 }
 
 func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) {

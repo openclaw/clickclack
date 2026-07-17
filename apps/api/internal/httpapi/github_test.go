@@ -263,7 +263,7 @@ func TestDesktopOAuthProtocolCompatibility(t *testing.T) {
 		t.Fatalf("expected legacy desktop protocol on the default cookie server, got %d", legacyRecorder.Code)
 	}
 
-	names, err := authpolicy.NewCookieNames("prod", "https://chat.example.com")
+	names, err := authpolicy.NewCookieNames("prod", "https://chat.example.com", "https://chat.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,7 +598,7 @@ func TestNamespacedOAuthSessionsCoexistAcrossSameHostPorts(t *testing.T) {
 			handler.ServeHTTP(w, r)
 		}))
 		t.Cleanup(server.Close)
-		names, err := authpolicy.NewCookieNames(namespace, server.URL)
+		names, err := authpolicy.NewCookieNames(namespace, server.URL, server.URL)
 		if err != nil {
 			t.Fatal(err)
 		}

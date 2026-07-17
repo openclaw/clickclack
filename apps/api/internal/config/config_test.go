@@ -14,6 +14,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_ENVIRONMENT", "fakeco")
 	t.Setenv("CLICKCLACK_METRICS_ENABLED", "true")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "https://clickclack.test")
+	t.Setenv("CLICKCLACK_PUBLIC_API_URL", "https://api.clickclack.test/services/clickclack/")
 	t.Setenv("CLICKCLACK_COOKIE_NAMESPACE", "prod-2")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "false")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "client")
@@ -29,7 +30,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.PublicAPIURL != "https://api.clickclack.test/services/clickclack/" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
 		t.Fatalf("unexpected env config: %#v", cfg)
 	}
 
@@ -52,6 +53,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_ENVIRONMENT", "")
 	t.Setenv("CLICKCLACK_METRICS_ENABLED", "")
 	t.Setenv("CLICKCLACK_PUBLIC_URL", "")
+	t.Setenv("CLICKCLACK_PUBLIC_API_URL", "")
 	t.Setenv("CLICKCLACK_COOKIE_NAMESPACE", "")
 	t.Setenv("CLICKCLACK_DEV_BOOTSTRAP", "")
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_ID", "")
@@ -130,6 +132,14 @@ func TestValidateServe(t *testing.T) {
 	if disabled.GitHubClientID != "" || disabled.GitHubClientSecret != "" {
 		t.Fatalf("expected whitespace credentials to normalize as disabled: %#v", disabled)
 	}
+	sameOrigin := Config{PublicURL: "https://chat.example.com"}
+	if err := sameOrigin.ValidateServe(); err != nil || sameOrigin.PublicAPIURL != sameOrigin.PublicURL {
+		t.Fatalf("expected public API URL to default to public URL: %#v %v", sameOrigin, err)
+	}
+	splitOrigin := Config{PublicURL: "https://chat.example.com", PublicAPIURL: "https://API.Example.com:443/services/clickclack/"}
+	if err := splitOrigin.ValidateServe(); err != nil || splitOrigin.PublicAPIURL != "https://api.example.com/services/clickclack" {
+		t.Fatalf("expected canonical split API URL: %#v %v", splitOrigin, err)
+	}
 
 	for _, tc := range []struct {
 		name string
@@ -139,6 +149,9 @@ func TestValidateServe(t *testing.T) {
 		{"namespace without public url", Config{CookieNamespace: "prod"}},
 		{"non-https remote url", Config{PublicURL: "http://chat.example.com"}},
 		{"public url path", Config{PublicURL: "https://chat.example.com/app"}},
+		{"public api url query", Config{PublicURL: "https://chat.example.com", PublicAPIURL: "https://api.example.com?x=1"}},
+		{"mixed loopback schemes", Config{PublicURL: "http://localhost:8080", PublicAPIURL: "https://localhost:8443"}},
+		{"different loopback hosts", Config{PublicURL: "http://localhost:8080", PublicAPIURL: "http://127.0.0.1:8081"}},
 		{"missing client secret", Config{PublicURL: "https://chat.example.com", GitHubClientID: "client"}},
 		{"oauth without public url", Config{GitHubClientID: "client", GitHubClientSecret: "secret"}},
 		{"org without oauth", Config{GitHubAllowedOrg: "openclaw"}},

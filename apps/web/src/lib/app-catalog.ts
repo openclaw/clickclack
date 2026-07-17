@@ -37,6 +37,8 @@ export type AppSnippetInput = {
   agentActivity?: boolean;
   // One-time setup code, set when rendering the code-based connect snippet.
   setupCode?: string;
+  setupClaimURL?: string;
+  apiBaseURL?: string;
 };
 
 export type AppManifest = {
@@ -110,6 +112,8 @@ export const APP_CATALOG: AppManifest[] = [
         code: input.setupCode ?? "",
         botHandle: input.botHandle,
         mode: input.mode,
+        claimURL: input.setupClaimURL,
+        apiBaseURL: input.apiBaseURL,
       }),
   },
   {

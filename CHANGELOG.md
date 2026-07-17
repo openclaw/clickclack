@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added validated split frontend/API origins, credentialed exact-origin browser access, and versioned server-issued bot setup endpoints while preserving same-origin setup commands.
 - Refreshed frontend, Cloudflare Worker, router, and SQLite dependencies to their current compatible releases.
 - Tightened integration administration with manager-only registration changes, signing-secret rotation, atomic installation revoke cascades, paginated delivery history, and a discoverable durable event-type vocabulary.
 - Added owner-scoped message nonce lookup so durable clients can distinguish completed sends from interrupted requests and recover attachments safely. Thanks @shakkernerd.

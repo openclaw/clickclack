@@ -1,5 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import { apiResourceURL } from "../../lib/api";
   import { avatarHue, directConversationForUser, handleLabel } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
@@ -188,7 +189,7 @@
       onclick={onOpenWorkspaceSettings}
     >
       {#if workspaceIconURL}
-        <img class="workspace-header-icon" src={workspaceIconURL} alt="" />
+        <img class="workspace-header-icon" src={apiResourceURL(workspaceIconURL)} alt="" />
       {/if}
       <span class="workspace-name">
         <strong>

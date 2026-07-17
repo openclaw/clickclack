@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -44,7 +45,7 @@ func ParseCookieNamespace(input string) (string, error) {
 	return namespace, nil
 }
 
-func NewCookieNames(namespace, publicURL string) (CookieNames, error) {
+func NewCookieNames(namespace, publicURL, publicAPIURL string) (CookieNames, error) {
 	namespace, err := ParseCookieNamespace(namespace)
 	if err != nil {
 		return CookieNames{}, err
@@ -59,9 +60,21 @@ func NewCookieNames(namespace, publicURL string) (CookieNames, error) {
 	if canonicalURL == "" {
 		return CookieNames{}, errors.New("namespaced cookies require CLICKCLACK_PUBLIC_URL")
 	}
+	canonicalAPIURL, err := CanonicalPublicAPIURL(publicAPIURL)
+	if err != nil {
+		return CookieNames{}, fmt.Errorf("namespaced cookies require a valid public API URL: %w", err)
+	}
+	if canonicalAPIURL == "" {
+		canonicalAPIURL = canonicalURL
+	}
+	apiURL, _ := url.Parse(canonicalAPIURL)
 	prefix := "cc-" + namespace + "-"
-	if strings.HasPrefix(canonicalURL, "https://") {
-		prefix = "__Host-" + prefix
+	if apiURL.Scheme == "https" {
+		if apiURL.Path == "" {
+			prefix = "__Host-" + prefix
+		} else {
+			prefix = "__Secure-" + prefix
+		}
 	}
 	return CookieNames{
 		Session:      prefix + "session",
@@ -71,6 +84,14 @@ func NewCookieNames(namespace, publicURL string) (CookieNames, error) {
 }
 
 func CanonicalPublicURL(input string) (string, error) {
+	return canonicalPublicURL(input, false)
+}
+
+func CanonicalPublicAPIURL(input string) (string, error) {
+	return canonicalPublicURL(input, true)
+}
+
+func canonicalPublicURL(input string, allowBasePath bool) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "", nil
@@ -91,7 +112,14 @@ func CanonicalPublicURL(input string) (string, error) {
 	if value.RawQuery != "" || value.Fragment != "" {
 		return "", errors.New("public URL must not include a query or fragment")
 	}
-	if value.EscapedPath() != "" && value.EscapedPath() != "/" {
+	basePath := ""
+	if allowBasePath {
+		var err error
+		basePath, err = canonicalBasePath(value)
+		if err != nil {
+			return "", err
+		}
+	} else if value.EscapedPath() != "" && value.EscapedPath() != "/" {
 		return "", errors.New("public URL must be an origin without a path")
 	}
 	hostname := strings.ToLower(value.Hostname())
@@ -118,7 +146,37 @@ func CanonicalPublicURL(input string) (string, error) {
 	} else if strings.Contains(hostname, ":") {
 		host = "[" + hostname + "]"
 	}
-	return value.Scheme + "://" + host, nil
+	return value.Scheme + "://" + host + basePath, nil
+}
+
+func canonicalBasePath(value *url.URL) (string, error) {
+	escaped := value.EscapedPath()
+	if escaped == "" || escaped == "/" {
+		return "", nil
+	}
+	if value.RawPath != "" || strings.Contains(value.Path, "\\") {
+		return "", errors.New("public API URL has an invalid base path")
+	}
+	cleaned := path.Clean(value.Path)
+	trimmed := strings.TrimSuffix(value.Path, "/")
+	if cleaned == "." || cleaned == "/" {
+		return "", errors.New("public API URL base path must be normalized")
+	}
+	if cleaned != trimmed || strings.Contains(value.Path, "//") {
+		return "", errors.New("public API URL base path must be normalized")
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(cleaned, "/"), "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", errors.New("public API URL base path must be normalized")
+		}
+		for _, character := range segment {
+			if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || strings.ContainsRune("-._~", character) {
+				continue
+			}
+			return "", errors.New("public API URL base path contains unsupported characters")
+		}
+	}
+	return cleaned, nil
 }
 
 func isLoopbackHost(host string) bool {

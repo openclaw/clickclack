@@ -50,6 +50,10 @@ export type BotSetupCode = {
   expires_at: string;
   /** One-time plaintext setup code. Present only in the mint response. */
   code?: string;
+  /** Version 1 treats claim_url as the exact endpoint. */
+  contract_version?: 1;
+  claim_url?: string;
+  api_base_url?: string;
 };
 
 export type BotSetupCodeDefaults = {
@@ -72,6 +76,8 @@ export type BotSetupCodeClaim = {
     name: string;
   };
   defaults: BotSetupCodeDefaults;
+  contract_version?: 1;
+  api_base_url?: string;
 };
 
 export type BotCommandInput = {

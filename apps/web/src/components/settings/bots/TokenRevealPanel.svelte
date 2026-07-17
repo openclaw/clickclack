@@ -54,6 +54,8 @@
         code: input.setupCode ?? "",
         botHandle: input.botHandle,
         mode: input.mode,
+        claimURL: input.setupClaimURL,
+        apiBaseURL: input.apiBaseURL,
       }),
     onDismiss,
   }: Props = $props();
@@ -154,7 +156,12 @@
   const shellSnippet = $derived(shellSnippetBuilder?.(snippetInput) ?? "");
   const codeSnippet = $derived(
     setupCode?.code && codeSnippetBuilder
-      ? codeSnippetBuilder({ ...snippetInput, setupCode: setupCode.code })
+      ? codeSnippetBuilder({
+          ...snippetInput,
+          setupCode: setupCode.code,
+          setupClaimURL: setupCode.claim_url,
+          apiBaseURL: setupCode.api_base_url,
+        })
       : "",
   );
 

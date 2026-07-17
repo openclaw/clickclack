@@ -1,7 +1,8 @@
 import type { Upload } from "./types";
+import { apiURL } from "./api";
 
 export function uploadURL(upload: Upload): string {
-  return `/api/uploads/${encodeURIComponent(upload.id)}`;
+  return apiURL(`/api/uploads/${encodeURIComponent(upload.id)}`);
 }
 
 export function isImageUpload(upload: Upload): boolean {

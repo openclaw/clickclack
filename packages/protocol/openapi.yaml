@@ -1976,6 +1976,18 @@ components:
         code:
           type: string
           description: One-time plaintext setup code (XXXX-XXXX-XXXX). Present only in the mint response; only a hash is stored.
+        contract_version:
+          type: integer
+          enum: [1]
+          description: Present with claim_url and api_base_url when the server has a trusted canonical API base. Version 1 means claim_url is the exact endpoint and must not be extended by consumers.
+        claim_url:
+          type: string
+          format: uri
+          description: Exact server-issued claim endpoint. Derived only from validated administrator configuration, except for trusted loopback development.
+        api_base_url:
+          type: string
+          format: uri
+          description: Canonical API base URL, including any configured base path.
     BotSetupCodeResponse:
       type: object
       required: [setup_code]
@@ -2002,6 +2014,14 @@ components:
           $ref: "#/components/schemas/BotSetupCodeClaimWorkspace"
         defaults:
           $ref: "#/components/schemas/BotSetupCodeClaimDefaults"
+        contract_version:
+          type: integer
+          enum: [1]
+          description: Version of the setup-code endpoint contract.
+        api_base_url:
+          type: string
+          format: uri
+          description: Canonical API base URL the installer should persist, including any configured base path.
     BotSetupCodeClaimBot:
       type: object
       required: [id, handle, display_name]

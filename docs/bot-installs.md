@@ -140,6 +140,18 @@ writes the account configuration selected in the ClickClack wizard, including
 the default channel, sender allowlist, and agent-activity setting. The token
 does not pass through the clipboard or shell history.
 
+Same-origin servers keep that command shape for compatibility. Split-origin
+or path-mounted servers issue the exact claim endpoint instead:
+
+```sh
+openclaw channels add clickclack \
+  --code "https://api.example.com/services/clickclack/api/bot-setup-codes/claim#XXXX-XXXX-XXXX"
+```
+
+The endpoint before `#` is server-issued and exact. Compatible OpenClaw
+consumers post the code there without appending a path, then persist the
+`api_base_url` returned by the claim.
+
 A running OpenClaw gateway picks up the new account automatically (the
 ClickClack extension hot-reloads on `channels.clickclack` changes). If the
 gateway is not running yet, start it with `openclaw gateway`.

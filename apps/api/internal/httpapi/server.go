@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -31,7 +32,10 @@ type Server struct {
 	uploadDir             string
 	uploadStorage         uploadstore.Store
 	githubOAuth           GitHubOAuthConfig
+	frontendURL           string
+	publicAPIURL          string
 	cookies               authpolicy.CookieNames
+	cookieSameSite        http.SameSite
 	disableDevAuth        bool
 	pushNotifier          PushNotifier
 	metrics               *metricsRegistry
@@ -66,6 +70,8 @@ type Options struct {
 	UploadDir      string
 	UploadStorage  uploadstore.Store
 	GitHubOAuth    GitHubOAuthConfig
+	FrontendURL    string
+	PublicAPIURL   string
 	CookieNames    authpolicy.CookieNames
 	DisableDevAuth bool
 	PushNotifier   PushNotifier
@@ -94,7 +100,10 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		uploadDir:             options.UploadDir,
 		uploadStorage:         uploadStorage,
 		githubOAuth:           options.GitHubOAuth.withDefaults(),
+		frontendURL:           strings.TrimSpace(options.FrontendURL),
+		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		cookies:               cookieNames,
+		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
 		disableDevAuth:        options.DisableDevAuth,
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
@@ -121,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/metrics", s.metricsHandler)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Use(s.cors)
 		r.Use(s.requireCookieCSRF)
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
@@ -1270,7 +1280,7 @@ func websocketBearerProtocol(r *http.Request) string {
 }
 
 func (s *Server) websocketOriginPatterns(r *http.Request) []string {
-	publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL))
+	publicURL, err := url.Parse(strings.TrimSpace(firstNonEmpty(s.frontendURL, s.githubOAuth.PublicURL)))
 	if err != nil || publicURL.Host == "" {
 		return nil
 	}
@@ -1445,7 +1455,19 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	index = s.injectRuntimeConfig(index)
 	_, _ = w.Write(index)
+}
+
+func (s *Server) injectRuntimeConfig(index []byte) []byte {
+	config, err := json.Marshal(map[string]string{"apiBaseUrl": s.publicAPIURL})
+	if err != nil {
+		return index
+	}
+	script := append([]byte(`<script>window.__CLICKCLACK_CONFIG__=`), config...)
+	script = append(script, []byte(`;</script></head>`)...)
+	return bytes.Replace(index, []byte("</head>"), script, 1)
 }
 
 func writeWS(ctx context.Context, conn *websocket.Conn, event store.Event) error {

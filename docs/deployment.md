@@ -234,6 +234,38 @@ GitHub for `read:org` and only accepts active members of that org. See
 origins must use HTTPS and cannot contain a path, credentials, query, or
 fragment. GitHub OAuth credentials are rejected without it.
 
+For separate public frontend and API origins, keep `CLICKCLACK_PUBLIC_URL` as
+the browser application origin and add the API address:
+
+```sh
+CLICKCLACK_PUBLIC_URL=https://chat.example.com
+CLICKCLACK_PUBLIC_API_URL=https://api.example.com
+```
+
+The frontend ingress proxies SPA and asset requests to the ClickClack server,
+which injects the configured API base into runtime HTML. The API ingress sends
+`/api/*` and `/api/realtime/ws` to the same server. When the API URL has a base
+path, the API ingress strips that prefix before forwarding. GitHub OAuth's
+callback must be registered at
+`<CLICKCLACK_PUBLIC_API_URL>/api/auth/github/callback`; successful browser
+login returns to `CLICKCLACK_PUBLIC_URL`.
+
+Browser API access is credentialed and exact-origin only:
+
+- CORS allows only the configured `CLICKCLACK_PUBLIC_URL`; no wildcard or
+  reflected arbitrary origin is used.
+- Preflights allow only the API's normal methods and the `Authorization`,
+  `Content-Type`, `X-ClickClack-CSRF`, and `X-Request-ID` headers.
+- Session-cookie mutations still require `X-ClickClack-CSRF: 1` and the exact
+  configured frontend `Origin`.
+- Realtime WebSocket upgrades accept that same exact frontend origin.
+- Same-host port splits retain `SameSite=Lax`. Different HTTPS hostnames use
+  `SameSite=None; Secure`; browser third-party-cookie policy can still block
+  unrelated-site topologies, so related frontend/API hostnames are preferred.
+
+The API also serves the embedded SPA at its own origin, but a split deployment
+must treat `CLICKCLACK_PUBLIC_URL` as the only supported browser origin.
+
 GitHub OAuth apps have one configured callback URL. Each ClickClack public
 origin, including a distinct non-default port, therefore needs matching OAuth
 app configuration. Never point multiple unrelated public origins at one

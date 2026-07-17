@@ -277,6 +277,29 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
   expect(namedCodeSnippet).toContain("--account 'release-bot'");
   expect(namedCodeSnippet).toContain("--code 'https://chat.example.com/#AB2C-DE3F-GH4J'");
   expect(namedCodeSnippet).not.toContain("--token");
+
+  const compatibleCodeSnippet = buildOpenClawCodeSnippet({
+    code: "AB2C-DE3F-GH4J",
+    botHandle: "release-bot",
+    mode: "single",
+    frontendURL: "https://chat.example.com",
+    apiBaseURL: "https://chat.example.com",
+    claimURL: "https://chat.example.com/api/bot-setup-codes/claim",
+  });
+  expect(compatibleCodeSnippet).toContain("--code 'https://chat.example.com/#AB2C-DE3F-GH4J'");
+
+  const splitCodeSnippet = buildOpenClawCodeSnippet({
+    code: "AB2C-DE3F-GH4J",
+    botHandle: "release-bot",
+    mode: "single",
+    frontendURL: "https://chat.example.com",
+    baseURL: "https://chat.example.com",
+    apiBaseURL: "https://api.example.com/services/clickclack",
+    claimURL: "https://api.example.com/services/clickclack/api/bot-setup-codes/claim",
+  });
+  expect(splitCodeSnippet).toContain(
+    "--code 'https://api.example.com/services/clickclack/api/bot-setup-codes/claim#AB2C-DE3F-GH4J'",
+  );
 });
 
 test("channels can be reordered accessibly and persist locally", async ({ page, browser }) => {

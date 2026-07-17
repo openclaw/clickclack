@@ -255,7 +255,11 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		s.setSessionCookie(w, r, session)
 		s.recordGitHubOAuthEvent(githubOAuthEventBrowserSucceeded)
-		http.Redirect(w, r, "/", http.StatusFound)
+		destination := "/"
+		if s.frontendURL != "" {
+			destination = s.frontendURL + "/"
+		}
+		http.Redirect(w, r, destination, http.StatusFound)
 		return
 	}
 	if transaction.Mode != store.OAuthModeDesktop || !validDesktopCode(transaction.DesktopChallenge, 43, 43) {
@@ -535,7 +539,7 @@ func (s *Server) githubScope() string {
 }
 
 func (s *Server) githubRedirectURL(r *http.Request) (string, error) {
-	base := strings.TrimRight(s.githubOAuth.PublicURL, "/")
+	base := strings.TrimRight(firstNonEmpty(s.publicAPIURL, s.githubOAuth.PublicURL), "/")
 	if base == "" {
 		if s.disableDevAuth || !isLocalHostPort(r.Host) || !isLocalHostPort(r.RemoteAddr) {
 			return "", errors.New("github oauth requires a configured public URL")
@@ -551,10 +555,22 @@ func (s *Server) githubRedirectURL(r *http.Request) (string, error) {
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, session store.Session) {
 	expires, _ := time.Parse(time.RFC3339Nano, session.ExpiresAt)
-	http.SetCookie(w, &http.Cookie{Name: s.cookies.Session, Value: session.Token, Path: "/", Expires: expires, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: s.cookies.Session, Value: session.Token, Path: s.cookiePath(), Expires: expires, HttpOnly: true, Secure: s.secureCookies(r), SameSite: s.cookieSameSite})
+}
+
+func (s *Server) cookiePath() string {
+	if publicAPIURL, err := url.Parse(strings.TrimSpace(s.publicAPIURL)); err == nil {
+		if basePath := strings.TrimSuffix(publicAPIURL.Path, "/"); basePath != "" {
+			return basePath
+		}
+	}
+	return "/"
 }
 
 func (s *Server) secureCookies(r *http.Request) bool {
+	if publicURL, err := url.Parse(strings.TrimSpace(s.publicAPIURL)); err == nil && publicURL.Scheme == "https" {
+		return true
+	}
 	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil {
 		if publicURL.Scheme == "https" {
 			return true
@@ -585,12 +601,12 @@ func (s *Server) oauthBrowserBinding(w http.ResponseWriter, r *http.Request) (st
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.cookies.OAuthBinding,
 		Value:    binding,
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   maxAge,
 		Expires:  time.Now().UTC().Add(oauthBrowserBindingTTL),
 		HttpOnly: true,
 		Secure:   s.secureCookies(r),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: s.cookieSameSite,
 	})
 	return binding, nil
 }

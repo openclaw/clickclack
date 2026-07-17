@@ -100,6 +100,26 @@ const socket = client.events.subscribe({
 `subscribe` returns a raw `WebSocket`. Call `.close()` to disconnect. See
 [features/realtime.md](features/realtime.md) for cursor recovery rules.
 
+Bot tokens can publish typed, target-scoped agent progress:
+
+```ts
+await client.events.publishEphemeral({
+  workspaceId,
+  channelId,
+  type: "agent.progress",
+  payload: {
+    turn_id: sourceMessageId,
+    seq: 1,
+    op: "append",
+    line: { id: "tool-1", kind: "tool", tool_name: "web_search", status: "running" },
+  },
+});
+```
+
+`agent.progress` requires a bot token and exactly one channel or DM target.
+Typing events have the same target rule. Presence events may instead omit both
+targets to publish workspace-wide.
+
 ## Generated types
 
 `packages/sdk-ts/src/generated/openapi.d.ts` is generated from

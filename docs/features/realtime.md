@@ -106,6 +106,10 @@ fall back to a workspace-wide broadcast.
 `POST /api/realtime/ephemeral` validates workspace membership and tags the
 payload with `user_id` from the caller before publishing.
 
+The TypeScript SDK exports `AgentProgressLine`, `AgentProgressPayload`, and
+`EphemeralEventInput`. Its input union requires one target for typing and agent
+progress while retaining targetless, workspace-wide presence events.
+
 ## Recovery rules
 
 - The client sends `after_cursor` on every connect/reconnect.

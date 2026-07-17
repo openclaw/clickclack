@@ -403,6 +403,53 @@ export type RealtimeEvent = {
   payload: RealtimeEventPayload;
 };
 
+export type AgentProgressLine = {
+  id: string;
+  kind: "commentary" | "lifecycle" | "thinking" | "tool";
+  text?: string;
+  title?: string;
+  tool_name?: string;
+  status?: string;
+};
+
+export type AgentProgressPayload = {
+  turn_id: string;
+  seq?: number;
+} & (
+  | { op: "append" | "update" | "finalize"; line: AgentProgressLine }
+  | { op: "clear"; line?: never }
+);
+
+type EphemeralEventTarget =
+  | { channelId: string; directConversationId?: never }
+  | { channelId?: never; directConversationId: string };
+
+type OptionalEphemeralEventTarget =
+  | EphemeralEventTarget
+  | { channelId?: never; directConversationId?: never };
+
+type TargetedEphemeralEventInput = {
+  workspaceId: string;
+} & EphemeralEventTarget &
+  (
+    | {
+        type: "agent.progress";
+        payload: AgentProgressPayload;
+      }
+    | {
+        type: "typing.started" | "typing.stopped";
+        payload?: Record<string, unknown>;
+      }
+  );
+
+type PresenceEventInput = {
+  workspaceId: string;
+  type: "presence.changed";
+  payload?: Record<string, unknown>;
+} & OptionalEphemeralEventTarget;
+
+export type EphemeralEventInput = TargetedEphemeralEventInput | PresenceEventInput;
+
 export type ClickClackClientOptions = {
   baseUrl: string;
   userId?: string;
@@ -1087,13 +1134,7 @@ export class ClickClackClient {
   };
 
   events = {
-    publishEphemeral: async (input: {
-      workspaceId: string;
-      channelId?: string;
-      directConversationId?: string;
-      type: "typing.started" | "typing.stopped" | "presence.changed";
-      payload?: Record<string, unknown>;
-    }): Promise<RealtimeEvent> => {
+    publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
       const data = await this.request<{ event: RealtimeEvent }>("/api/realtime/ephemeral", {
         method: "POST",
         body: JSON.stringify({

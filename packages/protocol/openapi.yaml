@@ -2969,7 +2969,7 @@ components:
           type: string
         type:
           type: string
-          enum: [typing.started, typing.stopped, presence.changed]
+          enum: [typing.started, typing.stopped, presence.changed, agent.progress]
         payload:
           type: object
           additionalProperties: true

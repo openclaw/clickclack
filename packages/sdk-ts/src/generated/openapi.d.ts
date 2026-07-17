@@ -1814,7 +1814,7 @@ export interface components {
       channel_id?: string;
       direct_conversation_id?: string;
       /** @enum {string} */
-      type: "typing.started" | "typing.stopped" | "presence.changed";
+      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress";
       payload?: {
         [key: string]: unknown;
       };

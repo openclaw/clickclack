@@ -1177,7 +1177,7 @@ export class ClickClackClient {
         ...(data.tail_cursor !== undefined ? { tailCursor: data.tail_cursor } : {}),
       };
     },
-        publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
+    publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
       const data = await this.request<{ event: RealtimeEvent }>("/api/realtime/ephemeral", {
         method: "POST",
         body: JSON.stringify({

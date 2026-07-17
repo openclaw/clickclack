@@ -450,6 +450,24 @@ type PresenceEventInput = {
 
 export type EphemeralEventInput = TargetedEphemeralEventInput | PresenceEventInput;
 
+export type RealtimeEventPage = {
+  events: RealtimeEvent[];
+  tailCursor?: string;
+};
+
+export type ThreadState = {
+  root_message_id: string;
+  reply_count: number;
+  last_reply_at?: string;
+  last_reply_author_ids: string[];
+};
+
+export type Thread = {
+  root: Message;
+  replies: Message[];
+  thread_state: ThreadState;
+};
+
 export type ClickClackClientOptions = {
   baseUrl: string;
   userId?: string;
@@ -1003,8 +1021,15 @@ export class ClickClackClient {
   };
 
   threads = {
-    get: async (messageId: string) => {
-      return this.request(`/api/messages/${messageId}/thread`);
+    get: async (
+      messageId: string,
+      options: { limit?: number; latest?: boolean } = {},
+    ): Promise<Thread> => {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      if (options.latest !== undefined) params.set("latest", String(options.latest));
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      return this.request<Thread>(`/api/messages/${messageId}/thread${query}`);
     },
     reply: async (
       messageId: string,
@@ -1134,7 +1159,25 @@ export class ClickClackClient {
   };
 
   events = {
-    publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
+    list: async (input: {
+      workspaceId: string;
+      afterCursor?: string;
+      limit?: number;
+      includeTail?: boolean;
+    }): Promise<RealtimeEventPage> => {
+      const params = new URLSearchParams({ workspace_id: input.workspaceId });
+      if (input.afterCursor) params.set("after_cursor", input.afterCursor);
+      if (input.limit !== undefined) params.set("limit", String(input.limit));
+      if (input.includeTail) params.set("include_tail", "true");
+      const data = await this.request<{ events: RealtimeEvent[]; tail_cursor?: string }>(
+        `/api/realtime/events?${params.toString()}`,
+      );
+      return {
+        events: data.events,
+        ...(data.tail_cursor !== undefined ? { tailCursor: data.tail_cursor } : {}),
+      };
+    },
+        publishEphemeral: async (input: EphemeralEventInput): Promise<RealtimeEvent> => {
       const data = await this.request<{ event: RealtimeEvent }>("/api/realtime/ephemeral", {
         method: "POST",
         body: JSON.stringify({

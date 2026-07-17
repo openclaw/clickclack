@@ -3771,7 +3771,12 @@ export interface operations {
   };
   getThread: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Maximum number of replies to return. */
+        limit?: number;
+        /** @description Return the latest bounded reply window in chronological order instead of the earliest window. */
+        latest?: boolean;
+      };
       header?: never;
       path: {
         message_id: components["parameters"]["message_id"];

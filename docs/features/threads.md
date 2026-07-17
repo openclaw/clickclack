@@ -65,8 +65,10 @@ subscribers via the realtime hub.
 ## Ordering and pagination
 
 Replies are ordered by `thread_seq` ascending. `limit` is clamped to `1..200`
-(default 100). There's no `after_seq` parameter on the thread endpoint yet —
-clients fetch the head of the thread and use realtime events for new replies.
+(default 100). By default clients fetch the earliest replies. Passing
+`latest=true` returns the latest bounded window, still in ascending order. There
+is no general `after_seq` pagination parameter yet; clients use realtime events
+for new replies.
 
 ## What is intentionally missing
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -636,6 +637,14 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 }
 
 func (s *Store) GetThread(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
+	return s.getThread(ctx, rootMessageID, userID, limit, false)
+}
+
+func (s *Store) GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
+	return s.getThread(ctx, rootMessageID, userID, limit, true)
+}
+
+func (s *Store) getThread(ctx context.Context, rootMessageID, userID string, limit int, latest bool) (store.Message, []store.Message, store.ThreadState, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
@@ -658,9 +667,13 @@ func (s *Store) GetThread(ctx context.Context, rootMessageID, userID string, lim
 		return store.Message{}, nil, store.ThreadState{}, err
 	}
 	root = roots[0]
+	order := "ASC"
+	if latest {
+		order = "DESC"
+	}
 	rows, err := s.db.QueryContext(ctx, messageSelect()+`
 		WHERE m.thread_root_id = $1 AND m.parent_message_id = $2
-		ORDER BY m.thread_seq
+		ORDER BY m.thread_seq `+order+`
 		LIMIT $3`, rootMessageID, rootMessageID, limit)
 	if err != nil {
 		return store.Message{}, nil, store.ThreadState{}, err
@@ -669,6 +682,9 @@ func (s *Store) GetThread(ctx context.Context, rootMessageID, userID string, lim
 	replies, err := scanMessages(rows)
 	if err != nil {
 		return store.Message{}, nil, store.ThreadState{}, err
+	}
+	if latest {
+		slices.Reverse(replies)
 	}
 	replies, err = s.hydrateAttachments(ctx, replies)
 	if err != nil {

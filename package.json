@@ -35,7 +35,7 @@
     "crabbox:stop": "crabbox stop",
     "crabbox:warmup": "crabbox warmup"
   },
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.13.1",
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
     "@playwright/test": "^1.61.1",

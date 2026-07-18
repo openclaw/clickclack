@@ -1,9 +1,6 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -22,6 +19,9 @@ env:
 jobs:
   release:
     name: GoReleaser
+    if: >-
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -71,17 +71,13 @@ jobs:
 
   desktop:
     name: ${{ matrix.name }}
+    if: >-
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS Desktop
-            os: macos-latest
-            platform: mac
-            builder_args: --mac dmg zip --x64 --arm64
-            files: |
-              apps/desktop/release/*.dmg
-              apps/desktop/release/*.zip
           - name: Windows Desktop
             os: windows-latest
             platform: win
@@ -159,11 +155,58 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  verify-macos:
+    name: Verify signed macOS release assets
+    if: >-
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out trusted verifier
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+
+      - name: Download signed macOS draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          mkdir -p macos-release
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir macos-release \
+            --pattern "ClickClack-${version}-mac-*.dmg" \
+            --pattern "ClickClack-${version}-mac-*.zip" \
+            --pattern "ClickClack-${version}-mac-SHA256SUMS.txt"
+
+      - name: Verify checksums and sealed apps
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          (
+            cd macos-release
+            shasum -a 256 --check "ClickClack-${version}-mac-SHA256SUMS.txt"
+          )
+          apps/desktop/scripts/verify-macos-release.sh "$RELEASE_TAG" macos-release
+
   publish-desktop:
     name: Publish desktop apps
+    if: >-
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     needs:
       - release
       - desktop
+      - verify-macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

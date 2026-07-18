@@ -3,6 +3,7 @@ productName: ClickClack
 copyright: Copyright © OpenClaw contributors
 asar: true
 compression: normal
+afterSign: scripts/after-sign.mjs
 directories:
   output: release
 files:
@@ -23,6 +24,8 @@ mac:
   icon: assets/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
+  strictVerify: true
+  notarize: false
   minimumSystemVersion: "12.0"
   target:
     - dmg

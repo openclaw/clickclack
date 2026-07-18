@@ -15,6 +15,7 @@
     "dist": "pnpm build && electron-builder --publish never",
     "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64 --publish never",
     "dist:mac": "pnpm build && electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "dist:mac:release": "bash scripts/package-macos-release.sh",
     "dist:win": "pnpm build && electron-builder --win nsis zip --x64 --publish never",
     "pack": "pnpm build && electron-builder --dir --publish never",
     "test": "node scripts/test.mjs",

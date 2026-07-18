@@ -2,6 +2,8 @@
 
 ## 0.2.1 - Unreleased
 
+- Signed and notarized macOS desktop release bundles with the OpenClaw Foundation identity, hardened runtime, and strict sealed-artifact verification.
+
 ## 0.2.0 - 2026-07-17
 
 ### Highlights

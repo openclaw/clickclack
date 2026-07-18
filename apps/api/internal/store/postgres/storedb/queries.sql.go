@@ -3547,6 +3547,48 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int32)
 	return items, nil
 }
 
+const listReactionsForMessages = `-- name: ListReactionsForMessages :many
+SELECT r.message_id, r.emoji, r.user_id, r.created_at
+FROM reactions r
+WHERE r.message_id = ANY($1::text[])
+ORDER BY r.created_at
+`
+
+type ListReactionsForMessagesRow struct {
+	MessageID string `json:"message_id"`
+	Emoji     string `json:"emoji"`
+	UserID    string `json:"user_id"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (q *Queries) ListReactionsForMessages(ctx context.Context, dollar_1 []string) ([]ListReactionsForMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReactionsForMessages, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReactionsForMessagesRow
+	for rows.Next() {
+		var i ListReactionsForMessagesRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.Emoji,
+			&i.UserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listThreadStates = `-- name: ListThreadStates :many
 SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
 FROM thread_state

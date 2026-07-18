@@ -169,6 +169,13 @@
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let realtimeReconcileSerial = 0;
+  let reactionRefreshSerial = 0;
+  const reactionRefreshGenerations = new Map<string, number>();
+  const pendingReactionSnapshots = new Map<
+    string,
+    { reactions: NonNullable<Message["reactions"]>; viewSerial: number }
+  >();
+  const MAX_PENDING_REACTION_SNAPSHOTS = 100;
   let slashDispatchGeneration = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
   let hiddenDirectUndoTimer: ReturnType<typeof setTimeout> | undefined;
@@ -615,6 +622,7 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
+    pendingReactionSnapshots.clear();
     const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
     const routeTarget = targetIDParam.trim()
       ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
@@ -1703,7 +1711,7 @@
     );
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
-    const merged = msgs.map((m) => {
+    const merged = applyPendingReactionSnapshots(msgs).map((m) => {
       const local = localByID.get(m.id) || (m.nonce ? localByNonce.get(m.nonce) : undefined);
       if (!local) return m;
       if (m.nonce && pendingDrafts.has(m.nonce)) {
@@ -1738,6 +1746,15 @@
       agentProgressTurns = [];
       stopTyping();
     }
+  }
+
+  function applyPendingReactionSnapshots(nextMessages: Message[]): Message[] {
+    return nextMessages.map((message) => {
+      const pending = pendingReactionSnapshots.get(message.id);
+      if (!pending || pending.viewSerial !== routeApplySerial) return message;
+      pendingReactionSnapshots.delete(message.id);
+      return { ...message, reactions: pending.reactions };
+    });
   }
 
   function setActiveMessages(nextMessages: Message[], direction: MessageWindowDirection = "append") {
@@ -2084,11 +2101,14 @@
     }
     const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
     if (!shouldCommit()) return false;
-    const root = { ...data.root, thread_state: data.thread_state };
+    const [root, ...loadedReplies] = applyPendingReactionSnapshots([
+      { ...data.root, thread_state: data.thread_state },
+      ...data.replies,
+    ]);
     selectedThread = root;
     activeComposerContext = "thread";
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
-    replies = data.replies;
+    replies = loadedReplies;
     selectedThreadState = data.thread_state;
     return true;
   }
@@ -2660,6 +2680,57 @@
     if (messageEventAlreadyAccounted(event)) return;
     const affectsActiveView =
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
+    if (
+      affectsActiveView &&
+      (event.type === "reaction.added" || event.type === "reaction.removed")
+    ) {
+      const messageID = event.payload.message_id || "";
+      if (messageID) {
+        const generation = ++reactionRefreshSerial;
+        const viewSerial = routeApplySerial;
+        reactionRefreshGenerations.set(messageID, generation);
+        try {
+          const data = await api<{ message: Message }>(`/api/messages/${messageID}`);
+          if (
+            reactionRefreshGenerations.get(messageID) !== generation ||
+            routeApplySerial !== viewSerial
+          ) {
+            return;
+          }
+          const reactions = data.message.reactions ?? [];
+          const isLoaded =
+            messages.some((message) => message.id === messageID) ||
+            replies.some((reply) => reply.id === messageID) ||
+            selectedThread?.id === messageID;
+          if (!isLoaded) {
+            pendingReactionSnapshots.delete(messageID);
+            pendingReactionSnapshots.set(messageID, { reactions, viewSerial });
+            while (pendingReactionSnapshots.size > MAX_PENDING_REACTION_SNAPSHOTS) {
+              const oldestMessageID = pendingReactionSnapshots.keys().next().value;
+              if (!oldestMessageID) break;
+              pendingReactionSnapshots.delete(oldestMessageID);
+            }
+            return;
+          }
+          setActiveMessages(
+            messages.map((message) =>
+              message.id === messageID ? { ...message, reactions } : message,
+            ),
+          );
+          replies = replies.map((reply) =>
+            reply.id === messageID ? { ...reply, reactions } : reply,
+          );
+          if (selectedThread?.id === messageID) {
+            selectedThread = { ...selectedThread, reactions };
+          }
+        } finally {
+          if (reactionRefreshGenerations.get(messageID) === generation) {
+            reactionRefreshGenerations.delete(messageID);
+          }
+        }
+      }
+      return;
+    }
     maybeShowBrowserNotification(event, affectsActiveView);
     if (event.type === "message.created" && !affectsActiveView) {
       const loadedConversation = await loadUnknownDirectConversationFromEvent(event);

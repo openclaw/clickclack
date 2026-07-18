@@ -498,6 +498,10 @@ func (s *Store) GetMessage(ctx context.Context, messageID, userID string) (store
 	if err != nil {
 		return store.Message{}, err
 	}
+	messages, err = s.hydrateReactions(ctx, messages)
+	if err != nil {
+		return store.Message{}, err
+	}
 	return messages[0], nil
 }
 
@@ -704,6 +708,12 @@ func (s *Store) getThread(ctx context.Context, rootMessageID, userID string, lim
 	if err != nil {
 		return store.Message{}, nil, store.ThreadState{}, err
 	}
+	threadMessages := append([]store.Message{root}, replies...)
+	threadMessages, err = s.hydrateReactions(ctx, threadMessages)
+	if err != nil {
+		return store.Message{}, nil, store.ThreadState{}, err
+	}
+	root, replies = threadMessages[0], threadMessages[1:]
 	state, err := getThreadState(ctx, s.db, rootMessageID)
 	return root, replies, state, err
 }

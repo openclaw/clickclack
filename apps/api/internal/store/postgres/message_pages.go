@@ -84,7 +84,43 @@ func (s *Store) listMessagePage(ctx context.Context, scope messagePageScope, req
 	if err != nil {
 		return store.MessagePage{}, err
 	}
+	messages, err = s.hydrateReactions(ctx, messages)
+	if err != nil {
+		return store.MessagePage{}, err
+	}
 	return s.buildMessagePage(ctx, scope, messages)
+}
+
+func (s *Store) hydrateReactions(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+	ids := make([]string, len(messages))
+	for i, m := range messages {
+		ids[i] = m.ID
+	}
+	if len(ids) == 0 {
+		return messages, nil
+	}
+
+	rows, err := s.q.ListReactionsForMessages(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load reactions: %w", err)
+	}
+
+	reactionsByMsg := make(map[string][]store.Reaction, len(ids))
+	for _, row := range rows {
+		reactionsByMsg[row.MessageID] = append(reactionsByMsg[row.MessageID], store.Reaction{
+			Emoji:     row.Emoji,
+			UserID:    row.UserID,
+			CreatedAt: row.CreatedAt,
+		})
+	}
+
+	for i := range messages {
+		messages[i].Reactions = reactionsByMsg[messages[i].ID]
+		if messages[i].Reactions == nil {
+			messages[i].Reactions = []store.Reaction{}
+		}
+	}
+	return messages, nil
 }
 
 func (s *Store) hydrateThreadStates(ctx context.Context, messages []store.Message) ([]store.Message, error) {

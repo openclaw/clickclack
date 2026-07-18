@@ -3,6 +3,7 @@
   import { enhanceMarkdownGifs } from "../../lib/actions/markdownGifs";
   import { time, markdown } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
+  import ReactionsBar from "./ReactionsBar.svelte";
   import type { Message, Upload } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
@@ -130,6 +131,13 @@
     {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(message.body)}</div>
+    {#if !isPending && !isFailed}
+      <ReactionsBar
+        messageId={message.id}
+        reactions={message.reactions ?? []}
+        {currentUserID}
+      />
+    {/if}
     {#if message.attachments?.length}
       <div class="attachment-grid" aria-label="Attachments">
         {#each message.attachments as attachment (attachment.id)}

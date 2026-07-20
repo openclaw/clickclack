@@ -1163,6 +1163,8 @@
     }
     const scrollAnchor = scrollMemory.get(key)?.anchorMessageID;
     if (scrollAnchor) ids.add(scrollAnchor);
+    const editSession = editController.session(key);
+    if (editSession) ids.add(editSession.messageID);
     if (selectedThread && belongsToView(selectedThread, key)) ids.add(selectedThread.id);
     if (replyTarget && belongsToView(replyTarget, key)) ids.add(replyTarget.id);
     for (const message of messages) {

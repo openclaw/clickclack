@@ -40,6 +40,14 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   await expect(openLink).toHaveAttribute("target", "_blank");
   await expect(page.locator(".sidebar, .topbar")).toHaveCount(0);
 
+  const rootRow = page.locator(`[data-message-id="${message.id}"]`);
+  await expect(rootRow.getByRole("button", { name: "Add reaction" })).toBeVisible();
+  const rootReaction = await page.request.post(`/api/messages/${message.id}/reactions`, {
+    data: { emoji: "🚀" },
+  });
+  expect(rootReaction.ok()).toBe(true);
+  await expect(rootRow.getByRole("button", { name: "🚀 — 1 reaction" })).toBeVisible();
+
   const composer = page.getByLabel("Reply body");
   await composer.fill(`embedded reply ${stamp}`);
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
@@ -58,6 +66,13 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   const { message: createdReply } = (await realtimeResponse.json()) as {
     message: { id: string };
   };
+  await expect(realtimeReplyRow.getByRole("button", { name: "Add reaction" })).toBeVisible();
+  const replyReaction = await page.request.post(`/api/messages/${createdReply.id}/reactions`, {
+    data: { emoji: "✅" },
+  });
+  expect(replyReaction.ok()).toBe(true);
+  await expect(realtimeReplyRow.getByRole("button", { name: "✅ — 1 reaction" })).toBeVisible();
+
   const editedReply = `${realtimeReply} edited`;
   const editResponse = await page.request.patch(`/api/messages/${createdReply.id}`, {
     data: { body: editedReply },

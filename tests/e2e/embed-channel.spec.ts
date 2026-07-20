@@ -22,6 +22,9 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
     data: { body: initialBody },
   });
   expect(initialResponse.ok()).toBe(true);
+  const { message: initialMessage } = (await initialResponse.json()) as {
+    message: { id: string };
+  };
 
   await page.setViewportSize({ width: 800, height: 700 });
   await page.goto(`/embed/channel/${workspace.route_id}/${channel.route_id}`);
@@ -36,6 +39,15 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
   await expect(openLink).toHaveAttribute("href", `/app/${workspace.route_id}/${channel.route_id}`);
   await expect(openLink).toHaveAttribute("target", "_blank");
   await expect(page.locator(".sidebar, .topbar, .guild-rail")).toHaveCount(0);
+
+  const initialRow = page.locator(`[data-message-id="${initialMessage.id}"]`);
+  const reactionResponse = await page.request.post(`/api/messages/${initialMessage.id}/reactions`, {
+    data: { emoji: "👀" },
+  });
+  expect(reactionResponse.ok()).toBe(true);
+  await expect(initialRow.getByRole("button", { name: "👀 — 1 reaction" })).toBeVisible();
+  await initialRow.getByRole("button", { name: "👀 — 1 reaction" }).click();
+  await expect(initialRow.getByRole("button", { name: "👀 — 1 reaction" })).toHaveCount(0);
 
   const composer = page.getByLabel("Message body");
   const uiBody = `embedded channel message ${stamp}`;

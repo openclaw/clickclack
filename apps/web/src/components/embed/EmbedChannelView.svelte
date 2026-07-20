@@ -4,8 +4,12 @@
   import ImageViewer from "../media/ImageViewer.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
-  import { APIError, api, apiResourceURL } from "../../lib/api";
+  import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
+  import {
+    MessageEditController,
+    type MessageEditSession,
+  } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
   import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
@@ -37,6 +41,7 @@
   let errorText = $state("");
   let user = $state<User | null>(null);
   const reactionController = new ReactionController(() => user?.id || "");
+  const editController = new MessageEditController(revealEditSession);
   let route = $state<RouteTarget | null>(null);
   let channel = $state<Channel | null>(null);
   let messages = $state<Message[]>([]);
@@ -77,14 +82,26 @@
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   }
 
-  function readableError(error: unknown, fallback: string): string {
-    if (!(error instanceof Error)) return fallback;
-    try {
-      const body = JSON.parse(error.message) as { error?: string };
-      return body.error || fallback;
-    } catch {
-      return error.message || fallback;
+  async function revealEditSession(scope: string, session: MessageEditSession) {
+    if (scope !== channel?.id) return;
+    messageList?.scrollToMessage(session.messageID);
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      await tick();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const editor = document
+        .querySelector(".embed-channel-shell")
+        ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
+        ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
+      if (!editor) continue;
+      editor.focus();
+      return;
     }
+  }
+
+  function applyEditedMessage(updated: Message) {
+    messages = messages.map((message) =>
+      message.id === updated.id ? { ...message, ...updated } : message,
+    );
   }
 
   function mergeMessages(...lists: Message[][]): Message[] {
@@ -105,6 +122,7 @@
         : mode === "prepend"
           ? mergeMessages(page.messages, messages)
           : mergeMessages(messages, page.messages);
+    editController.reconcile(channel?.id || "", messages);
     oldestSeq = messages[0]?.channel_seq || page.oldest_seq || oldestSeq;
     newestSeq = messages[messages.length - 1]?.channel_seq || page.newest_seq || newestSeq;
     if (mode !== "append") hasOlder = page.has_older;
@@ -117,6 +135,7 @@
     route = null;
     channel = null;
     reactionController.clear();
+    editController.clear();
     messages = [];
     oldestSeq = 0;
     newestSeq = 0;
@@ -141,7 +160,7 @@
         return;
       }
     }
-    errorText = readableError(error, "Could not load this channel.");
+    errorText = readableAPIError(error, "Could not load this channel.");
     viewState = "error";
   }
 
@@ -196,7 +215,7 @@
       if (channel?.id !== channelID || viewState !== "ready") return;
       applyPage(page, "prepend");
     } catch (error) {
-      sendError = readableError(error, "Could not load older messages.");
+      sendError = readableAPIError(error, "Could not load older messages.");
     } finally {
       loadingOlder = false;
     }
@@ -229,7 +248,7 @@
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
       } else {
-        sendError = readableError(error, "Could not recover newer messages.");
+        sendError = readableAPIError(error, "Could not recover newer messages.");
       }
     }
   }
@@ -260,6 +279,7 @@
       messages = messages.map((message) =>
         message.id === data.message.id ? data.message : message,
       );
+      editController.reconcile(channel?.id || "", messages);
     } catch (error) {
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
@@ -349,7 +369,7 @@
         return;
       }
       failedSubmission = submission;
-      sendError = readableError(error, "Could not send this message.");
+      sendError = readableAPIError(error, "Could not send this message.");
     } finally {
       sending = false;
     }
@@ -444,6 +464,9 @@
       {loadingOlder}
       currentUserID={user?.id}
       {reactionController}
+      {editController}
+      editScope={channel.id}
+      onMessageEdited={applyEditedMessage}
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => {}}
       onInlineImagePointerUp={handleInlineImagePointerUp}

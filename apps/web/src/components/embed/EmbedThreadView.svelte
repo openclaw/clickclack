@@ -3,9 +3,13 @@
   import ImageViewer from "../media/ImageViewer.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
-  import { APIError, api, apiResourceURL } from "../../lib/api";
+  import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
   import { dmTitle } from "../../lib/chat/people";
+  import {
+    MessageEditController,
+    type MessageEditSession,
+  } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
   import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
@@ -38,6 +42,7 @@
   let errorText = $state("");
   let user = $state<User | null>(null);
   const reactionController = new ReactionController(() => user?.id || "");
+  const editController = new MessageEditController(revealEditSession);
   let route = $state<RouteTarget | null>(null);
   let root = $state<Message | null>(null);
   let replies = $state<Message[]>([]);
@@ -81,14 +86,25 @@
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   }
 
-  function readableError(error: unknown, fallback: string): string {
-    if (!(error instanceof Error)) return fallback;
-    try {
-      const body = JSON.parse(error.message) as { error?: string };
-      return body.error || fallback;
-    } catch {
-      return error.message || fallback;
+  async function revealEditSession(scope: string, session: MessageEditSession) {
+    if (scope !== route?.target_id) return;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await tick();
+      const editor = document
+        .querySelector('[aria-label="Embedded thread"]')
+        ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
+        ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
+      if (!editor) continue;
+      editor.focus();
+      return;
     }
+  }
+
+  function applyEditedMessage(updated: Message) {
+    if (root?.id === updated.id) root = { ...root, ...updated };
+    replies = replies.map((reply) =>
+      reply.id === updated.id ? { ...reply, ...updated } : reply,
+    );
   }
 
   function clearThread() {
@@ -97,6 +113,7 @@
     route = null;
     root = null;
     reactionController.clear();
+    editController.clear();
     replies = [];
     threadState = null;
     directConversation = null;
@@ -119,7 +136,7 @@
         return;
       }
     }
-    errorText = readableError(error, "Could not load this thread.");
+    errorText = readableAPIError(error, "Could not load this thread.");
     viewState = "error";
   }
 
@@ -174,6 +191,7 @@
       root = { ...thread.root, thread_state: thread.thread_state };
       replies = thread.replies;
       reactionController.seedMessages([root, ...replies]);
+      editController.reconcile(resolved.route.target_id, [root, ...replies]);
       threadState = thread.thread_state;
       viewState = "ready";
       connectSocket(resolved.route.workspace_id);
@@ -195,6 +213,7 @@
       root = { ...thread.root, thread_state: thread.thread_state };
       replies = thread.replies;
       reactionController.seedMessages([root, ...replies]);
+      editController.reconcile(route?.target_id || root.id, [root, ...replies]);
       threadState = thread.thread_state;
       if (
         replyTarget &&
@@ -207,7 +226,7 @@
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
       } else {
-        replyError = readableError(error, "Could not refresh the thread.");
+        replyError = readableAPIError(error, "Could not refresh the thread.");
       }
     }
   }
@@ -298,7 +317,7 @@
         return;
       }
       failedSubmission = submission;
-      replyError = readableError(error, "Could not post the reply.");
+      replyError = readableAPIError(error, "Could not post the reply.");
     } finally {
       replySending = false;
     }
@@ -384,6 +403,9 @@
         openHref={route.canonical_path}
         currentUserID={user?.id}
         {reactionController}
+        {editController}
+        editScope={route.target_id}
+        onMessageEdited={applyEditedMessage}
         reactionsDisabled={Boolean(directConversation && !directConversation.can_send)}
         onReplyBody={(value) => (replyBody = value)}
         onSubmitReply={() => void sendReply()}

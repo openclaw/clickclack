@@ -25,9 +25,9 @@ go run ./apps/api/cmd/clickclack serve
 - Realtime over WebSocket with a durable event log. Reconnect with a cursor
   to recover anything you missed; HTTP `/api/realtime/events` works as a
   pull-style fallback.
-- Channels with Slack-style threads (one level, no nesting), reactions,
-  uploads, direct messages, and a guest waiting-room path with moderator
-  approvals, timeouts, and blocks.
+- Channels with Slack-style threads (one level, no nesting), message editing,
+  reactions, uploads, direct messages, and a guest waiting-room path with
+  moderator approvals, timeouts, and blocks.
 - CLI-managed bootstrap, magic-link auth, optional GitHub OAuth, and an
   agent-friendly client mode for sending/listing/replying from scripts.
 - Framework-neutral [TypeScript SDK](packages/sdk-ts) and a tiny

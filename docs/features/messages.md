@@ -58,6 +58,27 @@ Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
 Read events are private to the user who advanced the pointer.
 
+## Editing in the web app
+
+The message action menu exposes **Edit message** only for the original author.
+It is available for channel messages, direct messages, thread roots, and thread
+replies in both the full app and authenticated channel/thread embeds.
+
+Editing is inline and preserves the exact draft sent to `PATCH`; the server
+continues to own boundary-whitespace normalization. `Ctrl+Enter` or
+`Command+Enter` saves, and `Escape` cancels. Empty normalized bodies are
+rejected before a request is sent. A draft is retained when its channel or
+direct-message view is temporarily unmounted, including virtualized timeline
+rows, while closing a thread explicitly discards an unsaved thread-surface
+draft.
+
+Each conversation can have one active editor. Starting another edit in the same
+conversation reveals and focuses the existing editor instead of discarding its
+draft. Drafts in other conversations are retained for a bounded number of
+recent views. Realtime updates refresh an untouched draft; if the user already
+changed it, the editor keeps that draft and warns that the message changed
+elsewhere.
+
 ## Durable agent activity
 
 Channel and DM create endpoints accept two bot-only activity kinds:

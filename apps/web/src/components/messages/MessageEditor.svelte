@@ -44,15 +44,19 @@
   }
 </script>
 
-<div class="message-edit">
+<div class="message-edit" aria-busy={saving}>
   <textarea
     bind:this={textarea}
     class="message-edit__textarea"
     value={body}
+    rows="3"
     oninput={(event) => onBody(event.currentTarget.value)}
     onkeydown={handleKeydown}
     disabled={saving}
     aria-label="Edit message"
+    aria-keyshortcuts="Control+Enter Meta+Enter Escape"
+    aria-invalid={errorMessage ? "true" : undefined}
+    aria-describedby={errorMessage ? "message-edit-error" : undefined}
   ></textarea>
   <div class="message-edit__footer">
     <button
@@ -66,9 +70,8 @@
     <button type="button" class="message-edit__cancel" onclick={onCancel} disabled={saving}
       >Cancel</button
     >
-    <kbd class="message-edit__shortcut">Ctrl/⌘+Enter to save</kbd>
   </div>
   {#if errorMessage}
-    <p class="message-edit__error" role="alert">{errorMessage}</p>
+    <p id="message-edit-error" class="message-edit__error" role="alert">{errorMessage}</p>
   {/if}
 </div>

@@ -13,6 +13,9 @@ live updates, but none of the workspace rail, sidebar, or full-app top bar.
 It also exposes a channel embed with the shared message renderer, paginated
 history, nonce-idempotent composer, and realtime cursor recovery. Its slim
 header names the channel and links back to the canonical full ClickClack view.
+Authenticated users can edit their own thread roots, replies, and channel
+messages inline; the embeds use the same draft, error, and realtime
+reconciliation behavior as the full app.
 
 ## URL
 

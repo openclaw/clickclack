@@ -522,6 +522,10 @@ func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (
 	if err != nil {
 		return store.Message{}, err
 	}
+	messages, err = s.hydrateReactions(ctx, authorID, messages)
+	if err != nil {
+		return store.Message{}, err
+	}
 	return messages[0], nil
 }
 
@@ -938,6 +942,9 @@ func (s *Store) reaction(ctx context.Context, input store.CreateReactionInput, a
 		return store.Event{}, err
 	}
 	qtx := s.q.WithTx(tx)
+	if _, err := qtx.LockMessageForReaction(ctx, input.MessageID); err != nil {
+		return store.Event{}, err
+	}
 	var affected int64
 	if add {
 		affected, err = qtx.AddReaction(ctx, storedb.AddReactionParams{MessageID: input.MessageID, UserID: input.UserID, Emoji: input.Emoji, CreatedAt: now()})

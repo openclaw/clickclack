@@ -4287,6 +4287,20 @@ func (q *Queries) LockBotWorkspaceMembership(ctx context.Context, arg LockBotWor
 	return user_id, err
 }
 
+const lockMessageForReaction = `-- name: LockMessageForReaction :one
+SELECT id
+FROM messages
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockMessageForReaction(ctx context.Context, messageID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockMessageForReaction, messageID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockWorkspaceForUpdate = `-- name: LockWorkspaceForUpdate :exec
 SELECT id FROM workspaces WHERE id = $1 FOR UPDATE
 `

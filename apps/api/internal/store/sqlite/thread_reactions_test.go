@@ -30,7 +30,7 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "root"})
+	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "root", Nonce: "reaction-root"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +66,13 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	}
 	if len(replies) != 1 || len(replies[0].Reactions) != 1 || replies[0].Reactions[0].Emoji != "🔥" || !replies[0].Reactions[0].ReactedByMe {
 		t.Fatalf("expected hydrated reply reaction, got %#v", replies)
+	}
+	byNonce, err := st.GetMessageByNonce(ctx, owner.ID, "reaction-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reactionSummary(byNonce.Reactions, "👍"); got.Count != 2 || !got.ReactedByMe {
+		t.Fatalf("expected nonce lookup to hydrate reactions, got %#v", byNonce.Reactions)
 	}
 }
 

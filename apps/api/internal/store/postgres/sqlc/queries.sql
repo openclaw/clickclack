@@ -1248,6 +1248,12 @@ FROM reactions
 WHERE message_id = sqlc.arg(message_id)
   AND emoji = sqlc.arg(emoji);
 
+-- name: LockMessageForReaction :one
+SELECT id
+FROM messages
+WHERE id = sqlc.arg(message_id)
+FOR UPDATE;
+
 -- name: ListReactionsForMessages :many
 SELECT
   r.message_id,

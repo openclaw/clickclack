@@ -536,6 +536,10 @@ func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (
 	if err != nil {
 		return store.Message{}, err
 	}
+	messages, err = s.hydrateReactions(ctx, authorID, messages)
+	if err != nil {
+		return store.Message{}, err
+	}
 	return messages[0], nil
 }
 

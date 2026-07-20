@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"sync"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -32,7 +35,7 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "root"})
+	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "root", Nonce: "reaction-root"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +71,83 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	}
 	if len(replies) != 1 || len(replies[0].Reactions) != 1 || replies[0].Reactions[0].Emoji != "🔥" || !replies[0].Reactions[0].ReactedByMe {
 		t.Fatalf("expected hydrated reply reaction, got %#v", replies)
+	}
+	byNonce, err := st.GetMessageByNonce(ctx, owner.ID, "reaction-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reactionSummary(byNonce.Reactions, "👍"); got.Count != 2 || !got.ReactedByMe {
+		t.Fatalf("expected nonce lookup to hydrate reactions, got %#v", byNonce.Reactions)
+	}
+
+	concurrent, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "concurrent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const writers = 8
+	users := make([]store.User, 0, writers)
+	users = append(users, owner, member)
+	for index := len(users); index < writers; index++ {
+		user, err := st.CreateUser(ctx, store.CreateUserInput{
+			DisplayName: fmt.Sprintf("Reaction Writer %d", index),
+			Email:       fmt.Sprintf("postgres-reaction-writer-%d@example.com", index),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, user.ID, store.WorkspaceRoleMember); err != nil {
+			t.Fatal(err)
+		}
+		users = append(users, user)
+	}
+
+	start := make(chan struct{})
+	counts := make(chan int64, writers)
+	errs := make(chan error, writers)
+	var wg sync.WaitGroup
+	for _, user := range users {
+		wg.Add(1)
+		go func(userID string) {
+			defer wg.Done()
+			<-start
+			event, err := st.AddReaction(ctx, store.CreateReactionInput{
+				MessageID: concurrent.ID,
+				UserID:    userID,
+				Emoji:     "⚡",
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			payload, ok := event.Payload.(map[string]any)
+			if !ok {
+				errs <- fmt.Errorf("unexpected reaction payload %#v", event.Payload)
+				return
+			}
+			count, ok := payload["count"].(int64)
+			if !ok {
+				errs <- fmt.Errorf("unexpected reaction count %#v", payload["count"])
+				return
+			}
+			counts <- count
+		}(user.ID)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	close(counts)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	gotCounts := make([]int, 0, writers)
+	for count := range counts {
+		gotCounts = append(gotCounts, int(count))
+	}
+	sort.Ints(gotCounts)
+	for index, count := range gotCounts {
+		if want := index + 1; count != want {
+			t.Fatalf("expected serialized authoritative counts 1..%d, got %#v", writers, gotCounts)
+		}
 	}
 }
 

@@ -1763,7 +1763,7 @@ export interface components {
       created_at: string;
       payload: {
         [key: string]: unknown;
-      };
+      } | null;
     };
     ReactionMutationResponse: {
       event: components["schemas"]["Event"];

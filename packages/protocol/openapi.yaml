@@ -2855,6 +2855,7 @@ components:
           format: date-time
         payload:
           type: object
+          nullable: true
           additionalProperties: true
     ReactionMutationResponse:
       type: object

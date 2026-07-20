@@ -17,10 +17,12 @@ DELETE /api/messages/{message_id}/reactions/{emoji}
 
 `POST` body: `{emoji}`. Both endpoints require workspace membership for the
 message's workspace. Adding twice is a no-op that returns HTTP 200 without an
-event; removing a missing reaction is a no-op. Mutation responses include the
-event and the message's complete bounded reaction summaries.
+event; removing a missing reaction is a no-op. Mutation responses include an
+event object and the message's complete aggregated reaction summaries. The
+event fields are empty on a no-op for compatibility with the existing mutation
+response shape.
 
-Message reads expose reactions as bounded per-emoji summaries:
+Message reads expose reactions as per-emoji summaries:
 
 ```json
 {"emoji":"lobster","count":3,"reacted_by_me":true}

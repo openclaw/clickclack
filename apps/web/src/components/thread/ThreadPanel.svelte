@@ -8,10 +8,12 @@
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
+  import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, ThreadState, Upload, User } from "../../lib/types";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "../messages/QuoteBlock.svelte";
+  import ReactionsBar from "../messages/ReactionsBar.svelte";
 
   type Props = {
     root: Message;
@@ -20,6 +22,8 @@
     replyBody: string;
     replyTarget: Message | null;
     currentUserID?: string;
+    reactionController: ReactionController;
+    reactionsDisabled?: boolean;
     mentionPeople?: User[];
     replyDisabled?: boolean;
     headerLabel?: string;
@@ -51,6 +55,8 @@
     replyBody,
     replyTarget,
     currentUserID,
+    reactionController,
+    reactionsDisabled = false,
     mentionPeople = [],
     replyDisabled = false,
     headerLabel = "Thread",
@@ -164,6 +170,14 @@
         <div class="message-deleted">This message was deleted.</div>
       {:else}
         <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(root.body)}</div>
+        <ReactionsBar
+          messageId={root.id}
+          reactions={reactionController.reactionsFor(root)}
+          pending={reactionController.pending(root.id)}
+          error={reactionController.error(root.id)}
+          disabled={reactionsDisabled || !currentUserID}
+          onToggle={(emoji) => void reactionController.toggle(root, emoji)}
+        />
       {/if}
       {#if !root.deleted_at && root.attachments?.length}
         <div class="attachment-grid compact" aria-label="Attachments">
@@ -231,6 +245,14 @@
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />
             <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(reply.body)}</div>
+            <ReactionsBar
+              messageId={reply.id}
+              reactions={reactionController.reactionsFor(reply)}
+              pending={reactionController.pending(reply.id)}
+              error={reactionController.error(reply.id)}
+              disabled={reactionsDisabled || !currentUserID}
+              onToggle={(emoji) => void reactionController.toggle(reply, emoji)}
+            />
           {/if}
           {#if !reply.deleted_at && reply.attachments?.length}
             <div class="attachment-grid compact" aria-label="Attachments">

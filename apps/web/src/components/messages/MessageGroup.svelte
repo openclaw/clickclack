@@ -4,11 +4,14 @@
   import { time } from "../../lib/format";
   import type { Message, Upload } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
+  import type { ReactionController } from "../../lib/reactions.svelte";
   import MessageRow from "./MessageRow.svelte";
 
   type Props = {
     group: MessageGroupType;
     currentUserID?: string;
+    reactionController: ReactionController;
+    reactionsDisabled?: boolean;
     selectedThreadID?: string;
     canDeleteAnyMessage?: boolean;
     deletingMessageIDs?: ReadonlySet<string>;
@@ -27,6 +30,8 @@
   let {
     group,
     currentUserID,
+    reactionController,
+    reactionsDisabled = false,
     selectedThreadID,
     canDeleteAnyMessage = false,
     deletingMessageIDs = new Set<string>(),
@@ -87,6 +92,8 @@
         {replyContext}
         {selectedThreadID}
         {currentUserID}
+        {reactionController}
+        {reactionsDisabled}
         {canDeleteAnyMessage}
         deleting={deletingMessageIDs.has(message.id)}
         {onReply}

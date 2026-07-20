@@ -1,161 +1,48 @@
 <script lang="ts">
-  import { untrack } from "svelte";
-  import { api } from "../../lib/api";
+  import { tick } from "svelte";
   import type { ReactionSummary } from "../../lib/types";
 
-  let { messageId, reactions = [], currentUserID = "" }: {
+  let {
+    messageId,
+    reactions = [],
+    pending = false,
+    error = "",
+    disabled = false,
+    onToggle,
+  }: {
     messageId: string;
     reactions: ReactionSummary[];
-    currentUserID?: string;
+    pending?: boolean;
+    error?: string;
+    disabled?: boolean;
+    onToggle: (emoji: string) => void;
   } = $props();
 
-  let localReactions = $state<ReactionSummary[]>([]);
-  let pendingEmojis = $state(new Set<string>());
-  let pendingIntents = $state(new Map<string, "add" | "remove">());
-  let errorMessage = $state("");
-  let authoritativeReactions: ReactionSummary[] = [];
-  let authoritativeRevision = 0;
-  let authoritativeUserEmojis = new Set<string>();
-  let authoritativeEmojiRevisions = new Map<string, number>();
-
-  function applyPendingIntents(
-    authoritative: ReactionSummary[],
-    intents: Map<string, "add" | "remove">,
-  ) {
-    let next = authoritative.map((reaction) => ({ ...reaction }));
-    for (const [emoji, intent] of intents) {
-      const index = next.findIndex((reaction) => reaction.emoji === emoji);
-      if (intent === "remove") {
-        if (index < 0 || !next[index].reacted_by_me) continue;
-        if (next[index].count <= 1) {
-          next.splice(index, 1);
-        } else {
-          next[index] = {
-            ...next[index],
-            count: next[index].count - 1,
-            reacted_by_me: false,
-          };
-        }
-      } else if (index < 0) {
-        next.push({ emoji, count: 1, reacted_by_me: true });
-      } else if (!next[index].reacted_by_me) {
-        next[index] = {
-          ...next[index],
-          count: next[index].count + 1,
-          reacted_by_me: true,
-        };
-      }
-    }
-    return next;
-  }
-
-  function replaceAuthoritativeReactions(nextReactions: ReactionSummary[]) {
-    const nextUserEmojis = new Set(
-      nextReactions
-        .filter((reaction) => reaction.reacted_by_me)
-        .map((reaction) => reaction.emoji),
-    );
-    const changedEmojis = new Set([...authoritativeUserEmojis, ...nextUserEmojis]);
-    const nextEmojiRevisions = new Map(authoritativeEmojiRevisions);
-    for (const emoji of changedEmojis) {
-      if (authoritativeUserEmojis.has(emoji) !== nextUserEmojis.has(emoji)) {
-        nextEmojiRevisions.set(emoji, (nextEmojiRevisions.get(emoji) ?? 0) + 1);
-      }
-    }
-    authoritativeUserEmojis = nextUserEmojis;
-    authoritativeEmojiRevisions = nextEmojiRevisions;
-    authoritativeReactions = nextReactions;
-    authoritativeRevision += 1;
-  }
-
-  $effect(() => {
-    replaceAuthoritativeReactions(reactions);
-    localReactions = applyPendingIntents(authoritativeReactions, untrack(() => pendingIntents));
-  });
-
   let groupedEntries = $derived(
-    [...localReactions].sort(
+    [...reactions].sort(
       (a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji),
     ),
   );
 
   let showPicker = $state(false);
   let pickerRef = $state<HTMLDivElement>();
+  let addButtonRef = $state<HTMLButtonElement>();
   let pickerId = $derived(`reaction-picker-${messageId}`);
 
   const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥", "💯", "👀", "🚀", "✅"];
 
-  async function toggleReaction(emoji: string) {
-    if (!currentUserID || pendingEmojis.size > 0) return;
-    const existing = localReactions.find((reaction) => reaction.emoji === emoji)?.reacted_by_me;
-    const intent = existing ? "remove" : "add";
-    localReactions = applyPendingIntents(localReactions, new Map([[emoji, intent]]));
-    pendingEmojis = new Set([...pendingEmojis, emoji]);
-    pendingIntents = new Map(pendingIntents).set(emoji, intent);
-    errorMessage = "";
-    const emojiRevisionAtStart = authoritativeEmojiRevisions.get(emoji) ?? 0;
-    try {
-      if (existing) {
-        await api(`/api/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, {
-          method: "DELETE",
-        });
-      } else {
-        await api(`/api/messages/${messageId}/reactions`, {
-          method: "POST",
-          body: JSON.stringify({ emoji }),
-        });
-      }
-      if ((authoritativeEmojiRevisions.get(emoji) ?? 0) === emojiRevisionAtStart) {
-        authoritativeReactions = applyPendingIntents(
-          authoritativeReactions,
-          new Map([[emoji, intent]]),
-        );
-        authoritativeUserEmojis = new Set(authoritativeUserEmojis);
-        if (intent === "add") authoritativeUserEmojis.add(emoji);
-        else authoritativeUserEmojis.delete(emoji);
-        authoritativeEmojiRevisions = new Map(authoritativeEmojiRevisions).set(
-          emoji,
-          emojiRevisionAtStart + 1,
-        );
-        authoritativeRevision += 1;
-      }
-      const refreshRevision = authoritativeRevision;
-      try {
-        const data = await api<{ message: { reactions?: ReactionSummary[] } }>(
-          `/api/messages/${messageId}`,
-        );
-        if (authoritativeRevision === refreshRevision) {
-          replaceAuthoritativeReactions(data.message.reactions ?? []);
-        }
-      } catch {
-        // The mutation committed; retain the known intent or a newer realtime snapshot.
-      }
-      localReactions = applyPendingIntents(authoritativeReactions, pendingIntents);
-    } catch (e) {
-      const remainingIntents = new Map(pendingIntents);
-      remainingIntents.delete(emoji);
-      const recoveryRevision = authoritativeRevision;
-      try {
-        const data = await api<{ message: { reactions?: ReactionSummary[] } }>(
-          `/api/messages/${messageId}`,
-        );
-        if (authoritativeRevision === recoveryRevision) {
-          replaceAuthoritativeReactions(data.message.reactions ?? []);
-        }
-      } catch {
-        // Fall back to the latest realtime snapshot below.
-      }
-      localReactions = applyPendingIntents(authoritativeReactions, remainingIntents);
-      errorMessage = e instanceof Error ? e.message : "Could not update reaction";
-    } finally {
-      const next = new Set(pendingEmojis);
-      next.delete(emoji);
-      pendingEmojis = next;
-      const nextIntents = new Map(pendingIntents);
-      nextIntents.delete(emoji);
-      pendingIntents = nextIntents;
-      localReactions = applyPendingIntents(authoritativeReactions, nextIntents);
-    }
+  async function togglePicker() {
+    if (disabled || pending) return;
+    showPicker = !showPicker;
+    if (!showPicker) return;
+    await tick();
+    pickerRef?.querySelector<HTMLButtonElement>(".emoji-option")?.focus();
+  }
+
+  function chooseReaction(emoji: string) {
+    if (disabled || pending) return;
+    onToggle(emoji);
+    showPicker = false;
   }
 
   function handleClickOutside(e: MouseEvent) {
@@ -164,11 +51,22 @@
     }
   }
 
+  function handlePickerKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    showPicker = false;
+    addButtonRef?.focus();
+  }
+
   $effect(() => {
     if (showPicker) {
       document.addEventListener("click", handleClickOutside);
       return () => document.removeEventListener("click", handleClickOutside);
     }
+  });
+
+  $effect(() => {
+    if (disabled || pending) showPicker = false;
   });
 </script>
 
@@ -177,8 +75,8 @@
     <button
       class="reaction-btn"
       class:me={reacted_by_me}
-      onclick={() => toggleReaction(emoji)}
-      disabled={pendingEmojis.size > 0}
+      onclick={() => onToggle(emoji)}
+      disabled={disabled || pending}
       aria-pressed={reacted_by_me}
       aria-label="{emoji} — {count} reaction{count !== 1 ? 's' : ''}"
       title="{emoji}"
@@ -192,13 +90,13 @@
 
   <div class="picker-wrapper" bind:this={pickerRef}>
     <button
+      bind:this={addButtonRef}
       class="reaction-btn add-btn"
-      onclick={() => (showPicker = !showPicker)}
+      onclick={togglePicker}
       aria-label="Add reaction"
       aria-controls={pickerId}
       aria-expanded={showPicker}
-      aria-haspopup="menu"
-      disabled={pendingEmojis.size > 0}
+      disabled={disabled || pending}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -206,18 +104,22 @@
     </button>
 
     {#if showPicker}
-      <div class="emoji-grid" id={pickerId} role="menu" aria-label="Choose a reaction">
+      <div
+        class="emoji-grid"
+        id={pickerId}
+        role="group"
+        aria-label="Choose a reaction"
+      >
         {#each QUICK_EMOJIS as emoji}
           <button
             class="emoji-option"
-            role="menuitem"
             onclick={() => {
-              void toggleReaction(emoji);
-              showPicker = false;
+              chooseReaction(emoji);
             }}
             aria-label={`React with ${emoji}`}
             title={emoji}
-            disabled={pendingEmojis.size > 0}
+            disabled={disabled || pending}
+            onkeydown={handlePickerKeydown}
           >
             {emoji}
           </button>
@@ -225,7 +127,7 @@
       </div>
     {/if}
   </div>
-  {#if errorMessage}<span class="reaction-error" role="status">{errorMessage}</span>{/if}
+  {#if error}<span class="reaction-error" role="status">{error}</span>{/if}
 </div>
 
 <style>

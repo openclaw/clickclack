@@ -6,6 +6,7 @@
   import { markdownImageViewerURL } from "../../lib/actions/markdownGifs";
   import { APIError, api, apiResourceURL } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
+  import { ReactionController } from "../../lib/reactions.svelte";
   import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
@@ -35,6 +36,7 @@
   let viewState = $state<ViewState>("loading");
   let errorText = $state("");
   let user = $state<User | null>(null);
+  const reactionController = new ReactionController(() => user?.id || "");
   let route = $state<RouteTarget | null>(null);
   let channel = $state<Channel | null>(null);
   let messages = $state<Message[]>([]);
@@ -96,6 +98,7 @@
   }
 
   function applyPage(page: MessagePage, mode: "replace" | "prepend" | "append") {
+    reactionController.seedMessages(page.messages);
     messages =
       mode === "replace"
         ? page.messages
@@ -113,6 +116,7 @@
     socket = null;
     route = null;
     channel = null;
+    reactionController.clear();
     messages = [];
     oldestSeq = 0;
     newestSeq = 0;
@@ -293,6 +297,10 @@
       if (event.payload.message_id) void refreshMessage(event.payload.message_id);
       return;
     }
+    if (event.type === "reaction.added" || event.type === "reaction.removed") {
+      reactionController.applyEvent(event);
+      return;
+    }
     if (event.type === "channel.updated") void refreshChannelMetadata();
   }
 
@@ -435,6 +443,7 @@
       {hasNewer}
       {loadingOlder}
       currentUserID={user?.id}
+      {reactionController}
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => {}}
       onInlineImagePointerUp={handleInlineImagePointerUp}

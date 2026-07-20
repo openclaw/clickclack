@@ -4,6 +4,7 @@
   import { time, markdown } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
+  import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Upload } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
@@ -18,6 +19,8 @@
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
     currentUserID?: string;
+    reactionController: ReactionController;
+    reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
     deleting?: boolean;
     onReply: (message: Message, context: "channel" | "dm") => void;
@@ -39,6 +42,8 @@
     replyContext,
     selectedThreadID,
     currentUserID,
+    reactionController,
+    reactionsDisabled = false,
     canDeleteAnyMessage = false,
     deleting = false,
     onReply,
@@ -134,8 +139,11 @@
     {#if !isPending && !isFailed}
       <ReactionsBar
         messageId={message.id}
-        reactions={message.reactions ?? []}
-        {currentUserID}
+        reactions={reactionController.reactionsFor(message)}
+        pending={reactionController.pending(message.id)}
+        error={reactionController.error(message.id)}
+        disabled={reactionsDisabled || !currentUserID}
+        onToggle={(emoji) => void reactionController.toggle(message, emoji)}
       />
     {/if}
     {#if message.attachments?.length}

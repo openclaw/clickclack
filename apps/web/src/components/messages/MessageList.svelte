@@ -26,6 +26,7 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
   import { dmTitle } from "../../lib/chat/people";
+  import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Upload } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
   import MessageGroup from "./MessageGroup.svelte";
@@ -54,6 +55,8 @@
     selectedChannel?: Channel;
     selectedThreadID?: string;
     currentUserID?: string;
+    reactionController: ReactionController;
+    reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
     deletingMessageIDs?: ReadonlySet<string>;
     onListRef: (handle: MessageListHandle | null) => void;
@@ -94,6 +97,8 @@
     selectedChannel,
     selectedThreadID,
     currentUserID,
+    reactionController,
+    reactionsDisabled = false,
     canDeleteAnyMessage = false,
     deletingMessageIDs = new Set<string>(),
     onListRef,
@@ -860,6 +865,8 @@
             <MessageGroup
               group={item.group}
               {currentUserID}
+              {reactionController}
+              {reactionsDisabled}
               {selectedThreadID}
               {replyContext}
               {canDeleteAnyMessage}

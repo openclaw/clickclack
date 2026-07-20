@@ -6,6 +6,7 @@
   import { APIError, api, apiResourceURL } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
   import { dmTitle } from "../../lib/chat/people";
+  import { ReactionController } from "../../lib/reactions.svelte";
   import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
@@ -36,6 +37,7 @@
   let viewState = $state<ViewState>("loading");
   let errorText = $state("");
   let user = $state<User | null>(null);
+  const reactionController = new ReactionController(() => user?.id || "");
   let route = $state<RouteTarget | null>(null);
   let root = $state<Message | null>(null);
   let replies = $state<Message[]>([]);
@@ -94,6 +96,7 @@
     socket = null;
     route = null;
     root = null;
+    reactionController.clear();
     replies = [];
     threadState = null;
     directConversation = null;
@@ -170,6 +173,7 @@
       route = resolved.route;
       root = { ...thread.root, thread_state: thread.thread_state };
       replies = thread.replies;
+      reactionController.seedMessages([root, ...replies]);
       threadState = thread.thread_state;
       viewState = "ready";
       connectSocket(resolved.route.workspace_id);
@@ -190,6 +194,7 @@
       if (!root || root.id !== rootID || viewState !== "ready") return;
       root = { ...thread.root, thread_state: thread.thread_state };
       replies = thread.replies;
+      reactionController.seedMessages([root, ...replies]);
       threadState = thread.thread_state;
       if (
         replyTarget &&
@@ -231,10 +236,14 @@
     return messageID === root.id || replies.some((reply) => reply.id === messageID);
   }
 
-  // Exactly the event types that change what ThreadPanel renders: replies,
-  // bodies, deletions. Reactions and thread-state chips are not rendered in
-  // this panel, and reconnects already trigger a full refresh in connectSocket.
   function handleRealtimeEvent(event: RealtimeEvent) {
+    if (
+      eventBelongsToThread(event) &&
+      (event.type === "reaction.added" || event.type === "reaction.removed")
+    ) {
+      reactionController.applyEvent(event);
+      return;
+    }
     if (
       eventBelongsToThread(event) &&
       (event.type === "thread.reply_created" ||
@@ -374,6 +383,8 @@
         headerDetail={`Thread · ${threadState?.reply_count ?? replies.length} ${(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"}`}
         openHref={route.canonical_path}
         currentUserID={user?.id}
+        {reactionController}
+        reactionsDisabled={Boolean(directConversation && !directConversation.can_send)}
         onReplyBody={(value) => (replyBody = value)}
         onSubmitReply={() => void sendReply()}
         onReplyKeydown={handleReplyKeydown}

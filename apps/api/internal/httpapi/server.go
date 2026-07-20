@@ -1581,18 +1581,6 @@ func writeThreadReplyCreateResult(w http.ResponseWriter, message store.Message, 
 	writeJSON(w, status, map[string]any{"message": message, "thread_state": state, "events": events})
 }
 
-func writeEventMutationResult(w http.ResponseWriter, changedStatus int, event store.Event, err error) {
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	status := http.StatusOK
-	if event.ID != "" {
-		status = changedStatus
-	}
-	writeJSON(w, status, map[string]any{"event": event})
-}
-
 func (s *Server) writeReactionMutationResult(w http.ResponseWriter, r *http.Request, changedStatus int, userID, messageID string, event store.Event, err error) {
 	if err != nil {
 		writeStoreError(w, err)

@@ -152,6 +152,7 @@ test("ambiguous failures recover server state and preserve newer realtime reacti
   await pickReaction(row, "👍");
   await expect(row.getByRole("button", { name: "👍 — 1 reaction" })).toBeVisible();
   await expect(row.getByRole("status")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Add reaction" })).toBeEnabled();
 
   await page.unroute(`**/api/messages/${messageID}/reactions`);
   const cleanup = await page.request.delete(

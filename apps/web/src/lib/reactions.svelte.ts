@@ -10,11 +10,13 @@ type ReactionEntry = {
   complete: boolean;
   partialEmojis: Set<string>;
   revision: number;
+  lastEventCursor: string;
   pendingIntent?: { emoji: string; intent: ReactionIntent };
   error: string;
 };
 
 type ReactionMutationResponse = {
+  event?: Pick<RealtimeEvent, "cursor">;
   reactions: ReactionSummary[];
 };
 
@@ -80,22 +82,29 @@ export class ReactionController {
     if (!messageID || !emoji || typeof count !== "number") return;
 
     const existing = this.entries.get(messageID);
+    if (existing?.lastEventCursor && event.cursor && event.cursor <= existing.lastEventCursor) {
+      return;
+    }
+    const currentUserActed = event.payload.user_id === this.currentUserID();
     const confirmed = applyReactionEvent(
       existing?.confirmed ?? [],
       emoji,
       Math.max(0, count),
       event.type === "reaction.added",
-      event.payload.user_id === this.currentUserID(),
+      currentUserActed,
     );
+    const pendingIntent = existing?.pendingIntent;
+    const eventResolvesPendingIntent = currentUserActed && pendingIntent?.emoji === emoji;
     this.setEntry(messageID, {
       confirmed,
-      displayed: applyIntent(confirmed, existing?.pendingIntent),
+      displayed: eventResolvesPendingIntent ? confirmed : applyIntent(confirmed, pendingIntent),
       complete: existing?.complete ?? false,
       partialEmojis: existing?.complete
         ? new Set()
         : new Set([...(existing?.partialEmojis ?? []), emoji]),
       revision: ++this.revision,
-      pendingIntent: existing?.pendingIntent,
+      lastEventCursor: event.cursor || existing?.lastEventCursor || "",
+      pendingIntent,
       error: "",
     });
   }
@@ -130,7 +139,13 @@ export class ReactionController {
       if (generation !== this.generation) return;
       const current = this.entries.get(message.id);
       if (!current) return;
-      if (current.revision === revisionAtStart) {
+      const responseCursor = result.event?.cursor ?? "";
+      const responseIsCurrent =
+        current.revision === revisionAtStart ||
+        Boolean(
+          responseCursor && (!current.lastEventCursor || responseCursor >= current.lastEventCursor),
+        );
+      if (responseIsCurrent) {
         const confirmed = normalizeReactions(result.reactions);
         this.setEntry(message.id, {
           ...current,
@@ -202,6 +217,7 @@ export class ReactionController {
       complete,
       partialEmojis: new Set(),
       revision: ++this.revision,
+      lastEventCursor: "",
       error: "",
     };
   }

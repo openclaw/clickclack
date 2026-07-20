@@ -1745,6 +1745,12 @@ export interface components {
       last_reply_at?: string;
       last_reply_author_ids: string[];
     };
+    ReactionSummary: {
+      emoji: string;
+      /** Format: int64 */
+      count: number;
+      reacted_by_me: boolean;
+    };
     Message: {
       id: string;
       /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
@@ -1782,6 +1788,7 @@ export interface components {
       quoted_author?: components["schemas"]["User"];
       thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
+      reactions?: components["schemas"]["ReactionSummary"][];
     };
     MessageResponse: {
       message: components["schemas"]["Message"];

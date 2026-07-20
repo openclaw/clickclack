@@ -1,3 +1,5 @@
+import type { components } from "./generated/openapi";
+
 export type { components, paths } from "./generated/openapi";
 
 export type User = {
@@ -295,6 +297,8 @@ export type MessageInput = MessageInputBase &
     | { kind: "agent_commentary" | "agent_tool"; turn_id?: string }
   );
 
+export type ReactionSummary = components["schemas"]["ReactionSummary"];
+
 export type Message = {
   id: string;
   route_id?: string;
@@ -321,6 +325,7 @@ export type Message = {
   quoted_author_id?: string;
   quoted_author?: User;
   nonce?: string;
+  reactions?: ReactionSummary[];
 };
 
 export type SearchHighlight = {

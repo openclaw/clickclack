@@ -1215,10 +1215,15 @@ WHERE message_id = sqlc.arg(message_id)
   AND emoji = sqlc.arg(emoji);
 
 -- name: ListReactionsForMessages :many
-SELECT r.message_id, r.emoji, r.user_id, r.created_at
+SELECT
+  r.message_id,
+  r.emoji,
+  COUNT(*) AS reaction_count,
+  CAST(MAX(CASE WHEN r.user_id = sqlc.arg(user_id) THEN 1 ELSE 0 END) AS INTEGER) AS reacted_by_me
 FROM reactions r
 WHERE r.message_id IN (sqlc.slice(message_ids))
-ORDER BY r.created_at;
+GROUP BY r.message_id, r.emoji
+ORDER BY r.message_id, reaction_count DESC, r.emoji;
 
 -- name: ListEventsAfter :many
 SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at

@@ -73,10 +73,10 @@ export type PreambleBlock = {
   final: boolean;
 };
 
-export type Reaction = {
+export type ReactionSummary = {
   emoji: string;
-  user_id: string;
-  created_at: string;
+  count: number;
+  reacted_by_me: boolean;
 };
 
 export type Message = {
@@ -114,7 +114,7 @@ export type Message = {
   // Optimistic-send: client-supplied id, echoed by server. Used to swap
   // pending placeholder with the real message on response/WS event.
   nonce?: string;
-  reactions?: Reaction[];
+  reactions?: ReactionSummary[];
   // Client-only status. Absent for sent messages.
   status?: "pending" | "failed";
 };

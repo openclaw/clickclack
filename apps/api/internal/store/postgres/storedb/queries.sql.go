@@ -3548,21 +3548,31 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int32)
 }
 
 const listReactionsForMessages = `-- name: ListReactionsForMessages :many
-SELECT r.message_id, r.emoji, r.user_id, r.created_at
+SELECT
+  r.message_id,
+  r.emoji,
+  COUNT(*)::bigint AS reaction_count,
+  BOOL_OR(r.user_id = $1) AS reacted_by_me
 FROM reactions r
-WHERE r.message_id = ANY($1::text[])
-ORDER BY r.created_at
+WHERE r.message_id = ANY($2::text[])
+GROUP BY r.message_id, r.emoji
+ORDER BY r.message_id, reaction_count DESC, r.emoji
 `
 
-type ListReactionsForMessagesRow struct {
-	MessageID string `json:"message_id"`
-	Emoji     string `json:"emoji"`
-	UserID    string `json:"user_id"`
-	CreatedAt string `json:"created_at"`
+type ListReactionsForMessagesParams struct {
+	UserID     string   `json:"user_id"`
+	MessageIds []string `json:"message_ids"`
 }
 
-func (q *Queries) ListReactionsForMessages(ctx context.Context, dollar_1 []string) ([]ListReactionsForMessagesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listReactionsForMessages, pq.Array(dollar_1))
+type ListReactionsForMessagesRow struct {
+	MessageID     string `json:"message_id"`
+	Emoji         string `json:"emoji"`
+	ReactionCount int64  `json:"reaction_count"`
+	ReactedByMe   bool   `json:"reacted_by_me"`
+}
+
+func (q *Queries) ListReactionsForMessages(ctx context.Context, arg ListReactionsForMessagesParams) ([]ListReactionsForMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReactionsForMessages, arg.UserID, pq.Array(arg.MessageIds))
 	if err != nil {
 		return nil, err
 	}
@@ -3573,8 +3583,8 @@ func (q *Queries) ListReactionsForMessages(ctx context.Context, dollar_1 []strin
 		if err := rows.Scan(
 			&i.MessageID,
 			&i.Emoji,
-			&i.UserID,
-			&i.CreatedAt,
+			&i.ReactionCount,
+			&i.ReactedByMe,
 		); err != nil {
 			return nil, err
 		}

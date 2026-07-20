@@ -495,8 +495,9 @@ func (s *Store) ListMessages(ctx context.Context, channelID, userID string, page
 		return store.MessagePage{}, err
 	}
 	return s.listMessagePage(ctx, messagePageScope{
-		where: "m.channel_id = ? AND m.parent_message_id IS NULL",
-		args:  []any{channelID},
+		where:  "m.channel_id = ? AND m.parent_message_id IS NULL",
+		args:   []any{channelID},
+		userID: userID,
 	}, page)
 }
 
@@ -512,7 +513,7 @@ func (s *Store) GetMessage(ctx context.Context, messageID, userID string) (store
 	if err != nil {
 		return store.Message{}, err
 	}
-	messages, err = s.hydrateReactions(ctx, messages)
+	messages, err = s.hydrateReactions(ctx, userID, messages)
 	if err != nil {
 		return store.Message{}, err
 	}
@@ -723,7 +724,7 @@ func (s *Store) getThread(ctx context.Context, rootMessageID, userID string, lim
 		return store.Message{}, nil, store.ThreadState{}, err
 	}
 	threadMessages := append([]store.Message{root}, replies...)
-	threadMessages, err = s.hydrateReactions(ctx, threadMessages)
+	threadMessages, err = s.hydrateReactions(ctx, userID, threadMessages)
 	if err != nil {
 		return store.Message{}, nil, store.ThreadState{}, err
 	}

@@ -3539,27 +3539,38 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int64)
 }
 
 const listReactionsForMessages = `-- name: ListReactionsForMessages :many
-SELECT r.message_id, r.emoji, r.user_id, r.created_at
+SELECT
+  r.message_id,
+  r.emoji,
+  COUNT(*) AS reaction_count,
+  CAST(MAX(CASE WHEN r.user_id = ?1 THEN 1 ELSE 0 END) AS INTEGER) AS reacted_by_me
 FROM reactions r
 WHERE r.message_id IN (/*SLICE:message_ids*/?)
-ORDER BY r.created_at
+GROUP BY r.message_id, r.emoji
+ORDER BY r.message_id, reaction_count DESC, r.emoji
 `
 
-type ListReactionsForMessagesRow struct {
-	MessageID string `json:"message_id"`
-	Emoji     string `json:"emoji"`
-	UserID    string `json:"user_id"`
-	CreatedAt string `json:"created_at"`
+type ListReactionsForMessagesParams struct {
+	UserID     string   `json:"user_id"`
+	MessageIds []string `json:"message_ids"`
 }
 
-func (q *Queries) ListReactionsForMessages(ctx context.Context, messageIds []string) ([]ListReactionsForMessagesRow, error) {
+type ListReactionsForMessagesRow struct {
+	MessageID     string `json:"message_id"`
+	Emoji         string `json:"emoji"`
+	ReactionCount int64  `json:"reaction_count"`
+	ReactedByMe   int64  `json:"reacted_by_me"`
+}
+
+func (q *Queries) ListReactionsForMessages(ctx context.Context, arg ListReactionsForMessagesParams) ([]ListReactionsForMessagesRow, error) {
 	query := listReactionsForMessages
 	var queryParams []interface{}
-	if len(messageIds) > 0 {
-		for _, v := range messageIds {
+	queryParams = append(queryParams, arg.UserID)
+	if len(arg.MessageIds) > 0 {
+		for _, v := range arg.MessageIds {
 			queryParams = append(queryParams, v)
 		}
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", strings.Repeat(",?", len(messageIds))[1:], 1)
+		query = strings.Replace(query, "/*SLICE:message_ids*/?", strings.Repeat(",?", len(arg.MessageIds))[1:], 1)
 	} else {
 		query = strings.Replace(query, "/*SLICE:message_ids*/?", "NULL", 1)
 	}
@@ -3574,8 +3585,8 @@ func (q *Queries) ListReactionsForMessages(ctx context.Context, messageIds []str
 		if err := rows.Scan(
 			&i.MessageID,
 			&i.Emoji,
-			&i.UserID,
-			&i.CreatedAt,
+			&i.ReactionCount,
+			&i.ReactedByMe,
 		); err != nil {
 			return nil, err
 		}

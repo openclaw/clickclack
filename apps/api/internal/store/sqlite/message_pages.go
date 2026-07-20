@@ -10,8 +10,9 @@ import (
 )
 
 type messagePageScope struct {
-	where string
-	args  []any
+	where  string
+	args   []any
+	userID string
 }
 
 type messagePageMode string
@@ -84,14 +85,14 @@ func (s *Store) listMessagePage(ctx context.Context, scope messagePageScope, req
 	if err != nil {
 		return store.MessagePage{}, err
 	}
-	messages, err = s.hydrateReactions(ctx, messages)
+	messages, err = s.hydrateReactions(ctx, scope.userID, messages)
 	if err != nil {
 		return store.MessagePage{}, err
 	}
 	return s.buildMessagePage(ctx, scope, messages)
 }
 
-func (s *Store) hydrateReactions(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+func (s *Store) hydrateReactions(ctx context.Context, userID string, messages []store.Message) ([]store.Message, error) {
 	ids := make([]string, len(messages))
 	for i, m := range messages {
 		ids[i] = m.ID
@@ -100,24 +101,27 @@ func (s *Store) hydrateReactions(ctx context.Context, messages []store.Message) 
 		return messages, nil
 	}
 
-	rows, err := s.q.ListReactionsForMessages(ctx, ids)
+	rows, err := s.q.ListReactionsForMessages(ctx, storedb.ListReactionsForMessagesParams{
+		UserID:     userID,
+		MessageIds: ids,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("load reactions: %w", err)
 	}
 
-	reactionsByMsg := make(map[string][]store.Reaction, len(ids))
+	reactionsByMsg := make(map[string][]store.ReactionSummary, len(ids))
 	for _, row := range rows {
-		reactionsByMsg[row.MessageID] = append(reactionsByMsg[row.MessageID], store.Reaction{
-			Emoji:     row.Emoji,
-			UserID:    row.UserID,
-			CreatedAt: row.CreatedAt,
+		reactionsByMsg[row.MessageID] = append(reactionsByMsg[row.MessageID], store.ReactionSummary{
+			Emoji:       row.Emoji,
+			Count:       row.ReactionCount,
+			ReactedByMe: row.ReactedByMe != 0,
 		})
 	}
 
 	for i := range messages {
 		messages[i].Reactions = reactionsByMsg[messages[i].ID]
 		if messages[i].Reactions == nil {
-			messages[i].Reactions = []store.Reaction{}
+			messages[i].Reactions = []store.ReactionSummary{}
 		}
 	}
 	return messages, nil

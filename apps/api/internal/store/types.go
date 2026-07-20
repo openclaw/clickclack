@@ -210,10 +210,10 @@ type Channel struct {
 	UnreadCount     int64   `json:"unread_count"`
 }
 
-type Reaction struct {
-	Emoji     string `json:"emoji"`
-	UserID    string `json:"user_id"`
-	CreatedAt string `json:"created_at"`
+type ReactionSummary struct {
+	Emoji       string `json:"emoji"`
+	Count       int64  `json:"count"`
+	ReactedByMe bool   `json:"reacted_by_me"`
 }
 
 type Message struct {
@@ -252,8 +252,8 @@ type Message struct {
 	// Nonce is a client-supplied idempotency key used by optimistic UIs to match
 	// the server response to a pending placeholder and safely retry after a lost
 	// response.
-	Nonce     string     `json:"nonce,omitempty"`
-	Reactions []Reaction `json:"reactions,omitempty"`
+	Nonce     string            `json:"nonce,omitempty"`
+	Reactions []ReactionSummary `json:"reactions,omitempty"`
 }
 
 type MessagePageRequest struct {

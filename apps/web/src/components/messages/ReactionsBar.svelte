@@ -1,41 +1,58 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { api } from "../../lib/api";
-  import type { Reaction } from "../../lib/types";
+  import type { ReactionSummary } from "../../lib/types";
 
   let { messageId, reactions = [], currentUserID = "" }: {
     messageId: string;
-    reactions: Reaction[];
+    reactions: ReactionSummary[];
     currentUserID?: string;
   } = $props();
 
-  let localReactions = $state<Reaction[]>([]);
+  let localReactions = $state<ReactionSummary[]>([]);
   let pendingEmojis = $state(new Set<string>());
   let pendingIntents = $state(new Map<string, "add" | "remove">());
   let errorMessage = $state("");
-  let authoritativeReactions: Reaction[] = [];
+  let authoritativeReactions: ReactionSummary[] = [];
   let authoritativeRevision = 0;
   let authoritativeUserEmojis = new Set<string>();
   let authoritativeEmojiRevisions = new Map<string, number>();
 
-  function applyPendingIntents(authoritative: Reaction[], intents: Map<string, "add" | "remove">) {
-    let next = [...authoritative];
+  function applyPendingIntents(
+    authoritative: ReactionSummary[],
+    intents: Map<string, "add" | "remove">,
+  ) {
+    let next = authoritative.map((reaction) => ({ ...reaction }));
     for (const [emoji, intent] of intents) {
-      const matchesCurrentUser = (reaction: Reaction) =>
-        reaction.emoji === emoji && reaction.user_id === currentUserID;
+      const index = next.findIndex((reaction) => reaction.emoji === emoji);
       if (intent === "remove") {
-        next = next.filter((reaction) => !matchesCurrentUser(reaction));
-      } else if (!next.some(matchesCurrentUser)) {
-        next.push({ emoji, user_id: currentUserID, created_at: new Date().toISOString() });
+        if (index < 0 || !next[index].reacted_by_me) continue;
+        if (next[index].count <= 1) {
+          next.splice(index, 1);
+        } else {
+          next[index] = {
+            ...next[index],
+            count: next[index].count - 1,
+            reacted_by_me: false,
+          };
+        }
+      } else if (index < 0) {
+        next.push({ emoji, count: 1, reacted_by_me: true });
+      } else if (!next[index].reacted_by_me) {
+        next[index] = {
+          ...next[index],
+          count: next[index].count + 1,
+          reacted_by_me: true,
+        };
       }
     }
     return next;
   }
 
-  function replaceAuthoritativeReactions(nextReactions: Reaction[]) {
+  function replaceAuthoritativeReactions(nextReactions: ReactionSummary[]) {
     const nextUserEmojis = new Set(
       nextReactions
-        .filter((reaction) => reaction.user_id === currentUserID)
+        .filter((reaction) => reaction.reacted_by_me)
         .map((reaction) => reaction.emoji),
     );
     const changedEmojis = new Set([...authoritativeUserEmojis, ...nextUserEmojis]);
@@ -56,19 +73,11 @@
     localReactions = applyPendingIntents(authoritativeReactions, untrack(() => pendingIntents));
   });
 
-  // Group reactions by emoji
-  let grouped = $derived.by(() => {
-    const map = new Map<string, { count: number; me: boolean }>();
-    for (const r of localReactions) {
-      const entry = map.get(r.emoji) ?? { count: 0, me: false };
-      entry.count++;
-      if (r.user_id === currentUserID) entry.me = true;
-      map.set(r.emoji, entry);
-    }
-    return map;
-  });
-
-  let groupedEntries = $derived(Array.from(grouped.entries()).sort((a, b) => b[1].count - a[1].count));
+  let groupedEntries = $derived(
+    [...localReactions].sort(
+      (a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji),
+    ),
+  );
 
   let showPicker = $state(false);
   let pickerRef = $state<HTMLDivElement>();
@@ -78,19 +87,10 @@
 
   async function toggleReaction(emoji: string) {
     if (!currentUserID || pendingEmojis.size > 0) return;
-    const existing = localReactions.find(
-      (reaction) => reaction.emoji === emoji && reaction.user_id === currentUserID,
-    );
-    const optimisticReaction: Reaction | undefined = existing
-      ? undefined
-      : { emoji, user_id: currentUserID, created_at: new Date().toISOString() };
-    localReactions = existing
-      ? localReactions.filter(
-          (reaction) => !(reaction.emoji === emoji && reaction.user_id === currentUserID),
-        )
-      : [...localReactions, optimisticReaction!];
-    pendingEmojis = new Set([...pendingEmojis, emoji]);
+    const existing = localReactions.find((reaction) => reaction.emoji === emoji)?.reacted_by_me;
     const intent = existing ? "remove" : "add";
+    localReactions = applyPendingIntents(localReactions, new Map([[emoji, intent]]));
+    pendingEmojis = new Set([...pendingEmojis, emoji]);
     pendingIntents = new Map(pendingIntents).set(emoji, intent);
     errorMessage = "";
     const emojiRevisionAtStart = authoritativeEmojiRevisions.get(emoji) ?? 0;
@@ -121,7 +121,7 @@
       }
       const refreshRevision = authoritativeRevision;
       try {
-        const data = await api<{ message: { reactions?: Reaction[] } }>(
+        const data = await api<{ message: { reactions?: ReactionSummary[] } }>(
           `/api/messages/${messageId}`,
         );
         if (authoritativeRevision === refreshRevision) {
@@ -136,7 +136,7 @@
       remainingIntents.delete(emoji);
       const recoveryRevision = authoritativeRevision;
       try {
-        const data = await api<{ message: { reactions?: Reaction[] } }>(
+        const data = await api<{ message: { reactions?: ReactionSummary[] } }>(
           `/api/messages/${messageId}`,
         );
         if (authoritativeRevision === recoveryRevision) {
@@ -173,12 +173,13 @@
 </script>
 
 <div class="reactions-bar">
-  {#each groupedEntries as [emoji, { count, me }]}
+  {#each groupedEntries as { emoji, count, reacted_by_me }}
     <button
       class="reaction-btn"
-      class:me
+      class:me={reacted_by_me}
       onclick={() => toggleReaction(emoji)}
       disabled={pendingEmojis.size > 0}
+      aria-pressed={reacted_by_me}
       aria-label="{emoji} — {count} reaction{count !== 1 ? 's' : ''}"
       title="{emoji}"
     >

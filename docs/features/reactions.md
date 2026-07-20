@@ -19,6 +19,14 @@ DELETE /api/messages/{message_id}/reactions/{emoji}
 message's workspace. Adding twice is a no-op that returns HTTP 200 without an
 event; removing a missing reaction is a no-op.
 
+Message reads expose reactions as bounded per-emoji summaries:
+
+```json
+{"emoji":"lobster","count":3,"reacted_by_me":true}
+```
+
+The API does not include the individual reacting users in message payloads.
+
 ## Events
 
 - `reaction.added` on add

@@ -21,6 +21,13 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Reaction Member", Email: "postgres-reaction-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
 	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +43,12 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	if _, err := st.AddReaction(ctx, store.CreateReactionInput{MessageID: root.ID, UserID: owner.ID, Emoji: "👍"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.AddReaction(ctx, store.CreateReactionInput{MessageID: root.ID, UserID: member.ID, Emoji: "👍"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddReaction(ctx, store.CreateReactionInput{MessageID: root.ID, UserID: member.ID, Emoji: "👀"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := st.AddReaction(ctx, store.CreateReactionInput{MessageID: reply.ID, UserID: owner.ID, Emoji: "🔥"}); err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +57,25 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(threadRoot.Reactions) != 1 || threadRoot.Reactions[0].Emoji != "👍" {
+	if len(threadRoot.Reactions) != 2 {
 		t.Fatalf("expected hydrated root reaction, got %#v", threadRoot.Reactions)
 	}
-	if len(replies) != 1 || len(replies[0].Reactions) != 1 || replies[0].Reactions[0].Emoji != "🔥" {
+	if got := reactionSummary(threadRoot.Reactions, "👍"); got.Count != 2 || !got.ReactedByMe {
+		t.Fatalf("expected owner summary for thumbs-up, got %#v", got)
+	}
+	if got := reactionSummary(threadRoot.Reactions, "👀"); got.Count != 1 || got.ReactedByMe {
+		t.Fatalf("expected owner summary for eyes, got %#v", got)
+	}
+	if len(replies) != 1 || len(replies[0].Reactions) != 1 || replies[0].Reactions[0].Emoji != "🔥" || !replies[0].Reactions[0].ReactedByMe {
 		t.Fatalf("expected hydrated reply reaction, got %#v", replies)
 	}
+}
+
+func reactionSummary(reactions []store.ReactionSummary, emoji string) store.ReactionSummary {
+	for _, reaction := range reactions {
+		if reaction.Emoji == emoji {
+			return reaction
+		}
+	}
+	return store.ReactionSummary{}
 }

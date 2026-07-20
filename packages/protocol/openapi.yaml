@@ -2809,6 +2809,18 @@ components:
           type: array
           items:
             type: string
+    ReactionSummary:
+      type: object
+      required: [emoji, count, reacted_by_me]
+      properties:
+        emoji:
+          type: string
+        count:
+          type: integer
+          format: int64
+          minimum: 1
+        reacted_by_me:
+          type: boolean
     Message:
       type: object
       required: [id, workspace_id, author_id, thread_root_id, body, body_format, created_at]
@@ -2871,6 +2883,10 @@ components:
           $ref: "#/components/schemas/ThreadState"
         nonce:
           type: string
+        reactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReactionSummary"
     MessageResponse:
       type: object
       required: [message]

@@ -208,8 +208,9 @@ func (s *Store) ListDirectMessages(ctx context.Context, conversationID, userID s
 		return store.MessagePage{}, err
 	}
 	return s.listMessagePage(ctx, messagePageScope{
-		where: "m.direct_conversation_id = ? AND m.parent_message_id IS NULL",
-		args:  []any{conversationID},
+		where:  "m.direct_conversation_id = ? AND m.parent_message_id IS NULL",
+		args:   []any{conversationID},
+		userID: userID,
 	}, page)
 }
 

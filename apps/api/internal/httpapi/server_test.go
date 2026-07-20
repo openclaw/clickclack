@@ -246,16 +246,21 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	expectStatusAsUser(t, second.ID, http.MethodPost, server.URL+"/api/messages/"+created.Message.ID+"/attachments", strings.NewReader(`{"upload_id":"`+privateUpload.ID+`"}`), http.StatusForbidden)
 
 	reaction := postJSON[struct {
-		Event store.Event `json:"event"`
+		Event     store.Event             `json:"event"`
+		Reactions []store.ReactionSummary `json:"reactions"`
 	}](t, server.URL+"/api/messages/"+created.Message.ID+"/reactions", map[string]string{"emoji": "lobster"})
 	if reaction.Event.Type != "reaction.added" {
 		t.Fatalf("unexpected reaction event: %s", reaction.Event.Type)
 	}
+	if len(reaction.Reactions) != 1 || reaction.Reactions[0].Emoji != "lobster" || reaction.Reactions[0].Count != 1 || !reaction.Reactions[0].ReactedByMe {
+		t.Fatalf("unexpected reaction summaries: %#v", reaction.Reactions)
+	}
 	duplicateReaction, duplicateStatus := postJSONWithStatus[struct {
-		Event store.Event `json:"event"`
+		Event     store.Event             `json:"event"`
+		Reactions []store.ReactionSummary `json:"reactions"`
 	}](t, server.URL+"/api/messages/"+created.Message.ID+"/reactions", map[string]string{"emoji": "lobster"})
-	if duplicateStatus != http.StatusOK || duplicateReaction.Event.ID != "" {
-		t.Fatalf("expected duplicate reaction no-op, status=%d event=%#v", duplicateStatus, duplicateReaction.Event)
+	if duplicateStatus != http.StatusOK || duplicateReaction.Event.ID != "" || len(duplicateReaction.Reactions) != 1 {
+		t.Fatalf("expected duplicate reaction no-op, status=%d response=%#v", duplicateStatus, duplicateReaction)
 	}
 	deleteJSON(t, server.URL+"/api/messages/"+created.Message.ID+"/reactions/lobster")
 

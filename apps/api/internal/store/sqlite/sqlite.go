@@ -964,11 +964,23 @@ func (s *Store) reaction(ctx context.Context, input store.CreateReactionInput, a
 	if affected == 0 {
 		return store.Event{}, tx.Commit()
 	}
+	count, err := qtx.CountMessageReaction(ctx, storedb.CountMessageReactionParams{
+		MessageID: input.MessageID,
+		Emoji:     input.Emoji,
+	})
+	if err != nil {
+		return store.Event{}, err
+	}
 	eventType := "reaction.added"
 	if !add {
 		eventType = "reaction.removed"
 	}
-	payload := map[string]string{"message_id": input.MessageID, "emoji": input.Emoji}
+	payload := map[string]any{
+		"message_id": input.MessageID,
+		"emoji":      input.Emoji,
+		"user_id":    input.UserID,
+		"count":      count,
+	}
 	if msg.DirectConversationID != "" {
 		payload["direct_conversation_id"] = msg.DirectConversationID
 	}

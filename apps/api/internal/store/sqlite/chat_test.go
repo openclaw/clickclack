@@ -217,6 +217,14 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 	if added.Type != "reaction.added" || removed.Type != "reaction.removed" {
 		t.Fatalf("unexpected reaction events: %#v %#v", added, removed)
 	}
+	addedPayload, _ := added.Payload.(map[string]any)
+	removedPayload, _ := removed.Payload.(map[string]any)
+	if addedPayload["user_id"] != owner.ID || addedPayload["count"] != int64(1) {
+		t.Fatalf("unexpected added reaction payload: %#v", added.Payload)
+	}
+	if removedPayload["user_id"] != owner.ID || removedPayload["count"] != int64(0) {
+		t.Fatalf("unexpected removed reaction payload: %#v", removed.Payload)
+	}
 }
 
 func TestMessageSequenceAllocationIsConcurrentSafe(t *testing.T) {

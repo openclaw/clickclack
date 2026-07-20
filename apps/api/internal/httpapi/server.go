@@ -1152,7 +1152,7 @@ func (s *Server) addReaction(w http.ResponseWriter, r *http.Request) {
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 	}
-	writeEventMutationResult(w, http.StatusCreated, event, err)
+	s.writeReactionMutationResult(w, r, http.StatusCreated, act.user.ID, chi.URLParam(r, "message_id"), event, err)
 }
 
 func (s *Server) removeReaction(w http.ResponseWriter, r *http.Request) {
@@ -1172,7 +1172,7 @@ func (s *Server) removeReaction(w http.ResponseWriter, r *http.Request) {
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 	}
-	writeEventMutationResult(w, http.StatusOK, event, err)
+	s.writeReactionMutationResult(w, r, http.StatusOK, act.user.ID, chi.URLParam(r, "message_id"), event, err)
 }
 
 func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
@@ -1591,6 +1591,23 @@ func writeEventMutationResult(w http.ResponseWriter, changedStatus int, event st
 		status = changedStatus
 	}
 	writeJSON(w, status, map[string]any{"event": event})
+}
+
+func (s *Server) writeReactionMutationResult(w http.ResponseWriter, r *http.Request, changedStatus int, userID, messageID string, event store.Event, err error) {
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	message, err := s.store.GetMessage(r.Context(), messageID, userID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if event.ID != "" {
+		status = changedStatus
+	}
+	writeJSON(w, status, map[string]any{"event": event, "reactions": message.Reactions})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

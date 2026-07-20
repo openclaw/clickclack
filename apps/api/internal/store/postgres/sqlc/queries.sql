@@ -1242,6 +1242,12 @@ WHERE message_id = sqlc.arg(message_id)
   AND user_id = sqlc.arg(user_id)
   AND emoji = sqlc.arg(emoji);
 
+-- name: CountMessageReaction :one
+SELECT COUNT(*)
+FROM reactions
+WHERE message_id = sqlc.arg(message_id)
+  AND emoji = sqlc.arg(emoji);
+
 -- name: ListReactionsForMessages :many
 SELECT
   r.message_id,

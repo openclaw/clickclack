@@ -1200,8 +1200,16 @@ paths:
       responses:
         "200":
           description: Reaction already existed; no event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactionMutationResponse"
         "201":
           description: Added reaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactionMutationResponse"
   /api/messages/{message_id}/attachments:
     post:
       operationId: attachUpload
@@ -1229,6 +1237,10 @@ paths:
       responses:
         "200":
           description: Removed reaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactionMutationResponse"
   /api/realtime/events:
     get:
       operationId: listEvents
@@ -2821,6 +2833,39 @@ components:
           minimum: 1
         reacted_by_me:
           type: boolean
+    Event:
+      type: object
+      required: [id, cursor, type, workspace_id, created_at, payload]
+      properties:
+        id:
+          type: string
+        cursor:
+          type: string
+        type:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+    ReactionMutationResponse:
+      type: object
+      required: [event, reactions]
+      properties:
+        event:
+          $ref: "#/components/schemas/Event"
+        reactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReactionSummary"
     Message:
       type: object
       required: [id, workspace_id, author_id, thread_root_id, body, body_format, created_at]

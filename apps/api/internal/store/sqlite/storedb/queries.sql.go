@@ -185,6 +185,25 @@ func (q *Queries) CountDesktopOAuthGrants(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countMessageReaction = `-- name: CountMessageReaction :one
+SELECT COUNT(*)
+FROM reactions
+WHERE message_id = ?1
+  AND emoji = ?2
+`
+
+type CountMessageReactionParams struct {
+	MessageID string `json:"message_id"`
+	Emoji     string `json:"emoji"`
+}
+
+func (q *Queries) CountMessageReaction(ctx context.Context, arg CountMessageReactionParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countMessageReaction, arg.MessageID, arg.Emoji)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOAuthTransactions = `-- name: CountOAuthTransactions :one
 SELECT COUNT(*)
 FROM oauth_transactions

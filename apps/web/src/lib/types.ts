@@ -263,6 +263,8 @@ export type EventPayload = {
   root_message_id?: string;
   channel_id?: string;
   direct_conversation_id?: string;
+  emoji?: string;
+  count?: number;
   nonce?: string;
   user_id?: string;
   author_id?: string;

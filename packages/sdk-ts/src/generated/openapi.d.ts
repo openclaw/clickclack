@@ -1751,6 +1751,24 @@ export interface components {
       count: number;
       reacted_by_me: boolean;
     };
+    Event: {
+      id: string;
+      cursor: string;
+      type: string;
+      workspace_id: string;
+      channel_id?: string;
+      /** Format: int64 */
+      seq?: number;
+      /** Format: date-time */
+      created_at: string;
+      payload: {
+        [key: string]: unknown;
+      };
+    };
+    ReactionMutationResponse: {
+      event: components["schemas"]["Event"];
+      reactions: components["schemas"]["ReactionSummary"][];
+    };
     Message: {
       id: string;
       /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
@@ -3904,14 +3922,18 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["ReactionMutationResponse"];
+        };
       };
       /** @description Added reaction */
       201: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["ReactionMutationResponse"];
+        };
       };
     };
   };
@@ -3956,7 +3978,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["ReactionMutationResponse"];
+        };
       };
     };
   };

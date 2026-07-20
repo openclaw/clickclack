@@ -17,7 +17,8 @@ DELETE /api/messages/{message_id}/reactions/{emoji}
 
 `POST` body: `{emoji}`. Both endpoints require workspace membership for the
 message's workspace. Adding twice is a no-op that returns HTTP 200 without an
-event; removing a missing reaction is a no-op.
+event; removing a missing reaction is a no-op. Mutation responses include the
+event and the message's complete bounded reaction summaries.
 
 Message reads expose reactions as bounded per-emoji summaries:
 
@@ -32,9 +33,9 @@ The API does not include the individual reacting users in message payloads.
 - `reaction.added` on add
 - `reaction.removed` on remove
 
-The event payload contains `{message_id, emoji}` and inherits the message's
-`channel_seq` so that reaction counters can be ordered alongside the message
-they decorate.
+The event payload contains `{message_id, emoji, user_id, count}` and inherits
+the message's `channel_seq`. `count` is the authoritative total for that emoji
+after the mutation, so realtime clients do not need to refetch the message.
 
 ## Storage
 

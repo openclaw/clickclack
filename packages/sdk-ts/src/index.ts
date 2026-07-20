@@ -298,6 +298,7 @@ export type MessageInput = MessageInputBase &
   );
 
 export type ReactionSummary = components["schemas"]["ReactionSummary"];
+export type ReactionMutationResponse = components["schemas"]["ReactionMutationResponse"];
 
 export type Message = {
   id: string;
@@ -1048,6 +1049,16 @@ export class ClickClackClient {
       });
       return data.message;
     },
+    addReaction: async (messageId: string, emoji: string): Promise<ReactionMutationResponse> =>
+      this.request<ReactionMutationResponse>(`/api/messages/${messageId}/reactions`, {
+        method: "POST",
+        body: JSON.stringify({ emoji }),
+      }),
+    removeReaction: async (messageId: string, emoji: string): Promise<ReactionMutationResponse> =>
+      this.request<ReactionMutationResponse>(
+        `/api/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+        { method: "DELETE" },
+      ),
   };
 
   threads = {

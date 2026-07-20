@@ -1,16 +1,44 @@
 const animatedURLKey = Symbol("clickclackAnimatedURL");
+const tableResizeTargets = new WeakMap<Element, HTMLElement>();
 
 type EnhancedGIFImage = HTMLImageElement & {
   [animatedURLKey]?: string;
 };
 
+function updateTableOverflow(wrapper: HTMLElement) {
+  const overflows = wrapper.scrollWidth - wrapper.clientWidth > 1;
+  wrapper.toggleAttribute("data-overflowing", overflows);
+  if (overflows) {
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute("role", "group");
+    wrapper.setAttribute("aria-label", "Scrollable table");
+    return;
+  }
+  wrapper.removeAttribute("tabindex");
+  wrapper.removeAttribute("role");
+  wrapper.removeAttribute("aria-label");
+}
+
+const tableResizeObserver =
+  typeof ResizeObserver === "undefined"
+    ? null
+    : new ResizeObserver((entries) => {
+        const wrappers = new Set<HTMLElement>();
+        for (const entry of entries) {
+          const wrapper = tableResizeTargets.get(entry.target);
+          if (wrapper) wrappers.add(wrapper);
+        }
+        for (const wrapper of wrappers) updateTableOverflow(wrapper);
+      });
+
 export function markdownImageViewerURL(image: HTMLImageElement) {
   return (image as EnhancedGIFImage)[animatedURLKey] || image.currentSrc || image.src;
 }
 
-export function enhanceMarkdownGifs(node: HTMLElement) {
+export function enhanceMarkdown(node: HTMLElement) {
   const timers = new Map<HTMLImageElement, number>();
   const plays = new Map<HTMLImageElement, number>();
+  const tables = new Map<HTMLElement, HTMLTableElement>();
   const decorated = new Map<
     HTMLImageElement,
     {
@@ -23,6 +51,33 @@ export function enhanceMarkdownGifs(node: HTMLElement) {
     }
   >();
   let destroyed = false;
+
+  const releaseTable = (wrapper: HTMLElement) => {
+    const table = tables.get(wrapper);
+    if (!table) return;
+    tableResizeObserver?.unobserve(wrapper);
+    tableResizeObserver?.unobserve(table);
+    tables.delete(wrapper);
+  };
+
+  const decorateTables = () => {
+    for (const wrapper of tables.keys()) {
+      if (!node.contains(wrapper)) releaseTable(wrapper);
+    }
+    for (const table of node.querySelectorAll<HTMLTableElement>("table")) {
+      if (table.closest(".markdown-table-scroll")) continue;
+      const wrapper = document.createElement("div");
+      wrapper.className = "markdown-table-scroll";
+      table.before(wrapper);
+      wrapper.append(table);
+      tables.set(wrapper, table);
+      tableResizeTargets.set(wrapper, wrapper);
+      tableResizeTargets.set(table, wrapper);
+      tableResizeObserver?.observe(wrapper);
+      tableResizeObserver?.observe(table);
+      updateTableOverflow(wrapper);
+    }
+  };
 
   const gifStillURL = (src: string) => {
     try {
@@ -86,6 +141,7 @@ export function enhanceMarkdownGifs(node: HTMLElement) {
   };
 
   const decorate = () => {
+    decorateTables();
     for (const image of node.querySelectorAll<HTMLImageElement>("img")) {
       if (image.closest(".gif-player")) continue;
       if (image.closest("a")) continue;
@@ -139,6 +195,7 @@ export function enhanceMarkdownGifs(node: HTMLElement) {
     destroy() {
       destroyed = true;
       observer.disconnect();
+      for (const wrapper of tables.keys()) releaseTable(wrapper);
       for (const timer of timers.values()) window.clearTimeout(timer);
       for (const [image, state] of decorated) {
         state.replay.removeEventListener("click", state.onReplay);

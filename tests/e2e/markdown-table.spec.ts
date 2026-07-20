@@ -38,7 +38,7 @@ test("wide Markdown tables remain reachable by keyboard in ClickClack", async ({
   const row = page.locator(".message-row:not(.is-pending)", {
     has: page.getByText("production-us-west-service-cluster", { exact: true }),
   });
-  const scroller = row.getByRole("region", { name: "Scrollable Markdown table" });
+  const scroller = row.getByRole("group", { name: "Scrollable table" });
   await expect(scroller).toBeVisible();
   await expect
     .poll(() => scroller.evaluate((node) => node.scrollWidth > node.clientWidth))

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { markdown } from "../../lib/format";
   import { toolDetail } from "../../lib/chat/tool-detail";
   import type { PreambleBlock } from "../../lib/types";
@@ -72,7 +73,9 @@
     <div class="preamble-flow">
       {#each resolved as entry (entry.item.id)}
         {#if entry.item.type === "commentary"}
-          <div class="markdown preamble-body">{@html markdown(entry.item.body)}</div>
+          <div class="markdown preamble-body" use:enhanceMarkdown>
+            {@html markdown(entry.item.body)}
+          </div>
         {:else if entry.tool}
           {@const open = expandedTools[entry.item.id] === true}
           <div class="preamble-tool" class:expanded={open}>
@@ -99,7 +102,9 @@
                   <div class="preamble-tool-full-head">{full.head}</div>
                 {/if}
                 {#if full.text}
-                  <div class="markdown preamble-tool-full-body">{@html markdown(full.text)}</div>
+                  <div class="markdown preamble-tool-full-body" use:enhanceMarkdown>
+                    {@html markdown(full.text)}
+                  </div>
                 {/if}
               </div>
             {/if}

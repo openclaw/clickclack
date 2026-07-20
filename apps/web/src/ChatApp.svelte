@@ -6,7 +6,7 @@
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
   import { gifLibrary } from "./lib/gifs";
-  import { markdownImageViewerURL } from "./lib/actions/markdownGifs";
+  import { markdownImageViewerURL } from "./lib/actions/markdown";
   import {
     INITIAL_MESSAGE_LIMIT,
     MAX_RETAINED_MESSAGE_WINDOWS,

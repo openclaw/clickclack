@@ -1263,15 +1263,21 @@
 .markdown-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
   max-width: 100%;
   margin-top: 6px;
+}
+
+.markdown-table-scroll[data-overflowing]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .markdown-table-scroll:first-child {
   margin-top: 0;
 }
 
-.markdown table {
+.markdown-table-scroll > table {
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;

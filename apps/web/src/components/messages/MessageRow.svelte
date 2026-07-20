@@ -1,6 +1,6 @@
 <script lang="ts">
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
-  import { enhanceMarkdownGifs } from "../../lib/actions/markdownGifs";
+  import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { time, markdown } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
@@ -94,7 +94,7 @@
     const target = event.target as HTMLElement | null;
     if (
       target?.closest(
-        "a, button, input, textarea, select, .attachment-grid, .media-tile, .markdown img, .gif-player, .message-actions, .message-failed"
+        "a, button, input, textarea, select, .attachment-grid, .media-tile, .markdown img, .gif-player, .markdown-table-scroll, .message-actions, .message-failed"
       )
     ) {
       return;
@@ -135,7 +135,7 @@
       <div class="message-deleted">This message was deleted.</div>
     {:else}
     <QuoteBlock {message} onJump={onJumpToQuote} />
-    <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(message.body)}</div>
+    <div class="markdown" use:enhanceMarkdown>{@html markdown(message.body)}</div>
     {#if !isPending && !isFailed}
       <ReactionsBar
         messageId={message.id}

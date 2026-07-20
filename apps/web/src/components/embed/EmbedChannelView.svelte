@@ -3,7 +3,7 @@
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
-  import { markdownImageViewerURL } from "../../lib/actions/markdownGifs";
+  import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
   import { ReactionController } from "../../lib/reactions.svelte";

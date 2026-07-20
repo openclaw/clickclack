@@ -2,7 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
-  import { markdownImageViewerURL } from "../../lib/actions/markdownGifs";
+  import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL } from "../../lib/api";
   import { initAppearance } from "../../lib/appearance";
   import { dmTitle } from "../../lib/chat/people";

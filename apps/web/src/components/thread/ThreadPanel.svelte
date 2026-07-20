@@ -1,6 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { enhanceMarkdownGifs } from "../../lib/actions/markdownGifs";
+  import { enhanceMarkdown } from "../../lib/actions/markdown";
   import {
     handleLabel,
     isDeletedBot,
@@ -169,7 +169,7 @@
       {#if root.deleted_at}
         <div class="message-deleted">This message was deleted.</div>
       {:else}
-        <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(root.body)}</div>
+        <div class="markdown" use:enhanceMarkdown>{@html markdown(root.body)}</div>
         <ReactionsBar
           messageId={root.id}
           reactions={reactionController.reactionsFor(root)}
@@ -244,7 +244,7 @@
             <div class="message-deleted">This message was deleted.</div>
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />
-            <div class="markdown" use:enhanceMarkdownGifs>{@html markdown(reply.body)}</div>
+            <div class="markdown" use:enhanceMarkdown>{@html markdown(reply.body)}</div>
             <ReactionsBar
               messageId={reply.id}
               reactions={reactionController.reactionsFor(reply)}

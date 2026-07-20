@@ -26,6 +26,7 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
   import { dmTitle } from "../../lib/chat/people";
+  import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Upload } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
@@ -77,15 +78,9 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
-    editingMessageID?: string;
-    editingMessageSurface?: "timeline" | "thread" | "";
-    editingDraft?: string;
-    editingError?: string;
-    editingSaving?: boolean;
-    onEditDraft?: (body: string) => void;
-    onEditError?: (message: string) => void;
-    onEditMessage?: (message: Message) => void;
-    onSaveEdit?: (message: Message, body: string) => Promise<void>;
+    editController?: MessageEditController;
+    editScope?: string;
+    onMessageEdited?: (message: Message) => void;
   };
 
   let {
@@ -128,15 +123,9 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
-    editingMessageID = "",
-    editingMessageSurface = "",
-    editingDraft = "",
-    editingError = "",
-    editingSaving = false,
-    onEditDraft,
-    onEditError,
-    onEditMessage,
-    onSaveEdit,
+    editController,
+    editScope = "",
+    onMessageEdited,
   }: Props = $props();
 
   // Sub-pixel tolerance — matches virtua's official chat example (FIXME comment
@@ -889,15 +878,9 @@
               {replyContext}
               {canDeleteAnyMessage}
               {deletingMessageIDs}
-              {editingMessageID}
-              {editingMessageSurface}
-              {editingDraft}
-              {editingError}
-              {editingSaving}
-              {onEditDraft}
-              {onEditError}
-              {onEditMessage}
-              {onSaveEdit}
+              {editController}
+              {editScope}
+              {onMessageEdited}
               {onOpenProfile}
               {onReply}
               {onOpenThread}

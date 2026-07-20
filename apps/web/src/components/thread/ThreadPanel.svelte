@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import Avatar from "../avatar/Avatar.svelte";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import {
@@ -7,6 +8,7 @@
     userHandle,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
+  import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, ThreadState, Upload, User } from "../../lib/types";
@@ -41,15 +43,9 @@
     deletingMessageIDs?: ReadonlySet<string>;
     onSetReplyTarget: (message: Message, context: "thread") => void;
     onDeleteMessage?: (message: Message) => void;
-    editingMessageID?: string;
-    editingMessageSurface?: "timeline" | "thread" | "";
-    editingDraft?: string;
-    editingError?: string;
-    editingSaving?: boolean;
-    onEditDraft?: (body: string) => void;
-    onEditError?: (message: string) => void;
-    onEditMessage?: (message: Message) => void;
-    onSaveEdit?: (message: Message, body: string) => Promise<void>;
+    editController?: MessageEditController;
+    editScope?: string;
+    onMessageEdited?: (message: Message) => void;
     onClearReply: () => void;
     onActivateThreadComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;
@@ -83,15 +79,9 @@
     deletingMessageIDs = new Set<string>(),
     onSetReplyTarget,
     onDeleteMessage,
-    editingMessageID = "",
-    editingMessageSurface = "",
-    editingDraft = "",
-    editingError = "",
-    editingSaving = false,
-    onEditDraft,
-    onEditError,
-    onEditMessage,
-    onSaveEdit,
+    editController,
+    editScope = "",
+    onMessageEdited,
     onClearReply,
     onActivateThreadComposer,
     onInlineImagePointerUp,
@@ -100,13 +90,42 @@
     onOpenArtifact,
   }: Props = $props();
 
+  let threadScroll = $state<HTMLDivElement>();
+  let editSession = $derived(editController?.session(editScope));
   const canDelete = (message: Message) =>
     canDeleteAnyMessage ||
     (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID);
   const canEdit = (message: Message) =>
     Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID;
   const isEditing = (message: Message) =>
-    editingMessageSurface === "thread" && editingMessageID === message.id;
+    editSession?.surface === "thread" && editSession.messageID === message.id;
+
+  async function restoreEditButtonFocus(messageID: string) {
+    await tick();
+    threadScroll
+      ?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageID)}"]`)
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Edit message"]')
+      ?.focus();
+  }
+
+  function startEdit(message: Message) {
+    const result = editController?.start(editScope, message, "thread");
+    if (result === "cancelled") void restoreEditButtonFocus(message.id);
+  }
+
+  function cancelEdit(message: Message) {
+    if (editController?.cancel(editScope, "thread")) void restoreEditButtonFocus(message.id);
+  }
+
+  async function saveEdit(message: Message) {
+    if (!editController) return;
+    const result = await editController.save(editScope, message, (updated) =>
+      onMessageEdited?.(updated),
+    );
+    if (result === "saved" || result === "cancelled") {
+      await restoreEditButtonFocus(message.id);
+    }
+  }
 </script>
 
 <header>
@@ -139,6 +158,7 @@
   {/if}
 </header>
 <div
+  bind:this={threadScroll}
   class="thread-scroll"
   role="region"
   aria-label="Thread messages"
@@ -173,13 +193,13 @@
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
             </svg>
           </button>
-          {#if canEdit(root) && onEditMessage}
+          {#if canEdit(root) && editController && editScope}
             <button
               type="button"
               class="thread-action-btn"
               aria-label="Edit message"
               data-tooltip="Edit message"
-              onclick={() => onEditMessage?.(root)}
+              onclick={() => startEdit(root)}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
@@ -204,16 +224,14 @@
       </header>
       {#if root.deleted_at}
         <div class="message-deleted">This message was deleted.</div>
-      {:else if isEditing(root) && onSaveEdit && onEditMessage}
+      {:else if isEditing(root) && editSession}
         <MessageEditor
-          message={root}
-          body={editingDraft}
-          errorMessage={editingError}
-          saving={editingSaving}
-          onBody={(body) => onEditDraft?.(body)}
-          onError={(message) => onEditError?.(message)}
-          onCancel={() => onEditMessage?.(root)}
-          onSave={onSaveEdit}
+          body={editSession.draft}
+          errorMessage={editSession.error}
+          saving={editSession.saving}
+          onBody={(body) => editController?.updateDraft(editScope, body)}
+          onCancel={() => cancelEdit(root)}
+          onSave={() => saveEdit(root)}
         />
       {:else}
         <div class="markdown" use:enhanceMarkdown>{@html markdown(root.body)}</div>
@@ -274,14 +292,14 @@
                   <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
                 </svg>
               </button>
-              {#if canEdit(reply) && onEditMessage}
+              {#if canEdit(reply) && editController && editScope}
                 <button
                   type="button"
                   class="thread-action-btn"
                   aria-label="Edit message"
                   data-tooltip="Edit message"
                   disabled={reply.status === "pending" || reply.status === "failed"}
-                  onclick={() => onEditMessage?.(reply)}
+                  onclick={() => startEdit(reply)}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                     <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
@@ -306,16 +324,14 @@
           </header>
           {#if reply.deleted_at}
             <div class="message-deleted">This message was deleted.</div>
-          {:else if isEditing(reply) && onSaveEdit && onEditMessage}
+          {:else if isEditing(reply) && editSession}
             <MessageEditor
-              message={reply}
-              body={editingDraft}
-              errorMessage={editingError}
-              saving={editingSaving}
-              onBody={(body) => onEditDraft?.(body)}
-              onError={(message) => onEditError?.(message)}
-              onCancel={() => onEditMessage?.(reply)}
-              onSave={onSaveEdit}
+              body={editSession.draft}
+              errorMessage={editSession.error}
+              saving={editSession.saving}
+              onBody={(body) => editController?.updateDraft(editScope, body)}
+              onCancel={() => cancelEdit(reply)}
+              onSave={() => saveEdit(reply)}
             />
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />

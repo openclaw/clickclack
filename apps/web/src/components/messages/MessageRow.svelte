@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { time, markdown } from "../../lib/format";
+  import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -24,12 +26,9 @@
     reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
     deleting?: boolean;
-    editing?: boolean;
-    editingDraft?: string;
-    editingError?: string;
-    editingSaving?: boolean;
-    onEditDraft?: (body: string) => void;
-    onEditError?: (message: string) => void;
+    editController?: MessageEditController;
+    editScope?: string;
+    onMessageEdited?: (message: Message) => void;
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
@@ -38,8 +37,6 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
-    onEditMessage?: (message: Message) => void;
-    onSaveEdit?: (message: Message, body: string) => Promise<void>;
   };
 
   let {
@@ -55,12 +52,9 @@
     reactionsDisabled = false,
     canDeleteAnyMessage = false,
     deleting = false,
-    editing = false,
-    editingDraft = "",
-    editingError = "",
-    editingSaving = false,
-    onEditDraft,
-    onEditError,
+    editController,
+    editScope = "",
+    onMessageEdited,
     onReply,
     onOpenThread,
     onJumpToQuote,
@@ -69,16 +63,34 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
-    onEditMessage,
-    onSaveEdit,
   }: Props = $props();
 
+  let editButton = $state<HTMLButtonElement>();
+  let editSession = $derived(editController?.session(editScope));
+  let editing = $derived(
+    editSession?.surface === "timeline" && editSession.messageID === message.id,
+  );
+
+  async function restoreEditButtonFocus() {
+    await tick();
+    editButton?.focus();
+  }
+
   function handleEditStart() {
-    onEditMessage?.(message);
+    const result = editController?.start(editScope, message, "timeline");
+    if (result === "cancelled") void restoreEditButtonFocus();
   }
 
   function handleEditCancel() {
-    onEditMessage?.(message);
+    if (editController?.cancel(editScope, "timeline")) void restoreEditButtonFocus();
+  }
+
+  async function handleEditSave() {
+    if (!editController) return;
+    const result = await editController.save(editScope, message, (updated) =>
+      onMessageEdited?.(updated),
+    );
+    if (result === "saved" || result === "cancelled") await restoreEditButtonFocus();
   }
 
   let isPending = $derived(message.status === "pending");
@@ -163,16 +175,14 @@
     {:else if isDeleted}
       <div class="message-deleted">This message was deleted.</div>
     {:else if editing}
-      {#if onSaveEdit}
+      {#if editSession}
         <MessageEditor
-          {message}
-          body={editingDraft}
-          errorMessage={editingError}
-          saving={editingSaving}
-          onBody={(body) => onEditDraft?.(body)}
-          onError={(message) => onEditError?.(message)}
+          body={editSession.draft}
+          errorMessage={editSession.error}
+          saving={editSession.saving}
+          onBody={(body) => editController?.updateDraft(editScope, body)}
           onCancel={handleEditCancel}
-          onSave={onSaveEdit}
+          onSave={handleEditSave}
         />
       {/if}
     {:else}
@@ -263,8 +273,9 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
       </svg>
     </button>
-    {#if canEditMessage && onEditMessage && !editing}
+    {#if canEditMessage && editController && editScope && !editing}
         <button
+          bind:this={editButton}
           type="button"
           aria-label="Edit message"
           class="tooltip message-action-edit"

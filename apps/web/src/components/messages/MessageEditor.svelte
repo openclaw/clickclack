@@ -1,34 +1,24 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import type { Message } from "../../lib/types";
+  import { normalizeMessageBodyForServer } from "../../lib/messageEditing.svelte";
 
   let {
-    message,
     body,
     errorMessage,
     saving,
     onBody,
-    onError,
     onCancel,
     onSave,
   }: {
-    message: Message;
     body: string;
     errorMessage: string;
     saving: boolean;
     onBody: (body: string) => void;
-    onError: (message: string) => void;
     onCancel: () => void;
-    onSave: (message: Message, body: string) => Promise<void>;
+    onSave: () => void | Promise<void>;
   } = $props();
 
   let textarea = $state<HTMLTextAreaElement>();
-
-  function normalizeForServer(value: string): string {
-    return value
-      .replace(/^\p{White_Space}+/u, "")
-      .replace(/\p{White_Space}+$/u, "");
-  }
 
   onMount(async () => {
     await tick();
@@ -37,21 +27,7 @@
   });
 
   async function save() {
-    const normalizedBody = normalizeForServer(body);
-    if (!normalizedBody) {
-      onError("Message body is required");
-      return;
-    }
-    if (normalizedBody === message.body) {
-      onCancel();
-      return;
-    }
-    onError("");
-    try {
-      await onSave(message, body);
-    } catch (error) {
-      onError(error instanceof Error ? error.message : "Could not save edit");
-    }
+    await onSave();
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -83,7 +59,7 @@
       type="button"
       class="message-edit__save"
       onclick={save}
-      disabled={saving || !normalizeForServer(body)}
+      disabled={saving || !normalizeMessageBodyForServer(body)}
     >
       {#if saving}Saving…{:else}Save{/if}
     </button>

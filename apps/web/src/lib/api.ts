@@ -7,6 +7,19 @@ export class APIError extends Error {
   }
 }
 
+export function readableAPIError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.trim();
+  if (!message) return fallback;
+  try {
+    const body = JSON.parse(message) as { error?: unknown };
+    if (typeof body.error === "string" && body.error.trim()) return body.error.trim();
+  } catch {
+    // Plain-text API errors are already suitable for display.
+  }
+  return message;
+}
+
 declare global {
   interface Window {
     __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string };

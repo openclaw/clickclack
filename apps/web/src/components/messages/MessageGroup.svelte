@@ -4,6 +4,7 @@
   import { time } from "../../lib/format";
   import type { Message, Upload } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
+  import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import MessageRow from "./MessageRow.svelte";
 
@@ -25,15 +26,9 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
-    editingMessageID?: string;
-    editingMessageSurface?: "timeline" | "thread" | "";
-    editingDraft?: string;
-    editingError?: string;
-    editingSaving?: boolean;
-    onEditDraft?: (body: string) => void;
-    onEditError?: (message: string) => void;
-    onEditMessage?: (message: Message) => void;
-    onSaveEdit?: (message: Message, body: string) => Promise<void>;
+    editController?: MessageEditController;
+    editScope?: string;
+    onMessageEdited?: (message: Message) => void;
   };
 
   let {
@@ -54,15 +49,9 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
-    editingMessageID = "",
-    editingMessageSurface = "",
-    editingDraft = "",
-    editingError = "",
-    editingSaving = false,
-    onEditDraft,
-    onEditError,
-    onEditMessage,
-    onSaveEdit,
+    editController,
+    editScope = "",
+    onMessageEdited,
   }: Props = $props();
 
   const author = $derived(group.messages[0]?.author);
@@ -114,12 +103,9 @@
         {reactionsDisabled}
         {canDeleteAnyMessage}
         deleting={deletingMessageIDs.has(message.id)}
-        editing={editingMessageSurface === "timeline" && editingMessageID === message.id}
-        {editingDraft}
-        {editingError}
-        {editingSaving}
-        {onEditDraft}
-        {onEditError}
+        {editController}
+        {editScope}
+        {onMessageEdited}
         {onReply}
         {onOpenThread}
         {onJumpToQuote}
@@ -128,8 +114,6 @@
         {onRetry}
         {onDiscard}
         {onDeleteMessage}
-        {onEditMessage}
-        {onSaveEdit}
       />
     {/each}
   </div>

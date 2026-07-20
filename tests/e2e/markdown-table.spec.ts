@@ -102,6 +102,18 @@ test("Markdown tables stay contained and expose scrolling only when needed", asy
   await expect(rawScroller).toHaveAttribute("role", "group");
   await expect(rawScroller).toHaveAttribute("tabindex", "0");
 
+  const adoptedMarker = `prewrapped-raw-${suffix}-${"z".repeat(80)}`;
+  await sendMessage(
+    `<div class="markdown-table-scroll"><table><tbody><tr><td>${adoptedMarker}</td><td>normalized</td></tr></tbody></table></div>`,
+  );
+  const adoptedRow = page.locator(".message-row:not(.is-pending)", {
+    has: page.getByText(adoptedMarker, { exact: true }),
+  });
+  const adoptedScroller = adoptedRow.locator(".markdown-table-scroll");
+  await expect(adoptedScroller).toHaveCount(1);
+  await expect(adoptedScroller).toHaveAttribute("role", "group");
+  await expect(adoptedScroller).toHaveAttribute("tabindex", "0");
+
   const narrowMarker = `narrow-${suffix}`;
   await sendMessage(`| Key | Value |\n| --- | --- |\n| ${narrowMarker} | Fits |`);
   const narrowRow = page.locator(".message-row:not(.is-pending)", {

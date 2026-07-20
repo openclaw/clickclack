@@ -65,11 +65,17 @@ export function enhanceMarkdown(node: HTMLElement) {
       if (!node.contains(wrapper)) releaseTable(wrapper);
     }
     for (const table of node.querySelectorAll<HTMLTableElement>("table")) {
-      if (table.closest(".markdown-table-scroll")) continue;
-      const wrapper = document.createElement("div");
-      wrapper.className = "markdown-table-scroll";
-      table.before(wrapper);
-      wrapper.append(table);
+      let wrapper =
+        table.parentElement?.classList.contains("markdown-table-scroll") === true
+          ? table.parentElement
+          : null;
+      if (wrapper && tables.has(wrapper)) continue;
+      if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.className = "markdown-table-scroll";
+        table.before(wrapper);
+        wrapper.append(table);
+      }
       tables.set(wrapper, table);
       tableResizeTargets.set(wrapper, wrapper);
       tableResizeTargets.set(table, wrapper);

@@ -23,6 +23,15 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   const conversationTrigger = imageRow.getByRole("button", { name: `Open image ${filename}` });
   await expect(conversationTrigger).toBeVisible();
+
+  await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
+  const settingsDialog = page.getByRole("dialog", { name: "Account settings" });
+  await expect(settingsDialog).toBeVisible();
+  await conversationTrigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: `Image viewer: ${filename}` })).toHaveCount(0);
+  await settingsDialog.getByRole("button", { name: "Close" }).click();
+
   await conversationTrigger.click();
 
   const dialog = page.getByRole("dialog", { name: `Image viewer: ${filename}` });

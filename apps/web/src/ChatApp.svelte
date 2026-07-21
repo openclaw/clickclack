@@ -3079,6 +3079,7 @@
   }
 
   function openImageViewer(url: string, title: string) {
+    if (isModalOpen()) return;
     selectedImage = { url, title };
   }
 

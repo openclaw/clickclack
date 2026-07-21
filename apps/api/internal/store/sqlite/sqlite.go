@@ -119,7 +119,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.backfillAuthTokenHashes(ctx); err != nil {
 		return err
 	}
+	if err := s.backfillGravatarAvatars(ctx); err != nil {
+		return err
+	}
 	return s.backfillRouteIDsOnce(ctx)
+}
+
+func (s *Store) backfillGravatarAvatars(ctx context.Context) error {
+	users, err := s.q.ListUsersMissingAvatar(ctx)
+	if err != nil {
+		return err
+	}
+	for _, user := range users {
+		if err := s.q.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{
+			ID:        user.UserID,
+			AvatarUrl: store.ResolveAvatarURL("", user.Email),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) EnsureBootstrap(ctx context.Context, name, email string) (store.User, error) {
@@ -149,7 +168,7 @@ func (s *Store) CreateUser(ctx context.Context, input store.CreateUserInput) (st
 		Kind:        "human",
 		DisplayName: strings.TrimSpace(input.DisplayName),
 		Handle:      "",
-		AvatarURL:   "",
+		AvatarURL:   store.ResolveAvatarURL("", input.Email),
 		CreatedAt:   now(),
 	}
 	if user.DisplayName == "" {
@@ -214,6 +233,17 @@ func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserPro
 	}); err != nil {
 		return store.User{}, profileUpdateError(err)
 	}
+	if avatarURL == "" {
+		fallbackURL, err := resolveProfileAvatarURL(ctx, qtx, input.UserID, "")
+		if err != nil {
+			return store.User{}, err
+		}
+		if fallbackURL != "" {
+			if err := qtx.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: input.UserID, AvatarUrl: fallbackURL}); err != nil {
+				return store.User{}, err
+			}
+		}
+	}
 	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
 		DisplayName: displayName,
 		Handle:      handle,
@@ -258,6 +288,17 @@ func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, in
 		ID:          input.UserID,
 	}); err != nil {
 		return store.User{}, profileUpdateError(err)
+	}
+	if avatarURL == "" {
+		fallbackURL, err := resolveProfileAvatarURL(ctx, qtx, input.UserID, "")
+		if err != nil {
+			return store.User{}, err
+		}
+		if fallbackURL != "" {
+			if err := qtx.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: input.UserID, AvatarUrl: fallbackURL}); err != nil {
+				return store.User{}, err
+			}
+		}
 	}
 	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
 		DisplayName: displayName,

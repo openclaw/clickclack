@@ -127,7 +127,7 @@ func (s *Store) GetOrCreateUserByEmail(ctx context.Context, provider, email, dis
 	_ = tx.Rollback()
 	row, lookupErr := s.q.GetUserByIdentityEmail(ctx, email)
 	if lookupErr == nil {
-		return storeUserFromIdentityEmail(row), nil
+		return ensureUserAvatarForEmail(ctx, s.q, storeUserFromIdentityEmail(row), email)
 	}
 	return store.User{}, err
 }
@@ -140,16 +140,16 @@ func getOrCreateUserByEmail(ctx context.Context, q *storedb.Queries, provider, e
 	}
 	row, err := q.GetUserByIdentityEmail(ctx, email)
 	if err == nil {
-		return storeUserFromIdentityEmail(row), nil
+		return ensureUserAvatarForEmail(ctx, q, storeUserFromIdentityEmail(row), email)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
 	}
-	user := store.User{ID: newID("usr"), Kind: "human", DisplayName: strings.TrimSpace(displayName), Handle: "", AvatarURL: "", CreatedAt: now()}
+	user := store.User{ID: newID("usr"), Kind: "human", DisplayName: strings.TrimSpace(displayName), Handle: "", AvatarURL: store.ResolveAvatarURL("", email), CreatedAt: now()}
 	if user.DisplayName == "" {
 		user.DisplayName = email
 	}
-	if err := q.InsertHumanUser(ctx, storedb.InsertHumanUserParams{ID: user.ID, DisplayName: user.DisplayName, AvatarUrl: "", CreatedAt: user.CreatedAt}); err != nil {
+	if err := q.InsertHumanUser(ctx, storedb.InsertHumanUserParams{ID: user.ID, DisplayName: user.DisplayName, AvatarUrl: user.AvatarURL, CreatedAt: user.CreatedAt}); err != nil {
 		return store.User{}, err
 	}
 	err = q.InsertIdentity(ctx, storedb.InsertIdentityParams{
@@ -161,6 +161,24 @@ func getOrCreateUserByEmail(ctx context.Context, q *storedb.Queries, provider, e
 		CreatedAt:       user.CreatedAt,
 	})
 	return user, err
+}
+
+func ensureUserAvatarForEmail(ctx context.Context, q *storedb.Queries, user store.User, email string) (store.User, error) {
+	if user.AvatarURL != "" {
+		return user, nil
+	}
+	avatarURL := store.ResolveAvatarURL("", email)
+	if avatarURL == "" {
+		return user, nil
+	}
+	if err := q.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: user.ID, AvatarUrl: avatarURL}); err != nil {
+		return store.User{}, err
+	}
+	row, err := q.GetUserByIdentityEmail(ctx, email)
+	if err != nil {
+		return store.User{}, err
+	}
+	return storeUserFromIdentityEmail(row), nil
 }
 
 func createSessionTx(ctx context.Context, q *storedb.Queries, userID string) (store.Session, error) {

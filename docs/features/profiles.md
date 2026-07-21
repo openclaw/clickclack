@@ -6,7 +6,8 @@ read_when:
 # Profiles
 
 Each user has a display name, optional handle, optional avatar URL, and
-per-user notification settings.
+per-user notification settings. Email-backed users without an explicit or
+provider-supplied avatar use a Gravatar generated from their normalized email.
 
 The handle is the human-friendly short name shown as `@name` in the app. The
 API accepts it with or without the leading `@`, normalizes it to lowercase, and
@@ -31,7 +32,10 @@ PATCH /api/me
 
 `PATCH /api/me` returns `{ "user": ... }`. Handles must be unique when set and
 must be 2-32 characters using letters, numbers, `_`, or `-`. Avatar URLs can be
-blank or an `http`/`https` URL.
+blank or an `http`/`https` URL. An explicit URL takes precedence over Gravatar;
+clearing it restores the email-backed Gravatar fallback. Gravatar requests are
+served by `gravatar.com`, so clients loading those images contact that external
+service.
 
 Pushover notifications require `CLICKCLACK_PUSHOVER_API_TOKEN` on the server.
 Each user opts in from account settings with their own 30-character Pushover

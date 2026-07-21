@@ -139,9 +139,53 @@ func TestPostgresStoreSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	suffix := time.Now().UTC().Format("20060102150405.000000000")
-	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Postgres Owner", Email: "pg-owner-" + suffix + "@example.com"})
+	ownerEmail := "pg-owner-" + suffix + "@example.com"
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Postgres Owner", Email: ownerEmail})
 	if err != nil {
 		t.Fatal(err)
+	}
+	ownerGravatar := store.ResolveAvatarURL("", ownerEmail)
+	if owner.AvatarURL != ownerGravatar {
+		t.Fatalf("expected Postgres Gravatar %q, got %#v", ownerGravatar, owner)
+	}
+	ownerSession, err := st.CreateSession(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE users SET avatar_url = '' WHERE id = $1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessionUser, err := st.GetSessionUser(ctx, ownerSession.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessionUser.AvatarURL != ownerGravatar {
+		t.Fatalf("expected migrated Postgres Gravatar %q, got %#v", ownerGravatar, sessionUser)
+	}
+	identitySubject := "pg-avatar-" + suffix
+	identityUser, err := st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: identitySubject,
+		Email:           identitySubject + "@example.com",
+		DisplayName:     "Postgres Avatar",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityUser, err = st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: identitySubject,
+		Email:           identitySubject + "@example.com",
+		AvatarURL:       "https://example.com/postgres-provider.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identityUser.AvatarURL != "https://example.com/postgres-provider.png" {
+		t.Fatalf("expected Postgres provider avatar to replace Gravatar, got %#v", identityUser)
 	}
 	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Postgres Smoke " + suffix}, owner.ID)
 	if err != nil {

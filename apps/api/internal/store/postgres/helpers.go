@@ -195,6 +195,20 @@ func normalizeAvatarURL(value string) (string, error) {
 	return avatarURL, nil
 }
 
+func resolveProfileAvatarURL(ctx context.Context, q *storedb.Queries, userID, avatarURL string) (string, error) {
+	if avatarURL != "" {
+		return avatarURL, nil
+	}
+	email, err := q.GetIdentityEmailForUser(ctx, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return store.ResolveAvatarURL("", email), nil
+}
+
 func scanMessages(rows *sql.Rows) ([]store.Message, error) {
 	out := []store.Message{}
 	for rows.Next() {

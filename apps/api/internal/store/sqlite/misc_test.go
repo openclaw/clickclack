@@ -26,11 +26,15 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ownerGravatar := store.ResolveAvatarURL("", "owner@example.com")
+	if owner.AvatarURL != ownerGravatar {
+		t.Fatalf("expected bootstrap Gravatar %q, got %#v", ownerGravatar, owner)
+	}
 	unnamed, err := st.CreateUser(ctx, store.CreateUserInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if unnamed.DisplayName != "Local User" {
+	if unnamed.DisplayName != "Local User" || unnamed.AvatarURL != "" {
 		t.Fatalf("unexpected default user: %#v", unnamed)
 	}
 	updatedOwner, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{
@@ -42,8 +46,20 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updatedOwner.Handle != "steipete" || updatedOwner.AvatarURL == "" {
+	if updatedOwner.Handle != "steipete" || updatedOwner.AvatarURL != "https://example.com/avatar.png" {
 		t.Fatalf("unexpected profile update: %#v", updatedOwner)
+	}
+	clearedOwner, err := st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+		UserID:      owner.ID,
+		DisplayName: updatedOwner.DisplayName,
+		Handle:      updatedOwner.Handle,
+		AvatarURL:   "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clearedOwner.AvatarURL != ownerGravatar {
+		t.Fatalf("expected cleared avatar to restore Gravatar %q, got %#v", ownerGravatar, clearedOwner)
 	}
 	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{UserID: unnamed.ID, DisplayName: "Other", Handle: "STEIPETE"}); err == nil {
 		t.Fatal("expected duplicate handle error")
@@ -98,8 +114,8 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if againIdentity.ID != identityUser.ID {
-		t.Fatalf("expected existing identity user, got %#v", againIdentity)
+	if againIdentity.ID != identityUser.ID || againIdentity.AvatarURL != "https://example.com/a.png" {
+		t.Fatalf("expected existing identity user with provider avatar, got %#v", againIdentity)
 	}
 	session, err := st.CreateSession(ctx, identityUser.ID)
 	if err != nil {
@@ -115,15 +131,58 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fallbackIdentity.DisplayName != "github:fallback" {
-		t.Fatalf("unexpected fallback identity display: %#v", fallbackIdentity)
+	if fallbackIdentity.DisplayName != "github:fallback" || fallbackIdentity.AvatarURL != "" {
+		t.Fatalf("unexpected fallback identity: %#v", fallbackIdentity)
+	}
+	fallbackIdentity, err = st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: "fallback",
+		Email:           "fallback@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackGravatar := store.ResolveAvatarURL("", "fallback@example.com")
+	if fallbackIdentity.AvatarURL != fallbackGravatar {
+		t.Fatalf("expected existing identity Gravatar %q, got %#v", fallbackGravatar, fallbackIdentity)
+	}
+	fallbackIdentity, err = st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: "fallback",
+		Email:           "fallback@example.com",
+		AvatarURL:       "https://example.com/provider.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fallbackIdentity.AvatarURL != "https://example.com/provider.png" {
+		t.Fatalf("expected provider avatar to replace Gravatar, got %#v", fallbackIdentity)
+	}
+	fallbackIdentity, err = st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{
+		UserID:      fallbackIdentity.ID,
+		DisplayName: fallbackIdentity.DisplayName,
+		AvatarURL:   "https://example.com/custom.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackIdentity, err = st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+		UserID:      fallbackIdentity.ID,
+		DisplayName: fallbackIdentity.DisplayName,
+		AvatarURL:   "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fallbackIdentity.AvatarURL != fallbackGravatar {
+		t.Fatalf("expected late identity email to restore Gravatar %q, got %#v", fallbackGravatar, fallbackIdentity)
 	}
 	emailIdentity, err := st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{Provider: "github", ProviderSubject: "email", Email: "email@example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if emailIdentity.DisplayName != "email@example.com" {
-		t.Fatalf("unexpected email identity display: %#v", emailIdentity)
+	if emailIdentity.DisplayName != "email@example.com" || emailIdentity.AvatarURL != store.ResolveAvatarURL("", "email@example.com") {
+		t.Fatalf("unexpected email identity: %#v", emailIdentity)
 	}
 	if _, err := st.CreateSession(ctx, "usr_missing"); err == nil {
 		t.Fatal("expected missing session user error")
@@ -311,9 +370,152 @@ func TestGetOrCreateUserByEmailConcurrent(t *testing.T) {
 		if user.ID != userID {
 			t.Errorf("concurrent get-or-create returned different users: %q and %q", userID, user.ID)
 		}
+		if want := store.ResolveAvatarURL("", "concurrent@example.com"); user.AvatarURL != want {
+			t.Errorf("concurrent get-or-create avatar = %q, want %q", user.AvatarURL, want)
+		}
 	}
 	if count != callers {
 		t.Fatalf("successful callers = %d, want %d", count, callers)
+	}
+}
+
+func TestConcurrentProviderAvatarWinsLateEmailFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	identity := store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: "concurrent-avatar",
+		DisplayName:     "Concurrent Avatar",
+	}
+	user, err := st.UpsertIdentityUser(ctx, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.AvatarURL != "" {
+		t.Fatalf("expected initial blank avatar, got %#v", user)
+	}
+
+	start := make(chan struct{})
+	errors := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, input := range []store.UpsertIdentityUserInput{
+		{
+			Provider:        identity.Provider,
+			ProviderSubject: identity.ProviderSubject,
+			Email:           "concurrent-avatar@example.com",
+		},
+		{
+			Provider:        identity.Provider,
+			ProviderSubject: identity.ProviderSubject,
+			AvatarURL:       "https://example.com/provider-concurrent.png",
+		},
+	} {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			_, err := st.UpsertIdentityUser(ctx, input)
+			errors <- err
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	user, err = st.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.AvatarURL != "https://example.com/provider-concurrent.png" {
+		t.Fatalf("expected provider avatar to win concurrent late-email fallback, got %#v", user)
+	}
+}
+
+func TestConcurrentProfileClearRestoresLateEmailFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	identity := store.UpsertIdentityUserInput{
+		Provider:        "github",
+		ProviderSubject: "concurrent-clear",
+		DisplayName:     "Concurrent Clear",
+		AvatarURL:       "https://example.com/custom-before-clear.png",
+	}
+	user, err := st.UpsertIdentityUser(ctx, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	errors := make(chan error, 2)
+	var group sync.WaitGroup
+	group.Add(2)
+	go func() {
+		defer group.Done()
+		<-start
+		_, err := st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{
+			Provider:        identity.Provider,
+			ProviderSubject: identity.ProviderSubject,
+			Email:           "concurrent-clear@example.com",
+		})
+		errors <- err
+	}()
+	go func() {
+		defer group.Done()
+		<-start
+		_, err := st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+			UserID:      user.ID,
+			DisplayName: user.DisplayName,
+			AvatarURL:   "",
+		})
+		errors <- err
+	}()
+	close(start)
+	group.Wait()
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	user, err = st.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := store.ResolveAvatarURL("", "concurrent-clear@example.com"); user.AvatarURL != want {
+		t.Fatalf("expected late-email Gravatar %q after concurrent clear, got %#v", want, user)
+	}
+}
+
+func TestMigrateBackfillsLegacyGravatarForExistingSession(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Legacy User", Email: "legacy@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE users SET avatar_url = '' WHERE id = ?`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sessionUser, err := st.GetSessionUser(ctx, session.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := store.ResolveAvatarURL("", "legacy@example.com"); sessionUser.AvatarURL != want {
+		t.Fatalf("expected migrated session user Gravatar %q, got %#v", want, sessionUser)
 	}
 }
 

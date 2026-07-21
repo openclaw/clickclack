@@ -2,6 +2,8 @@
 
 ## 0.2.2 - Unreleased
 
+- Added Gravatar fallbacks for email-backed users without an explicit or provider-supplied avatar.
+
 ## 0.2.1 - 2026-07-19
 
 - Shipped the first signed and notarized macOS desktop release bundles with the OpenClaw Foundation identity, hardened runtime, and strict sealed-artifact verification.

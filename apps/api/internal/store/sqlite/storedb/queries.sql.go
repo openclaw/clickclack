@@ -1359,6 +1359,22 @@ func (q *Queries) GetEventDeliveryAttemptCursor(ctx context.Context, arg GetEven
 	return created_at, err
 }
 
+const getIdentityEmailForUser = `-- name: GetIdentityEmailForUser :one
+SELECT email
+FROM identities
+WHERE user_id = ?1
+  AND email <> ''
+ORDER BY created_at, id
+LIMIT 1
+`
+
+func (q *Queries) GetIdentityEmailForUser(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getIdentityEmailForUser, userID)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
 const getMagicLinkByToken = `-- name: GetMagicLinkByToken :one
 SELECT id, token, token_hash, email, display_name, created_at, expires_at, used_at
 FROM auth_magic_links
@@ -3664,6 +3680,50 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 	return items, nil
 }
 
+const listUsersMissingAvatar = `-- name: ListUsersMissingAvatar :many
+SELECT u.id AS user_id, i.email
+FROM users u
+JOIN identities i ON i.id = (
+  SELECT candidate.id
+  FROM identities candidate
+  WHERE candidate.user_id = u.id
+    AND candidate.email <> ''
+  ORDER BY candidate.created_at, candidate.id
+  LIMIT 1
+)
+WHERE u.kind = 'human'
+  AND u.avatar_url = ''
+ORDER BY u.id
+`
+
+type ListUsersMissingAvatarRow struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+func (q *Queries) ListUsersMissingAvatar(ctx context.Context) ([]ListUsersMissingAvatarRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersMissingAvatar)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersMissingAvatarRow
+	for rows.Next() {
+		var i ListUsersMissingAvatarRow
+		if err := rows.Scan(&i.UserID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaceActiveServiceBotIDs = `-- name: ListWorkspaceActiveServiceBotIDs :many
 SELECT DISTINCT u.id
 FROM users u
@@ -4684,6 +4744,45 @@ func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokens
 	return result.RowsAffected()
 }
 
+const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :execrows
+UPDATE users
+SET avatar_url = ?1
+WHERE id = ?2
+  AND (avatar_url = '' OR avatar_url = ?3)
+`
+
+type SetProviderAvatarUnlessExplicitParams struct {
+	AvatarUrl   string `json:"avatar_url"`
+	ID          string `json:"id"`
+	FallbackUrl string `json:"fallback_url"`
+}
+
+// Avatar URLs equal to the generated fallback remain fallback-equivalent.
+func (q *Queries) SetProviderAvatarUnlessExplicit(ctx context.Context, arg SetProviderAvatarUnlessExplicitParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setProviderAvatarUnlessExplicit, arg.AvatarUrl, arg.ID, arg.FallbackUrl)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setUserAvatarIfEmpty = `-- name: SetUserAvatarIfEmpty :exec
+UPDATE users
+SET avatar_url = ?1
+WHERE id = ?2
+  AND avatar_url = ''
+`
+
+type SetUserAvatarIfEmptyParams struct {
+	AvatarUrl string `json:"avatar_url"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) SetUserAvatarIfEmpty(ctx context.Context, arg SetUserAvatarIfEmptyParams) error {
+	_, err := q.db.ExecContext(ctx, setUserAvatarIfEmpty, arg.AvatarUrl, arg.ID)
+	return err
+}
+
 const threadNextSeq = `-- name: ThreadNextSeq :one
 SELECT CAST(COALESCE(MAX(thread_seq), 0) + 1 AS INTEGER) AS next_seq
 FROM messages
@@ -4779,6 +4878,25 @@ func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) er
 		arg.SidebarSection,
 		arg.ID,
 	)
+	return err
+}
+
+const updateIdentityEmailIfEmpty = `-- name: UpdateIdentityEmailIfEmpty :exec
+UPDATE identities
+SET email = ?1
+WHERE provider = ?2
+  AND provider_subject = ?3
+  AND email = ''
+`
+
+type UpdateIdentityEmailIfEmptyParams struct {
+	Email           string `json:"email"`
+	Provider        string `json:"provider"`
+	ProviderSubject string `json:"provider_subject"`
+}
+
+func (q *Queries) UpdateIdentityEmailIfEmpty(ctx context.Context, arg UpdateIdentityEmailIfEmptyParams) error {
+	_, err := q.db.ExecContext(ctx, updateIdentityEmailIfEmpty, arg.Email, arg.Provider, arg.ProviderSubject)
 	return err
 }
 

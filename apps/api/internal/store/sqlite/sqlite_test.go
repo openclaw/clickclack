@@ -85,6 +85,9 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	if magicUser.DisplayName != "Magic User" || session.Token == "" {
 		t.Fatalf("unexpected magic auth result: %#v %#v", magicUser, session)
 	}
+	if want := store.ResolveAvatarURL("", "magic@example.com"); magicUser.AvatarURL != want {
+		t.Fatalf("expected magic-link Gravatar %q, got %#v", want, magicUser)
+	}
 	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
 		UserID:          magicUser.ID,
 		PushoverEnabled: true,

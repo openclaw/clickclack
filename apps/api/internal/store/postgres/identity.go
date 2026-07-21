@@ -16,8 +16,61 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 	if provider == "" || subject == "" {
 		return store.User{}, errors.New("identity provider and subject are required")
 	}
-	row, err := s.q.GetUserByIdentityProviderSubject(ctx, storedb.GetUserByIdentityProviderSubjectParams{Provider: provider, ProviderSubject: subject})
+	lookup := storedb.GetUserByIdentityProviderSubjectParams{Provider: provider, ProviderSubject: subject}
+	row, err := s.q.GetUserByIdentityProviderSubject(ctx, lookup)
 	if err == nil {
+		user := storeUserFromIdentityProviderSubject(row)
+		email := strings.TrimSpace(input.Email)
+		if email != "" {
+			if err := s.q.UpdateIdentityEmailIfEmpty(ctx, storedb.UpdateIdentityEmailIfEmptyParams{
+				Email:           email,
+				Provider:        provider,
+				ProviderSubject: subject,
+			}); err != nil {
+				return store.User{}, err
+			}
+		}
+		storedEmail, emailErr := s.q.GetIdentityEmailForUser(ctx, user.ID)
+		if emailErr == nil {
+			email = storedEmail
+		} else if !errors.Is(emailErr, sql.ErrNoRows) {
+			return store.User{}, emailErr
+		}
+		explicitAvatarURL := strings.TrimSpace(input.AvatarURL)
+		fallbackURL := store.ResolveAvatarURL("", email)
+		if explicitAvatarURL != "" {
+			updated, err := s.q.SetProviderAvatarUnlessExplicit(ctx, storedb.SetProviderAvatarUnlessExplicitParams{
+				ID:          user.ID,
+				AvatarUrl:   explicitAvatarURL,
+				FallbackUrl: fallbackURL,
+			})
+			if err != nil {
+				return store.User{}, err
+			}
+			if updated == 0 {
+				latestEmail, emailErr := s.q.GetIdentityEmailForUser(ctx, user.ID)
+				if emailErr == nil {
+					_, err = s.q.SetProviderAvatarUnlessExplicit(ctx, storedb.SetProviderAvatarUnlessExplicitParams{
+						ID:          user.ID,
+						AvatarUrl:   explicitAvatarURL,
+						FallbackUrl: store.ResolveAvatarURL("", latestEmail),
+					})
+					if err != nil {
+						return store.User{}, err
+					}
+				} else if !errors.Is(emailErr, sql.ErrNoRows) {
+					return store.User{}, emailErr
+				}
+			}
+		} else if fallbackURL != "" {
+			if err := s.q.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: user.ID, AvatarUrl: fallbackURL}); err != nil {
+				return store.User{}, err
+			}
+		}
+		row, err = s.q.GetUserByIdentityProviderSubject(ctx, lookup)
+		if err != nil {
+			return store.User{}, err
+		}
 		return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityProviderSubject(row))
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -34,7 +87,7 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 		Kind:        "human",
 		DisplayName: strings.TrimSpace(input.DisplayName),
 		Handle:      "",
-		AvatarURL:   strings.TrimSpace(input.AvatarURL),
+		AvatarURL:   store.ResolveAvatarURL(input.AvatarURL, input.Email),
 		CreatedAt:   now(),
 	}
 	if user.DisplayName == "" {

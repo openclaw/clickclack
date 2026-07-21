@@ -121,6 +121,49 @@ WHERE i.provider = sqlc.arg(provider)
 INSERT INTO users (id, display_name, avatar_url, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(display_name), sqlc.arg(avatar_url), sqlc.arg(created_at));
 
+-- name: GetIdentityEmailForUser :one
+SELECT email
+FROM identities
+WHERE user_id = sqlc.arg(user_id)
+  AND email <> ''
+ORDER BY created_at, id
+LIMIT 1;
+
+-- name: ListUsersMissingAvatar :many
+SELECT u.id AS user_id, i.email
+FROM users u
+JOIN identities i ON i.id = (
+  SELECT candidate.id
+  FROM identities candidate
+  WHERE candidate.user_id = u.id
+    AND candidate.email <> ''
+  ORDER BY candidate.created_at, candidate.id
+  LIMIT 1
+)
+WHERE u.kind = 'human'
+  AND u.avatar_url = ''
+ORDER BY u.id;
+
+-- name: SetUserAvatarIfEmpty :exec
+UPDATE users
+SET avatar_url = sqlc.arg(avatar_url)
+WHERE id = sqlc.arg(id)
+  AND avatar_url = '';
+
+-- Avatar URLs equal to the generated fallback remain fallback-equivalent.
+-- name: SetProviderAvatarUnlessExplicit :execrows
+UPDATE users
+SET avatar_url = sqlc.arg(avatar_url)
+WHERE id = sqlc.arg(id)
+  AND (avatar_url = '' OR avatar_url = sqlc.arg(fallback_url));
+
+-- name: UpdateIdentityEmailIfEmpty :exec
+UPDATE identities
+SET email = sqlc.arg(email)
+WHERE provider = sqlc.arg(provider)
+  AND provider_subject = sqlc.arg(provider_subject)
+  AND email = '';
+
 -- name: InsertIdentity :exec
 INSERT INTO identities (id, user_id, provider, provider_subject, email, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(provider), sqlc.arg(provider_subject), sqlc.arg(email), sqlc.arg(created_at));

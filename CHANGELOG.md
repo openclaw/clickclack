@@ -3,6 +3,7 @@
 ## 0.2.2 - Unreleased
 
 - Added Gravatar fallbacks for email-backed users without an explicit or provider-supplied avatar.
+- Added an accessible large-image lightbox for chat and thread attachments with focus containment, focus restoration, backdrop dismissal, and responsive full-screen mobile presentation.
 
 ## 0.2.1 - 2026-07-19
 

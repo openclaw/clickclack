@@ -3211,6 +3211,7 @@
       ) {
         return;
       }
+      if (selectedImage) return;
       if (isModalOpen()) {
         closeModal();
       } else if (mobileNavOpen) {

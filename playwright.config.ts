@@ -17,7 +17,8 @@ export default defineConfig({
     command: `rm -rf data/e2e && pnpm build && go run ./apps/api/cmd/clickclack serve --addr 127.0.0.1:${e2ePort} --data ./data/e2e --dev-bootstrap=true`,
     url: `http://127.0.0.1:${e2ePort}`,
     reuseExistingServer: process.env.CLICKCLACK_REUSE_E2E_SERVER === "1",
-    timeout: 120_000,
+    // A cold production SPA build can exceed two minutes before the Go server starts.
+    timeout: 240_000,
   },
   projects: [
     {

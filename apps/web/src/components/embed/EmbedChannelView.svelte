@@ -548,6 +548,7 @@
 <style>
   .embed-channel-shell {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100vh;
     height: 100dvh;

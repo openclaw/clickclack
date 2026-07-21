@@ -94,3 +94,61 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
     page.locator(`[data-message-id="${realtimeMessage.id}"] .message-deleted`),
   ).toHaveText("This message was deleted.");
 });
+
+test("embedded channel fits narrow host panels without horizontal overflow", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const { workspaces } = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces[0];
+  const stamp = Date.now();
+
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `s-8a4123d56515f4446b2cdef3f5693a66-${stamp}`, kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; route_id: string };
+  };
+
+  await page.setViewportSize({ width: 400, height: 700 });
+  await page.goto(`/embed/channel/${workspace.route_id}/${channel.route_id}`);
+
+  await expect(page.locator(".empty")).toContainText("Welcome to");
+  // The overflow this guards against only manifests once the display webfont's
+  // wider metrics are active, so settle fonts before measuring anything.
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
+
+  const shellChildBounds = await page
+    .locator(".embed-channel-header, .messages, .embed-channel-composer-dock")
+    .evaluateAll((elements) =>
+      elements.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { x: bounds.x, width: bounds.width };
+      }),
+    );
+  expect(shellChildBounds).toHaveLength(3);
+  for (const bounds of shellChildBounds) {
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(400);
+  }
+
+  const openLinkBounds = await page.getByRole("link", { name: "Open in ClickClack" }).boundingBox();
+  expect(openLinkBounds).not.toBeNull();
+  expect(openLinkBounds!.x + openLinkBounds!.width).toBeLessThanOrEqual(400);
+
+  const sendButtonBounds = await page.locator(".send").boundingBox();
+  expect(sendButtonBounds).not.toBeNull();
+  expect(sendButtonBounds!.x + sendButtonBounds!.width).toBeLessThanOrEqual(400);
+
+  const longMessage = `sha256:${"a".repeat(64)}`;
+  const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: longMessage },
+  });
+  expect(messageResponse.ok()).toBe(true);
+
+  await page.reload();
+  await expect(page.locator(".markdown").filter({ hasText: longMessage })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
+});

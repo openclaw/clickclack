@@ -49,6 +49,14 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
   await initialRow.getByRole("button", { name: "👀 — 1 reaction" }).click();
   await expect(initialRow.getByRole("button", { name: "👀 — 1 reaction" })).toHaveCount(0);
 
+  const uiEditedBody = `${initialBody} edited in embed`;
+  await initialRow.hover();
+  await initialRow.getByRole("button", { name: "Edit message" }).click();
+  await initialRow.getByLabel("Edit message").fill(uiEditedBody);
+  await initialRow.getByRole("button", { name: "Save" }).click();
+  await expect(initialRow.locator(".markdown")).toContainText(uiEditedBody);
+  await expect(initialRow.getByText("(edited)")).toBeVisible();
+
   const composer = page.getByLabel("Message body");
   const uiBody = `embedded channel message ${stamp}`;
   await composer.fill(uiBody);

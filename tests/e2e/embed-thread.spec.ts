@@ -47,6 +47,12 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   });
   expect(rootReaction.ok()).toBe(true);
   await expect(rootRow.getByRole("button", { name: "🚀 — 1 reaction" })).toBeVisible();
+  const editedRoot = `${message.body} edited in embed`;
+  await rootRow.getByRole("button", { name: "Edit message" }).click();
+  await rootRow.getByLabel("Edit message").fill(editedRoot);
+  await rootRow.getByRole("button", { name: "Save" }).click();
+  await expect(rootRow.locator(".markdown")).toContainText(editedRoot);
+  await expect(rootRow.getByRole("button", { name: "🚀 — 1 reaction" })).toBeVisible();
 
   const composer = page.getByLabel("Reply body");
   await composer.fill(`embedded reply ${stamp}`);
@@ -60,12 +66,11 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
     data: { body: realtimeReply, nonce: `embed-realtime-${stamp}` },
   });
   expect(realtimeResponse.ok()).toBe(true);
-  const realtimeReplyRow = page.locator(".reply").filter({ hasText: realtimeReply });
-  await expect(realtimeReplyRow.locator(".markdown")).toBeVisible();
-
   const { message: createdReply } = (await realtimeResponse.json()) as {
     message: { id: string };
   };
+  const realtimeReplyRow = page.locator(`[data-message-id="${createdReply.id}"]`);
+  await expect(realtimeReplyRow.locator(".markdown")).toContainText(realtimeReply);
   await expect(realtimeReplyRow.getByRole("button", { name: "Add reaction" })).toBeVisible();
   const replyReaction = await page.request.post(`/api/messages/${createdReply.id}/reactions`, {
     data: { emoji: "✅" },
@@ -74,11 +79,11 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   await expect(realtimeReplyRow.getByRole("button", { name: "✅ — 1 reaction" })).toBeVisible();
 
   const editedReply = `${realtimeReply} edited`;
-  const editResponse = await page.request.patch(`/api/messages/${createdReply.id}`, {
-    data: { body: editedReply },
-  });
-  expect(editResponse.ok()).toBe(true);
-  await expect(page.locator(".reply .markdown").filter({ hasText: editedReply })).toBeVisible();
+  await realtimeReplyRow.getByRole("button", { name: "Edit message" }).click();
+  await realtimeReplyRow.getByLabel("Edit message").fill(editedReply);
+  await realtimeReplyRow.getByRole("button", { name: "Save" }).click();
+  await expect(realtimeReplyRow.locator(".markdown")).toContainText(editedReply);
+  await expect(realtimeReplyRow.getByRole("button", { name: "✅ — 1 reaction" })).toBeVisible();
 
   const deleteResponse = await page.request.delete(`/api/messages/${createdReply.id}`);
   expect(deleteResponse.ok()).toBe(true);

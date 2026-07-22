@@ -118,29 +118,52 @@ test("embedded channel fits narrow host panels without horizontal overflow", asy
   // The overflow this guards against only manifests once the display webfont's
   // wider metrics are active, so settle fonts before measuring anything.
   await page.evaluate(() => document.fonts.ready);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
 
-  const shellChildBounds = await page
-    .locator(".embed-channel-header, .messages, .embed-channel-composer-dock")
-    .evaluateAll((elements) =>
-      elements.map((element) => {
-        const bounds = element.getBoundingClientRect();
-        return { x: bounds.x, width: bounds.width };
-      }),
-    );
-  expect(shellChildBounds).toHaveLength(3);
-  for (const bounds of shellChildBounds) {
-    expect(bounds.x).toBeGreaterThanOrEqual(0);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(400);
-  }
+  const expectPanelToFit = async (viewport: { width: number; height: number }) => {
+    await page.setViewportSize(viewport);
 
-  const openLinkBounds = await page.getByRole("link", { name: "Open in ClickClack" }).boundingBox();
-  expect(openLinkBounds).not.toBeNull();
-  expect(openLinkBounds!.x + openLinkBounds!.width).toBeLessThanOrEqual(400);
+    const scrollingBounds = await page.evaluate(() => {
+      const scrollingElement = document.scrollingElement;
+      if (!scrollingElement) throw new Error("Document has no scrolling element");
+      return {
+        scrollWidth: scrollingElement.scrollWidth,
+        clientWidth: scrollingElement.clientWidth,
+      };
+    });
+    expect(scrollingBounds.scrollWidth).toBeLessThanOrEqual(scrollingBounds.clientWidth);
 
-  const sendButtonBounds = await page.locator(".send").boundingBox();
-  expect(sendButtonBounds).not.toBeNull();
-  expect(sendButtonBounds!.x + sendButtonBounds!.width).toBeLessThanOrEqual(400);
+    const shellChildBounds = await page
+      .locator(".embed-channel-header, .messages, .embed-channel-composer-dock")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { x: bounds.x, width: bounds.width };
+        }),
+      );
+    expect(shellChildBounds).toHaveLength(3);
+    for (const bounds of shellChildBounds) {
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
+    }
+
+    for (const element of [
+      page.getByRole("link", { name: "Open in ClickClack" }),
+      page.locator(".send"),
+    ]) {
+      const bounds = await element.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    }
+
+    const composerBounds = await page.locator(".embed-channel-composer").boundingBox();
+    expect(composerBounds).not.toBeNull();
+    expect(composerBounds!.x).toBeCloseTo(0, 1);
+    expect(composerBounds!.width).toBeCloseTo(viewport.width, 1);
+  };
+
+  await expectPanelToFit({ width: 400, height: 700 });
+  await expectPanelToFit({ width: 320, height: 600 });
 
   const longMessage = `sha256:${"a".repeat(64)}`;
   const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
@@ -150,5 +173,5 @@ test("embedded channel fits narrow host panels without horizontal overflow", asy
 
   await page.reload();
   await expect(page.locator(".markdown").filter({ hasText: longMessage })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
+  await expectPanelToFit({ width: 320, height: 600 });
 });

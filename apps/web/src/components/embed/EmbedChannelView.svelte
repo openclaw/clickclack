@@ -559,11 +559,11 @@
 
   .embed-channel-header {
     display: flex;
-    min-height: 54px;
+    min-height: 44px;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 9px 16px;
+    gap: 10px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
   }
@@ -580,7 +580,7 @@
     margin: 0;
     color: var(--text-strong);
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: 15px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -623,14 +623,17 @@
   }
 
   .embed-channel-composer-dock :global(.embed-channel-composer) {
-    padding-top: 6px;
+    --composer-card-top: 6px;
+    --composer-overlay-inset-x: 14px;
+
+    padding: 6px 14px 12px;
   }
 
   .embed-notice {
     position: absolute;
-    right: 18px;
+    right: 14px;
     bottom: calc(100% - 2px);
-    left: 18px;
+    left: 14px;
     z-index: 2;
     margin: 0;
     padding: 9px 11px;

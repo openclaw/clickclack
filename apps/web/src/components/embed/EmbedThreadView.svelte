@@ -490,8 +490,16 @@
   }
 
   .embed-shell :global(.thread > header) {
-    min-height: 54px;
-    padding-block: 9px;
+    min-height: 44px;
+    gap: 10px;
+    padding: 6px 12px;
+  }
+
+  .embed-shell :global(.reply-composer) {
+    --composer-card-top: 6px;
+    --composer-overlay-inset-x: 14px;
+
+    padding: 6px 14px 12px;
   }
 
   .embed-notice {

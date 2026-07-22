@@ -2,6 +2,7 @@
 
 ## 0.2.2 - Unreleased
 
+- Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
 - Fixed the embedded channel view overflowing narrow host panels (such as OpenClaw's discussion sidebar), where long session channel names clipped the header link and send button off the right edge.
 - Compacted the embedded channel and thread headers and aligned the embed composer gutters and bottom spacing with narrow host panels.
 - Added Gravatar fallbacks for email-backed users without an explicit or provider-supplied avatar.

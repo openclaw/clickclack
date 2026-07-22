@@ -453,7 +453,6 @@
         <h1>{channel.name}</h1>
         {#if channel.archived_at}<span class="embed-channel-status">Archived</span>{/if}
       </div>
-      <a href={route.canonical_path} target="_blank" rel="noopener">Open in ClickClack</a>
     </header>
     <MessageList
       {messages}
@@ -561,8 +560,6 @@
     display: flex;
     min-height: 44px;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
     padding: 6px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
@@ -600,18 +597,6 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-  }
-
-  .embed-channel-header a {
-    flex: 0 0 auto;
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  .embed-channel-header a:hover {
-    text-decoration: underline;
   }
 
   .embed-channel-shell :global(.messages) {

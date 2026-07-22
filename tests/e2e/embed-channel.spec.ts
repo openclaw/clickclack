@@ -35,9 +35,7 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
   expect(channelBounds?.width).toBe(800);
   await expect(page.locator(".markdown").filter({ hasText: initialBody })).toBeVisible();
   await expect(page.getByRole("heading", { name: channel.name })).toBeVisible();
-  const openLink = page.getByRole("link", { name: "Open in ClickClack" });
-  await expect(openLink).toHaveAttribute("href", `/app/${workspace.route_id}/${channel.route_id}`);
-  await expect(openLink).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Open in ClickClack" })).toHaveCount(0);
   await expect(page.locator(".sidebar, .topbar, .guild-rail")).toHaveCount(0);
 
   const initialRow = page.locator(`[data-message-id="${initialMessage.id}"]`);
@@ -146,15 +144,10 @@ test("embedded channel fits narrow host panels without horizontal overflow", asy
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
     }
 
-    for (const element of [
-      page.getByRole("link", { name: "Open in ClickClack" }),
-      page.locator(".send"),
-    ]) {
-      const bounds = await element.boundingBox();
-      expect(bounds).not.toBeNull();
-      expect(bounds!.x).toBeGreaterThanOrEqual(0);
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
-    }
+    const sendButtonBounds = await page.locator(".send").boundingBox();
+    expect(sendButtonBounds).not.toBeNull();
+    expect(sendButtonBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(sendButtonBounds!.x + sendButtonBounds!.width).toBeLessThanOrEqual(viewport.width);
 
     const composerBounds = await page.locator(".embed-channel-composer").boundingBox();
     expect(composerBounds).not.toBeNull();

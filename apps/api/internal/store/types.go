@@ -1103,6 +1103,7 @@ type Store interface {
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
+	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)
 	CreateUpload(ctx context.Context, input CreateUploadInput) (Upload, error)
 	GetUpload(ctx context.Context, uploadID, userID string) (Upload, error)

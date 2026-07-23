@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
@@ -16,6 +16,10 @@ import { waitForAppReady } from "./app-ready";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
+
+function activeChannelHeading(scope: Page | Locator): Locator {
+  return scope.getByRole("heading", { name: /^#/ });
+}
 const goCacheEnv = {
   GOCACHE: execFileSync("go", ["env", "GOCACHE"], { cwd: process.cwd(), encoding: "utf8" }).trim(),
   GOMODCACHE: execFileSync("go", ["env", "GOMODCACHE"], {
@@ -493,7 +497,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
 test("app subdomain root opens the chat app", async ({ page }) => {
   await page.goto("http://app.localhost:18082/");
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 });
 
 test("shows realtime connection state in the shell", async ({ page }) => {
@@ -1139,6 +1143,31 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
     .toBe(1);
 });
 
+test("realtime cursor storage failures do not block app startup", async ({ page }) => {
+  await page.addInitScript(() => {
+    const isCursorKey = (key: string) => key.startsWith("clickclack:") && key.endsWith(":cursor");
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return setItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return removeItem.call(this, key);
+    };
+  });
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await expect(page.getByRole("heading", { name: /^#/ })).toBeVisible();
+});
+
 test("browser notification storage failures do not block app startup", async ({ page }) => {
   const generalRoute = await createGeneralChannelRoute(page, "Notification storage");
   await page.addInitScript(() => {
@@ -1162,7 +1191,7 @@ test("browser notification storage failures do not block app startup", async ({ 
 
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 });
 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
@@ -1170,7 +1199,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -1180,7 +1209,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   };
 
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
   await expect(composer).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
@@ -1242,7 +1271,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   const shell = page.locator(".shell");
   const titlebar = page.locator(".desktop-titlebar");
@@ -1250,7 +1279,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await expect(titlebar).toBeVisible();
   await expect(page.getByTitle("ClickClack home")).toHaveAttribute("href", "/app");
   await expect(page.locator(".timeline .topbar")).toHaveCount(0);
-  await expect(titlebar.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.locator(".sidebar .sidebar-collapse")).toHaveCount(0);
   expect(
     await titlebarSearch.evaluate((input) => {
@@ -1268,7 +1297,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await titlebar.getByRole("button", { name: "Workspace settings" }).click();
   await expect(page.getByRole("dialog", { name: "Workspace settings" })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   await page.getByLabel("Message body").fill("desktop titlebar search probe");
   await page.getByRole("button", { name: "Send" }).click();
@@ -1297,7 +1326,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await page.setViewportSize({ width: 760, height: 700 });
   // The conversation title has no in-card fallback on desktop, so it must
   // survive narrow windows (truncated, not hidden).
-  await expect(titlebar.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
   const titlebarNavigation = titlebar.getByRole("button", { name: "Open navigation" });
   await expect(titlebarNavigation).toBeVisible();
@@ -1396,9 +1425,14 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
   const generalRoute = await createGeneralChannelRoute(page, "Mobile geometry");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
+<<<<<<< HEAD
     await page.goto(generalRoute);
     await waitForAppReady(page);
     await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+=======
+    await page.goto("/app");
+    await expect(activeChannelHeading(page)).toBeVisible();
+>>>>>>> b188120 (fix: harden realtime recovery)
     await expect
       .poll(() =>
         page.evaluate(
@@ -2446,6 +2480,93 @@ test("renders search results in a responsive sidebar", async ({ page }) => {
   expect(mobileResultsBox!.height).toBe(720);
   await page.keyboard.press("Escape");
   await expect(results).toHaveCount(0);
+});
+
+test("keeps the newest message snapshot when same-channel loads resolve out of order", async ({
+  page,
+}) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceID = workspaces.workspaces[0].id;
+  const suffix = Date.now();
+  const staleChannelResponse = await page.request.post(`/api/workspaces/${workspaceID}/channels`, {
+    data: { name: `snapshot-stale-${suffix}`, kind: "public" },
+  });
+  const freshChannelResponse = await page.request.post(`/api/workspaces/${workspaceID}/channels`, {
+    data: { name: `snapshot-fresh-${suffix}`, kind: "public" },
+  });
+  const { channel: targetChannel } = (await staleChannelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+  const { channel: alternateChannel } = (await freshChannelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+  const staleBody = `stale snapshot ${suffix}`;
+  const freshBody = `fresh snapshot ${suffix}`;
+  const message = (id: string, seq: number, body: string) => ({
+    id,
+    workspace_id: workspaceID,
+    channel_id: targetChannel.id,
+    author_id: "usr_snapshot",
+    thread_root_id: id,
+    channel_seq: seq,
+    body,
+    body_format: "markdown" as const,
+    created_at: new Date(Date.UTC(2026, 0, 1, 0, seq)).toISOString(),
+  });
+  let requestCount = 0;
+  let startFirstRequest!: () => void;
+  const firstRequestStarted = new Promise<void>((resolve) => {
+    startFirstRequest = resolve;
+  });
+  let releaseFirstRequest!: () => void;
+  const firstRequestRelease = new Promise<void>((resolve) => {
+    releaseFirstRequest = resolve;
+  });
+  await page.route(`**/api/channels/${targetChannel.id}/messages?*`, async (route) => {
+    requestCount += 1;
+    const stale = requestCount === 1;
+    if (stale) {
+      startFirstRequest();
+      await firstRequestRelease;
+    }
+    const seq = stale ? 1 : 2;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        messages: [
+          message(
+            stale ? "MSTALESNAPSHOT01" : "MFRESHSNAPSHOT1",
+            seq,
+            stale ? staleBody : freshBody,
+          ),
+        ],
+        oldest_seq: seq,
+        newest_seq: seq,
+        has_older: false,
+        has_newer: false,
+      }),
+    });
+  });
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${targetChannel.name}` }).click();
+  await firstRequestStarted;
+  await page.getByRole("link", { name: `# ${alternateChannel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${alternateChannel.name}` })).toBeVisible();
+  await page.getByRole("link", { name: `# ${targetChannel.name}` }).click();
+  await expect(page.getByText(freshBody)).toBeVisible();
+
+  const staleResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/channels/${targetChannel.id}/messages?`) && response.ok(),
+  );
+  releaseFirstRequest();
+  await staleResponse;
+  await expect(page.getByText(freshBody)).toBeVisible();
+  await expect(page.getByText(staleBody)).toHaveCount(0);
 });
 
 test("search paginates, and handles empty, failed, and stale responses", async ({ page }) => {

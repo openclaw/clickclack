@@ -1353,6 +1353,11 @@ WHERE r.message_id = ANY(sqlc.arg(message_ids)::text[])
 GROUP BY r.message_id, r.emoji
 ORDER BY r.message_id, reaction_count DESC, r.emoji;
 
+-- name: EventCursorExists :one
+SELECT EXISTS (
+  SELECT 1 FROM events WHERE workspace_id = sqlc.arg(workspace_id) AND cursor = sqlc.arg(cursor)
+);
+
 -- name: ListEventsAfter :many
 SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at
 FROM events e

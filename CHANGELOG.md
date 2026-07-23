@@ -7,6 +7,7 @@
 - Compacted the embedded channel and thread headers and aligned the embed composer gutters and bottom spacing with narrow host panels.
 - Added Gravatar fallbacks for email-backed users without an explicit or provider-supplied avatar.
 - Added an accessible large-image lightbox for chat and thread attachments with focus containment, focus restoration, backdrop dismissal, and responsive full-screen mobile presentation.
+- Hardened realtime recovery with ordered client application, post-success cursor checkpoints, paged connect-time replay, explicit overflow reconnects, and stale message-load protection.
 
 ## 0.2.1 - 2026-07-19
 

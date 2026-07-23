@@ -53,13 +53,12 @@
   let replyTarget = $state<Message | null>(null);
   let replyInput = $state<HTMLTextAreaElement | null>(null);
   let replyError = $state("");
+  let realtimeError = $state("");
   let replySending = $state(false);
   let selectedImage = $state<{ url: string; title: string } | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let refreshPending = false;
-  let refreshQueued = false;
   let failedSubmission: ReplySubmission | null = null;
 
   const replyDisabled = $derived(
@@ -202,14 +201,14 @@
     }
   }
 
-  async function refreshThread() {
+  async function refreshThread(isCurrent: () => boolean = () => true) {
     if (!root || viewState !== "ready") return;
     const rootID = root.id;
     try {
       const thread = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
         `/api/messages/${encodeURIComponent(rootID)}/thread`,
       );
-      if (!root || root.id !== rootID || viewState !== "ready") return;
+      if (!isCurrent() || !root || root.id !== rootID || viewState !== "ready") return;
       root = { ...thread.root, thread_state: thread.thread_state };
       replies = thread.replies;
       reactionController.seedMessages([root, ...replies]);
@@ -225,27 +224,9 @@
     } catch (error) {
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
-      } else {
-        replyError = readableAPIError(error, "Could not refresh the thread.");
       }
+      throw error;
     }
-  }
-
-  function queueRefresh() {
-    if (refreshPending) {
-      refreshQueued = true;
-      return;
-    }
-    refreshPending = true;
-    queueMicrotask(() => {
-      void refreshThread().finally(() => {
-        refreshPending = false;
-        if (refreshQueued) {
-          refreshQueued = false;
-          queueRefresh();
-        }
-      });
-    });
   }
 
   function eventBelongsToThread(event: RealtimeEvent): boolean {
@@ -255,7 +236,7 @@
     return messageID === root.id || replies.some((reply) => reply.id === messageID);
   }
 
-  function handleRealtimeEvent(event: RealtimeEvent) {
+  async function handleRealtimeEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     if (
       eventBelongsToThread(event) &&
       (event.type === "reaction.added" || event.type === "reaction.removed")
@@ -269,7 +250,21 @@
         event.type === "message.updated" ||
         event.type === "message.deleted")
     ) {
-      queueRefresh();
+      if (
+        event.type === "thread.reply_created" &&
+        event.payload.message_id &&
+        replies.some((reply) => reply.id === event.payload.message_id)
+      ) {
+        return;
+      }
+      await refreshThread(isCurrent);
+    }
+  }
+
+  function reportRealtimeError(error: unknown) {
+    if (viewState === "ready") {
+      realtimeError = readableAPIError(error, "Could not process a realtime update.");
+      replyError = realtimeError;
     }
   }
 
@@ -278,9 +273,13 @@
     socket = connectRealtime({
       workspaceID,
       onEvent: handleRealtimeEvent,
-      onStatusChange: (connected) => {
-        if (connected) queueRefresh();
+      onOpen: async (isCurrent, authoritativeResync) => {
+        if (authoritativeResync) await refreshThread(isCurrent);
+        if (!isCurrent()) return;
+        if (replyError === realtimeError) replyError = "";
+        realtimeError = "";
       },
+      onError: reportRealtimeError,
     });
   }
 

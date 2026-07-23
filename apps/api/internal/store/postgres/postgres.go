@@ -1032,6 +1032,16 @@ func (s *Store) ListEventsAfter(ctx context.Context, workspaceID, userID, cursor
 	return out, nil
 }
 
+func (s *Store) EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error) {
+	if err := s.requireMembership(ctx, workspaceID, userID); err != nil {
+		return false, err
+	}
+	return s.q.EventCursorExists(ctx, storedb.EventCursorExistsParams{
+		WorkspaceID: workspaceID,
+		Cursor:      cursor,
+	})
+}
+
 func (s *Store) LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error) {
 	if err := s.requireMembership(ctx, workspaceID, userID); err != nil {
 		return "", err

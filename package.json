@@ -24,7 +24,7 @@
     "test:desktop": "pnpm --filter @clickclack/desktop test",
     "test:fakeco-aws": "node --check deploy/fakeco/aws/owner.mjs && bash -n deploy/fakeco/aws/bootstrap.sh && node --test deploy/fakeco/aws/owner.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "pnpm build:web && pnpm build:sdk && node scripts/go-test-with-web-dist.mjs",
+    "test": "pnpm --filter @clickclack/web test && pnpm build:web && pnpm build:sdk && node scripts/go-test-with-web-dist.mjs",
     "embed:webassets": "node scripts/embed-web-dist.mjs apps/web/dist apps/api/internal/webassets/dist",
     "deploy:cloudflare": "wrangler deploy",
     "cf:containers": "wrangler containers list",

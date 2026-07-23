@@ -43,16 +43,23 @@ type Server struct {
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
+	realtimeReplayLimit   int
 }
 
 const (
-	websocketBearerProtocolPrefix = "clickclack.bearer."
-	csrfHeaderName                = "X-ClickClack-CSRF"
-	maxJSONBodyBytes              = 1 << 20
-	readHeaderTimeout             = 5 * time.Second
-	httpRequestTimeout            = 30 * time.Second
-	idleTimeout                   = 120 * time.Second
-	uploadCleanupSweepLimit       = 100
+	websocketBearerProtocolPrefix     = "clickclack.bearer."
+	csrfHeaderName                    = "X-ClickClack-CSRF"
+	maxJSONBodyBytes                  = 1 << 20
+	readHeaderTimeout                 = 5 * time.Second
+	httpRequestTimeout                = 30 * time.Second
+	idleTimeout                       = 120 * time.Second
+	uploadCleanupSweepLimit           = 100
+	realtimeReplayPageSize            = 500
+	realtimeReplayMaxEvents           = 5000
+	realtimeResyncRequiredStatus      = websocket.StatusCode(4001)
+	realtimeOverflowCloseReason       = "realtime buffer overflow; reconnect with after_cursor to replay"
+	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
+	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
@@ -114,6 +121,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		realtimeReplayLimit:   realtimeReplayMaxEvents,
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,
@@ -1262,20 +1270,78 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 	ctx := r.Context()
-	backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, r.URL.Query().Get("after_cursor"), 500)
+	replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 	if err != nil {
-		_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
+		_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
 		return
 	}
-	sent := make(map[string]struct{}, len(backlog))
-	for _, event := range backlog {
-		if event.ID != "" {
-			sent[event.ID] = struct{}{}
+	replayCursor := r.URL.Query().Get("after_cursor")
+	if replayCursor != "" {
+		exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
+		if err != nil {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+			return
 		}
-		if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
-			continue
+		if !exists {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return
 		}
-		if err := writeWS(ctx, conn, event); err != nil {
+	}
+	if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
+		_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+		return
+	}
+	replayedEvents := 0
+	for replayTail != "" && replayCursor < replayTail {
+		pageCursor := replayCursor
+		backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
+		if err != nil {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+			return
+		}
+		if len(backlog) == 0 {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return
+		}
+		if pageCursor != "" {
+			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+			if err != nil {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return
+			}
+			if !exists {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return
+			}
+		}
+		previousCursor := pageCursor
+		for _, event := range backlog {
+			if event.Cursor > replayTail {
+				break
+			}
+			if replayedEvents >= s.realtimeReplayLimit {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return
+			}
+			replayedEvents++
+			// ListEventsAfter prefilters visibility, while this live lookup closes
+			// the revocation window between fetching a page and writing its events.
+			deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+			if err != nil {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return
+			}
+			if !deliver {
+				replayCursor = event.Cursor
+				continue
+			}
+			if err := writeWS(ctx, conn, event); err != nil {
+				return
+			}
+			replayCursor = event.Cursor
+		}
+		if replayCursor == previousCursor {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
 			return
 		}
 	}
@@ -1283,12 +1349,16 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-		case event := <-events:
-			if event.ID != "" {
-				if _, ok := sent[event.ID]; ok {
-					continue
-				}
+		case event, ok := <-events:
+			if !ok {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+				return
 			}
+			if event.Cursor != "" && event.Cursor <= replayCursor {
+				continue
+			}
+			// Bot deletion and membership-removal revocations are intentionally
+			// ephemeral, so they only arrive on the live hub path, never replay.
 			if eventRevokesWorkspaceAccess(event, act.user.ID) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
 				return
@@ -1380,19 +1450,29 @@ func filterEventsForUser(events []store.Event, userID string) []store.Event {
 }
 
 func (s *Server) shouldDeliverEventToActor(ctx context.Context, event store.Event, userID string) bool {
+	deliver, err := s.shouldDeliverEventToActorResult(ctx, event, userID)
+	return err == nil && deliver
+}
+
+func (s *Server) shouldDeliverEventToActorResult(ctx context.Context, event store.Event, userID string) (bool, error) {
 	if !shouldDeliverEvent(event, userID) {
-		return false
+		return false, nil
 	}
+	var err error
 	if conversationID := directConversationIDFromEvent(event); conversationID != "" {
-		_, err := s.store.GetDirectConversation(ctx, conversationID, userID)
-		return err == nil
+		_, err = s.store.GetDirectConversation(ctx, conversationID, userID)
+	} else if event.ChannelID == "" {
+		_, err = s.store.GetWorkspace(ctx, event.WorkspaceID, userID)
+	} else {
+		_, err = s.store.GetChannel(ctx, event.ChannelID, userID)
 	}
-	if event.ChannelID == "" {
-		_, err := s.store.GetWorkspace(ctx, event.WorkspaceID, userID)
-		return err == nil
+	if err == nil {
+		return true, nil
 	}
-	_, err := s.store.GetChannel(ctx, event.ChannelID, userID)
-	return err == nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
 }
 
 func directConversationIDFromEvent(event store.Event) string {

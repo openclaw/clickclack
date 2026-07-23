@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
+    "test": "node --test src/lib/*.test.ts",
     "typecheck": "svelte-kit sync && tsc --noEmit -p tsconfig.json",
     "preview": "vite preview --host 127.0.0.1"
   },

@@ -753,6 +753,24 @@ func (q *Queries) EnsureAppearancePreferences(ctx context.Context, userID string
 	return err
 }
 
+const eventCursorExists = `-- name: EventCursorExists :one
+SELECT EXISTS (
+  SELECT 1 FROM events WHERE workspace_id = $1 AND cursor = $2
+)
+`
+
+type EventCursorExistsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Cursor      string `json:"cursor"`
+}
+
+func (q *Queries) EventCursorExists(ctx context.Context, arg EventCursorExistsParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, eventCursorExists, arg.WorkspaceID, arg.Cursor)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const findOneToOneDirectConversation = `-- name: FindOneToOneDirectConversation :one
 SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created_at
 FROM direct_conversations dc

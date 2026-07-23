@@ -134,6 +134,9 @@
   let authRequired = false;
   let desktopAuthStatus = "";
   let connected = false;
+  let realtimeError = "";
+  let realtimeInitializedWorkspaceID = "";
+  let pendingRealtimeWorkspaceID = "";
   let socket: RealtimeConnection | null = null;
   let realtimeMessageLoadQueue: Promise<void> = Promise.resolve();
   let messageList: MessageListHandle | null = null;
@@ -171,6 +174,9 @@
   let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
   let routeApplySerial = 0;
+  let messageLoadGeneration = 0;
+  let workspacesLoadSerial = 0;
+  let channelsLoadSerial = 0;
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
@@ -496,7 +502,9 @@
   }
 
   async function loadWorkspaces() {
+    const serial = ++workspacesLoadSerial;
     const data = await api<{ workspaces: Workspace[] }>("/api/workspaces");
+    if (serial !== workspacesLoadSerial) return;
     workspaces = data.workspaces;
   }
 
@@ -619,6 +627,12 @@
     }
   }
 
+  function connectPendingRealtime(workspaceID: string) {
+    if (pendingRealtimeWorkspaceID !== workspaceID) return;
+    pendingRealtimeWorkspaceID = "";
+    connectRealtimeSocket();
+  }
+
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
     reactionController.clear();
@@ -658,7 +672,7 @@
       resetSearch();
       resetHistoryPaging();
       messagesLoading = true;
-      connectRealtimeSocket();
+      pendingRealtimeWorkspaceID = workspace.id;
     }
 
     if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
@@ -700,11 +714,13 @@
       if (sameConversation) {
         appliedRouteKey = canonicalRouteKey;
         updateActiveMessageWindowFlags(targetID);
+        connectPendingRealtime(workspace.id);
         return;
       }
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
+      connectPendingRealtime(workspace.id);
       return;
     }
 
@@ -718,11 +734,13 @@
       if (sameConversation) {
         appliedRouteKey = canonicalRouteKey;
         updateActiveMessageWindowFlags(targetID);
+        connectPendingRealtime(workspace.id);
         return;
       }
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
+      connectPendingRealtime(workspace.id);
       return;
     }
 
@@ -731,6 +749,7 @@
       if (serial !== routeApplySerial) return;
       if (resolved) {
         appliedRouteKey = canonicalRouteKey;
+        connectPendingRealtime(workspace.id);
         return;
       }
     }
@@ -743,6 +762,7 @@
       await loadMessages();
       appliedRouteKey = requestedRouteKey;
       if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
+      connectPendingRealtime(workspace.id);
       return;
     }
     await navigateToApp(workspace.id, fallbackTargetID, true);
@@ -838,8 +858,11 @@
   }
 
   async function loadChannels(loadInitialMessages = true, selectFallback = true, resetSidePanel = true) {
-    if (!selectedWorkspaceID) return;
-    const data = await api<{ channels: Channel[] }>(`/api/workspaces/${selectedWorkspaceID}/channels`);
+    const workspaceID = selectedWorkspaceID;
+    if (!workspaceID) return;
+    const serial = ++channelsLoadSerial;
+    const data = await api<{ channels: Channel[] }>(`/api/workspaces/${workspaceID}/channels`);
+    if (serial !== channelsLoadSerial || workspaceID !== selectedWorkspaceID) return;
     channels = data.channels;
     if (selectFallback) {
       selectedChannelID =
@@ -894,7 +917,10 @@
     }
   }
 
-  async function loadBotCommands(workspaceID = selectedWorkspaceID) {
+  async function loadBotCommands(
+    workspaceID = selectedWorkspaceID,
+    propagateError = false,
+  ) {
     const serial = ++botCommandsLoadSerial;
     if (!workspaceID) {
       botCommands = [];
@@ -904,10 +930,10 @@
       const commands = await listBotCommands(workspaceID);
       if (serial !== botCommandsLoadSerial || workspaceID !== selectedWorkspaceID) return;
       botCommands = commands;
-    } catch {
-      if (serial === botCommandsLoadSerial && workspaceID === selectedWorkspaceID) {
-        botCommands = [];
-      }
+    } catch (error) {
+      const isCurrent = serial === botCommandsLoadSerial && workspaceID === selectedWorkspaceID;
+      if (isCurrent) botCommands = [];
+      if (propagateError && isCurrent) throw error;
     }
   }
 
@@ -976,9 +1002,14 @@
     await navigateToApp(selectedWorkspaceID, channelID);
   }
 
-  async function loadMessages() {
-    captureScrollMemory();
+  function isCurrentMessageLoad(generation: number, targetKey: string): boolean {
+    return generation === messageLoadGeneration && currentConversationKey() === targetKey;
+  }
+
+  async function loadMessages(preserveScroll = true) {
+    if (preserveScroll) captureScrollMemory();
     const targetKey = currentConversationKey();
+    const generation = ++messageLoadGeneration;
     const isSwitching = targetKey !== viewKey;
     resetHistoryPaging();
     if (isSwitching) {
@@ -990,25 +1021,30 @@
         return;
       }
       const data = await api<MessagePage>(messagePagePath(initialMessagePageQuery()));
-      if (currentConversationKey() !== targetKey) return;
+      if (!isCurrentMessageLoad(generation, targetKey)) return;
       commitMessageWindow(targetKey, pageToWindow(data), "replace");
     } finally {
-      if (currentConversationKey() === targetKey) messagesLoading = false;
+      if (isCurrentMessageLoad(generation, targetKey)) {
+        messagesLoading = false;
+      }
     }
   }
 
   async function loadLatestMessages() {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
+    const generation = ++messageLoadGeneration;
     resetHistoryPaging();
     messagesLoading = true;
     scrollMemory.set(targetKey, { atBottom: true });
     try {
       const data = await api<MessagePage>(messagePagePath(`limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== targetKey) return;
+      if (!isCurrentMessageLoad(generation, targetKey)) return;
       commitMessageWindow(targetKey, pageToWindow(data), "replace");
     } finally {
-      if (currentConversationKey() === targetKey) messagesLoading = false;
+      if (isCurrentMessageLoad(generation, targetKey)) {
+        messagesLoading = false;
+      }
     }
   }
 
@@ -2482,6 +2518,12 @@
     const data = await api<{ conversations: DirectConversation[] }>(`/api/dms?workspace_id=${workspaceID}`);
     if (serial !== directConversationsLoadSerial || workspaceID !== selectedWorkspaceID) return;
     directConversations = data.conversations;
+    if (
+      selectedDirectID &&
+      !directConversations.some((conversation) => conversation.id === selectedDirectID)
+    ) {
+      selectedDirectID = "";
+    }
   }
 
   function upsertDirectConversation(conversation: DirectConversation) {
@@ -2609,40 +2651,80 @@
     const workspaceID = selectedWorkspaceID;
     socket = connectRealtime({
       workspaceID,
-      onEvent: (event) => {
-        void handleEvent(event).catch((error) => {
-          status = error instanceof Error ? error.message : "Could not process realtime event";
-        });
+      onEvent: handleEvent,
+      onOpen: async (isCurrent, authoritativeResync) => {
+        const preserveScroll = realtimeInitializedWorkspaceID === workspaceID;
+        await reconcileRealtimeState(
+          workspaceID,
+          isCurrent,
+          preserveScroll,
+          authoritativeResync,
+        );
+        if (!isCurrent()) return;
+        realtimeInitializedWorkspaceID = workspaceID;
+        if (workspaceID === selectedWorkspaceID && status === realtimeError) status = "ready";
+        realtimeError = "";
+      },
+      onError: (error) => {
+        if (workspaceID === selectedWorkspaceID) {
+          realtimeError = error instanceof Error ? error.message : "Could not process realtime event";
+          status = realtimeError;
+        }
       },
       onStatusChange: (next) => {
         connected = next;
-        if (!next) return;
-        void reconcileRealtimeState(workspaceID).catch((error) => {
-          if (workspaceID === selectedWorkspaceID && status === "ready") {
-            status = error instanceof Error ? error.message : "Could not refresh after reconnect";
-          }
-        });
       },
     });
   }
 
-  async function reconcileRealtimeState(workspaceID: string) {
+  async function reconcileRealtimeState(
+    workspaceID: string,
+    isCurrent: () => boolean = () => true,
+    preserveScroll = true,
+    authoritativeResync = true,
+  ) {
     const serial = ++realtimeReconcileSerial;
-    if (!workspaceID || workspaceID !== selectedWorkspaceID) return;
+    if (!workspaceID || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     const selectedThreadID = selectedThread?.id || "";
     const selectedBotProfileID = selectedProfile?.kind === "bot" ? selectedProfile.id : "";
     typingEntries = [];
     agentProgressTurns = [];
+    if (!authoritativeResync) {
+      await Promise.all([loadSlashCommands(workspaceID), loadBotCommands(workspaceID, true)]);
+      return;
+    }
     reactionController.clear();
     await Promise.all([
+      loadWorkspaces(),
+      loadChannels(false, false, false),
       loadDirectConversations(workspaceID),
       loadModerationMembers(workspaceID),
       loadSlashCommands(workspaceID),
-      loadBotCommands(workspaceID),
+      loadBotCommands(workspaceID, true),
     ]);
-    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID) return;
-    await loadMessages();
-    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID) return;
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
+    if (selectedChannelID && !channels.some((channel) => channel.id === selectedChannelID)) {
+      selectedChannelID = "";
+    }
+    if (
+      selectedDirectID &&
+      !directConversations.some((conversation) => conversation.id === selectedDirectID)
+    ) {
+      selectedDirectID = "";
+    }
+    if (!selectedChannelID && !selectedDirectID) {
+      const fallbackID = defaultTargetID(workspaceID);
+      if (fallbackID) {
+        const fallbackDirect = directConversations.some((conversation) => conversation.id === fallbackID);
+        selectedDirectID = fallbackDirect ? fallbackID : "";
+        selectedChannelID = fallbackDirect ? "" : fallbackID;
+        if (!fallbackDirect) rememberLastChannel(workspaceID, fallbackID);
+        await navigateToApp(workspaceID, fallbackID, true);
+      }
+    }
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
+    await loadMessages(preserveScroll);
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     if (selectedThreadID && selectedThread?.id === selectedThreadID) {
       await refreshThread(selectedThreadID, selectedThread);
     }
@@ -2666,7 +2748,16 @@
       return;
     }
     if (event.type === "bot_command.updated") {
-      if (event.workspace_id === selectedWorkspaceID) await loadBotCommands(event.workspace_id);
+      // Cursorless command updates represent replaceable latest state. Detach the
+      // fetch so a delayed response cannot block a newer invalidation; the loader
+      // serial makes only the latest request authoritative.
+      if (event.workspace_id === selectedWorkspaceID) {
+        void loadBotCommands(event.workspace_id, true).catch((error) => {
+          if (event.workspace_id !== selectedWorkspaceID) return;
+          status = error instanceof Error ? error.message : "Could not refresh bot commands";
+          connectRealtimeSocket();
+        });
+      }
       return;
     }
     if (event.type === "bot.deleted") {

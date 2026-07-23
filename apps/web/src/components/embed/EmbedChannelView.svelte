@@ -55,13 +55,12 @@
   let messageInput = $state<HTMLTextAreaElement | null>(null);
   let messageList = $state<MessageListHandle | null>(null);
   let sendError = $state("");
+  let realtimeError = $state("");
   let sending = $state(false);
   let selectedImage = $state<{ url: string; title: string } | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let syncPending = false;
-  let syncQueued = false;
   let failedSubmission: MessageSubmission | null = null;
 
   const mentionPeople = $derived.by(() => {
@@ -221,7 +220,43 @@
     }
   }
 
-  async function syncNewMessages() {
+  async function reconcileChannelSnapshot(isCurrent: () => boolean = () => true) {
+    if (!route || !channel || viewState !== "ready") return;
+    const workspaceID = route.workspace_id;
+    const channelID = channel.id;
+    try {
+      const [channelData, page] = await Promise.all([
+        api<{ channels: Channel[] }>(
+          `/api/workspaces/${encodeURIComponent(workspaceID)}/channels`,
+        ),
+        api<MessagePage>(`/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`),
+      ]);
+      if (
+        !isCurrent() ||
+        route?.workspace_id !== workspaceID ||
+        channel?.id !== channelID ||
+        viewState !== "ready"
+      ) {
+        return;
+      }
+      const refreshed = channelData.channels.find((candidate) => candidate.id === channelID);
+      if (!refreshed) throw new APIError(404, "Channel not found");
+      channel = refreshed;
+      applyPage(page, "replace");
+    } catch (error) {
+      const stillCurrent =
+        isCurrent() &&
+        route?.workspace_id === workspaceID &&
+        channel?.id === channelID &&
+        viewState === "ready";
+      if (stillCurrent && error instanceof APIError && [401, 403, 404].includes(error.status)) {
+        handleLoadError(error);
+      }
+      if (stillCurrent) throw error;
+    }
+  }
+
+  async function syncNewMessages(isCurrent: () => boolean = () => true) {
     if (!channel || viewState !== "ready") return;
     const channelID = channel.id;
     try {
@@ -229,7 +264,9 @@
         const latest = await api<MessagePage>(
           `/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`,
         );
-        if (channel?.id === channelID && viewState === "ready") applyPage(latest, "replace");
+        if (isCurrent() && channel?.id === channelID && viewState === "ready") {
+          applyPage(latest, "replace");
+        }
         return;
       }
       let cursor = newestSeq;
@@ -237,45 +274,28 @@
         const page = await api<MessagePage>(
           `/api/channels/${encodeURIComponent(channelID)}/messages?after_seq=${encodeURIComponent(String(cursor))}&limit=100`,
         );
-        if (channel?.id !== channelID || viewState !== "ready") return;
+        if (!isCurrent() || channel?.id !== channelID || viewState !== "ready") return;
         applyPage(page, "append");
         const nextCursor = page.newest_seq || cursor;
         if (!page.has_newer || nextCursor <= cursor) return;
         cursor = nextCursor;
       }
-      queueMessageSync();
+      throw new Error("Realtime message recovery exceeded its page limit");
     } catch (error) {
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
-      } else {
-        sendError = readableAPIError(error, "Could not recover newer messages.");
       }
+      throw error;
     }
   }
 
-  function queueMessageSync() {
-    if (syncPending) {
-      syncQueued = true;
-      return;
-    }
-    syncPending = true;
-    queueMicrotask(() => {
-      void syncNewMessages().finally(() => {
-        syncPending = false;
-        if (syncQueued) {
-          syncQueued = false;
-          queueMessageSync();
-        }
-      });
-    });
-  }
-
-  async function refreshMessage(messageID: string) {
+  async function refreshMessage(messageID: string, isCurrent: () => boolean = () => true) {
     if (!messages.some((message) => message.id === messageID)) return;
     try {
       const data = await api<{ message: Message }>(
         `/api/messages/${encodeURIComponent(messageID)}`,
       );
+      if (!isCurrent()) return;
       messages = messages.map((message) =>
         message.id === data.message.id ? data.message : message,
       );
@@ -284,15 +304,17 @@
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
       }
+      throw error;
     }
   }
 
-  async function refreshChannelMetadata() {
+  async function refreshChannelMetadata(isCurrent: () => boolean = () => true) {
     if (!route || !channel) return;
     try {
       const data = await api<{ channels: Channel[] }>(
         `/api/workspaces/${encodeURIComponent(route.workspace_id)}/channels`,
       );
+      if (!isCurrent()) return;
       const refreshed = data.channels.find((candidate) => candidate.id === channel?.id);
       if (!refreshed) throw new APIError(404, "Channel not found");
       channel = refreshed;
@@ -300,6 +322,7 @@
       if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
       }
+      throw error;
     }
   }
 
@@ -307,21 +330,30 @@
     return event.channel_id || event.payload.channel_id || "";
   }
 
-  function handleRealtimeEvent(event: RealtimeEvent) {
+  async function handleRealtimeEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     if (!channel || eventChannelID(event) !== channel.id) return;
     if (event.type === "message.created") {
-      queueMessageSync();
+      const eventSeq = event.seq || event.payload.seq || 0;
+      if (eventSeq > 0 && eventSeq <= newestSeq) return;
+      await syncNewMessages(isCurrent);
       return;
     }
     if (event.type === "message.updated" || event.type === "message.deleted") {
-      if (event.payload.message_id) void refreshMessage(event.payload.message_id);
+      if (event.payload.message_id) await refreshMessage(event.payload.message_id, isCurrent);
       return;
     }
     if (event.type === "reaction.added" || event.type === "reaction.removed") {
       reactionController.applyEvent(event);
       return;
     }
-    if (event.type === "channel.updated") void refreshChannelMetadata();
+    if (event.type === "channel.updated") await refreshChannelMetadata(isCurrent);
+  }
+
+  function reportRealtimeError(error: unknown) {
+    if (viewState === "ready") {
+      realtimeError = readableAPIError(error, "Could not process a realtime update.");
+      sendError = realtimeError;
+    }
   }
 
   function connectSocket(workspaceID: string) {
@@ -329,9 +361,15 @@
     socket = connectRealtime({
       workspaceID,
       onEvent: handleRealtimeEvent,
-      onStatusChange: (connected) => {
-        if (connected) queueMessageSync();
+      onOpen: async (isCurrent, authoritativeResync) => {
+        if (authoritativeResync) {
+          await reconcileChannelSnapshot(isCurrent);
+        }
+        if (!isCurrent()) return;
+        if (sendError === realtimeError) sendError = "";
+        realtimeError = "";
       },
+      onError: reportRealtimeError,
     });
   }
 

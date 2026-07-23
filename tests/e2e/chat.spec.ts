@@ -1425,14 +1425,9 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
   const generalRoute = await createGeneralChannelRoute(page, "Mobile geometry");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-<<<<<<< HEAD
     await page.goto(generalRoute);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
-=======
-    await page.goto("/app");
     await expect(activeChannelHeading(page)).toBeVisible();
->>>>>>> b188120 (fix: harden realtime recovery)
     await expect
       .poll(() =>
         page.evaluate(

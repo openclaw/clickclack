@@ -32,6 +32,8 @@ Commands:
   messages list
   threads open
   threads reply
+  reactions add
+  reactions remove
 ```
 
 Client commands accept these common flags before the command or on the command
@@ -254,6 +256,17 @@ clickclack --server http://localhost:8080 --token sst_... threads reply msg_... 
 inline-quote an existing message in the same channel/thread (see
 [features/replies.md](features/replies.md)). `--plain` prints only the
 created message ID; `--json` prints the API response.
+
+Reaction commands use the existing public reaction API:
+
+```sh
+clickclack reactions add msg_01kr... "👍"
+clickclack reactions remove msg_01kr... "👍"
+```
+
+Human output confirms the action without echoing the reaction value. `--json`
+prints the API's `{event,reactions}` response. `--plain` is unsupported and
+fails before making a request.
 
 ## `canary`
 

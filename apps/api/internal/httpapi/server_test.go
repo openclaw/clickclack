@@ -266,6 +266,21 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 		t.Fatalf("expected duplicate reaction no-op, status=%d response=%#v", duplicateStatus, duplicateReaction)
 	}
 	deleteJSON(t, server.URL+"/api/messages/"+created.Message.ID+"/reactions/lobster")
+	slashEmoji := ":claw:/blue"
+	slashReaction := postJSON[struct {
+		Event     store.Event             `json:"event"`
+		Reactions []store.ReactionSummary `json:"reactions"`
+	}](t, server.URL+"/api/messages/"+created.Message.ID+"/reactions", map[string]string{"emoji": slashEmoji})
+	if slashReaction.Event.Type != "reaction.added" || len(slashReaction.Reactions) != 1 || slashReaction.Reactions[0].Emoji != slashEmoji {
+		t.Fatalf("unexpected slash reaction response: %#v", slashReaction)
+	}
+	removedSlashReaction := deleteJSONAsUser[struct {
+		Event     store.Event             `json:"event"`
+		Reactions []store.ReactionSummary `json:"reactions"`
+	}](t, owner.ID, server.URL+"/api/messages/"+created.Message.ID+"/reactions/"+url.PathEscape(slashEmoji))
+	if removedSlashReaction.Event.Type != "reaction.removed" || len(removedSlashReaction.Reactions) != 0 {
+		t.Fatalf("slash reaction was not removed: %#v", removedSlashReaction)
+	}
 
 	dm := postJSON[struct {
 		Conversation store.DirectConversation `json:"conversation"`

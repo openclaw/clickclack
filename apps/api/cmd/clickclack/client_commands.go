@@ -313,6 +313,66 @@ func (c apiClient) threadReply(messageID string, args []string) error {
 	return c.write(result, result.Message.ID, fmt.Sprintf("replied %s to %s\n", result.Message.ID, messageID))
 }
 
+type reactionMutationResponse struct {
+	Event     store.Event             `json:"event"`
+	Reactions []store.ReactionSummary `json:"reactions"`
+}
+
+func (c apiClient) reactions(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: clickclack reactions <add|remove> <message-id> <emoji>")
+	}
+	action := args[0]
+	if action != "add" && action != "remove" {
+		return fmt.Errorf("unknown reactions command %q", action)
+	}
+
+	opts := c.opts
+	flags := flag.NewFlagSet("reactions "+action, flag.ExitOnError)
+	addClientFlags(flags, &opts)
+	var rest []string
+	if len(args) >= 3 && !strings.HasPrefix(args[1], "-") {
+		rest = args[1:3]
+		if err := flags.Parse(args[3:]); err != nil {
+			return err
+		}
+		if len(flags.Args()) != 0 {
+			return fmt.Errorf("usage: clickclack reactions %s <message-id> <emoji>", action)
+		}
+	} else {
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		rest = flags.Args()
+	}
+	if len(rest) != 2 {
+		return fmt.Errorf("usage: clickclack reactions %s <message-id> <emoji>", action)
+	}
+	if opts.Plain {
+		return errors.New("--plain is not supported for reaction commands; omit it or use --json")
+	}
+	c = c.withOptions(opts, true)
+
+	messageID, emoji := rest[0], rest[1]
+	messagePath := "/api/messages/" + url.PathEscape(messageID) + "/reactions"
+	method := http.MethodPost
+	var body any = map[string]string{"emoji": emoji}
+	pastTense := "added"
+	if action == "remove" {
+		method = http.MethodDelete
+		messagePath += "/" + url.PathEscape(emoji)
+		body = nil
+		pastTense = "removed"
+	}
+
+	var result reactionMutationResponse
+	if err := c.doJSON(context.Background(), method, messagePath, body, &result); err != nil {
+		return err
+	}
+	human := fmt.Sprintf("reaction %s on %s\n", pastTense, url.PathEscape(messageID))
+	return c.write(result, "", human)
+}
+
 func parseBodyCommand(name string, args []string, opts *clientOptions) (*string, *bool, *string, *string, []string, error) {
 	flags := flag.NewFlagSet(name, flag.ExitOnError)
 	addClientFlags(flags, opts)

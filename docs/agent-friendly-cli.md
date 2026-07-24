@@ -37,6 +37,7 @@ Implemented now:
 - `channels list`.
 - `send`, `messages send`, `messages list`.
 - `threads open`, `threads reply`, and `reply`.
+- `reactions add` and `reactions remove`.
 - `canary` for a correlated human-to-OpenClaw quoted-reply check.
 - `--server`, `--token`, `--user` / `--user-id`, `--workspace`, `--channel`,
   `--json`, `--plain`, `--no-input`, and `--verbose`.
@@ -45,7 +46,6 @@ Still target-only:
 
 - `workspaces use`, `channels use`, `channels create`.
 - `messages tail`, `messages watch`, `events tail`.
-- reactions from the CLI.
 - Stable non-generic exit-code mapping.
 
 ```text

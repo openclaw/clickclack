@@ -84,6 +84,8 @@ func client(args []string) error {
 		return c.messages(rest[1:])
 	case "threads", "thread":
 		return c.threads(rest[1:])
+	case "reactions":
+		return c.reactions(rest[1:])
 	case "reply":
 		if len(rest) < 2 {
 			return errors.New("usage: clickclack reply <message-id> [body]")

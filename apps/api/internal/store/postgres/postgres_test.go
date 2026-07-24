@@ -124,6 +124,52 @@ func TestWorkspaceIconMigrationUpgradesExistingData(t *testing.T) {
 	}
 }
 
+func TestChannelDescriptionMigrationLeavesExistingRowsUnset(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	applyPostgresMigrationsBefore(t, ctx, st, "0032_channel_description.sql")
+
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, handle, created_at)
+		VALUES ('usr_channel_description_owner', 'Channel Description Owner', 'channel-description-owner', $1)`,
+		now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspaces (id, route_id, name, slug, created_at)
+		VALUES ('wsp_channel_description_upgrade', 'THQDESCRIPTION01', 'Channel Description Upgrade', 'channel-description-upgrade', $1)`,
+		now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES ('wsp_channel_description_upgrade', 'usr_channel_description_owner', 'owner', $1)`,
+		now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO channels (id, route_id, workspace_id, name, kind, created_at)
+		VALUES ('chn_channel_description_upgrade', 'CDESCRIPTION01', 'wsp_channel_description_upgrade', 'existing', 'public', $1)`,
+		now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := st.GetChannel(ctx, "chn_channel_description_upgrade", "usr_channel_description_owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if channel.Description != nil {
+		t.Fatalf("existing channel description should remain unset: %#v", channel)
+	}
+}
+
 func TestPostgresStoreSmoke(t *testing.T) {
 	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
 	if dsn == "" {

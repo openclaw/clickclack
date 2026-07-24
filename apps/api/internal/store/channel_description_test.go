@@ -20,6 +20,7 @@ func TestNormalizeChannelDescription(t *testing.T) {
 		{name: "279 code points", input: strings.Repeat("é", 279), want: stringPointer(strings.Repeat("é", 279))},
 		{name: "280 code points", input: strings.Repeat("é", 280), want: stringPointer(strings.Repeat("é", 280))},
 		{name: "281 code points", input: strings.Repeat("é", 281), wantErr: true},
+		{name: "281 code points before trimming", input: " " + strings.Repeat("é", 279) + " ", wantErr: true},
 		{name: "line feed", input: "one\ntwo", wantErr: true},
 		{name: "carriage return", input: "one\rtwo", wantErr: true},
 		{name: "tab", input: "one\ttwo", wantErr: true},

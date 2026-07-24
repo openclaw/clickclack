@@ -2502,6 +2502,10 @@ components:
       properties:
         name:
           type: string
+        description:
+          type: string
+          maxLength: 280
+          description: Optional single-line plain-text channel purpose. Leading and trailing whitespace is trimmed; line breaks and control characters are rejected.
         kind:
           type: string
           default: public
@@ -2551,6 +2555,10 @@ components:
       properties:
         name:
           type: string
+        description:
+          type: string
+          maxLength: 280
+          description: Optional single-line plain-text channel purpose. Send an empty string to clear it; omit it to preserve the current value.
         kind:
           type: string
         archived:
@@ -2781,6 +2789,10 @@ components:
           type: string
         name:
           type: string
+        description:
+          type: string
+          maxLength: 280
+          description: Optional single-line plain-text channel purpose.
         kind:
           type: string
         created_at:

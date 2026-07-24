@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -21,15 +23,21 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name            string  `json:"name"`
-		Kind            string  `json:"kind"`
-		Archived        *bool   `json:"archived"`
-		ExternalManaged *bool   `json:"external_managed"`
-		ExternalRef     *string `json:"external_ref"`
-		ExternalURL     *string `json:"external_url"`
-		SidebarSection  *string `json:"sidebar_section"`
+		Name            string          `json:"name"`
+		Description     json.RawMessage `json:"description"`
+		Kind            string          `json:"kind"`
+		Archived        *bool           `json:"archived"`
+		ExternalManaged *bool           `json:"external_managed"`
+		ExternalRef     *string         `json:"external_ref"`
+		ExternalURL     *string         `json:"external_url"`
+		SidebarSection  *string         `json:"sidebar_section"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	description, err := decodeOptionalStringField(body.Description, "description")
+	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -40,6 +48,7 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		ChannelID:       chi.URLParam(r, "channel_id"),
 		UserID:          act.user.ID,
 		Name:            body.Name,
+		Description:     description,
 		Kind:            body.Kind,
 		Archived:        body.Archived,
 		ExternalManaged: body.ExternalManaged,
@@ -51,6 +60,20 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		s.publishEvent(r.Context(), event)
 	}
 	writeResult(w, map[string]any{"channel": channel, "event": event}, err)
+}
+
+func decodeOptionalStringField(raw json.RawMessage, field string) (*string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, errors.New(field + " must not be null")
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, errors.New(field + " must be a string")
+	}
+	return &value, nil
 }
 
 func (s *Server) updateMessage(w http.ResponseWriter, r *http.Request) {

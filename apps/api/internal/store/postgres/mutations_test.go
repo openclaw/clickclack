@@ -28,6 +28,7 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 		WorkspaceID:     workspace.ID,
 		UserID:          owner.ID,
 		Name:            "managed-session",
+		Description:     "Coordinate the Postgres rollout",
 		ExternalManaged: true,
 		ExternalRef:     "session:postgres",
 		ExternalURL:     "https://control.example.com/sessions/postgres",
@@ -36,7 +37,7 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !channel.ExternalManaged || channel.ExternalRef == nil || channel.ExternalURL == nil || channel.SidebarSection == nil {
+	if channel.Description == nil || *channel.Description != "Coordinate the Postgres rollout" || !channel.ExternalManaged || channel.ExternalRef == nil || channel.ExternalURL == nil || channel.SidebarSection == nil {
 		t.Fatalf("unexpected created managed channel: %#v", channel)
 	}
 	clear := ""
@@ -45,6 +46,7 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 		ChannelID:      channel.ID,
 		UserID:         owner.ID,
 		Archived:       &archived,
+		Description:    &clear,
 		ExternalRef:    &clear,
 		ExternalURL:    &clear,
 		SidebarSection: &clear,
@@ -52,7 +54,7 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.ExternalRef != nil || updated.ExternalURL != nil || updated.SidebarSection != nil || updated.ArchivedAt == nil {
+	if updated.Description != nil || updated.ExternalRef != nil || updated.ExternalURL != nil || updated.SidebarSection != nil || updated.ArchivedAt == nil {
 		t.Fatalf("managed fields were not cleared: %#v", updated)
 	}
 	payload, ok := event.Payload.(map[string]any)

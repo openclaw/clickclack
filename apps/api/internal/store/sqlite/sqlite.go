@@ -556,10 +556,15 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 	if err := requireNoModerationBlockTx(ctx, tx, input.WorkspaceID, input.UserID); err != nil {
 		return store.Channel{}, store.Event{}, err
 	}
+	description, err := store.NormalizeChannelDescription(input.Description)
+	if err != nil {
+		return store.Channel{}, store.Event{}, err
+	}
 	ch := store.Channel{
 		ID:              newID("chn"),
 		WorkspaceID:     input.WorkspaceID,
 		Name:            slug(input.Name),
+		Description:     description,
 		Kind:            input.Kind,
 		CreatedAt:       now(),
 		ExternalManaged: input.ExternalManaged,
@@ -588,6 +593,7 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 			RouteID:         sqlText(ch.RouteID),
 			WorkspaceID:     ch.WorkspaceID,
 			Name:            ch.Name,
+			Description:     nullFromPtr(ch.Description),
 			Kind:            ch.Kind,
 			CreatedAt:       ch.CreatedAt,
 			ExternalManaged: databaseBool(ch.ExternalManaged),

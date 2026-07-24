@@ -52,19 +52,24 @@ directory does not include moderation state.
 ```http
 GET  /api/workspaces/{workspace_id}/channels  # list, ordered by name
 POST /api/workspaces/{workspace_id}/channels  # create
-PATCH /api/channels/{channel_id}              # rename, change kind, archive
+PATCH /api/channels/{channel_id}              # update purpose, name, kind, or archive state
 ```
 
-Create body: `{name, kind?, external_managed?, external_ref?, external_url?,
-sidebar_section?}`. `name` is slugified to keep `(workspace_id, name)` unique.
-`kind` defaults to `public`. External management is opt-in and does not change
-channel authorization: it records an opaque identity and optional deep link for
-the application that owns the channel lifecycle.
+Create body: `{name, description?, kind?, external_managed?, external_ref?,
+external_url?, sidebar_section?}`. `name` is slugified to keep
+`(workspace_id, name)` unique. `description` is an optional single-line
+plain-text purpose of at most 280 Unicode code points. It is trimmed on write
+and rejects line breaks and control characters. `kind` defaults to `public`.
+External management is opt-in and does not change channel authorization: it
+records an opaque identity and optional deep link for the application that owns
+the channel lifecycle.
 
-`PATCH` accepts any subset of `{name, kind, archived, external_managed,
-external_ref, external_url, sidebar_section}`. Setting `archived=true` fills
-`archived_at`; `archived=false` clears it. Sending an empty string for any of
-the nullable external or sidebar fields clears that field.
+`PATCH` accepts any subset of `{name, description, kind, archived,
+external_managed, external_ref, external_url, sidebar_section}`. Omitting
+`description` preserves it; an empty string clears it; JSON `null` is rejected.
+Setting `archived=true` fills `archived_at`; `archived=false` clears it. Sending
+an empty string for any of the nullable external or sidebar fields clears that
+field.
 
 Archived channels remain addressable and readable, but the web sidebar removes
 them from the normal channel list and places them in a collapsed Archived group.
@@ -72,7 +77,9 @@ Non-archived channels with a non-empty `sidebar_section` appear in an
 alphabetized labeled subgroup; channels without one keep the original flat-list
 placement. Section and Archived disclosure state is browser-local and persisted
 per workspace. `external_managed` adds a small row marker, while a safe HTTP(S)
-`external_url` adds an external-open action to the channel header.
+`external_url` adds an external-open action to the channel header. A non-empty
+description appears as a compact **Purpose** line in the main and embedded
+channel headers; expanding it reveals the complete plain-text value.
 
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
@@ -124,4 +131,4 @@ first direct conversation.
 
 - Private channels with explicit member sets (planned but not modeled in V1).
 - Arbitrary HTTP member invites/additions.
-- Channel topic, description, or pinned messages.
+- Channel topic or pinned messages.

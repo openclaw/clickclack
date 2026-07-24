@@ -1557,6 +1557,8 @@ export interface components {
     };
     CreateChannelRequest: {
       name: string;
+      /** @description Optional single-line plain-text channel purpose. Leading and trailing whitespace is trimmed; line breaks and control characters are rejected. */
+      description?: string;
       /** @default public */
       kind: string;
       external_managed?: boolean;
@@ -1587,6 +1589,8 @@ export interface components {
     };
     UpdateChannelRequest: {
       name?: string;
+      /** @description Optional single-line plain-text channel purpose. Send an empty string to clear it; omit it to preserve the current value. */
+      description?: string;
       kind?: string;
       archived?: boolean;
       external_managed?: boolean;
@@ -1722,6 +1726,8 @@ export interface components {
       route_id: string;
       workspace_id: string;
       name: string;
+      /** @description Optional single-line plain-text channel purpose. */
+      description?: string;
       kind: string;
       /** Format: date-time */
       created_at: string;

@@ -2,6 +2,7 @@
   import { dmTitle } from "../../lib/chat/people";
   import { safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, DirectConversation } from "../../lib/types";
+  import ChannelPurpose from "../channels/ChannelPurpose.svelte";
 
   type Props = {
     selectedDirect?: DirectConversation;
@@ -41,7 +42,10 @@
     {#if selectedDirect}
       <h1 class="with-glyph dm">{`@${dmTitle(selectedDirect, currentUserID)}`}</h1>
     {:else if selectedChannel}
-      <h1 class="with-glyph channel">{`#${selectedChannel.name}`}</h1>
+      <div class="topbar-channel-copy">
+        <h1 class="with-glyph channel">{`#${selectedChannel.name}`}</h1>
+        <ChannelPurpose description={selectedChannel.description} />
+      </div>
     {:else}
       <h1 class="with-glyph">ClickClack</h1>
     {/if}
@@ -96,3 +100,11 @@
     </button>
   </div>
 </header>
+
+<style>
+  .topbar-channel-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+</style>

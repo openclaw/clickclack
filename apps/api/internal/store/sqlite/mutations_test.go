@@ -146,6 +146,7 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 		WorkspaceID:     workspaces[0].ID,
 		UserID:          owner.ID,
 		Name:            "managed-session",
+		Description:     "  Coordinate the alpha rollout 🚀  ",
 		ExternalManaged: true,
 		ExternalRef:     "  session:alpha  ",
 		ExternalURL:     "  https://control.example.com/sessions/alpha  ",
@@ -154,7 +155,7 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !channel.ExternalManaged || channel.ExternalRef == nil || *channel.ExternalRef != "session:alpha" || channel.ExternalURL == nil || *channel.ExternalURL != "https://control.example.com/sessions/alpha" || channel.SidebarSection == nil || *channel.SidebarSection != "Sessions" {
+	if channel.Description == nil || *channel.Description != "Coordinate the alpha rollout 🚀" || !channel.ExternalManaged || channel.ExternalRef == nil || *channel.ExternalRef != "session:alpha" || channel.ExternalURL == nil || *channel.ExternalURL != "https://control.example.com/sessions/alpha" || channel.SidebarSection == nil || *channel.SidebarSection != "Sessions" {
 		t.Fatalf("unexpected created managed channel: %#v", channel)
 	}
 	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
@@ -168,17 +169,29 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 			break
 		}
 	}
-	if listed.ID == "" || !listed.ExternalManaged || listed.ExternalRef == nil || *listed.ExternalRef != "session:alpha" || listed.ExternalURL == nil || listed.SidebarSection == nil {
+	if listed.ID == "" || listed.Description == nil || *listed.Description != "Coordinate the alpha rollout 🚀" || !listed.ExternalManaged || listed.ExternalRef == nil || *listed.ExternalRef != "session:alpha" || listed.ExternalURL == nil || listed.SidebarSection == nil {
 		t.Fatalf("managed fields missing from channel list: %#v", listed)
 	}
 
 	clear := ""
 	managed := false
 	archived := true
+	preserved, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{
+		ChannelID: channel.ID,
+		UserID:    owner.ID,
+		Archived:  &archived,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preserved.Description == nil || *preserved.Description != "Coordinate the alpha rollout 🚀" {
+		t.Fatalf("omitted description did not preserve the current value: %#v", preserved)
+	}
 	updated, event, err := st.UpdateChannel(ctx, store.UpdateChannelInput{
 		ChannelID:       channel.ID,
 		UserID:          owner.ID,
 		Archived:        &archived,
+		Description:     &clear,
 		ExternalManaged: &managed,
 		ExternalRef:     &clear,
 		ExternalURL:     &clear,
@@ -187,12 +200,41 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.ExternalManaged || updated.ExternalRef != nil || updated.ExternalURL != nil || updated.SidebarSection != nil || updated.ArchivedAt == nil {
+	if updated.Description != nil || updated.ExternalManaged || updated.ExternalRef != nil || updated.ExternalURL != nil || updated.SidebarSection != nil || updated.ArchivedAt == nil {
 		t.Fatalf("managed fields were not cleared: %#v", updated)
 	}
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true || payload["channel_id"] != channel.ID {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestChannelDescriptionMigrationLeavesExistingRowsUnset(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "channel-description-migration.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	applySQLiteMigrationsBefore(t, ctx, st, "0039_channel_description.sql")
+	owner, err := st.EnsureBootstrap(ctx, "Migration Owner", "channel-description-migration@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(channels) == 0 || channels[0].Description != nil {
+		t.Fatalf("existing channel description should remain unset: %#v", channels)
 	}
 }
 

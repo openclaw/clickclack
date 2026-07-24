@@ -862,20 +862,31 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name            string `json:"name"`
-		Kind            string `json:"kind"`
-		ExternalManaged bool   `json:"external_managed"`
-		ExternalRef     string `json:"external_ref"`
-		ExternalURL     string `json:"external_url"`
-		SidebarSection  string `json:"sidebar_section"`
+		Name            string          `json:"name"`
+		Description     json.RawMessage `json:"description"`
+		Kind            string          `json:"kind"`
+		ExternalManaged bool            `json:"external_managed"`
+		ExternalRef     string          `json:"external_ref"`
+		ExternalURL     string          `json:"external_url"`
+		SidebarSection  string          `json:"sidebar_section"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	descriptionPatch, err := decodeOptionalStringField(body.Description, "description")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	description := ""
+	if descriptionPatch != nil {
+		description = *descriptionPatch
+	}
 	channel, event, err := s.store.CreateChannel(r.Context(), store.CreateChannelInput{
 		WorkspaceID:     chi.URLParam(r, "workspace_id"),
 		Name:            body.Name,
+		Description:     description,
 		Kind:            body.Kind,
 		UserID:          act.user.ID,
 		ExternalManaged: body.ExternalManaged,

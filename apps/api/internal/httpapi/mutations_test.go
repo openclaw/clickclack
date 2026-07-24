@@ -73,12 +73,13 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Channel store.Channel `json:"channel"`
 	}](t, server.URL+"/api/workspaces/"+workspaces[0].ID+"/channels", map[string]any{
 		"name":             "managed-http",
+		"description":      "  Coordinate HTTP rollout  ",
 		"external_managed": true,
 		"external_ref":     "session:http",
 		"external_url":     "https://control.example.com/sessions/http",
 		"sidebar_section":  "Sessions",
 	}).Channel
-	if !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
+	if managedChannel.Description == nil || *managedChannel.Description != "Coordinate HTTP rollout" || !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
 		t.Fatalf("managed channel fields missing from create response: %#v", managedChannel)
 	}
 	clear := ""
@@ -87,16 +88,20 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Event   store.Event   `json:"event"`
 	}](t, server.URL+"/api/channels/"+managedChannel.ID, map[string]any{
 		"archived":        true,
+		"description":     clear,
 		"external_ref":    clear,
 		"external_url":    clear,
 		"sidebar_section": clear,
 	})
-	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
+	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.Description != nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
 		t.Fatalf("managed channel fields not updated through HTTP: %#v", archivedManaged.Channel)
 	}
 	if payload, ok := archivedManaged.Event.Payload.(map[string]any); !ok || payload["archived"] != true {
 		t.Fatalf("archive state missing from channel.updated metadata: %#v", archivedManaged.Event.Payload)
 	}
+	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+managedChannel.ID, strings.NewReader(`{"description":null}`), http.StatusBadRequest)
+	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+managedChannel.ID, strings.NewReader(`{"description":"line one\nline two"}`), http.StatusBadRequest)
+	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+managedChannel.ID, strings.NewReader(`{"description":"`+strings.Repeat("é", 281)+`"}`), http.StatusBadRequest)
 	message := postJSON[struct {
 		Message store.Message `json:"message"`
 	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "original"}).Message

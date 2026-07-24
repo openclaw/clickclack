@@ -266,6 +266,13 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	if kind == "" {
 		kind = ch.Kind
 	}
+	description := ch.Description
+	if input.Description != nil {
+		description, err = store.NormalizeChannelDescription(*input.Description)
+		if err != nil {
+			return store.Channel{}, store.Event{}, err
+		}
+	}
 	archivedValue := ch.ArchivedAt
 	if input.Archived != nil {
 		archivedValue = nil
@@ -292,6 +299,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	}
 	if err := qtx.UpdateChannel(ctx, storedb.UpdateChannelParams{
 		Name:            name,
+		Description:     nullFromPtr(description),
 		Kind:            kind,
 		ArchivedAt:      nullFromPtr(archivedValue),
 		ExternalManaged: databaseBool(externalManaged),
@@ -307,6 +315,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 		return store.Channel{}, store.Event{}, err
 	}
 	ch.Name = name
+	ch.Description = description
 	ch.Kind = kind
 	ch.ArchivedAt = archivedValue
 	ch.ExternalManaged = externalManaged

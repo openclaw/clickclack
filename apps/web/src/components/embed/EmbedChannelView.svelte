@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import ChatComposer from "../composer/ChatComposer.svelte";
+  import ChannelPurpose from "../channels/ChannelPurpose.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
@@ -485,10 +486,13 @@
 {#if viewState === "ready" && channel && route}
   <main class="embed-channel-shell" aria-label="Embedded channel">
     <header class="embed-channel-header">
-      <div>
-        <span class="embed-channel-glyph" aria-hidden="true">#</span>
-        <h1>{channel.name}</h1>
-        {#if channel.archived_at}<span class="embed-channel-status">Archived</span>{/if}
+      <div class="embed-channel-heading">
+        <div class="embed-channel-title">
+          <span class="embed-channel-glyph" aria-hidden="true">#</span>
+          <h1>{channel.name}</h1>
+          {#if channel.archived_at}<span class="embed-channel-status">Archived</span>{/if}
+        </div>
+        <ChannelPurpose description={channel.description} />
       </div>
     </header>
     <MessageList
@@ -602,7 +606,13 @@
     background: var(--panel);
   }
 
-  .embed-channel-header > div {
+  .embed-channel-heading {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .embed-channel-title {
     display: flex;
     min-width: 0;
     align-items: center;

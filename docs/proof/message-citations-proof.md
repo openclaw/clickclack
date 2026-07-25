@@ -26,3 +26,23 @@ The scenario verifies:
 `message-citation-highlight.png` captures the direct citation before the first
 reply. `message-citation-fallback.png` captures the same URL after the first
 reply with the clipboard fallback open.
+
+## Channel and direct-message persistence boundary
+
+Channel roots and direct-message roots have separate creation paths:
+
+- `CreateMessage` accepts a `ChannelID`, inserts through
+  `InsertChannelMessage`, and eagerly assigns the channel root an `M...` route;
+- `CreateDirectMessage` accepts a `ConversationID`, inserts through
+  `InsertDirectMessage`, and does not assign an `M...` route; and
+- `EnsureThreadRouteID` preserves the existing compatible lazy route for a
+  direct-message root when that thread path is actually used.
+
+The same boundary is covered against both stores:
+
+```sh
+go test ./apps/api/internal/store/sqlite -run TestRouteIDsCreationResolutionAndPermissions
+CLICKCLACK_POSTGRES_TEST_DSN="$POSTGRES_DSN" \
+  go test ./apps/api/internal/store/postgres \
+  -run TestMessageRouteIDCreationRespectsChannelAndDirectBoundaries
+```

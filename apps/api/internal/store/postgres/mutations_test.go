@@ -141,6 +141,13 @@ func TestManagedChannelReconciliationConvergesPostgres(t *testing.T) {
 	}
 }
 
+func TestManagedChannelReconcileRetriesConcurrentNameConflictPostgres(t *testing.T) {
+	t.Parallel()
+	if !isManagedChannelReconcileConflict(errors.New(`duplicate key value violates unique constraint "channels_workspace_id_name_key"`)) {
+		t.Fatal("expected concurrent channel-name collision to be retried")
+	}
+}
+
 func TestWorkspaceUpdateSerializesPartialWrites(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)

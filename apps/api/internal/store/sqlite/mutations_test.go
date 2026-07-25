@@ -320,6 +320,13 @@ func TestManagedChannelReconciliationConverges(t *testing.T) {
 	}
 }
 
+func TestManagedChannelReconcileRetriesConcurrentNameConflict(t *testing.T) {
+	t.Parallel()
+	if !isManagedChannelReconcileConflict(errors.New("UNIQUE constraint failed: channels.workspace_id, channels.name")) {
+		t.Fatal("expected concurrent channel-name collision to be retried")
+	}
+}
+
 func TestGuestChannelNameIsReserved(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

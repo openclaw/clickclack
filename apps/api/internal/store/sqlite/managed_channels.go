@@ -203,6 +203,7 @@ func isManagedChannelReconcileConflict(err error) bool {
 	message := err.Error()
 	return strings.Contains(message, "idx_channels_managed_identity") ||
 		strings.Contains(message, "channels.workspace_id, channels.external_provider, channels.external_ref") ||
+		strings.Contains(message, "channels.workspace_id, channels.name") ||
 		strings.Contains(message, "route_id") ||
 		strings.Contains(message, "database is locked")
 }

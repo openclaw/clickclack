@@ -202,6 +202,7 @@ func isManagedChannelReconcileConflict(err error) bool {
 	}
 	message := err.Error()
 	return strings.Contains(message, "idx_channels_managed_identity") ||
+		strings.Contains(message, "channels_workspace_id_name_key") ||
 		strings.Contains(message, "route_id") ||
 		strings.Contains(message, "could not serialize access")
 }

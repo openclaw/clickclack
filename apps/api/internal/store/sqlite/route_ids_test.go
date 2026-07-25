@@ -112,6 +112,10 @@ func TestRouteIDsCreationResolutionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	originalChannelRootRouteID := channelRoot.RouteID
+	if !hasRoutePrefix(originalChannelRootRouteID, "M") {
+		t.Fatalf("channel root should receive an eager M route_id: %#v", channelRoot)
+	}
 	if _, err := st.ResolveLegacyRouteTarget(ctx, owner.ID, otherWorkspace.ID, channelRoot.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected wrong workspace legacy thread route to fail closed, got %v", err)
 	}
@@ -119,8 +123,8 @@ func TestRouteIDsCreationResolutionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channelRoot.RouteID != "" {
-		t.Fatalf("wrong workspace legacy thread route should not assign M route_id: %#v", channelRoot)
+	if channelRoot.RouteID != originalChannelRootRouteID {
+		t.Fatalf("wrong workspace legacy thread route should not change M route_id: %#v", channelRoot)
 	}
 }
 
@@ -201,9 +205,10 @@ func TestRouteTargetEdgesAndThreadCreationPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if channelRoot.RouteID != "" {
-		t.Fatalf("new channel root should not eagerly get route_id: %#v", channelRoot)
+	if !hasRoutePrefix(channelRoot.RouteID, "M") {
+		t.Fatalf("new channel root should eagerly get an M route_id: %#v", channelRoot)
 	}
+	originalRouteID := channelRoot.RouteID
 	reply, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: channelRoot.ID, AuthorID: owner.ID, Body: "first reply"})
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +219,12 @@ func TestRouteTargetEdgesAndThreadCreationPaths(t *testing.T) {
 	}
 	if !hasRoutePrefix(channelRoot.RouteID, "M") {
 		t.Fatalf("thread reply path should assign root route_id: %#v", channelRoot)
+	}
+	if channelRoot.RouteID != originalRouteID {
+		t.Fatalf("first reply should preserve the root route_id: %q vs %q", originalRouteID, channelRoot.RouteID)
+	}
+	if reply.RouteID != "" {
+		t.Fatalf("thread reply should not receive a route_id: %#v", reply)
 	}
 	channelThreadTarget, err := st.ResolveRouteTarget(ctx, owner.ID, workspace.RouteID, channelRoot.RouteID)
 	if err != nil {
@@ -319,7 +330,7 @@ func TestRouteIDFaultBranches(t *testing.T) {
 	}
 }
 
-func TestRouteIDBackfillOnlyExistingThreadRoots(t *testing.T) {
+func TestRouteIDBackfillAllChannelRoots(t *testing.T) {
 	t.Parallel()
 	ctx, st, owner, workspace, channel := seededStore(t)
 
@@ -334,6 +345,29 @@ func TestRouteIDBackfillOnlyExistingThreadRoots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	channelReply, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: plainRoot.ID, AuthorID: owner.ID, Body: "plain reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Other", Email: "citation-backfill-other@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, other.ID, "member"); err != nil {
+		t.Fatal(err)
+	}
+	dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: workspace.ID,
+		UserID:      owner.ID,
+		MemberIDs:   []string{other.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dmRoot, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: dm.ID, AuthorID: owner.ID, Body: "private root"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	mustExecSQL(t, ctx, st, `DROP TRIGGER messages_route_id_immutable`)
 	mustExecSQL(t, ctx, st, `DROP TRIGGER workspaces_route_id_immutable`)
 	mustExecSQL(t, ctx, st, `DROP TRIGGER channels_route_id_immutable`)
@@ -345,11 +379,17 @@ func TestRouteIDBackfillOnlyExistingThreadRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var threadRouteID, plainRouteID, workspaceRouteID, channelRouteID sql.NullString
+	var threadRouteID, plainRouteID, replyRouteID, dmRootRouteID, workspaceRouteID, channelRouteID sql.NullString
 	if err := st.db.QueryRowContext(ctx, `SELECT route_id FROM messages WHERE id = ?`, threadRoot.ID).Scan(&threadRouteID); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.db.QueryRowContext(ctx, `SELECT route_id FROM messages WHERE id = ?`, plainRoot.ID).Scan(&plainRouteID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRowContext(ctx, `SELECT route_id FROM messages WHERE id = ?`, channelReply.ID).Scan(&replyRouteID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRowContext(ctx, `SELECT route_id FROM messages WHERE id = ?`, dmRoot.ID).Scan(&dmRootRouteID); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.db.QueryRowContext(ctx, `SELECT route_id FROM workspaces WHERE id = ?`, workspace.ID).Scan(&workspaceRouteID); err != nil {
@@ -361,8 +401,14 @@ func TestRouteIDBackfillOnlyExistingThreadRoots(t *testing.T) {
 	if !threadRouteID.Valid || !hasRoutePrefix(threadRouteID.String, "M") {
 		t.Fatalf("thread root was not backfilled: %q", threadRouteID.String)
 	}
-	if plainRouteID.Valid {
-		t.Fatalf("plain root should not be backfilled with M route_id: %q", plainRouteID.String)
+	if !plainRouteID.Valid || !hasRoutePrefix(plainRouteID.String, "M") {
+		t.Fatalf("plain channel root was not backfilled with M route_id: %q", plainRouteID.String)
+	}
+	if replyRouteID.Valid {
+		t.Fatalf("channel reply should not be backfilled with M route_id: %q", replyRouteID.String)
+	}
+	if dmRootRouteID.Valid {
+		t.Fatalf("direct-message root should not be backfilled with M route_id: %q", dmRootRouteID.String)
 	}
 	if !workspaceRouteID.Valid || !hasRoutePrefix(workspaceRouteID.String, "T") {
 		t.Fatalf("workspace was not backfilled: %q", workspaceRouteID.String)
@@ -423,8 +469,8 @@ func TestMigrateBackfillsRouteIDsOnce(t *testing.T) {
 	if !threadRouteID.Valid || !hasRoutePrefix(threadRouteID.String, "M") {
 		t.Fatalf("thread root was not backfilled: %q", threadRouteID.String)
 	}
-	if plainRouteID.Valid {
-		t.Fatalf("plain root should not receive a route_id during 0011 backfill: %q", plainRouteID.String)
+	if !plainRouteID.Valid || !hasRoutePrefix(plainRouteID.String, "M") {
+		t.Fatalf("plain channel root should receive a route_id during citation backfill: %q", plainRouteID.String)
 	}
 	if scalarCount(t, ctx, st, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, routeIDBackfillMarker) != 1 {
 		t.Fatal("route ID backfill completion marker was not recorded")

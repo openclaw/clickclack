@@ -770,6 +770,9 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err := qtx.InsertThreadState(ctx, id); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	if err := assignRouteIDTx(ctx, tx, "messages", id, 'M'); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	eventFields := map[string]string{"message_id": id, "author_id": input.AuthorID}
 	if input.TopicID != "" {
 		eventFields["topic_id"] = input.TopicID

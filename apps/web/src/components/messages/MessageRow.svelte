@@ -8,6 +8,7 @@
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
+  import CopyLinkFallback from "./CopyLinkFallback.svelte";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Upload } from "../../lib/types";
@@ -40,6 +41,7 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    citationURL?: string;
   };
 
   let {
@@ -66,6 +68,7 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    citationURL = "",
   }: Props = $props();
 
   let editSession = $derived(editController?.session(editScope));
@@ -160,6 +163,8 @@
   let showReactPicker = $state(false);
   let showMenu = $state(false);
   let copyStatus = $state<"copied" | "failed" | "">("");
+  let copyLinkFallback = $state("");
+  let copyLinkReturnFocus = $state<HTMLElement>();
   let reactPickerUp = $state(false);
   let menuUp = $state(false);
   let rowEl = $state<HTMLDivElement>();
@@ -285,6 +290,27 @@
   async function copyMessageText() {
     closeMenu();
     await writeMessageToClipboard();
+  }
+
+  async function copyMessageLink(returnFocus?: HTMLElement) {
+    closeMenu(false);
+    if (!citationURL) return;
+    copyLinkReturnFocus = returnFocus;
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(citationURL);
+      setCopyStatus("copied");
+      returnFocus?.focus();
+    } catch {
+      setCopyStatus("failed");
+      copyLinkFallback = citationURL;
+    }
+  }
+
+  async function sheetCopyLink() {
+    const returnFocus = actionSheetReturnFocus;
+    closeActionSheet();
+    await copyMessageLink(returnFocus);
   }
 
   async function writeMessageToClipboard(): Promise<boolean> {
@@ -737,6 +763,18 @@
             </svg>
             Copy text
           </button>
+          {#if citationURL}
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => void copyMessageLink(moreButton)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              Copy link
+            </button>
+          {/if}
           {#if canEditMessage && editController && editScope && !editing}
             <div class="menu-sep" role="separator"></div>
             <button type="button" role="menuitem" onclick={menuEdit}>
@@ -777,14 +815,23 @@
       canDelete={canDeleteMessage && Boolean(onDeleteMessage)}
       {deleting}
       {copyStatus}
+      canCopyLink={Boolean(citationURL)}
       onReact={sheetReact}
       onOpenThread={sheetOpenThread}
       onReply={sheetReply}
       onCopy={sheetCopy}
+      onCopyLink={sheetCopyLink}
       onEdit={sheetEdit}
       onDelete={sheetDelete}
       onClose={closeActionSheet}
       returnFocus={actionSheetReturnFocus}
+    />
+  {/if}
+  {#if copyLinkFallback}
+    <CopyLinkFallback
+      url={copyLinkFallback}
+      onClose={() => (copyLinkFallback = "")}
+      returnFocus={copyLinkReturnFocus}
     />
   {/if}
 </div>

@@ -110,8 +110,15 @@ and `/app/wsp_.../msg_...` remain compatibility inputs. The app resolves them
 through `/api/routes/{workspace_route_id}/{target_route_id}` and replaces the
 URL with the canonical public route after permission checks.
 
-Thread URLs resolve through the root message, inherit that message's channel or
-DM visibility, and then open the thread panel in the parent conversation.
+Every channel root message receives an immutable `M...` route ID when it is
+created. Its action menu can copy an absolute citation URL without changing
+the current view. Opening that URL selects and highlights the root in its
+channel; once the root has replies, the same URL also opens the thread panel.
+Replies do not receive route IDs.
+
+Existing DM thread URLs remain compatible, but the web app does not offer a
+copy-link action for direct messages. All message URLs inherit the root
+message's channel or DM visibility and grant no additional access.
 
 When a user opens a bare workspace route, the web app returns to the last
 channel that browser visited in that workspace. If that saved channel is no

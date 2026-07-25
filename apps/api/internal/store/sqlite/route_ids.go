@@ -12,7 +12,7 @@ import (
 const (
 	routeIDInsertAttempts = 5
 	routeIDMigrationName  = "0011_public_route_ids.sql"
-	routeIDBackfillMarker = "0011_public_route_ids.backfill"
+	routeIDBackfillMarker = "0011_public_route_ids.message_citations_backfill"
 )
 
 func isRouteIDConflict(err error) bool {
@@ -58,12 +58,7 @@ func (s *Store) backfillRouteIDs(ctx context.Context) error {
 	return s.backfillTableRouteIDs(ctx, "messages", "M", `
 		route_id IS NULL
 		AND parent_message_id IS NULL
-		AND EXISTS (
-		  SELECT 1
-		  FROM thread_state ts
-		  WHERE ts.root_message_id = messages.id
-		    AND ts.reply_count > 0
-		)`)
+		AND channel_id IS NOT NULL`)
 }
 
 func (s *Store) backfillTableRouteIDs(ctx context.Context, table, prefix, where string) error {

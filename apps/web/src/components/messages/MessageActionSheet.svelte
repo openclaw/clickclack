@@ -14,11 +14,13 @@
     canEdit = false,
     canDelete = false,
     deleting = false,
+    canCopyLink = false,
     copyStatus = "",
     onReact,
     onOpenThread,
     onReply,
     onCopy,
+    onCopyLink,
     onEdit,
     onDelete,
     onClose,
@@ -32,11 +34,13 @@
     canEdit?: boolean;
     canDelete?: boolean;
     deleting?: boolean;
+    canCopyLink?: boolean;
     copyStatus?: CopyStatus;
     onReact: (emoji: string) => void;
     onOpenThread: () => void;
     onReply: () => void;
     onCopy: () => void;
+    onCopyLink: () => void;
     onEdit: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -173,6 +177,14 @@
           >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
         {/if}
       </button>
+      {#if canCopyLink}
+        <button type="button" onclick={onCopyLink}>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+          Copy link
+        </button>
+      {/if}
       {#if canEdit}
         <button type="button" onclick={() => runAndClose(onEdit)}>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">

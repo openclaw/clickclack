@@ -521,6 +521,11 @@
     return targetRouteID ? `${workspacePath}/${encodeURIComponent(targetRouteID)}` : workspacePath;
   }
 
+  function citationURLFor(message: Message): string {
+    if (!message.channel_id || message.parent_message_id || !message.route_id) return "";
+    return new URL(appHref(message.workspace_id, message.route_id), window.location.origin).toString();
+  }
+
   function notificationHref(targetID: string): string {
     const targetRouteID = channels.find((channel) => channel.id === targetID)?.route_id ||
       directConversations.find((conversation) => conversation.id === targetID)?.route_id;
@@ -834,6 +839,20 @@
     activeComposerContext = "thread";
     mobileNavOpen = false;
     await refreshThread(route.target_id);
+    if (
+      !sameThread &&
+      parentChannelID &&
+      selectedThread &&
+      (selectedThread.thread_state?.reply_count ?? 0) === 0
+    ) {
+      const root = selectedThread;
+      selectedThread = null;
+      replies = [];
+      selectedThreadState = null;
+      activeComposerContext = "message";
+      await loadMessagesAround(root);
+      return true;
+    }
     if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
     return true;
   }
@@ -2271,8 +2290,14 @@
   }
 
   async function highlightMessage(messageID: string) {
-    await tick();
-    const node = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageID)}"]`);
+    let node: HTMLElement | null = null;
+    for (let attempt = 0; attempt < 10 && !node; attempt += 1) {
+      await tick();
+      node = document.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(messageID)}"]`,
+      );
+      if (!node) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
     if (!node) return;
     node.classList.add("highlight");
     window.setTimeout(() => node.classList.remove("highlight"), 1500);
@@ -3578,6 +3603,7 @@
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
       onDeleteMessage={requestMessageDelete}
+      {citationURLFor}
       {editController}
       editScope={activeConversationKey}
       onMessageEdited={applyEditedMessage}
@@ -3712,6 +3738,7 @@
         onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
         onOpenImage={openImageViewer}
         onOpenArtifact={openArtifactViewer}
+        citationURL={citationURLFor(selectedThread)}
       />
     {:else if selectedProfile}
       <ProfilePane

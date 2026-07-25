@@ -19,6 +19,7 @@
   import ReactionsBar from "../messages/ReactionsBar.svelte";
   import AddReactionButton from "../messages/AddReactionButton.svelte";
   import MessageActionSheet from "../messages/MessageActionSheet.svelte";
+  import CopyLinkFallback from "../messages/CopyLinkFallback.svelte";
 
   type Props = {
     root: Message;
@@ -34,6 +35,7 @@
     headerLabel?: string;
     headerDetail?: string;
     openHref?: string;
+    citationURL?: string;
     onClose?: () => void;
     onBack?: () => void;
     onReplyBody: (value: string) => void;
@@ -70,6 +72,7 @@
     headerLabel = "Thread",
     headerDetail,
     openHref,
+    citationURL = "",
     onClose,
     onBack,
     onReplyBody,
@@ -147,6 +150,8 @@
   let actionMessage = $state<Message>();
   let actionSheetReturnFocus = $state<HTMLElement>();
   let actionCopyStatus = $state<"copied" | "failed" | "">("");
+  let copyLinkFallback = $state("");
+  let copyLinkReturnFocus = $state<HTMLElement>();
   let longPressTimer: number | undefined;
   let longPressCleanup: (() => void) | undefined;
   let sheetCloseTimer: number | undefined;
@@ -280,6 +285,26 @@
     }
   }
 
+  async function copyRootLink(returnFocus?: HTMLElement) {
+    if (!citationURL) return;
+    copyLinkReturnFocus = returnFocus;
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(citationURL);
+      returnFocus?.focus({ preventScroll: true });
+    } catch {
+      copyLinkFallback = citationURL;
+    }
+  }
+
+  async function sheetCopyLink() {
+    const message = actionMessage;
+    if (!message || message.id !== root.id) return;
+    const returnFocus = actionSheetReturnFocus;
+    closeActionSheet();
+    await copyRootLink(returnFocus);
+  }
+
   function sheetEdit() {
     const message = actionMessage;
     const returnFocus = actionSheetReturnFocus;
@@ -379,6 +404,19 @@
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
             </svg>
           </button>
+          {#if citationURL}
+            <button
+              type="button"
+              class="thread-action-btn"
+              aria-label="Copy link"
+              data-tooltip="Copy link"
+              onclick={(event) => void copyRootLink(event.currentTarget)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </button>
+          {/if}
           {#if canEdit(root) && editController && editScope}
             <button
               type="button"
@@ -606,15 +644,24 @@
     canEdit={canEdit(actionMessage) && Boolean(editController) && Boolean(editScope)}
     canDelete={canDelete(actionMessage) && Boolean(onDeleteMessage)}
     deleting={deletingMessageIDs.has(actionMessage.id)}
+    canCopyLink={actionMessage.id === root.id && Boolean(citationURL)}
     copyStatus={actionCopyStatus}
     onReact={sheetReact}
     onOpenThread={() => {}}
     onReply={sheetReply}
     onCopy={sheetCopy}
+    onCopyLink={sheetCopyLink}
     onEdit={sheetEdit}
     onDelete={sheetDelete}
     onClose={closeActionSheet}
     returnFocus={actionSheetReturnFocus}
+  />
+{/if}
+{#if copyLinkFallback}
+  <CopyLinkFallback
+    url={copyLinkFallback}
+    onClose={() => (copyLinkFallback = "")}
+    returnFocus={copyLinkReturnFocus}
   />
 {/if}
 <ChatComposer

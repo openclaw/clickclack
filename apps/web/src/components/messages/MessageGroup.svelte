@@ -26,6 +26,7 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    citationURLFor?: (message: Message) => string;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -49,6 +50,7 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    citationURLFor,
     editController,
     editScope = "",
     onMessageEdited,
@@ -114,6 +116,7 @@
         {onRetry}
         {onDiscard}
         {onDeleteMessage}
+        citationURL={citationURLFor?.(message)}
       />
     {/each}
   </div>

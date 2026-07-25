@@ -1574,7 +1574,7 @@ export interface components {
     CreateChannelRequest: {
       name: string;
       /** @default public */
-      kind: string;
+      kind?: string;
       external_managed?: boolean;
       /** @description Opaque identity in the external managing system. */
       external_ref?: string;
@@ -1596,12 +1596,12 @@ export interface components {
        * @description Desired channel kind. Omission reconciles to public.
        * @default public
        */
-      kind: string;
+      kind?: string;
       /**
        * @description Desired archive state. Omission reconciles to open.
        * @default false
        */
-      archived: boolean;
+      archived?: boolean;
       /**
        * Format: uri
        * @description Deep link into the external managing application. Omission clears it.
@@ -1649,7 +1649,7 @@ export interface components {
        * @default markdown
        * @enum {string}
        */
-      body_format: "markdown";
+      body_format?: "markdown";
       /**
        * @description Optional ID of a message to quote. The quoted message must live in
        *     the same channel, DM conversation, or thread as the new message;

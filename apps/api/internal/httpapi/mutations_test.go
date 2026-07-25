@@ -177,14 +177,23 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	}
 	reconcileBody["name"] = "pr-125-review"
 	reconcileBody["archived"] = true
+	reconcileBody["kind"] = "private"
 	changed, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
-	if status != http.StatusOK || changed.Action != store.ManagedChannelActionUpdated || changed.Event == nil || changed.Event.Type != "channel.updated" || changed.Channel.ID != reconciled.Channel.ID || changed.Channel.ArchivedAt == nil {
+	if status != http.StatusOK || changed.Action != store.ManagedChannelActionUpdated || changed.Event == nil || changed.Event.Type != "channel.updated" || changed.Channel.ID != reconciled.Channel.ID || changed.Channel.ArchivedAt == nil || changed.Channel.Kind != "private" {
 		t.Fatalf("unexpected managed channel update reconciliation: status=%d result=%#v", status, changed)
 	}
 	reconcileBody["archived"] = false
 	reopened, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
 	if status != http.StatusOK || reopened.Action != store.ManagedChannelActionUpdated || reopened.Channel.ID != reconciled.Channel.ID || reopened.Channel.ArchivedAt != nil {
 		t.Fatalf("unexpected managed channel reopen reconciliation: status=%d result=%#v", status, reopened)
+	}
+	delete(reconcileBody, "kind")
+	delete(reconcileBody, "archived")
+	delete(reconcileBody, "external_url")
+	delete(reconcileBody, "sidebar_section")
+	defaulted, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
+	if status != http.StatusOK || defaulted.Action != store.ManagedChannelActionUpdated || defaulted.Channel.Kind != "public" || defaulted.Channel.ArchivedAt != nil || defaulted.Channel.ExternalURL != nil || defaulted.Channel.SidebarSection != nil {
+		t.Fatalf("omitted desired fields did not reconcile to defaults: status=%d result=%#v", status, defaulted)
 	}
 	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+reconciled.Channel.ID, strings.NewReader(`{"external_ref":""}`), http.StatusBadRequest)
 	message := postJSON[struct {

@@ -2559,16 +2559,18 @@ components:
         kind:
           type: string
           default: public
+          description: Desired channel kind. Omission reconciles to public.
         archived:
           type: boolean
           default: false
+          description: Desired archive state. Omission reconciles to open.
         external_url:
           type: string
           format: uri
-          description: Deep link into the external managing application.
+          description: Deep link into the external managing application. Omission clears it.
         sidebar_section:
           type: string
-          description: Optional client sidebar grouping label.
+          description: Optional client sidebar grouping label. Omission clears it.
     ReconcileManagedChannelResponse:
       type: object
       required: [channel, action]
@@ -2620,9 +2622,6 @@ components:
           type: boolean
         external_managed:
           type: boolean
-        external_provider:
-          type: string
-          description: Immutable provider namespace for reconciled managed channels.
         external_ref:
           type: string
           description: Opaque external identity. Send an empty string to clear it.
@@ -2857,6 +2856,9 @@ components:
           format: date-time
         external_managed:
           type: boolean
+        external_provider:
+          type: string
+          description: Immutable provider namespace for reconciled managed channels.
         external_ref:
           type: string
           description: Opaque identity in the external managing system.

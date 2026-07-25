@@ -1592,16 +1592,22 @@ export interface components {
       /** @description Opaque identity within the external provider namespace. */
       external_ref: string;
       name: string;
-      /** @default public */
+      /**
+       * @description Desired channel kind. Omission reconciles to public.
+       * @default public
+       */
       kind: string;
-      /** @default false */
+      /**
+       * @description Desired archive state. Omission reconciles to open.
+       * @default false
+       */
       archived: boolean;
       /**
        * Format: uri
-       * @description Deep link into the external managing application.
+       * @description Deep link into the external managing application. Omission clears it.
        */
       external_url?: string;
-      /** @description Optional client sidebar grouping label. */
+      /** @description Optional client sidebar grouping label. Omission clears it. */
       sidebar_section?: string;
     };
     ReconcileManagedChannelResponse: {
@@ -1630,8 +1636,6 @@ export interface components {
       kind?: string;
       archived?: boolean;
       external_managed?: boolean;
-      /** @description Immutable provider namespace for reconciled managed channels. */
-      external_provider?: string;
       /** @description Opaque external identity. Send an empty string to clear it. */
       external_ref?: string;
       /** @description External deep link. Send an empty string to clear it. */
@@ -1770,6 +1774,8 @@ export interface components {
       /** Format: date-time */
       archived_at?: string;
       external_managed: boolean;
+      /** @description Immutable provider namespace for reconciled managed channels. */
+      external_provider?: string;
       /** @description Opaque identity in the external managing system. */
       external_ref?: string;
       /**

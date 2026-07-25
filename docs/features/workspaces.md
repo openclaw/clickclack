@@ -67,6 +67,9 @@ channel reconcile endpoint with a complete desired representation:
 `{external_provider, external_ref, name, kind?, archived?, external_url?,
 sidebar_section?}`. `external_provider` is a lowercase integration namespace;
 the provider/reference pair is immutable and unique within one workspace.
+Omitted mutable fields reconcile to their defaults: `kind` becomes `public`,
+`archived` becomes `false`, and `external_url` or `sidebar_section` are
+cleared. This is desired-state replacement, not a partial PATCH.
 Reconciliation returns `action` as `created`, `updated`, or `unchanged`, plus
 the canonical `channel`. A create returns HTTP `201`; updates and exact replays
 return `200`. Only creates and changed state emit the normal durable channel

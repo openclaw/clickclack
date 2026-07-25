@@ -19,6 +19,7 @@ The HTTP scenarios verify:
   `channel.created` event;
 - an exact replay returns `200 unchanged`, the same channel ID, and no event;
 - changed desired state returns `200 updated` with one `channel.updated` event;
+- omitted mutable desired fields reconcile to documented defaults or clearing;
 - archived channels can be reopened through reconciliation;
 - normal channel updates cannot clear the reconciled identity;
 - a bot with `channels:write` can reconcile in its bound workspace; and

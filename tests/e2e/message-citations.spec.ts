@@ -102,6 +102,12 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
     .poll(() => page.evaluate(() => Reflect.get(window, "highlightedMessageIDs")))
     .toContain(message.id);
   await expect(page.locator(".thread.open")).toHaveCount(0);
+  if (process.env.MESSAGE_CITATION_HIGHLIGHT_PROOF_PATH) {
+    await page.screenshot({
+      path: process.env.MESSAGE_CITATION_HIGHLIGHT_PROOF_PATH,
+      fullPage: true,
+    });
+  }
 
   const replyResponse = await page.request.post(`/api/messages/${message.id}/thread/replies`, {
     data: { body: `First reply ${suffix}` },
@@ -129,4 +135,10 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
   await expect(input).toBeFocused();
   await expect(input).toHaveJSProperty("selectionStart", 0);
   await expect(input).toHaveJSProperty("selectionEnd", expectedURL.length);
+  if (process.env.MESSAGE_CITATION_FALLBACK_PROOF_PATH) {
+    await page.screenshot({
+      path: process.env.MESSAGE_CITATION_FALLBACK_PROOF_PATH,
+      fullPage: true,
+    });
+  }
 });

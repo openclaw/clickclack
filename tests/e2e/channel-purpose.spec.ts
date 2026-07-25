@@ -41,6 +41,12 @@ test("channel purpose refreshes in main and embed headers", async ({ page }) => 
   expect(updateResponse.ok()).toBe(true);
   await expect(mainPurpose).toContainText(updated);
   await expect(embedPurpose).toContainText(updated);
+  if (process.env.PURPOSE_MAIN_PROOF_PATH) {
+    await page.screenshot({ path: process.env.PURPOSE_MAIN_PROOF_PATH, fullPage: true });
+  }
+  if (process.env.PURPOSE_EMBED_PROOF_PATH) {
+    await embedPage.screenshot({ path: process.env.PURPOSE_EMBED_PROOF_PATH, fullPage: true });
+  }
 
   const clearResponse = await page.request.patch(`/api/channels/${channel.id}`, {
     data: { description: "" },
@@ -48,4 +54,7 @@ test("channel purpose refreshes in main and embed headers", async ({ page }) => 
   expect(clearResponse.ok()).toBe(true);
   await expect(mainPurpose).toHaveCount(0);
   await expect(embedPurpose).toHaveCount(0);
+  if (process.env.PURPOSE_CLEAR_PROOF_PATH) {
+    await page.screenshot({ path: process.env.PURPOSE_CLEAR_PROOF_PATH, fullPage: true });
+  }
 });

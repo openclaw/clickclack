@@ -3,6 +3,7 @@
 .thread {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   background: var(--panel);
   border-left: 1px solid var(--line);
   min-width: 0;
@@ -53,6 +54,11 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
+  /* Session channel names are one long unbreakable token; without truncation
+     they escape the flex box and collide with the header link. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread > header strong {

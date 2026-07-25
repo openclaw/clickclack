@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
-  import { APIError, api, apiResourceURL, apiURL } from "./lib/api";
+  import { APIError, api, apiResourceURL, apiURL, frontendBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
@@ -523,7 +523,7 @@
 
   function citationURLFor(message: Message): string {
     if (!message.channel_id || message.parent_message_id || !message.route_id) return "";
-    return new URL(appHref(message.workspace_id, message.route_id), window.location.origin).toString();
+    return new URL(appHref(message.workspace_id, message.route_id), frontendBaseURL()).toString();
   }
 
   function notificationHref(targetID: string): string {

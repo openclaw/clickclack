@@ -22,13 +22,20 @@ export function readableAPIError(error: unknown, fallback: string): string {
 
 declare global {
   interface Window {
-    __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string };
+    __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string; frontendBaseUrl?: string };
   }
 }
 
 export function apiBaseURL(): string {
   if (typeof window === "undefined") return "";
   return (window.__CLICKCLACK_CONFIG__?.apiBaseUrl || "").trim().replace(/\/$/, "");
+}
+
+export function frontendBaseURL(): string {
+  if (typeof window === "undefined") return "";
+  return (window.__CLICKCLACK_CONFIG__?.frontendBaseUrl || window.location.origin)
+    .trim()
+    .replace(/\/$/, "");
 }
 
 export function apiURL(path: string): string {

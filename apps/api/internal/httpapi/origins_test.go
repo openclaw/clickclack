@@ -93,7 +93,7 @@ func TestSplitOriginTrustAndRuntimeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Code != http.StatusOK || !strings.Contains(string(body), `window.__CLICKCLACK_CONFIG__={"apiBaseUrl":"http://127.0.0.1:18081/services/clickclack"}`) {
+	if response.Code != http.StatusOK || !strings.Contains(string(body), `window.__CLICKCLACK_CONFIG__={"apiBaseUrl":"http://127.0.0.1:18081/services/clickclack","frontendBaseUrl":"http://127.0.0.1:18080"}`) {
 		t.Fatalf("expected injected API base, got %d %q", response.Code, body)
 	}
 	if response.Header().Get("Cache-Control") != "no-store" {

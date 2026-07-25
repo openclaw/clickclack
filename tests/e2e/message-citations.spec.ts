@@ -54,14 +54,33 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
         writeText: async (value: string) => Object.assign(window, { copiedCitation: value }),
       },
     });
+    window.__CLICKCLACK_CONFIG__ = {
+      ...window.__CLICKCLACK_CONFIG__,
+      frontendBaseUrl: "https://chat.example.test",
+    };
+  });
+  const expectedPath = `/app/${workspace.route_id}/${message.route_id}`;
+  await row.hover();
+  await row.getByRole("button", { name: "More actions" }).click();
+  await row.getByRole("menuitem", { name: "Copy link" }).click();
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, "copiedCitation")))
+    .toBe(new URL(expectedPath, "https://chat.example.test").toString());
+
+  const expectedURL = new URL(expectedPath, page.url()).toString();
+  await page.reload();
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => Object.assign(window, { copiedCitation: value }),
+      },
+    });
   });
   await row.hover();
   await row.getByRole("button", { name: "More actions" }).click();
   await row.getByRole("menuitem", { name: "Copy link" }).click();
-  const expectedURL = new URL(
-    `/app/${workspace.route_id}/${message.route_id}`,
-    page.url(),
-  ).toString();
   await expect
     .poll(() => page.evaluate(() => Reflect.get(window, "copiedCitation")))
     .toBe(expectedURL);

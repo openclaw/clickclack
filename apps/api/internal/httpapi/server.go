@@ -1605,7 +1605,10 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {
-	config, err := json.Marshal(map[string]string{"apiBaseUrl": s.publicAPIURL})
+	config, err := json.Marshal(map[string]string{
+		"apiBaseUrl":      s.publicAPIURL,
+		"frontendBaseUrl": s.frontendURL,
+	})
 	if err != nil {
 		return index
 	}

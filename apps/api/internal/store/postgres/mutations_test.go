@@ -141,6 +141,61 @@ func TestManagedChannelReconciliationConvergesPostgres(t *testing.T) {
 	}
 }
 
+func TestManagedChannelReconciliationMigrationPreservesLegacyChannelsPostgres(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	applyPostgresMigrationsBefore(t, ctx, st, "0033_managed_channel_reconciliation.sql")
+
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Upgrade Owner", Email: "upgrade-postgres@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Upgrade Postgres", Slug: "upgrade-postgres"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const legacyID = "chn_legacy_managed"
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO channels (id, workspace_id, name, kind, created_at, external_managed, external_ref)
+		VALUES ($1, $2, 'legacy-managed', 'public', $3, 1, 'repo:42:pull:125')`,
+		legacyID, workspace.ID, now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated store.Channel
+	for _, channel := range channels {
+		if channel.ID == legacyID {
+			migrated = channel
+			break
+		}
+	}
+	if migrated.ID == "" || !migrated.ExternalManaged || migrated.ExternalProvider != nil || migrated.ExternalRef == nil || *migrated.ExternalRef != "repo:42:pull:125" {
+		t.Fatalf("legacy managed channel was not preserved: %#v", migrated)
+	}
+
+	result, err := st.ReconcileManagedChannel(ctx, store.ReconcileManagedChannelInput{
+		WorkspaceID:      workspace.ID,
+		UserID:           owner.ID,
+		ExternalProvider: "github",
+		ExternalRef:      "repo:42:pull:125",
+		Name:             "provider-managed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Action != store.ManagedChannelActionCreated || result.Channel.ID == legacyID {
+		t.Fatalf("provider identity should not capture a legacy unnamespaced channel: %#v", result)
+	}
+}
+
 func TestManagedChannelReconcileRetriesConcurrentNameConflictPostgres(t *testing.T) {
 	t.Parallel()
 	if !isManagedChannelReconcileConflict(errors.New(`duplicate key value violates unique constraint "channels_workspace_id_name_key"`)) {

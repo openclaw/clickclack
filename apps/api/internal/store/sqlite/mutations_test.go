@@ -320,6 +320,65 @@ func TestManagedChannelReconciliationConverges(t *testing.T) {
 	}
 }
 
+func TestManagedChannelReconciliationMigrationPreservesLegacyChannels(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open("sqlite://" + filepath.Join(t.TempDir(), "managed-channel-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	applySQLiteMigrationsBefore(t, ctx, st, "0040_managed_channel_reconciliation.sql")
+
+	owner, err := st.EnsureBootstrap(ctx, "Upgrade Owner", "upgrade-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const legacyID = "chn_legacy_managed"
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO channels (id, workspace_id, name, kind, created_at, external_managed, external_ref)
+		VALUES (?, ?, 'legacy-managed', 'public', ?, 1, 'repo:42:pull:125')`,
+		legacyID, workspaces[0].ID, now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated store.Channel
+	for _, channel := range channels {
+		if channel.ID == legacyID {
+			migrated = channel
+			break
+		}
+	}
+	if migrated.ID == "" || !migrated.ExternalManaged || migrated.ExternalProvider != nil || migrated.ExternalRef == nil || *migrated.ExternalRef != "repo:42:pull:125" {
+		t.Fatalf("legacy managed channel was not preserved: %#v", migrated)
+	}
+
+	result, err := st.ReconcileManagedChannel(ctx, store.ReconcileManagedChannelInput{
+		WorkspaceID:      workspaces[0].ID,
+		UserID:           owner.ID,
+		ExternalProvider: "github",
+		ExternalRef:      "repo:42:pull:125",
+		Name:             "provider-managed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Action != store.ManagedChannelActionCreated || result.Channel.ID == legacyID {
+		t.Fatalf("provider identity should not capture a legacy unnamespaced channel: %#v", result)
+	}
+}
+
 func TestManagedChannelReconcileRetriesConcurrentNameConflict(t *testing.T) {
 	t.Parallel()
 	if !isManagedChannelReconcileConflict(errors.New("UNIQUE constraint failed: channels.workspace_id, channels.name")) {

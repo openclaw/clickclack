@@ -1725,6 +1725,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		{"get workspace", http.MethodGet, "/api/workspaces/" + workspace.ID, "", ""},
 		{"list channels", http.MethodGet, "/api/workspaces/" + workspace.ID + "/channels", "", ""},
 		{"create channel", http.MethodPost, "/api/workspaces/" + workspace.ID + "/channels", `{"name":"bot-channel"}`, "application/json"},
+		{"reconcile managed channel", http.MethodPost, "/api/workspaces/" + workspace.ID + "/managed-channels/reconcile", `{"external_provider":"github","external_ref":"repo:42:pull:125","name":"pr-125"}`, "application/json"},
 		{"update channel", http.MethodPatch, "/api/channels/" + channel.ID, `{"name":"bot-channel"}`, "application/json"},
 		{"list messages", http.MethodGet, "/api/channels/" + channel.ID + "/messages", "", ""},
 		{"update message", http.MethodPatch, "/api/messages/" + messageID, `{"body":"blocked"}`, "application/json"},

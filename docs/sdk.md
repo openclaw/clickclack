@@ -74,7 +74,7 @@ See [features/auth.md](features/auth.md).
 | `eventTypes`  | `list` |
 | `auditLog`     | `list` |
 | `connectedAccounts` | `list`, `create`, `revoke` |
-| `channels`    | `list`, `create`, `update`, `messages`, `sendMessage`, `markRead` |
+| `channels`    | `list`, `create`, `reconcile`, `update`, `messages`, `sendMessage`, `markRead` |
 | `messages`    | `get`, `findByNonce(workspaceId, nonce)`, `update`, `delete` |
 | `threads`     | `get`, `reply` |
 | `search(workspaceId, q, options?)` | paginated workspace, channel, or direct-message search |

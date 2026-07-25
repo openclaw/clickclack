@@ -46,6 +46,13 @@ func optionalTrimmedString(value string) *string {
 	return &trimmed
 }
 
+func equalOptionalString(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func databaseBool(value bool) int32 {
 	if value {
 		return 1
@@ -187,36 +194,55 @@ func storeUploadFromGetUploadByOwnerNonce(row storedb.GetUploadByOwnerNonceRow) 
 
 func storeChannelFromGetChannel(row storedb.GetChannelRow) store.Channel {
 	return store.Channel{
-		ID:              row.ID,
-		RouteID:         row.RouteID,
-		WorkspaceID:     row.WorkspaceID,
-		Name:            row.Name,
-		Kind:            row.Kind,
-		CreatedAt:       row.CreatedAt,
-		ArchivedAt:      ptrFromNull(row.ArchivedAt),
-		ExternalManaged: row.ExternalManaged == 1,
-		ExternalRef:     ptrFromNull(row.ExternalRef),
-		ExternalURL:     ptrFromNull(row.ExternalUrl),
-		SidebarSection:  ptrFromNull(row.SidebarSection),
+		ID:               row.ID,
+		RouteID:          row.RouteID,
+		WorkspaceID:      row.WorkspaceID,
+		Name:             row.Name,
+		Kind:             row.Kind,
+		CreatedAt:        row.CreatedAt,
+		ArchivedAt:       ptrFromNull(row.ArchivedAt),
+		ExternalManaged:  row.ExternalManaged == 1,
+		ExternalProvider: ptrFromNull(row.ExternalProvider),
+		ExternalRef:      ptrFromNull(row.ExternalRef),
+		ExternalURL:      ptrFromNull(row.ExternalUrl),
+		SidebarSection:   ptrFromNull(row.SidebarSection),
 	}
 }
 
 func storeChannelFromListChannels(row storedb.ListChannelsRow) store.Channel {
 	return store.Channel{
-		ID:              row.ID,
-		RouteID:         row.RouteID,
-		WorkspaceID:     row.WorkspaceID,
-		Name:            row.Name,
-		Kind:            row.Kind,
-		CreatedAt:       row.CreatedAt,
-		ArchivedAt:      ptrFromNull(row.ArchivedAt),
-		ExternalManaged: row.ExternalManaged == 1,
-		ExternalRef:     ptrFromNull(row.ExternalRef),
-		ExternalURL:     ptrFromNull(row.ExternalUrl),
-		SidebarSection:  ptrFromNull(row.SidebarSection),
-		LastSeq:         row.LastSeq,
-		LastReadSeq:     row.LastReadSeq,
-		UnreadCount:     row.UnreadCount,
+		ID:               row.ID,
+		RouteID:          row.RouteID,
+		WorkspaceID:      row.WorkspaceID,
+		Name:             row.Name,
+		Kind:             row.Kind,
+		CreatedAt:        row.CreatedAt,
+		ArchivedAt:       ptrFromNull(row.ArchivedAt),
+		ExternalManaged:  row.ExternalManaged == 1,
+		ExternalProvider: ptrFromNull(row.ExternalProvider),
+		ExternalRef:      ptrFromNull(row.ExternalRef),
+		ExternalURL:      ptrFromNull(row.ExternalUrl),
+		SidebarSection:   ptrFromNull(row.SidebarSection),
+		LastSeq:          row.LastSeq,
+		LastReadSeq:      row.LastReadSeq,
+		UnreadCount:      row.UnreadCount,
+	}
+}
+
+func storeChannelFromGetManagedChannelByIdentity(row storedb.GetManagedChannelByIdentityRow) store.Channel {
+	return store.Channel{
+		ID:               row.ID,
+		RouteID:          row.RouteID,
+		WorkspaceID:      row.WorkspaceID,
+		Name:             row.Name,
+		Kind:             row.Kind,
+		CreatedAt:        row.CreatedAt,
+		ArchivedAt:       ptrFromNull(row.ArchivedAt),
+		ExternalManaged:  row.ExternalManaged == 1,
+		ExternalProvider: ptrFromNull(row.ExternalProvider),
+		ExternalRef:      ptrFromNull(row.ExternalRef),
+		ExternalURL:      ptrFromNull(row.ExternalUrl),
+		SidebarSection:   ptrFromNull(row.SidebarSection),
 	}
 }
 

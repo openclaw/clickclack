@@ -327,6 +327,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/managed-channels/reconcile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["reconcileManagedChannel"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces/{workspace_id}/topics": {
     parameters: {
       query?: never;
@@ -1570,6 +1586,30 @@ export interface components {
       /** @description Optional client sidebar grouping label. */
       sidebar_section?: string;
     };
+    ReconcileManagedChannelRequest: {
+      /** @description Lowercase namespace for the external managing integration. */
+      external_provider: string;
+      /** @description Opaque identity within the external provider namespace. */
+      external_ref: string;
+      name: string;
+      /** @default public */
+      kind: string;
+      /** @default false */
+      archived: boolean;
+      /**
+       * Format: uri
+       * @description Deep link into the external managing application.
+       */
+      external_url?: string;
+      /** @description Optional client sidebar grouping label. */
+      sidebar_section?: string;
+    };
+    ReconcileManagedChannelResponse: {
+      channel: components["schemas"]["Channel"];
+      /** @enum {string} */
+      action: "created" | "updated" | "unchanged";
+      event?: components["schemas"]["Event"];
+    };
     Topic: {
       id: string;
       workspace_id: string;
@@ -1590,6 +1630,8 @@ export interface components {
       kind?: string;
       archived?: boolean;
       external_managed?: boolean;
+      /** @description Immutable provider namespace for reconciled managed channels. */
+      external_provider?: string;
       /** @description Opaque external identity. Send an empty string to clear it. */
       external_ref?: string;
       /** @description External deep link. Send an empty string to clear it. */
@@ -2738,6 +2780,41 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  reconcileManagedChannel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReconcileManagedChannelRequest"];
+      };
+    };
+    responses: {
+      /** @description Existing managed channel updated or unchanged */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReconcileManagedChannelResponse"];
+        };
+      };
+      /** @description Managed channel created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReconcileManagedChannelResponse"];
+        };
       };
     };
   };

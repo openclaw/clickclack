@@ -52,6 +52,7 @@ directory does not include moderation state.
 ```http
 GET  /api/workspaces/{workspace_id}/channels  # list, ordered by name
 POST /api/workspaces/{workspace_id}/channels  # create
+POST /api/workspaces/{workspace_id}/managed-channels/reconcile
 PATCH /api/channels/{channel_id}              # rename, change kind, archive
 ```
 
@@ -61,10 +62,23 @@ sidebar_section?}`. `name` is slugified to keep `(workspace_id, name)` unique.
 channel authorization: it records an opaque identity and optional deep link for
 the application that owns the channel lifecycle.
 
+External integrations that need replay-safe provisioning use the managed
+channel reconcile endpoint with a complete desired representation:
+`{external_provider, external_ref, name, kind?, archived?, external_url?,
+sidebar_section?}`. `external_provider` is a lowercase integration namespace;
+the provider/reference pair is immutable and unique within one workspace.
+Reconciliation returns `action` as `created`, `updated`, or `unchanged`, plus
+the canonical `channel`. A create returns HTTP `201`; updates and exact replays
+return `200`. Only creates and changed state emit the normal durable channel
+event, so exact webhook replay does not add realtime churn.
+
 `PATCH` accepts any subset of `{name, kind, archived, external_managed,
 external_ref, external_url, sidebar_section}`. Setting `archived=true` fills
 `archived_at`; `archived=false` clears it. Sending an empty string for any of
-the nullable external or sidebar fields clears that field.
+the nullable external or sidebar fields clears that field. Once a channel has
+an `external_provider`, ordinary PATCH cannot clear external management or
+retarget its provider/reference identity; integrations reconcile mutable state
+through the provider identity instead.
 
 Archived channels remain addressable and readable, but the web sidebar removes
 them from the normal channel list and places them in a collapsed Archived group.
@@ -83,6 +97,9 @@ Channel write endpoints emit a durable `channel.created` or `channel.updated`
 event into the workspace event stream so connected clients see the change
 without polling. `channel.updated` includes the resulting `archived` boolean in
 its payload so consumers can update visibility without refetching the channel.
+Provider labels are namespacing metadata, not trusted identity or
+authorization. Reconciliation uses the same `channels:write` scope and
+workspace binding as normal channel creation.
 
 ## Web routes
 

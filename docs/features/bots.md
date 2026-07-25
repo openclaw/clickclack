@@ -170,7 +170,8 @@ MVP endpoint mapping:
 - `GET /api/me`: `profile:read`
 - `GET /api/workspaces*`: `workspaces:read`
 - `GET /api/workspaces/{id}/channels`: `channels:read`
-- `POST/PATCH channel endpoints`: `channels:write`
+- `POST/PATCH channel endpoints`, including managed-channel reconciliation:
+  `channels:write`
 - `GET channel/DM/thread messages`: matching read scope
 - `POST channel/DM/thread messages`: matching write scope
 - Durable `agent_commentary` and `agent_tool` channel/DM messages additionally

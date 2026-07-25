@@ -213,20 +213,21 @@ type Workspace struct {
 }
 
 type Channel struct {
-	ID              string  `json:"id"`
-	RouteID         string  `json:"route_id"`
-	WorkspaceID     string  `json:"workspace_id"`
-	Name            string  `json:"name"`
-	Kind            string  `json:"kind"`
-	CreatedAt       string  `json:"created_at"`
-	ArchivedAt      *string `json:"archived_at,omitempty"`
-	ExternalManaged bool    `json:"external_managed"`
-	ExternalRef     *string `json:"external_ref,omitempty"`
-	ExternalURL     *string `json:"external_url,omitempty"`
-	SidebarSection  *string `json:"sidebar_section,omitempty"`
-	LastSeq         int64   `json:"last_seq"`
-	LastReadSeq     int64   `json:"last_read_seq"`
-	UnreadCount     int64   `json:"unread_count"`
+	ID               string  `json:"id"`
+	RouteID          string  `json:"route_id"`
+	WorkspaceID      string  `json:"workspace_id"`
+	Name             string  `json:"name"`
+	Kind             string  `json:"kind"`
+	CreatedAt        string  `json:"created_at"`
+	ArchivedAt       *string `json:"archived_at,omitempty"`
+	ExternalManaged  bool    `json:"external_managed"`
+	ExternalProvider *string `json:"external_provider,omitempty"`
+	ExternalRef      *string `json:"external_ref,omitempty"`
+	ExternalURL      *string `json:"external_url,omitempty"`
+	SidebarSection   *string `json:"sidebar_section,omitempty"`
+	LastSeq          int64   `json:"last_seq"`
+	LastReadSeq      int64   `json:"last_read_seq"`
+	UnreadCount      int64   `json:"unread_count"`
 }
 
 type ReactionSummary struct {
@@ -1087,6 +1088,7 @@ type Store interface {
 	ListChannels(ctx context.Context, workspaceID, userID string) ([]Channel, error)
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, error)
 	CreateChannel(ctx context.Context, input CreateChannelInput) (Channel, Event, error)
+	ReconcileManagedChannel(ctx context.Context, input ReconcileManagedChannelInput) (ReconcileManagedChannelResult, error)
 	UpdateChannel(ctx context.Context, input UpdateChannelInput) (Channel, Event, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)
 	CreateTopic(ctx context.Context, input CreateTopicInput) (Topic, error)

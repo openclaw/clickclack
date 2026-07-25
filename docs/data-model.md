@@ -84,6 +84,14 @@ Nested replies are forbidden — the API rejects replies to non-root messages.
 - `events.cursor`: globally sortable opaque cursor used by realtime
   recovery.
 
+## Externally managed channel identity
+
+Reconciled managed channels have an immutable
+`(workspace_id, external_provider, external_ref)` identity. A partial unique
+index enforces that identity when both external fields are present. Legacy
+managed channels have no `external_provider`, so they retain their existing
+behavior and are outside the reconciliation namespace.
+
 ## Private durable events
 
 `events.is_private` is the durable privacy bit for replay filtering.

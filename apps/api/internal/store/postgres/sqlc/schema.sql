@@ -75,6 +75,7 @@ CREATE TABLE channels (
   archived_at TEXT,
   route_id TEXT,
   external_managed INTEGER NOT NULL DEFAULT 0,
+  external_provider TEXT,
   external_ref TEXT,
   external_url TEXT,
   sidebar_section TEXT,
@@ -82,6 +83,9 @@ CREATE TABLE channels (
 );
 
 CREATE UNIQUE INDEX idx_channels_workspace_route_id ON channels(workspace_id, route_id) WHERE route_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_channels_managed_identity
+  ON channels(workspace_id, external_provider, external_ref)
+  WHERE external_provider IS NOT NULL AND external_ref IS NOT NULL;
 
 CREATE TABLE direct_conversations (
   id TEXT PRIMARY KEY,

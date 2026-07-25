@@ -265,6 +265,7 @@ export type Channel = {
   created_at: string;
   archived_at?: string;
   external_managed: boolean;
+  external_provider?: string;
   external_ref?: string;
   external_url?: string;
   sidebar_section?: string;
@@ -299,6 +300,8 @@ export type MessageInput = MessageInputBase &
 
 export type ReactionSummary = components["schemas"]["ReactionSummary"];
 export type ReactionMutationResponse = components["schemas"]["ReactionMutationResponse"];
+export type ReconcileManagedChannelResponse =
+  components["schemas"]["ReconcileManagedChannelResponse"];
 
 export type Message = {
   id: string;
@@ -975,6 +978,25 @@ export class ClickClackClient {
       );
       return data.channel;
     },
+    reconcile: async (
+      workspaceId: string,
+      input: {
+        external_provider: string;
+        external_ref: string;
+        name: string;
+        kind?: string;
+        archived?: boolean;
+        external_url?: string;
+        sidebar_section?: string;
+      },
+    ): Promise<ReconcileManagedChannelResponse> =>
+      this.request<ReconcileManagedChannelResponse>(
+        `/api/workspaces/${workspaceId}/managed-channels/reconcile`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      ),
     update: async (
       channelId: string,
       input: {

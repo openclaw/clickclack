@@ -19,6 +19,68 @@ import (
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
 
+func TestManagedChannelReconciliationBotAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other Workspace"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		OwnerUserID: owner.ID,
+		DisplayName: "Managed Channel Bot",
+		Scopes:      []string{"channels:write"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, otherWorkspace.ID, bot.ID, "bot"); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+	body := `{"external_provider":"github","external_ref":"openclaw/clickclack#125","name":"pr-125"}`
+	result, status := postJSONWithBearerStatus[store.ReconcileManagedChannelResult](
+		t,
+		token.Token,
+		server.URL+"/api/workspaces/"+workspace.ID+"/managed-channels/reconcile",
+		body,
+	)
+	if status != http.StatusCreated || result.Action != store.ManagedChannelActionCreated {
+		t.Fatalf("expected authorized bot reconciliation, status=%d result=%#v", status, result)
+	}
+	_, status = postJSONWithBearerStatus[store.ReconcileManagedChannelResult](
+		t,
+		token.Token,
+		server.URL+"/api/workspaces/"+otherWorkspace.ID+"/managed-channels/reconcile",
+		body,
+	)
+	if status != http.StatusForbidden {
+		t.Fatalf("expected workspace-bound bot token to be rejected, got %d", status)
+	}
+}
+
 func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -97,6 +159,34 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if payload, ok := archivedManaged.Event.Payload.(map[string]any); !ok || payload["archived"] != true {
 		t.Fatalf("archive state missing from channel.updated metadata: %#v", archivedManaged.Event.Payload)
 	}
+	reconcileURL := server.URL + "/api/workspaces/" + workspaces[0].ID + "/managed-channels/reconcile"
+	reconcileBody := map[string]any{
+		"external_provider": "github",
+		"external_ref":      "repo:42:pull:125",
+		"name":              "pr-125",
+		"external_url":      "https://github.com/openclaw/clickclack/pull/125",
+		"sidebar_section":   "Pull requests",
+	}
+	reconciled, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
+	if status != http.StatusCreated || reconciled.Action != store.ManagedChannelActionCreated || reconciled.Event == nil || reconciled.Channel.ExternalProvider == nil || *reconciled.Channel.ExternalProvider != "github" {
+		t.Fatalf("unexpected managed channel create reconciliation: status=%d result=%#v", status, reconciled)
+	}
+	replayed, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
+	if status != http.StatusOK || replayed.Action != store.ManagedChannelActionUnchanged || replayed.Event != nil || replayed.Channel.ID != reconciled.Channel.ID {
+		t.Fatalf("unexpected managed channel replay: status=%d result=%#v", status, replayed)
+	}
+	reconcileBody["name"] = "pr-125-review"
+	reconcileBody["archived"] = true
+	changed, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
+	if status != http.StatusOK || changed.Action != store.ManagedChannelActionUpdated || changed.Event == nil || changed.Event.Type != "channel.updated" || changed.Channel.ID != reconciled.Channel.ID || changed.Channel.ArchivedAt == nil {
+		t.Fatalf("unexpected managed channel update reconciliation: status=%d result=%#v", status, changed)
+	}
+	reconcileBody["archived"] = false
+	reopened, status := postJSONWithStatus[store.ReconcileManagedChannelResult](t, reconcileURL, reconcileBody)
+	if status != http.StatusOK || reopened.Action != store.ManagedChannelActionUpdated || reopened.Channel.ID != reconciled.Channel.ID || reopened.Channel.ArchivedAt != nil {
+		t.Fatalf("unexpected managed channel reopen reconciliation: status=%d result=%#v", status, reopened)
+	}
+	expectStatus(t, http.MethodPatch, server.URL+"/api/channels/"+reconciled.Channel.ID, strings.NewReader(`{"external_ref":""}`), http.StatusBadRequest)
 	message := postJSON[struct {
 		Message store.Message `json:"message"`
 	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "original"}).Message

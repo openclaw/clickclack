@@ -282,6 +282,11 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	if input.ExternalRef != nil {
 		externalRef = optionalTrimmedString(*input.ExternalRef)
 	}
+	if ch.ExternalProvider != nil &&
+		((input.ExternalManaged != nil && !externalManaged) ||
+			(input.ExternalRef != nil && !equalOptionalString(externalRef, ch.ExternalRef))) {
+		return store.Channel{}, store.Event{}, store.ErrManagedChannelIdentityImmutable
+	}
 	externalURL := ch.ExternalURL
 	if input.ExternalURL != nil {
 		externalURL = optionalTrimmedString(*input.ExternalURL)
@@ -291,14 +296,15 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 		sidebarSection = optionalTrimmedString(*input.SidebarSection)
 	}
 	if err := qtx.UpdateChannel(ctx, storedb.UpdateChannelParams{
-		Name:            name,
-		Kind:            kind,
-		ArchivedAt:      nullFromPtr(archivedValue),
-		ExternalManaged: databaseBool(externalManaged),
-		ExternalRef:     nullFromPtr(externalRef),
-		ExternalUrl:     nullFromPtr(externalURL),
-		SidebarSection:  nullFromPtr(sidebarSection),
-		ID:              ch.ID,
+		Name:             name,
+		Kind:             kind,
+		ArchivedAt:       nullFromPtr(archivedValue),
+		ExternalManaged:  databaseBool(externalManaged),
+		ExternalProvider: nullFromPtr(ch.ExternalProvider),
+		ExternalRef:      nullFromPtr(externalRef),
+		ExternalUrl:      nullFromPtr(externalURL),
+		SidebarSection:   nullFromPtr(sidebarSection),
+		ID:               ch.ID,
 	}); err != nil {
 		return store.Channel{}, store.Event{}, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -193,6 +194,129 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true || payload["channel_id"] != channel.ID {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestManagedChannelReconciliationConverges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Reconcile Owner", "reconcile-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaceID := workspaces[0].ID
+	input := store.ReconcileManagedChannelInput{
+		WorkspaceID:      workspaceID,
+		UserID:           owner.ID,
+		ExternalProvider: "github",
+		ExternalRef:      "repo:42:pull:125",
+		Name:             "pr-125",
+		ExternalURL:      "https://github.com/openclaw/clickclack/pull/125",
+		SidebarSection:   "Pull requests",
+	}
+
+	const callers = 6
+	results := make(chan store.ReconcileManagedChannelResult, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := st.ReconcileManagedChannel(ctx, input)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var channelID string
+	created := 0
+	unchanged := 0
+	for result := range results {
+		if channelID == "" {
+			channelID = result.Channel.ID
+		}
+		if result.Channel.ID != channelID {
+			t.Fatalf("reconcile produced multiple channels: %s and %s", channelID, result.Channel.ID)
+		}
+		switch result.Action {
+		case store.ManagedChannelActionCreated:
+			created++
+			if result.Event == nil || result.Event.Type != "channel.created" {
+				t.Fatalf("created result missing event: %#v", result)
+			}
+		case store.ManagedChannelActionUnchanged:
+			unchanged++
+			if result.Event != nil {
+				t.Fatalf("unchanged result emitted event: %#v", result)
+			}
+		default:
+			t.Fatalf("unexpected reconcile action: %#v", result)
+		}
+	}
+	if created != 1 || unchanged != callers-1 {
+		t.Fatalf("expected one create and %d unchanged results, got create=%d unchanged=%d", callers-1, created, unchanged)
+	}
+
+	archivedInput := input
+	archivedInput.Name = "pr-125-review"
+	archivedInput.Archived = true
+	updated, err := st.ReconcileManagedChannel(ctx, archivedInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Action != store.ManagedChannelActionUpdated || updated.Channel.ID != channelID || updated.Channel.ArchivedAt == nil || updated.Event == nil || updated.Event.Type != "channel.updated" {
+		t.Fatalf("unexpected changed reconciliation: %#v", updated)
+	}
+	reopenedInput := archivedInput
+	reopenedInput.Archived = false
+	reopened, err := st.ReconcileManagedChannel(ctx, reopenedInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Channel.ID != channelID || reopened.Channel.ArchivedAt != nil || reopened.Action != store.ManagedChannelActionUpdated {
+		t.Fatalf("unexpected reopened reconciliation: %#v", reopened)
+	}
+
+	clear := ""
+	notManaged := false
+	if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{
+		ChannelID:       channelID,
+		UserID:          owner.ID,
+		ExternalManaged: &notManaged,
+	}); !errors.Is(err, store.ErrManagedChannelIdentityImmutable) {
+		t.Fatalf("expected managed identity protection, got %v", err)
+	}
+	if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{
+		ChannelID:   channelID,
+		UserID:      owner.ID,
+		ExternalRef: &clear,
+	}); !errors.Is(err, store.ErrManagedChannelIdentityImmutable) {
+		t.Fatalf("expected external ref protection, got %v", err)
+	}
+
+	otherProvider := input
+	otherProvider.ExternalProvider = "gitlab"
+	otherProvider.Name = "gitlab-pr-125"
+	isolated, err := st.ReconcileManagedChannel(ctx, otherProvider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isolated.Channel.ID == channelID {
+		t.Fatalf("provider namespaces were not isolated: %#v", isolated)
 	}
 }
 

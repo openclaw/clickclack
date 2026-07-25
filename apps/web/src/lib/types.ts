@@ -50,6 +50,7 @@ export type Channel = {
   created_at: string;
   archived_at?: string;
   external_managed: boolean;
+  external_provider?: string;
   external_ref?: string;
   external_url?: string;
   sidebar_section?: string;

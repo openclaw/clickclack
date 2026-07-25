@@ -584,16 +584,17 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 		}
 		ch.RouteID = routeID
 		if err := s.q.WithTx(tx).InsertChannel(ctx, storedb.InsertChannelParams{
-			ID:              ch.ID,
-			RouteID:         sqlText(ch.RouteID),
-			WorkspaceID:     ch.WorkspaceID,
-			Name:            ch.Name,
-			Kind:            ch.Kind,
-			CreatedAt:       ch.CreatedAt,
-			ExternalManaged: databaseBool(ch.ExternalManaged),
-			ExternalRef:     nullFromPtr(ch.ExternalRef),
-			ExternalUrl:     nullFromPtr(ch.ExternalURL),
-			SidebarSection:  nullFromPtr(ch.SidebarSection),
+			ID:               ch.ID,
+			RouteID:          sqlText(ch.RouteID),
+			WorkspaceID:      ch.WorkspaceID,
+			Name:             ch.Name,
+			Kind:             ch.Kind,
+			CreatedAt:        ch.CreatedAt,
+			ExternalManaged:  databaseBool(ch.ExternalManaged),
+			ExternalProvider: sql.NullString{},
+			ExternalRef:      nullFromPtr(ch.ExternalRef),
+			ExternalUrl:      nullFromPtr(ch.ExternalURL),
+			SidebarSection:   nullFromPtr(ch.SidebarSection),
 		}); err != nil {
 			if isRouteIDConflict(err) {
 				continue

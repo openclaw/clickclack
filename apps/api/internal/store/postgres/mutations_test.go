@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,6 +59,85 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestManagedChannelReconciliationConvergesPostgres(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Reconcile Owner", Email: "reconcile-postgres@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Reconcile Postgres", Slug: "reconcile-postgres"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := store.ReconcileManagedChannelInput{
+		WorkspaceID:      workspace.ID,
+		UserID:           owner.ID,
+		ExternalProvider: "github",
+		ExternalRef:      "repo:42:pull:125",
+		Name:             "pr-125",
+		ExternalURL:      "https://github.com/openclaw/clickclack/pull/125",
+		SidebarSection:   "Pull requests",
+	}
+	const callers = 6
+	results := make(chan store.ReconcileManagedChannelResult, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := st.ReconcileManagedChannel(ctx, input)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var channelID string
+	created := 0
+	unchanged := 0
+	for result := range results {
+		if channelID == "" {
+			channelID = result.Channel.ID
+		}
+		if result.Channel.ID != channelID {
+			t.Fatalf("reconcile produced multiple channels: %s and %s", channelID, result.Channel.ID)
+		}
+		switch result.Action {
+		case store.ManagedChannelActionCreated:
+			created++
+		case store.ManagedChannelActionUnchanged:
+			unchanged++
+		default:
+			t.Fatalf("unexpected reconcile action: %#v", result)
+		}
+	}
+	if created != 1 || unchanged != callers-1 {
+		t.Fatalf("expected one create and %d unchanged results, got create=%d unchanged=%d", callers-1, created, unchanged)
+	}
+	changed := input
+	changed.Archived = true
+	changed.Name = "pr-125-review"
+	updated, err := st.ReconcileManagedChannel(ctx, changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Channel.ID != channelID || updated.Channel.ArchivedAt == nil || updated.Action != store.ManagedChannelActionUpdated {
+		t.Fatalf("unexpected changed reconciliation: %#v", updated)
 	}
 }
 

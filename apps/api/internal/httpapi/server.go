@@ -169,6 +169,7 @@ func (s *Server) Handler() http.Handler {
 		r.Patch("/workspaces/{workspace_id}/moderation/members/{user_id}", s.updateWorkspaceMemberModeration)
 		r.Get("/workspaces/{workspace_id}/channels", s.listChannels)
 		r.Post("/workspaces/{workspace_id}/channels", s.createChannel)
+		r.Post("/workspaces/{workspace_id}/managed-channels/reconcile", s.reconcileManagedChannel)
 		r.Get("/workspaces/{workspace_id}/topics", s.listTopics)
 		r.Post("/workspaces/{workspace_id}/topics", s.createTopic)
 		r.Get("/workspaces/{workspace_id}/bots", s.listBots)
@@ -887,6 +888,59 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 		s.publishEvent(r.Context(), event)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{"channel": channel, "event": event}, err)
+}
+
+func (s *Server) reconcileManagedChannel(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if err := act.requireScope("channels:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	var body struct {
+		ExternalProvider string `json:"external_provider"`
+		ExternalRef      string `json:"external_ref"`
+		Name             string `json:"name"`
+		Kind             string `json:"kind"`
+		Archived         bool   `json:"archived"`
+		ExternalURL      string `json:"external_url"`
+		SidebarSection   string `json:"sidebar_section"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	result, err := s.store.ReconcileManagedChannel(r.Context(), store.ReconcileManagedChannelInput{
+		WorkspaceID:      workspaceID,
+		UserID:           act.user.ID,
+		ExternalProvider: body.ExternalProvider,
+		ExternalRef:      body.ExternalRef,
+		Name:             body.Name,
+		Kind:             body.Kind,
+		Archived:         body.Archived,
+		ExternalURL:      body.ExternalURL,
+		SidebarSection:   body.SidebarSection,
+	})
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if result.Event != nil {
+		s.publishEvent(r.Context(), *result.Event)
+	}
+	status := http.StatusOK
+	if result.Action == store.ManagedChannelActionCreated {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, result)
 }
 
 func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {

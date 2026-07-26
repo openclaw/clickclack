@@ -3,11 +3,17 @@
 This proof runs the built production web bundle against the real Go API and a
 fresh SQLite store, then exercises the rendered browser UI.
 
+![Message citation lifecycle storyboard](./message-citation-lifecycle.png)
+
 ## Reproduction
 
 ```sh
 MESSAGE_CITATION_HIGHLIGHT_PROOF_PATH=docs/proof/message-citation-highlight.png \
 MESSAGE_CITATION_FALLBACK_PROOF_PATH=docs/proof/message-citation-fallback.png \
+MESSAGE_CITATION_COPY_FRAME_PATH=/tmp/message-citation-01-copy.png \
+MESSAGE_CITATION_HIGHLIGHT_FRAME_PATH=/tmp/message-citation-02-highlight.png \
+MESSAGE_CITATION_THREAD_FRAME_PATH=/tmp/message-citation-03-thread.png \
+MESSAGE_CITATION_FALLBACK_FRAME_PATH=/tmp/message-citation-04-fallback.png \
 pnpm exec playwright test tests/e2e/message-citations.spec.ts --workers=1
 ```
 
@@ -26,6 +32,19 @@ The scenario verifies:
 `message-citation-highlight.png` captures the direct citation before the first
 reply. `message-citation-fallback.png` captures the same URL after the first
 reply with the clipboard fallback open.
+
+The four optional frame paths add a clearly marked proof annotation containing
+the current canonical URL. The committed
+`message-citation-lifecycle.png` storyboard combines those real built-app frames
+in order:
+
+1. the channel-root action menu exposes **Copy link**;
+2. the copied route opens and highlights the root before replies;
+3. the same route opens the thread after the first reply; and
+4. clipboard denial exposes that same URL selected in the accessible fallback.
+
+The annotation is proof-only DOM added immediately before each screenshot and
+removed afterward; it does not alter the application bundle or behavior.
 
 ## Channel and direct-message persistence boundary
 

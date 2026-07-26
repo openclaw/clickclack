@@ -1,6 +1,54 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+
+async function captureAnnotatedProof(
+  page: Page,
+  proofPath: string | undefined,
+  step: string,
+  detail: string,
+  citationURL: string,
+) {
+  if (!proofPath) return;
+  await page.evaluate(
+    ({ step, detail, citationURL }) => {
+      const annotation = document.createElement("div");
+      annotation.dataset.citationProofAnnotation = "true";
+      annotation.setAttribute("role", "note");
+      annotation.style.cssText = [
+        "position:fixed",
+        "z-index:2147483647",
+        "top:12px",
+        "left:50%",
+        "transform:translateX(-50%)",
+        "width:min(920px,calc(100vw - 48px))",
+        "box-sizing:border-box",
+        "padding:12px 16px",
+        "border:2px solid #67e8f9",
+        "border-radius:10px",
+        "background:rgba(8,15,30,.96)",
+        "box-shadow:0 12px 32px rgba(0,0,0,.45)",
+        "color:#f8fafc",
+        "font:600 16px/1.35 ui-sans-serif,system-ui,sans-serif",
+        "pointer-events:none",
+      ].join(";");
+      const title = document.createElement("div");
+      title.textContent = step;
+      title.style.color = "#67e8f9";
+      const description = document.createElement("div");
+      description.textContent = detail;
+      const url = document.createElement("div");
+      url.textContent = `Canonical URL: ${citationURL}`;
+      url.style.cssText =
+        "margin-top:4px;color:#cbd5e1;font:500 13px/1.35 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere";
+      annotation.append(title, description, url);
+      document.body.append(annotation);
+    },
+    { step, detail, citationURL },
+  );
+  await page.screenshot({ path: proofPath, fullPage: true });
+  await page.locator("[data-citation-proof-annotation]").evaluate((element) => element.remove());
+}
 
 test("channel root citations copy, reopen, highlight, and keep their URL after the first reply", async ({
   browser,
@@ -60,14 +108,21 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
     };
   });
   const expectedPath = `/app/${workspace.route_id}/${message.route_id}`;
+  const expectedURL = new URL(expectedPath, page.url()).toString();
   await row.hover();
   await row.getByRole("button", { name: "More actions" }).click();
+  await captureAnnotatedProof(
+    page,
+    process.env.MESSAGE_CITATION_COPY_FRAME_PATH,
+    "1 · Copy a stable citation",
+    "The channel-root action menu exposes Copy link.",
+    expectedURL,
+  );
   await row.getByRole("menuitem", { name: "Copy link" }).click();
   await expect
     .poll(() => page.evaluate(() => Reflect.get(window, "copiedCitation")))
     .toBe(new URL(expectedPath, "https://chat.example.test").toString());
 
-  const expectedURL = new URL(expectedPath, page.url()).toString();
   await page.reload();
   await waitForAppReady(page);
   await page.evaluate(() => {
@@ -127,6 +182,13 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
       fullPage: true,
     });
   }
+  await captureAnnotatedProof(
+    page,
+    process.env.MESSAGE_CITATION_HIGHLIGHT_FRAME_PATH,
+    "2 · Open the citation before replies",
+    "The canonical route opens the channel and highlights its root message.",
+    expectedURL,
+  );
 
   const replyResponse = await page.request.post(`/api/messages/${message.id}/thread/replies`, {
     data: { body: `First reply ${suffix}` },
@@ -138,6 +200,13 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
   await expect(page.locator(".thread.open")).toBeVisible();
   await expect(page.locator(".thread-root", { hasText: message.body })).toBeVisible();
   await expect(page.locator(".reply", { hasText: `First reply ${suffix}` })).toBeVisible();
+  await captureAnnotatedProof(
+    page,
+    process.env.MESSAGE_CITATION_THREAD_FRAME_PATH,
+    "3 · Add the first reply",
+    "The same URL now opens the thread pane; the citation did not change.",
+    expectedURL,
+  );
 
   const root = page.locator(".thread-root");
   await page.evaluate(() => {
@@ -160,4 +229,11 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
       fullPage: true,
     });
   }
+  await captureAnnotatedProof(
+    page,
+    process.env.MESSAGE_CITATION_FALLBACK_FRAME_PATH,
+    "4 · Recover from clipboard denial",
+    "The same URL is visible, focused, and selected in the accessible fallback.",
+    expectedURL,
+  );
 });

@@ -3,8 +3,6 @@
 This proof runs the built production web bundle against the real Go API and a
 fresh SQLite store, then exercises the rendered browser UI.
 
-![Message citation lifecycle storyboard](./message-citation-lifecycle.png)
-
 ## Reproduction
 
 ```sh

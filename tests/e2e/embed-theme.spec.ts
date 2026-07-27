@@ -81,6 +81,10 @@ test("embedded channels follow the exact cross-origin host theme without changin
   embedUrl.searchParams.set("theme", "light");
   embedUrl.searchParams.set("hostOrigin", hostOrigin);
 
+  const embedResponse = await page.request.get(embedUrl.href);
+  expect(embedResponse.ok()).toBe(true);
+  expect(embedResponse.headers()["content-security-policy"]).toContain(hostOrigin);
+
   await page.route(`${hostOrigin}/theme-proof`, (route) =>
     route.fulfill({
       contentType: "text/html; charset=utf-8",
@@ -96,7 +100,7 @@ test("embedded channels follow the exact cross-origin host theme without changin
           iframe { width: 100%; height: 620px; border: 0; border-left: 1px solid #e4e4e7; }
         </style></head><body><main>
           <section><h1>OpenClaw host theme</h1><p>Cross-origin ClickClack sidebar</p></section>
-          <iframe title="ClickClack discussion" src="${embedUrl.href}"></iframe>
+          <iframe title="ClickClack discussion" src="${embedUrl.href.replaceAll("&", "&amp;")}"></iframe>
         </main></body></html>`,
     }),
   );
@@ -113,6 +117,9 @@ test("embedded channels follow the exact cross-origin host theme without changin
   });
 
   await page.goto(`${hostOrigin}/theme-proof`);
+  await expect
+    .poll(() => page.frames().map((candidate) => candidate.url()))
+    .toContain(embedUrl.href);
   const embeddedPage = page.frameLocator('iframe[title="ClickClack discussion"]');
   await expect(embeddedPage.getByLabel("Embedded channel")).toBeVisible();
   await expect(embeddedPage.locator("html")).toHaveAttribute("data-color-mode", "light");
@@ -210,4 +217,25 @@ test("embedded channels follow the exact cross-origin host theme without changin
     )
     .toEqual(storedAppearance);
   expect(appearanceWrites).toEqual([]);
+
+  await frame!.evaluate(
+    ({ workspaceID, channelID }) => {
+      const link = document.createElement("a");
+      link.href = `/app/${workspaceID}/${channelID}`;
+      document.body.append(link);
+      link.click();
+    },
+    { workspaceID: workspace.route_id, channelID: channel.route_id },
+  );
+  await expect
+    .poll(() => new URL(frame!.url()).pathname)
+    .toBe(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect
+    .poll(() => frame!.evaluate(() => document.documentElement.style.getPropertyValue("--bg")))
+    .toBe("");
+
+  await postTheme("light", { ...lightTokens, surface: "#ff0000" });
+  await expect
+    .poll(() => frame!.evaluate(() => document.documentElement.style.getPropertyValue("--bg")))
+    .toBe("");
 });

@@ -73,6 +73,18 @@ export function getEmbedHostThemeMode(): EmbedThemeMode | null {
   return activeEmbedThemeMode ?? resolveEmbedThemeMode(window.location);
 }
 
+export function clearEmbedHostTheme(): boolean {
+  if (activeEmbedThemeMode === null) return false;
+
+  activeEmbedThemeMode = null;
+  const root = document.documentElement;
+  for (const property of MANAGED_CUSTOM_PROPERTIES) {
+    root.style.removeProperty(property);
+  }
+  root.style.removeProperty("font-family");
+  return true;
+}
+
 function parseEmbedThemeMessage(value: unknown): EmbedThemeMessage | null {
   if (!value || typeof value !== "object") return null;
   const message = value as Partial<EmbedThemeMessage>;
@@ -152,10 +164,19 @@ export function installEmbedHostTheme(): () => void {
   const hostOrigin = resolveEmbedHostOrigin(window.location);
   if (!hostOrigin || window.parent === window) return () => {};
 
+  activeEmbedThemeMode = resolveEmbedThemeMode(window.location);
+
   const onMessage = (event: MessageEvent<unknown>) => {
     // Only the exact host named in the embed URL can update this document.
-    // Checking source as well prevents another frame on that origin spoofing it.
-    if (event.origin !== hostOrigin || event.source !== window.parent) return;
+    // Rechecking the current route prevents a persistent root-layout listener
+    // from carrying host control into normal pages after client-side navigation.
+    if (
+      resolveEmbedHostOrigin(window.location) !== hostOrigin ||
+      event.origin !== hostOrigin ||
+      event.source !== window.parent
+    ) {
+      return;
+    }
     const message = parseEmbedThemeMessage(event.data);
     if (message) applyEmbedTheme(message);
   };

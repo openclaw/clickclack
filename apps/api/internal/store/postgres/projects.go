@@ -212,7 +212,8 @@ func (s *Store) ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, 
 	for attempt := 0; attempt < 3; attempt++ {
 		claimedAt := now()
 		rows, err := s.q.ClaimGitHubDelivery(ctx, storedb.ClaimGitHubDeliveryParams{
-			ProjectID: projectID, DeliveryID: deliveryID, EventType: eventType, CreatedAt: claimedAt,
+			ProjectID: projectID, DeliveryID: deliveryID, EventType: eventType,
+			CreatedAt: claimedAt, UpdatedAt: claimedAt,
 		})
 		if err != nil {
 			return "", err
@@ -220,8 +221,8 @@ func (s *Store) ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, 
 		if rows == 1 {
 			return store.GitHubDeliveryClaimed, nil
 		}
-		rows, err = s.q.ReclaimStaleGitHubDelivery(ctx, storedb.ReclaimStaleGitHubDeliveryParams{
-			EventType: eventType, CreatedAt: claimedAt, ProjectID: projectID, DeliveryID: deliveryID,
+		rows, err = s.q.ReclaimRetryableGitHubDelivery(ctx, storedb.ReclaimRetryableGitHubDeliveryParams{
+			EventType: eventType, UpdatedAt: claimedAt, ProjectID: projectID, DeliveryID: deliveryID,
 			StaleBefore: time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339Nano),
 		})
 		if err != nil {
@@ -244,6 +245,8 @@ func (s *Store) ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, 
 			return store.GitHubDeliveryComplete, nil
 		case string(store.GitHubDeliveryProcessing):
 			return store.GitHubDeliveryProcessing, nil
+		case "failed":
+			continue
 		default:
 			return "", errors.New("invalid GitHub delivery status")
 		}
@@ -252,14 +255,18 @@ func (s *Store) ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, 
 }
 
 func (s *Store) CompleteGitHubDelivery(ctx context.Context, projectID, deliveryID string) error {
+	completedAt := now()
 	_, err := s.q.CompleteGitHubDelivery(ctx, storedb.CompleteGitHubDeliveryParams{
-		CompletedAt: sqlText(now()), ProjectID: projectID, DeliveryID: deliveryID,
+		UpdatedAt: completedAt, CompletedAt: sqlText(completedAt), ProjectID: projectID, DeliveryID: deliveryID,
 	})
 	return err
 }
 
-func (s *Store) ReleaseGitHubDelivery(ctx context.Context, projectID, deliveryID string) error {
-	_, err := s.q.ReleaseGitHubDelivery(ctx, storedb.ReleaseGitHubDeliveryParams{ProjectID: projectID, DeliveryID: deliveryID})
+func (s *Store) FailGitHubDelivery(ctx context.Context, projectID, deliveryID string) error {
+	failedAt := now()
+	_, err := s.q.FailGitHubDelivery(ctx, storedb.FailGitHubDeliveryParams{
+		UpdatedAt: failedAt, FailedAt: sqlText(failedAt), ProjectID: projectID, DeliveryID: deliveryID,
+	})
 	return err
 }
 

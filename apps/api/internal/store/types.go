@@ -1197,7 +1197,7 @@ type Store interface {
 	GetGitHubWebhookTarget(ctx context.Context, projectID, repositoryFullName string) (GitHubWebhookTarget, error)
 	ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, eventType string) (GitHubDeliveryClaim, error)
 	CompleteGitHubDelivery(ctx context.Context, projectID, deliveryID string) error
-	ReleaseGitHubDelivery(ctx context.Context, projectID, deliveryID string) error
+	FailGitHubDelivery(ctx context.Context, projectID, deliveryID string) error
 	GetGitHubPullRequestThread(ctx context.Context, projectID, repositoryID string, pullNumber int64) (string, error)
 	SetGitHubPullRequestThread(ctx context.Context, projectID, repositoryID string, pullNumber int64, rootMessageID string) (string, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)

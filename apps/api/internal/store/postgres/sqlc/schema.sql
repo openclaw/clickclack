@@ -604,9 +604,11 @@ CREATE TABLE github_deliveries (
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   delivery_id TEXT NOT NULL,
   event_type TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('processing', 'complete')),
+  status TEXT NOT NULL CHECK (status IN ('processing', 'failed', 'complete')),
   created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
   completed_at TEXT,
+  failed_at TEXT,
   PRIMARY KEY (project_id, delivery_id)
 );
 

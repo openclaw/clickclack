@@ -223,7 +223,9 @@ type GithubDelivery struct {
 	EventType   string         `json:"event_type"`
 	Status      string         `json:"status"`
 	CreatedAt   string         `json:"created_at"`
+	UpdatedAt   string         `json:"updated_at"`
 	CompletedAt sql.NullString `json:"completed_at"`
+	FailedAt    sql.NullString `json:"failed_at"`
 }
 
 type GithubPullRequestThread struct {

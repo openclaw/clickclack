@@ -7,11 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
@@ -126,18 +128,49 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 		t.Fatalf("could not create active delivery fixture: claim=%q err=%v", claim, err)
 	}
 	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "pull_request", "delivery-active", opened, http.StatusServiceUnavailable)
-	if err := st.ReleaseGitHubDelivery(ctx, created.Project.ID, "delivery-active"); err != nil {
+	if err := st.FailGitHubDelivery(ctx, created.Project.ID, "delivery-active"); err != nil {
 		t.Fatal(err)
 	}
+
+	failingStore := &failGitHubThreadOnceStore{Store: st}
+	retryServer := httptest.NewServer(New(failingStore, realtime.NewHub(), Options{
+		UploadDir: filepath.Join(t.TempDir(), "retry-uploads"),
+	}).Handler())
+	t.Cleanup(retryServer.Close)
+	retryEndpoint := retryServer.URL + "/api/hooks/github/projects/" + created.Project.ID
+	retryOpened := map[string]any{
+		"action":     "opened",
+		"repository": map[string]any{"full_name": "block/buzz"},
+		"sender":     map[string]any{"login": "retry-author"},
+		"pull_request": map[string]any{
+			"number": 45, "title": "Recover a failed delivery", "html_url": "https://github.com/block/buzz/pull/45",
+			"user": map[string]any{"login": "retry-author"},
+			"head": map[string]any{"ref": "retry-delivery"},
+			"base": map[string]any{"ref": "main"},
+		},
+	}
+	sendProjectWebhook(t, retryEndpoint, created.Webhook.Secret, "pull_request", "delivery-retry", retryOpened, http.StatusInternalServerError)
+	sendProjectWebhook(t, retryEndpoint, created.Webhook.Secret, "pull_request", "delivery-retry", retryOpened, http.StatusAccepted)
 
 	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "pull_request", "delivery-open", opened, http.StatusAccepted)
 	messages, err := st.ListMessages(ctx, created.Project.Channel.ID, owner.ID, store.MessagePageRequest{Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages.Messages) != 1 || !strings.Contains(messages.Messages[0].Body, "PR #42") {
-		t.Fatalf("expected one PR root message, got %#v", messages.Messages)
+	var pull42Root store.Message
+	var retryRoots int
+	for _, message := range messages.Messages {
+		if strings.Contains(message.Body, "PR #42") {
+			pull42Root = message
+		}
+		if strings.Contains(message.Body, "PR #45") {
+			retryRoots++
+		}
 	}
+	if len(messages.Messages) != 2 || pull42Root.ID == "" || retryRoots != 1 {
+		t.Fatalf("expected one root per recovered and successful delivery, got %#v", messages.Messages)
+	}
+	messages.Messages = []store.Message{pull42Root}
 
 	opened["action"] = "synchronize"
 	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "pull_request", "delivery-sync", opened, http.StatusAccepted)
@@ -256,6 +289,24 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 	if len(replies) != 1 {
 		t.Fatalf("invalid signature changed thread: %#v", replies)
 	}
+}
+
+type failGitHubThreadOnceStore struct {
+	store.Store
+	mu     sync.Mutex
+	failed bool
+}
+
+func (s *failGitHubThreadOnceStore) GetGitHubPullRequestThread(
+	ctx context.Context, projectID, repositoryID string, pullNumber int64,
+) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.failed {
+		s.failed = true
+		return "", errors.New("injected GitHub thread lookup failure")
+	}
+	return s.Store.GetGitHubPullRequestThread(ctx, projectID, repositoryID, pullNumber)
 }
 
 func TestGitHubProjectUpdateCoverage(t *testing.T) {

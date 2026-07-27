@@ -123,10 +123,11 @@ func (q *Queries) ChannelRouteID(ctx context.Context, arg ChannelRouteIDParams) 
 
 const claimGitHubDelivery = `-- name: ClaimGitHubDelivery :execrows
 INSERT OR IGNORE INTO github_deliveries (
-  project_id, delivery_id, event_type, status, created_at
+  project_id, delivery_id, event_type, status, created_at, updated_at
 )
 VALUES (
-  ?1, ?2, ?3, 'processing', ?4
+  ?1, ?2, ?3, 'processing',
+  ?4, ?5
 )
 `
 
@@ -135,6 +136,7 @@ type ClaimGitHubDeliveryParams struct {
 	DeliveryID string `json:"delivery_id"`
 	EventType  string `json:"event_type"`
 	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 func (q *Queries) ClaimGitHubDelivery(ctx context.Context, arg ClaimGitHubDeliveryParams) (int64, error) {
@@ -143,6 +145,7 @@ func (q *Queries) ClaimGitHubDelivery(ctx context.Context, arg ClaimGitHubDelive
 		arg.DeliveryID,
 		arg.EventType,
 		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -204,18 +207,27 @@ func (q *Queries) ClearMemberTimeout(ctx context.Context, arg ClearMemberTimeout
 
 const completeGitHubDelivery = `-- name: CompleteGitHubDelivery :execrows
 UPDATE github_deliveries
-SET status = 'complete', completed_at = ?1
-WHERE project_id = ?2 AND delivery_id = ?3
+SET status = 'complete', updated_at = ?1,
+    completed_at = ?2, failed_at = NULL
+WHERE project_id = ?3
+  AND delivery_id = ?4
+  AND status = 'processing'
 `
 
 type CompleteGitHubDeliveryParams struct {
+	UpdatedAt   string         `json:"updated_at"`
 	CompletedAt sql.NullString `json:"completed_at"`
 	ProjectID   string         `json:"project_id"`
 	DeliveryID  string         `json:"delivery_id"`
 }
 
 func (q *Queries) CompleteGitHubDelivery(ctx context.Context, arg CompleteGitHubDeliveryParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, completeGitHubDelivery, arg.CompletedAt, arg.ProjectID, arg.DeliveryID)
+	result, err := q.db.ExecContext(ctx, completeGitHubDelivery,
+		arg.UpdatedAt,
+		arg.CompletedAt,
+		arg.ProjectID,
+		arg.DeliveryID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -815,6 +827,34 @@ func (q *Queries) EventCursorExists(ctx context.Context, arg EventCursorExistsPa
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const failGitHubDelivery = `-- name: FailGitHubDelivery :execrows
+UPDATE github_deliveries
+SET status = 'failed', updated_at = ?1, failed_at = ?2
+WHERE project_id = ?3
+  AND delivery_id = ?4
+  AND status = 'processing'
+`
+
+type FailGitHubDeliveryParams struct {
+	UpdatedAt  string         `json:"updated_at"`
+	FailedAt   sql.NullString `json:"failed_at"`
+	ProjectID  string         `json:"project_id"`
+	DeliveryID string         `json:"delivery_id"`
+}
+
+func (q *Queries) FailGitHubDelivery(ctx context.Context, arg FailGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failGitHubDelivery,
+		arg.UpdatedAt,
+		arg.FailedAt,
+		arg.ProjectID,
+		arg.DeliveryID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const findOneToOneDirectConversation = `-- name: FindOneToOneDirectConversation :one
@@ -5002,27 +5042,30 @@ func (q *Queries) ReadDirectRead(ctx context.Context, arg ReadDirectReadParams) 
 	return i, err
 }
 
-const reclaimStaleGitHubDelivery = `-- name: ReclaimStaleGitHubDelivery :execrows
+const reclaimRetryableGitHubDelivery = `-- name: ReclaimRetryableGitHubDelivery :execrows
 UPDATE github_deliveries
-SET event_type = ?1, created_at = ?2
+SET event_type = ?1, status = 'processing',
+    updated_at = ?2, completed_at = NULL, failed_at = NULL
 WHERE project_id = ?3
   AND delivery_id = ?4
-  AND status = 'processing'
-  AND created_at < ?5
+  AND (
+    status = 'failed'
+    OR (status = 'processing' AND updated_at < ?5)
+  )
 `
 
-type ReclaimStaleGitHubDeliveryParams struct {
+type ReclaimRetryableGitHubDeliveryParams struct {
 	EventType   string `json:"event_type"`
-	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 	ProjectID   string `json:"project_id"`
 	DeliveryID  string `json:"delivery_id"`
 	StaleBefore string `json:"stale_before"`
 }
 
-func (q *Queries) ReclaimStaleGitHubDelivery(ctx context.Context, arg ReclaimStaleGitHubDeliveryParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, reclaimStaleGitHubDelivery,
+func (q *Queries) ReclaimRetryableGitHubDelivery(ctx context.Context, arg ReclaimRetryableGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reclaimRetryableGitHubDelivery,
 		arg.EventType,
-		arg.CreatedAt,
+		arg.UpdatedAt,
 		arg.ProjectID,
 		arg.DeliveryID,
 		arg.StaleBefore,
@@ -5050,26 +5093,6 @@ type RecordPendingUploadCleanupFailureParams struct {
 func (q *Queries) RecordPendingUploadCleanupFailure(ctx context.Context, arg RecordPendingUploadCleanupFailureParams) error {
 	_, err := q.db.ExecContext(ctx, recordPendingUploadCleanupFailure, arg.LastError, arg.UpdatedAt, arg.ID)
 	return err
-}
-
-const releaseGitHubDelivery = `-- name: ReleaseGitHubDelivery :execrows
-DELETE FROM github_deliveries
-WHERE project_id = ?1
-  AND delivery_id = ?2
-  AND status = 'processing'
-`
-
-type ReleaseGitHubDeliveryParams struct {
-	ProjectID  string `json:"project_id"`
-	DeliveryID string `json:"delivery_id"`
-}
-
-func (q *Queries) ReleaseGitHubDelivery(ctx context.Context, arg ReleaseGitHubDeliveryParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, releaseGitHubDelivery, arg.ProjectID, arg.DeliveryID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
 }
 
 const removeReaction = `-- name: RemoveReaction :execrows

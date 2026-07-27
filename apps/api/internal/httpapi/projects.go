@@ -303,12 +303,12 @@ func (s *Server) githubProjectWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, errors.New("invalid GitHub delivery claim state"))
 		return
 	}
-	complete := false
+	completed := false
 	defer func() {
-		if !complete {
+		if !completed {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 			defer cancel()
-			_ = s.store.ReleaseGitHubDelivery(cleanupCtx, target.ProjectID, deliveryID)
+			_ = s.store.FailGitHubDelivery(cleanupCtx, target.ProjectID, deliveryID)
 		}
 	}()
 
@@ -323,7 +323,7 @@ func (s *Server) githubProjectWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	complete = true
+	completed = true
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"status": "accepted", "delivery_id": deliveryID, "updates": len(updates),
 	})

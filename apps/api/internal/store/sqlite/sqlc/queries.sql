@@ -1669,24 +1669,31 @@ WHERE p.id = sqlc.arg(project_id)
 
 -- name: ClaimGitHubDelivery :execrows
 INSERT OR IGNORE INTO github_deliveries (
-  project_id, delivery_id, event_type, status, created_at
+  project_id, delivery_id, event_type, status, created_at, updated_at
 )
 VALUES (
-  sqlc.arg(project_id), sqlc.arg(delivery_id), sqlc.arg(event_type), 'processing', sqlc.arg(created_at)
+  sqlc.arg(project_id), sqlc.arg(delivery_id), sqlc.arg(event_type), 'processing',
+  sqlc.arg(created_at), sqlc.arg(updated_at)
 );
 
 -- name: CompleteGitHubDelivery :execrows
 UPDATE github_deliveries
-SET status = 'complete', completed_at = sqlc.arg(completed_at)
-WHERE project_id = sqlc.arg(project_id) AND delivery_id = sqlc.arg(delivery_id);
-
--- name: ReclaimStaleGitHubDelivery :execrows
-UPDATE github_deliveries
-SET event_type = sqlc.arg(event_type), created_at = sqlc.arg(created_at)
+SET status = 'complete', updated_at = sqlc.arg(updated_at),
+    completed_at = sqlc.arg(completed_at), failed_at = NULL
 WHERE project_id = sqlc.arg(project_id)
   AND delivery_id = sqlc.arg(delivery_id)
-  AND status = 'processing'
-  AND created_at < sqlc.arg(stale_before);
+  AND status = 'processing';
+
+-- name: ReclaimRetryableGitHubDelivery :execrows
+UPDATE github_deliveries
+SET event_type = sqlc.arg(event_type), status = 'processing',
+    updated_at = sqlc.arg(updated_at), completed_at = NULL, failed_at = NULL
+WHERE project_id = sqlc.arg(project_id)
+  AND delivery_id = sqlc.arg(delivery_id)
+  AND (
+    status = 'failed'
+    OR (status = 'processing' AND updated_at < sqlc.arg(stale_before))
+  );
 
 -- name: GetGitHubDeliveryStatus :one
 SELECT status
@@ -1694,8 +1701,9 @@ FROM github_deliveries
 WHERE project_id = sqlc.arg(project_id)
   AND delivery_id = sqlc.arg(delivery_id);
 
--- name: ReleaseGitHubDelivery :execrows
-DELETE FROM github_deliveries
+-- name: FailGitHubDelivery :execrows
+UPDATE github_deliveries
+SET status = 'failed', updated_at = sqlc.arg(updated_at), failed_at = sqlc.arg(failed_at)
 WHERE project_id = sqlc.arg(project_id)
   AND delivery_id = sqlc.arg(delivery_id)
   AND status = 'processing';

@@ -217,6 +217,23 @@ type EventSubscription struct {
 	RevokedAt         sql.NullString `json:"revoked_at"`
 }
 
+type GithubDelivery struct {
+	ProjectID   string         `json:"project_id"`
+	DeliveryID  string         `json:"delivery_id"`
+	EventType   string         `json:"event_type"`
+	Status      string         `json:"status"`
+	CreatedAt   string         `json:"created_at"`
+	CompletedAt sql.NullString `json:"completed_at"`
+}
+
+type GithubPullRequestThread struct {
+	ProjectID     string `json:"project_id"`
+	RepositoryID  string `json:"repository_id"`
+	PullNumber    int64  `json:"pull_number"`
+	RootMessageID string `json:"root_message_id"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
 type Identity struct {
 	ID              string `json:"id"`
 	UserID          string `json:"user_id"`
@@ -286,6 +303,37 @@ type PendingUploadCleanup struct {
 	LastError   string `json:"last_error"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type Project struct {
+	ID                string `json:"id"`
+	WorkspaceID       string `json:"workspace_id"`
+	Name              string `json:"name"`
+	Slug              string `json:"slug"`
+	Description       string `json:"description"`
+	ChannelID         string `json:"channel_id"`
+	IntegrationUserID string `json:"integration_user_id"`
+	WebhookSecret     string `json:"webhook_secret"`
+	CreatedBy         string `json:"created_by"`
+	CreatedAt         string `json:"created_at"`
+}
+
+type ProjectMember struct {
+	ProjectID string `json:"project_id"`
+	UserID    string `json:"user_id"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ProjectRepository struct {
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Provider  string `json:"provider"`
+	Owner     string `json:"owner"`
+	Name      string `json:"name"`
+	FullName  string `json:"full_name"`
+	Url       string `json:"url"`
+	CreatedAt string `json:"created_at"`
 }
 
 type Reaction struct {

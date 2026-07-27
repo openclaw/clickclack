@@ -327,6 +327,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/projects": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List GitHub-linked project rooms in a workspace */
+    get: operations["listProjects"];
+    put?: never;
+    /** Create a GitHub-linked project room and collaboration channel */
+    post: operations["createProject"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{project_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getProject"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{project_id}/context": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read repository, participant, and channel context for human or bot collaboration */
+    get: operations["getProjectContext"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspaces/{workspace_id}/topics": {
     parameters: {
       query?: never;
@@ -1085,6 +1136,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/hooks/github/projects/{project_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Receive signed GitHub pull request activity for a project */
+    post: operations["githubProjectWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1744,6 +1812,68 @@ export interface components {
       /** Format: int64 */
       unread_count?: number;
     };
+    CreateProjectRequest: {
+      name: string;
+      slug?: string;
+      description?: string;
+      repositories: string[];
+      member_ids?: string[];
+    };
+    ProjectRepository: {
+      id: string;
+      project_id: string;
+      /** @enum {string} */
+      provider: "github";
+      owner: string;
+      name: string;
+      full_name: string;
+      /** Format: uri */
+      url: string;
+      /** Format: date-time */
+      created_at: string;
+    };
+    ProjectMember: {
+      user: components["schemas"]["User"];
+      /** @enum {string} */
+      role: "admin" | "member";
+    };
+    Project: {
+      id: string;
+      workspace_id: string;
+      name: string;
+      slug: string;
+      description: string;
+      channel: components["schemas"]["Channel"];
+      /** @description Internal tokenless service identity used to author GitHub activity. */
+      integration_user_id: string;
+      created_by: string;
+      /** Format: date-time */
+      created_at: string;
+      repositories: components["schemas"]["ProjectRepository"][];
+      members: components["schemas"]["ProjectMember"][];
+    };
+    ProjectWebhookHandoff: {
+      /** Format: uri */
+      url: string;
+      /** @description One-time webhook secret returned only when the project is created. */
+      secret: string;
+    };
+    CreateProjectResponse: {
+      project: components["schemas"]["Project"];
+      webhook: components["schemas"]["ProjectWebhookHandoff"];
+    };
+    ProjectContextResponse: {
+      project: components["schemas"]["Project"];
+      context: {
+        /** @enum {string} */
+        source_of_truth: "github";
+        /** @enum {boolean} */
+        write_access: false;
+        channel_id: string;
+        repositories: components["schemas"]["ProjectRepository"][];
+        participants: components["schemas"]["ProjectMember"][];
+      };
+    };
     DirectConversation: {
       id: string;
       /** @description Immutable public route ID used in app URLs. */
@@ -1933,6 +2063,7 @@ export interface components {
   parameters: {
     workspace_id: string;
     channel_id: string;
+    project_id: string;
     message_id: string;
     conversation_id: string;
     workspace_route_id: string;
@@ -2738,6 +2869,109 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  listProjects: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Project list with repositories, participants, and collaboration channels */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            projects: components["schemas"]["Project"][];
+          };
+        };
+      };
+    };
+  };
+  createProject: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateProjectRequest"];
+      };
+    };
+    responses: {
+      /** @description Project created; the webhook secret is returned only in this response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreateProjectResponse"];
+        };
+      };
+      /** @description Workspace manager permission required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getProject: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: components["parameters"]["project_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Project room */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            project: components["schemas"]["Project"];
+          };
+        };
+      };
+    };
+  };
+  getProjectContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: components["parameters"]["project_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Read-only project context */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectContextResponse"];
+        };
       };
     };
   };
@@ -4455,6 +4689,64 @@ export interface operations {
     responses: {
       /** @description Slash-command callback response */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  githubProjectWebhook: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-GitHub-Event": string;
+        "X-GitHub-Delivery": string;
+        "X-Hub-Signature-256": string;
+      };
+      path: {
+        project_id: components["parameters"]["project_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description GitHub ping accepted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Delivery accepted or identified as a duplicate */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid project, repository, or webhook signature */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Delivery processing failed */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Delivery is already processing and should be retried */
+      503: {
         headers: {
           [name: string]: unknown;
         };

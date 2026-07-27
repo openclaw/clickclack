@@ -169,6 +169,10 @@ func (s *Server) Handler() http.Handler {
 		r.Patch("/workspaces/{workspace_id}/moderation/members/{user_id}", s.updateWorkspaceMemberModeration)
 		r.Get("/workspaces/{workspace_id}/channels", s.listChannels)
 		r.Post("/workspaces/{workspace_id}/channels", s.createChannel)
+		r.Get("/workspaces/{workspace_id}/projects", s.listProjects)
+		r.Post("/workspaces/{workspace_id}/projects", s.createProject)
+		r.Get("/projects/{project_id}", s.getProject)
+		r.Get("/projects/{project_id}/context", s.getProjectContext)
 		r.Get("/workspaces/{workspace_id}/topics", s.listTopics)
 		r.Post("/workspaces/{workspace_id}/topics", s.createTopic)
 		r.Get("/workspaces/{workspace_id}/bots", s.listBots)
@@ -230,6 +234,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/dms/{conversation_id}/read", s.markDirectRead)
 		r.Post("/hooks/mattermost/{channel_id}", s.mattermostWebhook)
 		r.Post("/hooks/slash/{channel_id}", s.slashCommand)
+		r.Post("/hooks/github/projects/{project_id}", s.githubProjectWebhook)
 	})
 
 	r.NotFound(s.serveSPA)

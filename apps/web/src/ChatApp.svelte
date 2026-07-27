@@ -3511,6 +3511,7 @@
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
     onOpenWorkspaceSettings={openWorkspaceSettings}
+    projectsHref={`/app/${selectedWorkspace?.route_id || selectedWorkspaceID}/projects`}
   />
 
   <main class="timeline" inert={mobileNavOpen}>

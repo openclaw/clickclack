@@ -1,5 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import { FolderGit2 } from "@lucide/svelte";
   import { apiResourceURL } from "../../lib/api";
   import { avatarHue, directConversationForUser, handleLabel } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User } from "../../lib/types";
@@ -33,6 +34,7 @@
     onOpenProfile: (profile: User) => void;
     onOpenSettings: () => void;
     onOpenWorkspaceSettings: () => void;
+    projectsHref: string;
   };
 
   let {
@@ -62,6 +64,7 @@
     onOpenProfile,
     onOpenSettings,
     onOpenWorkspaceSettings,
+    projectsHref,
   }: Props = $props();
 
   type SectionState = { channels: boolean; directMessages: boolean; people: boolean };
@@ -227,6 +230,11 @@
   {/if}
 
   <div class="sidebar-scroll">
+    <a class="projects-link" href={projectsHref}>
+      <FolderGit2 size={16} strokeWidth={1.8} aria-hidden="true" />
+      <span>Projects</span>
+    </a>
+
     <ChannelList
       {workspaceID}
       expanded={sections.channels}

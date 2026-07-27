@@ -58,6 +58,36 @@ export type Channel = {
   unread_count?: number;
 };
 
+export type ProjectRepository = {
+  id: string;
+  project_id: string;
+  provider: "github";
+  owner: string;
+  name: string;
+  full_name: string;
+  url: string;
+  created_at: string;
+};
+
+export type ProjectMember = {
+  user: User;
+  role: "admin" | "member";
+};
+
+export type Project = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  channel: Channel;
+  integration_user_id: string;
+  created_by: string;
+  created_at: string;
+  repositories: ProjectRepository[];
+  members: ProjectMember[];
+};
+
 // One commentary prose segment inside a coalesced preamble block.
 export type PreambleCommentaryItem = {
   type: "commentary";

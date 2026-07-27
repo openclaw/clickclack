@@ -26,6 +26,7 @@ func (s *Store) ExportJSON(ctx context.Context, writer io.Writer) error {
 		"channel_reads", "direct_reads",
 		"message_attachments", "direct_conversations", "direct_conversation_members",
 		"invites", "auth_magic_links", "sessions", "bot_tokens",
+		"projects", "project_repositories", "project_members", "github_deliveries", "github_pull_request_threads",
 	}
 	for _, table := range tables {
 		rows, err := tx.QueryContext(ctx, `SELECT * FROM `+table)
@@ -92,6 +93,8 @@ func shouldRedactExportColumn(table, column string) bool {
 		return column == "token_hash" || column == "setup_nonce"
 	case "uploads":
 		return column == "storage_path"
+	case "projects":
+		return column == "webhook_secret"
 	default:
 		return false
 	}

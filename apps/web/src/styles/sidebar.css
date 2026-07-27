@@ -186,6 +186,25 @@
   transform: translateX(-14px);
 }
 
+.projects-link {
+  height: 34px;
+  margin: 8px 10px 4px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.projects-link:hover {
+  color: var(--text-strong);
+  background: var(--hover);
+}
+
 .workspace-header {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);

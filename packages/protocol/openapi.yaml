@@ -466,6 +466,74 @@ paths:
       responses:
         "201":
           description: Created channel
+  /api/workspaces/{workspace_id}/projects:
+    get:
+      operationId: listProjects
+      summary: List GitHub-linked project rooms in a workspace
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      responses:
+        "200":
+          description: Project list with repositories, participants, and collaboration channels
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      summary: Create a GitHub-linked project room and collaboration channel
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created; the webhook secret is returned only in this response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateProjectResponse"
+        "403":
+          description: Workspace manager permission required
+  /api/projects/{project_id}:
+    get:
+      operationId: getProject
+      parameters:
+        - $ref: "#/components/parameters/project_id"
+      responses:
+        "200":
+          description: Project room
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project]
+                properties:
+                  project:
+                    $ref: "#/components/schemas/Project"
+  /api/projects/{project_id}/context:
+    get:
+      operationId: getProjectContext
+      summary: Read repository, participant, and channel context for human or bot collaboration
+      parameters:
+        - $ref: "#/components/parameters/project_id"
+      responses:
+        "200":
+          description: Read-only project context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectContextResponse"
   /api/workspaces/{workspace_id}/topics:
     get:
       operationId: listTopics
@@ -1571,6 +1639,47 @@ paths:
       responses:
         "201":
           description: Slash-command callback response
+  /api/hooks/github/projects/{project_id}:
+    post:
+      operationId: githubProjectWebhook
+      summary: Receive signed GitHub pull request activity for a project
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/project_id"
+        - name: X-GitHub-Event
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-GitHub-Delivery
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: "^sha256=[a-f0-9]{64}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: GitHub ping accepted
+        "202":
+          description: Delivery accepted or identified as a duplicate
+        "401":
+          description: Invalid project, repository, or webhook signature
+        "500":
+          description: Delivery processing failed
+        "503":
+          description: Delivery is already processing and should be retried
 components:
   parameters:
     workspace_id:
@@ -1581,6 +1690,12 @@ components:
         type: string
     channel_id:
       name: channel_id
+      in: path
+      required: true
+      schema:
+        type: string
+    project_id:
+      name: project_id
       in: path
       required: true
       schema:
@@ -2810,6 +2925,137 @@ components:
         unread_count:
           type: integer
           format: int64
+    CreateProjectRequest:
+      type: object
+      required: [name, repositories]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        slug:
+          type: string
+        description:
+          type: string
+          maxLength: 500
+        repositories:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            description: GitHub repository URL or owner/name identifier.
+        member_ids:
+          type: array
+          items:
+            type: string
+    ProjectRepository:
+      type: object
+      required: [id, project_id, provider, owner, name, full_name, url, created_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        provider:
+          type: string
+          enum: [github]
+        owner:
+          type: string
+        name:
+          type: string
+        full_name:
+          type: string
+        url:
+          type: string
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+    ProjectMember:
+      type: object
+      required: [user, role]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        role:
+          type: string
+          enum: [admin, member]
+    Project:
+      type: object
+      required:
+        [id, workspace_id, name, slug, description, channel, integration_user_id, created_by, created_at, repositories, members]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        channel:
+          $ref: "#/components/schemas/Channel"
+        integration_user_id:
+          type: string
+          description: Internal tokenless service identity used to author GitHub activity.
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        repositories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectRepository"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectMember"
+    ProjectWebhookHandoff:
+      type: object
+      required: [url, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+        secret:
+          type: string
+          description: One-time webhook secret returned only when the project is created.
+    CreateProjectResponse:
+      type: object
+      required: [project, webhook]
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        webhook:
+          $ref: "#/components/schemas/ProjectWebhookHandoff"
+    ProjectContextResponse:
+      type: object
+      required: [project, context]
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        context:
+          type: object
+          required: [source_of_truth, write_access, channel_id, repositories, participants]
+          properties:
+            source_of_truth:
+              type: string
+              enum: [github]
+            write_access:
+              type: boolean
+              enum: [false]
+            channel_id:
+              type: string
+            repositories:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectRepository"
+            participants:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectMember"
     DirectConversation:
       type: object
       required: [id, route_id, workspace_id, created_at, members, can_send]

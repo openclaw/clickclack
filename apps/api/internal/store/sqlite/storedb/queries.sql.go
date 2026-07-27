@@ -121,6 +121,35 @@ func (q *Queries) ChannelRouteID(ctx context.Context, arg ChannelRouteIDParams) 
 	return route_id, err
 }
 
+const claimGitHubDelivery = `-- name: ClaimGitHubDelivery :execrows
+INSERT OR IGNORE INTO github_deliveries (
+  project_id, delivery_id, event_type, status, created_at
+)
+VALUES (
+  ?1, ?2, ?3, 'processing', ?4
+)
+`
+
+type ClaimGitHubDeliveryParams struct {
+	ProjectID  string `json:"project_id"`
+	DeliveryID string `json:"delivery_id"`
+	EventType  string `json:"event_type"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (q *Queries) ClaimGitHubDelivery(ctx context.Context, arg ClaimGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimGitHubDelivery,
+		arg.ProjectID,
+		arg.DeliveryID,
+		arg.EventType,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const clearMemberBlocked = `-- name: ClearMemberBlocked :exec
 UPDATE workspace_member_moderation
 SET blocked_at = NULL,
@@ -171,6 +200,26 @@ func (q *Queries) ClearMemberTimeout(ctx context.Context, arg ClearMemberTimeout
 		arg.UserID,
 	)
 	return err
+}
+
+const completeGitHubDelivery = `-- name: CompleteGitHubDelivery :execrows
+UPDATE github_deliveries
+SET status = 'complete', completed_at = ?1
+WHERE project_id = ?2 AND delivery_id = ?3
+`
+
+type CompleteGitHubDeliveryParams struct {
+	CompletedAt sql.NullString `json:"completed_at"`
+	ProjectID   string         `json:"project_id"`
+	DeliveryID  string         `json:"delivery_id"`
+}
+
+func (q *Queries) CompleteGitHubDelivery(ctx context.Context, arg CompleteGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, completeGitHubDelivery, arg.CompletedAt, arg.ProjectID, arg.DeliveryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const countDesktopOAuthGrants = `-- name: CountDesktopOAuthGrants :one
@@ -1413,6 +1462,86 @@ func (q *Queries) GetEventDeliveryAttemptCursor(ctx context.Context, arg GetEven
 	return created_at, err
 }
 
+const getGitHubDeliveryStatus = `-- name: GetGitHubDeliveryStatus :one
+SELECT status
+FROM github_deliveries
+WHERE project_id = ?1
+  AND delivery_id = ?2
+`
+
+type GetGitHubDeliveryStatusParams struct {
+	ProjectID  string `json:"project_id"`
+	DeliveryID string `json:"delivery_id"`
+}
+
+func (q *Queries) GetGitHubDeliveryStatus(ctx context.Context, arg GetGitHubDeliveryStatusParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getGitHubDeliveryStatus, arg.ProjectID, arg.DeliveryID)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
+const getGitHubPullRequestThread = `-- name: GetGitHubPullRequestThread :one
+SELECT root_message_id
+FROM github_pull_request_threads
+WHERE project_id = ?1
+  AND repository_id = ?2
+  AND pull_number = ?3
+`
+
+type GetGitHubPullRequestThreadParams struct {
+	ProjectID    string `json:"project_id"`
+	RepositoryID string `json:"repository_id"`
+	PullNumber   int64  `json:"pull_number"`
+}
+
+func (q *Queries) GetGitHubPullRequestThread(ctx context.Context, arg GetGitHubPullRequestThreadParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getGitHubPullRequestThread, arg.ProjectID, arg.RepositoryID, arg.PullNumber)
+	var root_message_id string
+	err := row.Scan(&root_message_id)
+	return root_message_id, err
+}
+
+const getGitHubWebhookTarget = `-- name: GetGitHubWebhookTarget :one
+SELECT p.id AS project_id, p.workspace_id, p.channel_id, p.integration_user_id,
+       pr.id AS repository_id, pr.full_name AS repository_full_name, p.webhook_secret
+FROM projects p
+JOIN project_repositories pr ON pr.project_id = p.id
+WHERE p.id = ?1
+  AND pr.provider = 'github'
+  AND pr.full_name = ?2
+`
+
+type GetGitHubWebhookTargetParams struct {
+	ProjectID          string `json:"project_id"`
+	RepositoryFullName string `json:"repository_full_name"`
+}
+
+type GetGitHubWebhookTargetRow struct {
+	ProjectID          string `json:"project_id"`
+	WorkspaceID        string `json:"workspace_id"`
+	ChannelID          string `json:"channel_id"`
+	IntegrationUserID  string `json:"integration_user_id"`
+	RepositoryID       string `json:"repository_id"`
+	RepositoryFullName string `json:"repository_full_name"`
+	WebhookSecret      string `json:"webhook_secret"`
+}
+
+func (q *Queries) GetGitHubWebhookTarget(ctx context.Context, arg GetGitHubWebhookTargetParams) (GetGitHubWebhookTargetRow, error) {
+	row := q.db.QueryRowContext(ctx, getGitHubWebhookTarget, arg.ProjectID, arg.RepositoryFullName)
+	var i GetGitHubWebhookTargetRow
+	err := row.Scan(
+		&i.ProjectID,
+		&i.WorkspaceID,
+		&i.ChannelID,
+		&i.IntegrationUserID,
+		&i.RepositoryID,
+		&i.RepositoryFullName,
+		&i.WebhookSecret,
+	)
+	return i, err
+}
+
 const getIdentityEmailForUser = `-- name: GetIdentityEmailForUser :one
 SELECT email
 FROM identities
@@ -1513,6 +1642,64 @@ func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash s
 		&i.DesktopProtocol,
 		&i.CreatedAtUnix,
 		&i.ExpiresAtUnix,
+	)
+	return i, err
+}
+
+const getProject = `-- name: GetProject :one
+SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.integration_user_id,
+       p.created_by, p.created_at,
+       c.id AS channel_id, COALESCE(c.route_id, '') AS channel_route_id,
+       c.name AS channel_name, c.kind AS channel_kind, c.created_at AS channel_created_at,
+       c.archived_at, c.external_managed, c.external_ref, c.external_url, c.sidebar_section
+FROM projects p
+JOIN channels c ON c.id = p.channel_id
+WHERE p.id = ?1
+`
+
+type GetProjectRow struct {
+	ID                string         `json:"id"`
+	WorkspaceID       string         `json:"workspace_id"`
+	Name              string         `json:"name"`
+	Slug              string         `json:"slug"`
+	Description       string         `json:"description"`
+	IntegrationUserID string         `json:"integration_user_id"`
+	CreatedBy         string         `json:"created_by"`
+	CreatedAt         string         `json:"created_at"`
+	ChannelID         string         `json:"channel_id"`
+	ChannelRouteID    string         `json:"channel_route_id"`
+	ChannelName       string         `json:"channel_name"`
+	ChannelKind       string         `json:"channel_kind"`
+	ChannelCreatedAt  string         `json:"channel_created_at"`
+	ArchivedAt        sql.NullString `json:"archived_at"`
+	ExternalManaged   int64          `json:"external_managed"`
+	ExternalRef       sql.NullString `json:"external_ref"`
+	ExternalUrl       sql.NullString `json:"external_url"`
+	SidebarSection    sql.NullString `json:"sidebar_section"`
+}
+
+func (q *Queries) GetProject(ctx context.Context, projectID string) (GetProjectRow, error) {
+	row := q.db.QueryRowContext(ctx, getProject, projectID)
+	var i GetProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IntegrationUserID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ChannelID,
+		&i.ChannelRouteID,
+		&i.ChannelName,
+		&i.ChannelKind,
+		&i.ChannelCreatedAt,
+		&i.ArchivedAt,
+		&i.ExternalManaged,
+		&i.ExternalRef,
+		&i.ExternalUrl,
+		&i.SidebarSection,
 	)
 	return i, err
 }
@@ -2437,6 +2624,38 @@ func (q *Queries) InsertEventRecipient(ctx context.Context, arg InsertEventRecip
 	return err
 }
 
+const insertGitHubPullRequestThread = `-- name: InsertGitHubPullRequestThread :execrows
+INSERT OR IGNORE INTO github_pull_request_threads (
+  project_id, repository_id, pull_number, root_message_id, updated_at
+)
+VALUES (
+  ?1, ?2, ?3,
+  ?4, ?5
+)
+`
+
+type InsertGitHubPullRequestThreadParams struct {
+	ProjectID     string `json:"project_id"`
+	RepositoryID  string `json:"repository_id"`
+	PullNumber    int64  `json:"pull_number"`
+	RootMessageID string `json:"root_message_id"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+func (q *Queries) InsertGitHubPullRequestThread(ctx context.Context, arg InsertGitHubPullRequestThreadParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertGitHubPullRequestThread,
+		arg.ProjectID,
+		arg.RepositoryID,
+		arg.PullNumber,
+		arg.RootMessageID,
+		arg.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const insertHumanUser = `-- name: InsertHumanUser :exec
 INSERT INTO users (id, display_name, avatar_url, created_at)
 VALUES (?1, ?2, ?3, ?4)
@@ -2611,6 +2830,102 @@ func (q *Queries) InsertPendingUploadCleanup(ctx context.Context, arg InsertPend
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertProject = `-- name: InsertProject :exec
+INSERT INTO projects (
+  id, workspace_id, name, slug, description, channel_id, integration_user_id,
+  webhook_secret, created_by, created_at
+)
+VALUES (
+  ?1, ?2, ?3, ?4,
+  ?5, ?6, ?7,
+  ?8, ?9, ?10
+)
+`
+
+type InsertProjectParams struct {
+	ID                string `json:"id"`
+	WorkspaceID       string `json:"workspace_id"`
+	Name              string `json:"name"`
+	Slug              string `json:"slug"`
+	Description       string `json:"description"`
+	ChannelID         string `json:"channel_id"`
+	IntegrationUserID string `json:"integration_user_id"`
+	WebhookSecret     string `json:"webhook_secret"`
+	CreatedBy         string `json:"created_by"`
+	CreatedAt         string `json:"created_at"`
+}
+
+func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) error {
+	_, err := q.db.ExecContext(ctx, insertProject,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.ChannelID,
+		arg.IntegrationUserID,
+		arg.WebhookSecret,
+		arg.CreatedBy,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertProjectMember = `-- name: InsertProjectMember :exec
+INSERT INTO project_members (project_id, user_id, role, created_at)
+VALUES (?1, ?2, ?3, ?4)
+`
+
+type InsertProjectMemberParams struct {
+	ProjectID string `json:"project_id"`
+	UserID    string `json:"user_id"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (q *Queries) InsertProjectMember(ctx context.Context, arg InsertProjectMemberParams) error {
+	_, err := q.db.ExecContext(ctx, insertProjectMember,
+		arg.ProjectID,
+		arg.UserID,
+		arg.Role,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertProjectRepository = `-- name: InsertProjectRepository :exec
+INSERT INTO project_repositories (
+  id, project_id, provider, owner, name, full_name, url, created_at
+)
+VALUES (
+  ?1, ?2, 'github', ?3, ?4,
+  ?5, ?6, ?7
+)
+`
+
+type InsertProjectRepositoryParams struct {
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Owner     string `json:"owner"`
+	Name      string `json:"name"`
+	FullName  string `json:"full_name"`
+	Url       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (q *Queries) InsertProjectRepository(ctx context.Context, arg InsertProjectRepositoryParams) error {
+	_, err := q.db.ExecContext(ctx, insertProjectRepository,
+		arg.ID,
+		arg.ProjectID,
+		arg.Owner,
+		arg.Name,
+		arg.FullName,
+		arg.Url,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const insertSession = `-- name: InsertSession :exec
@@ -3627,6 +3942,171 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int64)
 	return items, nil
 }
 
+const listProjectMembers = `-- name: ListProjectMembers :many
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at, pm.role
+FROM project_members pm
+JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = ?1
+ORDER BY CASE pm.role WHEN 'admin' THEN 0 ELSE 1 END, u.display_name, u.id
+`
+
+type ListProjectMembersRow struct {
+	ID          string         `json:"id"`
+	Kind        string         `json:"kind"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+	Role        string         `json:"role"`
+}
+
+func (q *Queries) ListProjectMembers(ctx context.Context, projectID string) ([]ListProjectMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectMembers, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectMembersRow
+	for rows.Next() {
+		var i ListProjectMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectRepositories = `-- name: ListProjectRepositories :many
+SELECT id, project_id, provider, owner, name, full_name, url, created_at
+FROM project_repositories
+WHERE project_id = ?1
+ORDER BY full_name, id
+`
+
+func (q *Queries) ListProjectRepositories(ctx context.Context, projectID string) ([]ProjectRepository, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectRepositories, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProjectRepository
+	for rows.Next() {
+		var i ProjectRepository
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Provider,
+			&i.Owner,
+			&i.Name,
+			&i.FullName,
+			&i.Url,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjects = `-- name: ListProjects :many
+SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.integration_user_id,
+       p.created_by, p.created_at,
+       c.id AS channel_id, COALESCE(c.route_id, '') AS channel_route_id,
+       c.name AS channel_name, c.kind AS channel_kind, c.created_at AS channel_created_at,
+       c.archived_at, c.external_managed, c.external_ref, c.external_url, c.sidebar_section
+FROM projects p
+JOIN channels c ON c.id = p.channel_id
+WHERE p.workspace_id = ?1
+ORDER BY p.name, p.id
+`
+
+type ListProjectsRow struct {
+	ID                string         `json:"id"`
+	WorkspaceID       string         `json:"workspace_id"`
+	Name              string         `json:"name"`
+	Slug              string         `json:"slug"`
+	Description       string         `json:"description"`
+	IntegrationUserID string         `json:"integration_user_id"`
+	CreatedBy         string         `json:"created_by"`
+	CreatedAt         string         `json:"created_at"`
+	ChannelID         string         `json:"channel_id"`
+	ChannelRouteID    string         `json:"channel_route_id"`
+	ChannelName       string         `json:"channel_name"`
+	ChannelKind       string         `json:"channel_kind"`
+	ChannelCreatedAt  string         `json:"channel_created_at"`
+	ArchivedAt        sql.NullString `json:"archived_at"`
+	ExternalManaged   int64          `json:"external_managed"`
+	ExternalRef       sql.NullString `json:"external_ref"`
+	ExternalUrl       sql.NullString `json:"external_url"`
+	SidebarSection    sql.NullString `json:"sidebar_section"`
+}
+
+func (q *Queries) ListProjects(ctx context.Context, workspaceID string) ([]ListProjectsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjects, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectsRow
+	for rows.Next() {
+		var i ListProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IntegrationUserID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ChannelID,
+			&i.ChannelRouteID,
+			&i.ChannelName,
+			&i.ChannelKind,
+			&i.ChannelCreatedAt,
+			&i.ArchivedAt,
+			&i.ExternalManaged,
+			&i.ExternalRef,
+			&i.ExternalUrl,
+			&i.SidebarSection,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReactionsForMessages = `-- name: ListReactionsForMessages :many
 SELECT
   r.message_id,
@@ -4522,6 +5002,37 @@ func (q *Queries) ReadDirectRead(ctx context.Context, arg ReadDirectReadParams) 
 	return i, err
 }
 
+const reclaimStaleGitHubDelivery = `-- name: ReclaimStaleGitHubDelivery :execrows
+UPDATE github_deliveries
+SET event_type = ?1, created_at = ?2
+WHERE project_id = ?3
+  AND delivery_id = ?4
+  AND status = 'processing'
+  AND created_at < ?5
+`
+
+type ReclaimStaleGitHubDeliveryParams struct {
+	EventType   string `json:"event_type"`
+	CreatedAt   string `json:"created_at"`
+	ProjectID   string `json:"project_id"`
+	DeliveryID  string `json:"delivery_id"`
+	StaleBefore string `json:"stale_before"`
+}
+
+func (q *Queries) ReclaimStaleGitHubDelivery(ctx context.Context, arg ReclaimStaleGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reclaimStaleGitHubDelivery,
+		arg.EventType,
+		arg.CreatedAt,
+		arg.ProjectID,
+		arg.DeliveryID,
+		arg.StaleBefore,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const recordPendingUploadCleanupFailure = `-- name: RecordPendingUploadCleanupFailure :exec
 UPDATE pending_upload_cleanups
 SET attempts = attempts + 1,
@@ -4539,6 +5050,26 @@ type RecordPendingUploadCleanupFailureParams struct {
 func (q *Queries) RecordPendingUploadCleanupFailure(ctx context.Context, arg RecordPendingUploadCleanupFailureParams) error {
 	_, err := q.db.ExecContext(ctx, recordPendingUploadCleanupFailure, arg.LastError, arg.UpdatedAt, arg.ID)
 	return err
+}
+
+const releaseGitHubDelivery = `-- name: ReleaseGitHubDelivery :execrows
+DELETE FROM github_deliveries
+WHERE project_id = ?1
+  AND delivery_id = ?2
+  AND status = 'processing'
+`
+
+type ReleaseGitHubDeliveryParams struct {
+	ProjectID  string `json:"project_id"`
+	DeliveryID string `json:"delivery_id"`
+}
+
+func (q *Queries) ReleaseGitHubDelivery(ctx context.Context, arg ReleaseGitHubDeliveryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, releaseGitHubDelivery, arg.ProjectID, arg.DeliveryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const removeReaction = `-- name: RemoveReaction :execrows

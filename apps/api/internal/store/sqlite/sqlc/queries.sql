@@ -1599,3 +1599,119 @@ WHERE workspace_id = sqlc.arg(workspace_id)
   AND archived_at IS NULL
 ORDER BY CASE WHEN name = 'general' THEN 0 ELSE 1 END, created_at, id
 LIMIT 1;
+
+-- name: InsertProject :exec
+INSERT INTO projects (
+  id, workspace_id, name, slug, description, channel_id, integration_user_id,
+  webhook_secret, created_by, created_at
+)
+VALUES (
+  sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(name), sqlc.arg(slug),
+  sqlc.arg(description), sqlc.arg(channel_id), sqlc.arg(integration_user_id),
+  sqlc.arg(webhook_secret), sqlc.arg(created_by), sqlc.arg(created_at)
+);
+
+-- name: InsertProjectRepository :exec
+INSERT INTO project_repositories (
+  id, project_id, provider, owner, name, full_name, url, created_at
+)
+VALUES (
+  sqlc.arg(id), sqlc.arg(project_id), 'github', sqlc.arg(owner), sqlc.arg(name),
+  sqlc.arg(full_name), sqlc.arg(url), sqlc.arg(created_at)
+);
+
+-- name: InsertProjectMember :exec
+INSERT INTO project_members (project_id, user_id, role, created_at)
+VALUES (sqlc.arg(project_id), sqlc.arg(user_id), sqlc.arg(role), sqlc.arg(created_at));
+
+-- name: ListProjects :many
+SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.integration_user_id,
+       p.created_by, p.created_at,
+       c.id AS channel_id, COALESCE(c.route_id, '') AS channel_route_id,
+       c.name AS channel_name, c.kind AS channel_kind, c.created_at AS channel_created_at,
+       c.archived_at, c.external_managed, c.external_ref, c.external_url, c.sidebar_section
+FROM projects p
+JOIN channels c ON c.id = p.channel_id
+WHERE p.workspace_id = sqlc.arg(workspace_id)
+ORDER BY p.name, p.id;
+
+-- name: GetProject :one
+SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.integration_user_id,
+       p.created_by, p.created_at,
+       c.id AS channel_id, COALESCE(c.route_id, '') AS channel_route_id,
+       c.name AS channel_name, c.kind AS channel_kind, c.created_at AS channel_created_at,
+       c.archived_at, c.external_managed, c.external_ref, c.external_url, c.sidebar_section
+FROM projects p
+JOIN channels c ON c.id = p.channel_id
+WHERE p.id = sqlc.arg(project_id);
+
+-- name: ListProjectRepositories :many
+SELECT id, project_id, provider, owner, name, full_name, url, created_at
+FROM project_repositories
+WHERE project_id = sqlc.arg(project_id)
+ORDER BY full_name, id;
+
+-- name: ListProjectMembers :many
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at, pm.role
+FROM project_members pm
+JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = sqlc.arg(project_id)
+ORDER BY CASE pm.role WHEN 'admin' THEN 0 ELSE 1 END, u.display_name, u.id;
+
+-- name: GetGitHubWebhookTarget :one
+SELECT p.id AS project_id, p.workspace_id, p.channel_id, p.integration_user_id,
+       pr.id AS repository_id, pr.full_name AS repository_full_name, p.webhook_secret
+FROM projects p
+JOIN project_repositories pr ON pr.project_id = p.id
+WHERE p.id = sqlc.arg(project_id)
+  AND pr.provider = 'github'
+  AND pr.full_name = sqlc.arg(repository_full_name);
+
+-- name: ClaimGitHubDelivery :execrows
+INSERT OR IGNORE INTO github_deliveries (
+  project_id, delivery_id, event_type, status, created_at
+)
+VALUES (
+  sqlc.arg(project_id), sqlc.arg(delivery_id), sqlc.arg(event_type), 'processing', sqlc.arg(created_at)
+);
+
+-- name: CompleteGitHubDelivery :execrows
+UPDATE github_deliveries
+SET status = 'complete', completed_at = sqlc.arg(completed_at)
+WHERE project_id = sqlc.arg(project_id) AND delivery_id = sqlc.arg(delivery_id);
+
+-- name: ReclaimStaleGitHubDelivery :execrows
+UPDATE github_deliveries
+SET event_type = sqlc.arg(event_type), created_at = sqlc.arg(created_at)
+WHERE project_id = sqlc.arg(project_id)
+  AND delivery_id = sqlc.arg(delivery_id)
+  AND status = 'processing'
+  AND created_at < sqlc.arg(stale_before);
+
+-- name: GetGitHubDeliveryStatus :one
+SELECT status
+FROM github_deliveries
+WHERE project_id = sqlc.arg(project_id)
+  AND delivery_id = sqlc.arg(delivery_id);
+
+-- name: ReleaseGitHubDelivery :execrows
+DELETE FROM github_deliveries
+WHERE project_id = sqlc.arg(project_id)
+  AND delivery_id = sqlc.arg(delivery_id)
+  AND status = 'processing';
+
+-- name: GetGitHubPullRequestThread :one
+SELECT root_message_id
+FROM github_pull_request_threads
+WHERE project_id = sqlc.arg(project_id)
+  AND repository_id = sqlc.arg(repository_id)
+  AND pull_number = sqlc.arg(pull_number);
+
+-- name: InsertGitHubPullRequestThread :execrows
+INSERT OR IGNORE INTO github_pull_request_threads (
+  project_id, repository_id, pull_number, root_message_id, updated_at
+)
+VALUES (
+  sqlc.arg(project_id), sqlc.arg(repository_id), sqlc.arg(pull_number),
+  sqlc.arg(root_message_id), sqlc.arg(updated_at)
+);

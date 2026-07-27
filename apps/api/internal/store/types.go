@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -228,6 +229,108 @@ type Channel struct {
 	LastReadSeq     int64   `json:"last_read_seq"`
 	UnreadCount     int64   `json:"unread_count"`
 }
+
+type Project struct {
+	ID                string              `json:"id"`
+	WorkspaceID       string              `json:"workspace_id"`
+	Name              string              `json:"name"`
+	Slug              string              `json:"slug"`
+	Description       string              `json:"description"`
+	Channel           Channel             `json:"channel"`
+	IntegrationUserID string              `json:"integration_user_id"`
+	CreatedBy         string              `json:"created_by"`
+	CreatedAt         string              `json:"created_at"`
+	Repositories      []ProjectRepository `json:"repositories"`
+	Members           []ProjectMember     `json:"members"`
+}
+
+type ProjectRepository struct {
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Provider  string `json:"provider"`
+	Owner     string `json:"owner"`
+	Name      string `json:"name"`
+	FullName  string `json:"full_name"`
+	URL       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ProjectMember struct {
+	User User   `json:"user"`
+	Role string `json:"role"`
+}
+
+type CreateProjectRepositoryInput struct {
+	Owner    string
+	Name     string
+	FullName string
+	URL      string
+}
+
+type CreateProjectInput struct {
+	WorkspaceID   string
+	Name          string
+	Slug          string
+	Description   string
+	CreatedBy     string
+	WebhookSecret string
+	Repositories  []CreateProjectRepositoryInput
+	MemberIDs     []string
+}
+
+func ValidateCreateProjectInput(input CreateProjectInput) error {
+	name := strings.TrimSpace(input.Name)
+	description := strings.TrimSpace(input.Description)
+	if name == "" {
+		return errors.New("project name is required")
+	}
+	if len([]rune(name)) > 80 {
+		return errors.New("project name must be 80 characters or fewer")
+	}
+	if len([]rune(description)) > 500 {
+		return errors.New("project description must be 500 characters or fewer")
+	}
+	if len(input.Repositories) == 0 {
+		return errors.New("at least one GitHub repository is required")
+	}
+	if len(input.Repositories) > 50 {
+		return errors.New("a project can link at most 50 GitHub repositories")
+	}
+	for _, repository := range input.Repositories {
+		owner := strings.TrimSpace(repository.Owner)
+		repositoryName := strings.TrimSpace(repository.Name)
+		fullName := strings.TrimSpace(repository.FullName)
+		canonicalFullName := strings.ToLower(owner + "/" + repositoryName)
+		if owner == "" || repositoryName == "" || fullName != canonicalFullName {
+			return errors.New("project repositories must use canonical GitHub owner/name values")
+		}
+		if strings.TrimSpace(repository.URL) != "https://github.com/"+canonicalFullName {
+			return errors.New("project repository URL must be a canonical GitHub URL")
+		}
+	}
+	if strings.TrimSpace(input.WebhookSecret) == "" {
+		return errors.New("webhook secret is required")
+	}
+	return nil
+}
+
+type GitHubWebhookTarget struct {
+	ProjectID          string
+	WorkspaceID        string
+	ChannelID          string
+	IntegrationUserID  string
+	RepositoryID       string
+	RepositoryFullName string
+	WebhookSecret      string
+}
+
+type GitHubDeliveryClaim string
+
+const (
+	GitHubDeliveryClaimed    GitHubDeliveryClaim = "claimed"
+	GitHubDeliveryProcessing GitHubDeliveryClaim = "processing"
+	GitHubDeliveryComplete   GitHubDeliveryClaim = "complete"
+)
 
 type ReactionSummary struct {
 	Emoji       string `json:"emoji"`
@@ -1088,6 +1191,15 @@ type Store interface {
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, error)
 	CreateChannel(ctx context.Context, input CreateChannelInput) (Channel, Event, error)
 	UpdateChannel(ctx context.Context, input UpdateChannelInput) (Channel, Event, error)
+	ListProjects(ctx context.Context, workspaceID, userID string) ([]Project, error)
+	GetProject(ctx context.Context, projectID, userID string) (Project, error)
+	CreateProject(ctx context.Context, input CreateProjectInput) (Project, Event, error)
+	GetGitHubWebhookTarget(ctx context.Context, projectID, repositoryFullName string) (GitHubWebhookTarget, error)
+	ClaimGitHubDelivery(ctx context.Context, projectID, deliveryID, eventType string) (GitHubDeliveryClaim, error)
+	CompleteGitHubDelivery(ctx context.Context, projectID, deliveryID string) error
+	ReleaseGitHubDelivery(ctx context.Context, projectID, deliveryID string) error
+	GetGitHubPullRequestThread(ctx context.Context, projectID, repositoryID string, pullNumber int64) (string, error)
+	SetGitHubPullRequestThread(ctx context.Context, projectID, repositoryID string, pullNumber int64, rootMessageID string) (string, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)
 	CreateTopic(ctx context.Context, input CreateTopicInput) (Topic, error)
 	ListMessages(ctx context.Context, channelID, userID string, page MessagePageRequest) (MessagePage, error)

@@ -200,6 +200,54 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 		t.Fatalf("PR open event did not enrich the placeholder root: %#v", enrichedRoot)
 	}
 
+	issueOpened := map[string]any{
+		"action":     "opened",
+		"repository": map[string]any{"full_name": "block/buzz"},
+		"sender":     map[string]any{"login": "carol"},
+		"issue": map[string]any{
+			"number": 44, "title": "Track the release blocker", "body": "Waiting on production access.",
+			"html_url": "https://github.com/block/buzz/issues/44", "user": map[string]any{"login": "carol"},
+		},
+	}
+	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "issues", "delivery-issue-open", issueOpened, http.StatusAccepted)
+	channelMessages, err = st.ListMessages(ctx, created.Project.Channel.ID, owner.ID, store.MessagePageRequest{Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var issueRoot store.Message
+	for _, message := range channelMessages.Messages {
+		if strings.Contains(message.Body, "Issue #44") {
+			issueRoot = message
+			break
+		}
+	}
+	if issueRoot.ID == "" || !strings.Contains(issueRoot.Body, "Waiting on production access") {
+		t.Fatalf("issue event did not create a rich root: %#v", channelMessages.Messages)
+	}
+
+	issueComment := map[string]any{
+		"action":     "created",
+		"repository": map[string]any{"full_name": "block/buzz"},
+		"sender":     map[string]any{"login": "dana"},
+		"issue": map[string]any{
+			"number": 44, "title": "Track the release blocker",
+			"html_url": "https://github.com/block/buzz/issues/44", "user": map[string]any{"login": "carol"},
+		},
+		"comment": map[string]any{
+			"body": "Access is ready.", "html_url": "https://github.com/block/buzz/issues/44#issuecomment-1",
+			"user": map[string]any{"login": "dana"},
+		},
+	}
+	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "issue_comment", "delivery-issue-comment", issueComment, http.StatusAccepted)
+	sendProjectWebhook(t, created.Webhook.URL, created.Webhook.Secret, "issue_comment", "delivery-issue-comment", issueComment, http.StatusAccepted)
+	_, issueReplies, issueState, err := st.GetThread(ctx, issueRoot.ID, owner.ID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issueReplies) != 1 || issueState.ReplyCount != 1 || !strings.Contains(issueReplies[0].Body, "Access is ready") {
+		t.Fatalf("expected one idempotent issue reply, replies=%#v state=%#v", issueReplies, issueState)
+	}
+
 	sendProjectWebhook(t, created.Webhook.URL, "wrong-secret", "pull_request", "delivery-invalid", opened, http.StatusUnauthorized)
 	_, replies, _, err = st.GetThread(ctx, messages.Messages[0].ID, owner.ID, 20)
 	if err != nil {
@@ -251,13 +299,7 @@ func TestGitHubProjectUpdateCoverage(t *testing.T) {
 		t.Fatalf("missing review comment update: %#v", updates)
 	}
 
-	payload.Issue = &struct {
-		Number      int64  `json:"number"`
-		HTMLURL     string `json:"html_url"`
-		PullRequest *struct {
-			URL string `json:"url"`
-		} `json:"pull_request"`
-	}{Number: 7, PullRequest: &struct {
+	payload.Issue = &githubIssue{Number: 7, PullRequest: &struct {
 		URL string `json:"url"`
 	}{URL: "https://api.github.test/pulls/7"}}
 	payload.Comment = &struct {

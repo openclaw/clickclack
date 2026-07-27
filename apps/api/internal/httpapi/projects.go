@@ -206,13 +206,7 @@ type githubProjectPayload struct {
 			Login string `json:"login"`
 		} `json:"user"`
 	} `json:"comment"`
-	Issue *struct {
-		Number      int64  `json:"number"`
-		HTMLURL     string `json:"html_url"`
-		PullRequest *struct {
-			URL string `json:"url"`
-		} `json:"pull_request"`
-	} `json:"issue"`
+	Issue      *githubIssue `json:"issue"`
 	CheckSuite *githubCheck `json:"check_suite"`
 	CheckRun   *githubCheck `json:"check_run"`
 }
@@ -233,6 +227,20 @@ type githubPullRequest struct {
 	Base struct {
 		Ref string `json:"ref"`
 	} `json:"base"`
+}
+
+type githubIssue struct {
+	Number  int64  `json:"number"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	HTMLURL string `json:"html_url"`
+	State   string `json:"state"`
+	User    struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	PullRequest *struct {
+		URL string `json:"url"`
+	} `json:"pull_request"`
 }
 
 type githubCheck struct {
@@ -335,10 +343,11 @@ func validGitHubSignature(payload []byte, signature, secret string) bool {
 }
 
 type githubProjectUpdate struct {
-	PullNumber int64
-	Root       githubPullRequest
-	Body       string
-	RootOnly   bool
+	Number   int64
+	Root     githubPullRequest
+	Issue    *githubIssue
+	Body     string
+	RootOnly bool
 }
 
 func githubProjectUpdates(eventType string, payload githubProjectPayload) []githubProjectUpdate {
@@ -356,7 +365,19 @@ func githubProjectUpdates(eventType string, payload githubProjectPayload) []gith
 			body = fmt.Sprintf("**%s** merged pull request #%d.", actor, payload.PullRequest.Number)
 		}
 		return []githubProjectUpdate{{
-			PullNumber: payload.PullRequest.Number, Root: *payload.PullRequest, Body: body,
+			Number: payload.PullRequest.Number, Root: *payload.PullRequest, Body: body,
+			RootOnly: payload.Action == "opened",
+		}}
+	case "issues":
+		if payload.Issue == nil || payload.Issue.PullRequest != nil {
+			return nil
+		}
+		action := strings.ReplaceAll(payload.Action, "_", " ")
+		body := fmt.Sprintf("**%s** %s issue #%d.", actor, action, payload.Issue.Number)
+		return []githubProjectUpdate{{
+			Number:   payload.Issue.Number,
+			Issue:    payload.Issue,
+			Body:     body,
 			RootOnly: payload.Action == "opened",
 		}}
 	case "pull_request_review":
@@ -371,22 +392,34 @@ func githubProjectUpdates(eventType string, payload githubProjectPayload) []gith
 		if payload.Review.HTMLURL != "" {
 			body += "\n\n[View review on GitHub](" + payload.Review.HTMLURL + ")"
 		}
-		return []githubProjectUpdate{{PullNumber: payload.PullRequest.Number, Root: *payload.PullRequest, Body: body}}
+		return []githubProjectUpdate{{Number: payload.PullRequest.Number, Root: *payload.PullRequest, Body: body}}
 	case "pull_request_review_comment":
 		if payload.PullRequest == nil || payload.Comment == nil {
 			return nil
 		}
 		return []githubProjectUpdate{{
-			PullNumber: payload.PullRequest.Number, Root: *payload.PullRequest,
+			Number: payload.PullRequest.Number, Root: *payload.PullRequest,
 			Body: githubCommentBody(firstNonEmpty(payload.Comment.User.Login, actor), "left a review comment", payload.Comment.Body, payload.Comment.HTMLURL),
 		}}
 	case "issue_comment":
-		if payload.Issue == nil || payload.Issue.PullRequest == nil || payload.Comment == nil {
+		if payload.Issue == nil || payload.Comment == nil {
 			return nil
+		}
+		if payload.Issue.PullRequest == nil {
+			return []githubProjectUpdate{{
+				Number: payload.Issue.Number,
+				Issue:  payload.Issue,
+				Body: githubCommentBody(
+					firstNonEmpty(payload.Comment.User.Login, actor),
+					"commented",
+					payload.Comment.Body,
+					payload.Comment.HTMLURL,
+				),
+			}}
 		}
 		root := githubPullRequest{Number: payload.Issue.Number, HTMLURL: payload.Issue.HTMLURL}
 		return []githubProjectUpdate{{
-			PullNumber: payload.Issue.Number, Root: root,
+			Number: payload.Issue.Number, Root: root,
 			Body: githubCommentBody(firstNonEmpty(payload.Comment.User.Login, actor), "commented", payload.Comment.Body, payload.Comment.HTMLURL),
 		}}
 	case "check_suite", "check_run":
@@ -406,7 +439,7 @@ func githubProjectUpdates(eventType string, payload githubProjectPayload) []gith
 		updates := make([]githubProjectUpdate, 0, len(check.PullRequests))
 		for _, pull := range check.PullRequests {
 			updates = append(updates, githubProjectUpdate{
-				PullNumber: pull.Number, Body: body,
+				Number: pull.Number, Body: body,
 			})
 		}
 		return updates
@@ -416,12 +449,12 @@ func githubProjectUpdates(eventType string, payload githubProjectPayload) []gith
 }
 
 func (s *Server) postGitHubProjectUpdate(r *http.Request, target store.GitHubWebhookTarget, deliveryID string, update githubProjectUpdate) error {
-	rootID, err := s.store.GetGitHubPullRequestThread(r.Context(), target.ProjectID, target.RepositoryID, update.PullNumber)
+	rootID, err := s.store.GetGitHubPullRequestThread(r.Context(), target.ProjectID, target.RepositoryID, update.Number)
 	if errors.Is(err, sql.ErrNoRows) {
-		rootBody := githubPullRequestRootBody(target.RepositoryFullName, update)
+		rootBody := githubProjectRootBody(target.RepositoryFullName, update)
 		message, event, createErr := s.store.CreateMessage(r.Context(), store.CreateMessageInput{
 			ChannelID: target.ChannelID, AuthorID: target.IntegrationUserID, Body: rootBody,
-			Nonce: githubNonce("pr", target.ProjectID, target.RepositoryID, strconv.FormatInt(update.PullNumber, 10)),
+			Nonce: githubNonce("pr", target.ProjectID, target.RepositoryID, strconv.FormatInt(update.Number, 10)),
 		})
 		if createErr != nil {
 			return createErr
@@ -430,7 +463,7 @@ func (s *Server) postGitHubProjectUpdate(r *http.Request, target store.GitHubWeb
 			s.publishEvent(r.Context(), event)
 			s.notifyMessageCreated(r.Context(), message)
 		}
-		rootID, err = s.store.SetGitHubPullRequestThread(r.Context(), target.ProjectID, target.RepositoryID, update.PullNumber, message.ID)
+		rootID, err = s.store.SetGitHubPullRequestThread(r.Context(), target.ProjectID, target.RepositoryID, update.Number, message.ID)
 		if err != nil {
 			return err
 		}
@@ -440,7 +473,7 @@ func (s *Server) postGitHubProjectUpdate(r *http.Request, target store.GitHubWeb
 	} else if err != nil {
 		return err
 	} else if update.RootOnly {
-		rootBody := githubPullRequestRootBody(target.RepositoryFullName, update)
+		rootBody := githubProjectRootBody(target.RepositoryFullName, update)
 		message, getErr := s.store.GetMessage(r.Context(), rootID, target.IntegrationUserID)
 		if getErr != nil {
 			return getErr
@@ -460,7 +493,7 @@ func (s *Server) postGitHubProjectUpdate(r *http.Request, target store.GitHubWeb
 	}
 	reply, _, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{
 		RootMessageID: rootID, AuthorID: target.IntegrationUserID, Body: update.Body,
-		Nonce: githubNonce("delivery", target.ProjectID, deliveryID, strconv.FormatInt(update.PullNumber, 10)),
+		Nonce: githubNonce("delivery", target.ProjectID, deliveryID, strconv.FormatInt(update.Number, 10)),
 	})
 	if err != nil {
 		return err
@@ -472,12 +505,19 @@ func (s *Server) postGitHubProjectUpdate(r *http.Request, target store.GitHubWeb
 	return nil
 }
 
+func githubProjectRootBody(repositoryFullName string, update githubProjectUpdate) string {
+	if update.Issue != nil {
+		return githubIssueRootBody(repositoryFullName, *update.Issue)
+	}
+	return githubPullRequestRootBody(repositoryFullName, update)
+}
+
 func githubPullRequestRootBody(repositoryFullName string, update githubProjectUpdate) string {
 	title := strings.TrimSpace(update.Root.Title)
 	if title == "" {
-		title = "Pull request #" + strconv.FormatInt(update.PullNumber, 10)
+		title = "Pull request #" + strconv.FormatInt(update.Number, 10)
 	}
-	body := fmt.Sprintf("**PR #%d · %s**\n%s", update.PullNumber, title, repositoryFullName)
+	body := fmt.Sprintf("**PR #%d · %s**\n%s", update.Number, title, repositoryFullName)
 	if update.Root.User.Login != "" {
 		body += " · opened by **" + update.Root.User.Login + "**"
 	}
@@ -486,6 +526,24 @@ func githubPullRequestRootBody(repositoryFullName string, update githubProjectUp
 	}
 	if update.Root.HTMLURL != "" {
 		body += "\n\n[View pull request on GitHub](" + update.Root.HTMLURL + ")"
+	}
+	return body
+}
+
+func githubIssueRootBody(repositoryFullName string, issue githubIssue) string {
+	title := strings.TrimSpace(issue.Title)
+	if title == "" {
+		title = "Issue #" + strconv.FormatInt(issue.Number, 10)
+	}
+	body := fmt.Sprintf("**Issue #%d · %s**\n%s", issue.Number, title, repositoryFullName)
+	if issue.User.Login != "" {
+		body += " · opened by **" + issue.User.Login + "**"
+	}
+	if excerpt := webhookExcerpt(issue.Body); excerpt != "" {
+		body += "\n\n> " + strings.ReplaceAll(excerpt, "\n", "\n> ")
+	}
+	if issue.HTMLURL != "" {
+		body += "\n\n[View issue on GitHub](" + issue.HTMLURL + ")"
 	}
 	return body
 }

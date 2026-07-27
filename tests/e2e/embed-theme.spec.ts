@@ -85,27 +85,8 @@ test("embedded channels follow the exact cross-origin host theme without changin
   expect(embedResponse.ok()).toBe(true);
   expect(embedResponse.headers()["content-security-policy"]).toContain(hostOrigin);
 
-  await page.route(`${hostOrigin}/theme-proof`, (route) =>
-    route.fulfill({
-      contentType: "text/html; charset=utf-8",
-      body: `<!doctype html>
-        <html><head><meta charset="utf-8"><title>Host theme proof</title>
-        <style>
-          :root { color-scheme: light; }
-          body { margin: 0; padding: 24px; background: #faf9f7; color: #27272a;
-            font: 14px system-ui, sans-serif; }
-          main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
-            min-height: 620px; overflow: hidden; border: 1px solid #e4e4e7; border-radius: 8px; }
-          section { padding: 24px; }
-          iframe { width: 100%; height: 620px; border: 0; border-left: 1px solid #e4e4e7; }
-        </style></head><body><main>
-          <section><h1>OpenClaw host theme</h1><p>Cross-origin ClickClack sidebar</p></section>
-          <iframe title="ClickClack discussion" src="${embedUrl.href.replaceAll("&", "&amp;")}"></iframe>
-        </main></body></html>`,
-    }),
-  );
-
   const appearanceWrites: string[] = [];
+  const frameDiagnostics: string[] = [];
   page.on("request", (request) => {
     if (
       request.method() === "PATCH" &&
@@ -115,11 +96,28 @@ test("embedded channels follow the exact cross-origin host theme without changin
       appearanceWrites.push(request.postData() ?? "");
     }
   });
+  page.on("requestfailed", (request) => {
+    if (request.url().startsWith(clickClackOrigin)) {
+      frameDiagnostics.push(`${request.url()}: ${request.failure()?.errorText ?? "unknown error"}`);
+    }
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") frameDiagnostics.push(message.text());
+  });
 
-  await page.goto(`${hostOrigin}/theme-proof`);
-  await expect
-    .poll(() => page.frames().map((candidate) => candidate.url()))
-    .toContain(embedUrl.href);
+  const hostUrl = new URL("/theme-proof", hostOrigin);
+  hostUrl.searchParams.set("embed", embedUrl.href);
+  await page.goto(hostUrl.href);
+  try {
+    await expect
+      .poll(() => page.frames().map((candidate) => candidate.url()))
+      .toContain(embedUrl.href);
+  } catch (error) {
+    throw new Error(
+      `The real cross-origin embed did not load. Browser diagnostics: ${frameDiagnostics.join("; ") || "none"}`,
+      { cause: error },
+    );
+  }
   const embeddedPage = page.frameLocator('iframe[title="ClickClack discussion"]');
   await expect(embeddedPage.getByLabel("Embedded channel")).toBeVisible();
   await expect(embeddedPage.locator("html")).toHaveAttribute("data-color-mode", "light");

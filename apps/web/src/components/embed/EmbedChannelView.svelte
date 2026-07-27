@@ -6,6 +6,7 @@
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
+  import { channelDisplayTitle } from "../../lib/chat/channels";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -478,7 +479,7 @@
 </script>
 
 <svelte:head>
-  <title>{channel ? `#${channel.name} · ClickClack` : "ClickClack channel"}</title>
+  <title>{channel ? `#${channelDisplayTitle(channel)} · ClickClack` : "ClickClack channel"}</title>
   <meta name="color-scheme" content="light dark" />
 </svelte:head>
 
@@ -487,7 +488,7 @@
     <header class="embed-channel-header">
       <div>
         <span class="embed-channel-glyph" aria-hidden="true">#</span>
-        <h1>{channel.name}</h1>
+        <h1>{channelDisplayTitle(channel)}</h1>
         {#if channel.archived_at}<span class="embed-channel-status">Archived</span>{/if}
       </div>
     </header>
@@ -519,7 +520,7 @@
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
         value={messageBody}
-        placeholder={`Message #${channel.name}`}
+        placeholder={`Message #${channelDisplayTitle(channel)}`}
         ariaLabel="Message body"
         submitLabel="Send"
         formClass="composer embed-channel-composer"

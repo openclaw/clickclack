@@ -46,6 +46,19 @@ func optionalTrimmedString(value string) *string {
 	return &trimmed
 }
 
+func normalizedDisplayTitle(value string) *string {
+	const maxRunes = 200
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	runes := []rune(trimmed)
+	if len(runes) > maxRunes {
+		trimmed = strings.TrimSpace(string(runes[:maxRunes]))
+	}
+	return &trimmed
+}
+
 func databaseBool(value bool) int32 {
 	if value {
 		return 1
@@ -191,6 +204,7 @@ func storeChannelFromGetChannel(row storedb.GetChannelRow) store.Channel {
 		RouteID:         row.RouteID,
 		WorkspaceID:     row.WorkspaceID,
 		Name:            row.Name,
+		DisplayTitle:    ptrFromNull(row.DisplayTitle),
 		Kind:            row.Kind,
 		CreatedAt:       row.CreatedAt,
 		ArchivedAt:      ptrFromNull(row.ArchivedAt),
@@ -207,6 +221,7 @@ func storeChannelFromListChannels(row storedb.ListChannelsRow) store.Channel {
 		RouteID:         row.RouteID,
 		WorkspaceID:     row.WorkspaceID,
 		Name:            row.Name,
+		DisplayTitle:    ptrFromNull(row.DisplayTitle),
 		Kind:            row.Kind,
 		CreatedAt:       row.CreatedAt,
 		ArchivedAt:      ptrFromNull(row.ArchivedAt),

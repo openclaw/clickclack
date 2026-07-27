@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -193,6 +194,78 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true || payload["channel_id"] != channel.ID {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestChannelDisplayTitleRoundTripAndClear(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Display Owner", "display-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	longTitle := "  " + strings.Repeat("界", 205) + "  "
+	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID:  workspaces[0].ID,
+		UserID:       owner.ID,
+		Name:         "display-session",
+		DisplayTitle: longTitle,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if channel.DisplayTitle == nil || len([]rune(*channel.DisplayTitle)) != 200 || strings.Contains(*channel.DisplayTitle, " ") {
+		t.Fatalf("display title was not trimmed and rune-truncated: %#v", channel.DisplayTitle)
+	}
+	listed, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, candidate := range listed {
+		if candidate.ID == channel.ID {
+			found = candidate.DisplayTitle != nil && *candidate.DisplayTitle == *channel.DisplayTitle
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("display title missing from channel list: %#v", listed)
+	}
+	got, err := st.GetChannel(ctx, channel.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DisplayTitle == nil || *got.DisplayTitle != *channel.DisplayTitle {
+		t.Fatalf("display title missing from channel get: %#v", got)
+	}
+	trailingBoundary := strings.Repeat("界", 199) + "  X"
+	updated, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &trailingBoundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || len([]rune(*updated.DisplayTitle)) != 199 || strings.HasSuffix(*updated.DisplayTitle, " ") {
+		t.Fatalf("truncated display title retained boundary whitespace: %#v", updated.DisplayTitle)
+	}
+	next := "  Sensible Work Tree Naming Scheme  "
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &next})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || *updated.DisplayTitle != "Sensible Work Tree Naming Scheme" {
+		t.Fatalf("display title was not updated: %#v", updated.DisplayTitle)
+	}
+	clear := "  "
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &clear})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle != nil {
+		t.Fatalf("display title was not cleared: %#v", updated.DisplayTitle)
 	}
 }
 

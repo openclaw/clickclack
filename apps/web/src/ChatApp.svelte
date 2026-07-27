@@ -17,6 +17,7 @@
   } from "./lib/chat/messageWindow";
   import { collectRecentPeople, dmTitle } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
+  import { channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
   import {
     MessageEditController,
@@ -1629,7 +1630,7 @@
     const channel = channels.find((candidate) => candidate.id === channelID);
     const author = lookupUser(authorID);
     const authorName = author?.display_name || "ClickClack";
-    const place = channel ? `#${channel.name}` : "Direct message";
+    const place = channel ? `#${channelDisplayTitle(channel)}` : "Direct message";
     const rawBody = typeof payload.body === "string" ? payload.body : "New message";
     const messageID = typeof payload.message_id === "string" ? payload.message_id : `${channelID || dmID}:${event.seq || Date.now()}`;
     if (desktop) {
@@ -2300,7 +2301,7 @@
               workspaceID: selectedWorkspaceID,
               channelID: selectedChannelID,
               directConversationID: "",
-              label: `#${selectedChannel.name}`,
+              label: `#${channelDisplayTitle(selectedChannel)}`,
             }
           : { workspaceID: selectedWorkspaceID, channelID: "", directConversationID: "", label: "" };
     searchThreadDetour = false;
@@ -3433,7 +3434,7 @@
       channelTitle={selectedDirect
         ? `@${dmTitle(selectedDirect, user?.id)}`
         : selectedChannel
-          ? `#${selectedChannel.name}`
+          ? `#${channelDisplayTitle(selectedChannel)}`
           : undefined}
       externalURL={selectedDirect ? undefined : selectedChannel?.external_url}
       {connected}
@@ -3611,7 +3612,7 @@
 
     <ChatComposer
       value={messageBody}
-      placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${selectedChannel.name}` : "Pick a channel to start"}
+      placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${channelDisplayTitle(selectedChannel)}` : "Pick a channel to start"}
       ariaLabel="Message body"
       submitLabel="Send"
       disabled={!!selectedDirect && !selectedDirectWritable}

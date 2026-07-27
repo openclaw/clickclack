@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
   import { APIError } from "../../../lib/api";
+  import { channelDisplayTitle } from "../../../lib/chat/channels";
   import {
     BOT_SCOPE_BUNDLES,
     activeTokens,
@@ -102,13 +103,8 @@
     ),
   );
 
-  const channelNames = $derived.by(() => {
-    const names = channels
-      .filter((channel) => !channel.archived_at)
-      .map((channel) => channel.name)
-      .filter(Boolean);
-    return names;
-  });
+  const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
+  const channelNames = $derived(activeChannels.map((channel) => channel.name).filter(Boolean));
 
   $effect(() => {
     if (!handleEdited) {
@@ -576,8 +572,8 @@
           bind:value={defaultChannel}
           disabled={credentialsLocked || channelNames.length === 0}
         >
-          {#each channelNames as name (name)}
-            <option value={name}>#{name}</option>
+          {#each activeChannels as channel (channel.id)}
+            <option value={channel.name}>#{channelDisplayTitle(channel)}</option>
           {/each}
         </select>
         <span class="ws-bots__form-hint">

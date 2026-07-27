@@ -2502,6 +2502,9 @@ components:
       properties:
         name:
           type: string
+        display_title:
+          type: string
+          description: Optional presentation-only title. Whitespace-only values clear it; longer values are truncated to 200 Unicode code points.
         kind:
           type: string
           default: public
@@ -2551,6 +2554,9 @@ components:
       properties:
         name:
           type: string
+        display_title:
+          type: string
+          description: Presentation-only title. Send an empty string to clear it; longer values are truncated to 200 Unicode code points.
         kind:
           type: string
         archived:
@@ -2781,6 +2787,9 @@ components:
           type: string
         name:
           type: string
+        display_title:
+          type: string
+          description: Optional presentation-only title; channel routing and uniqueness continue to use name.
         kind:
           type: string
         created_at:

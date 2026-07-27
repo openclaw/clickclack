@@ -343,6 +343,7 @@ channels
   id
   workspace_id
   name
+  display_title (nullable, presentation-only)
   kind
   created_at
   archived_at

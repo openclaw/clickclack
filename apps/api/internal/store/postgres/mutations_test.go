@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,75 @@ func TestManagedChannelFieldsRoundTripPostgres(t *testing.T) {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestChannelDisplayTitleRoundTripPostgres(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Display Owner", Email: "display-postgres@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Display Postgres", Slug: "display-postgres"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID:  workspace.ID,
+		UserID:       owner.ID,
+		Name:         "display-session",
+		DisplayTitle: "  " + strings.Repeat("界", 205) + "  ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if channel.DisplayTitle == nil || len([]rune(*channel.DisplayTitle)) != 200 {
+		t.Fatalf("display title was not rune-truncated: %#v", channel.DisplayTitle)
+	}
+	listed, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, candidate := range listed {
+		if candidate.ID == channel.ID {
+			found = candidate.DisplayTitle != nil && *candidate.DisplayTitle == *channel.DisplayTitle
+		}
+	}
+	got, err := st.GetChannel(ctx, channel.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || got.DisplayTitle == nil || *got.DisplayTitle != *channel.DisplayTitle {
+		t.Fatalf("display title did not roundtrip: list=%#v get=%#v", listed, got)
+	}
+	trailingBoundary := strings.Repeat("界", 199) + "  X"
+	updated, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &trailingBoundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || len([]rune(*updated.DisplayTitle)) != 199 || strings.HasSuffix(*updated.DisplayTitle, " ") {
+		t.Fatalf("truncated display title retained boundary whitespace: %#v", updated.DisplayTitle)
+	}
+	next := "  Sensible Work Tree Naming Scheme  "
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &next})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || *updated.DisplayTitle != "Sensible Work Tree Naming Scheme" {
+		t.Fatalf("display title was not updated: %#v", updated.DisplayTitle)
+	}
+	clear := ""
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &clear})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle != nil {
+		t.Fatalf("display title was not cleared: %#v", updated.DisplayTitle)
 	}
 }
 

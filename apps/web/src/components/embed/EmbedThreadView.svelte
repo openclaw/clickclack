@@ -5,6 +5,7 @@
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
+  import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import {
     MessageEditController,
@@ -161,7 +162,7 @@
     const channel = data.channels.find((item) => item.id === target.parent_id);
     if (!channel) throw new APIError(404, "Thread channel not found");
     directConversation = null;
-    parentLabel = `#${channel.name}`;
+    parentLabel = `#${channelDisplayTitle(channel)}`;
   }
 
   async function loadThread() {

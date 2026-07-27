@@ -25,6 +25,7 @@
   import { onDestroy, tick } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
+  import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -825,7 +826,7 @@
         {#if selectedDirect}
           This is the start of your conversation with {dmTitle(selectedDirect, currentUserID)}.
         {:else if selectedChannel}
-          Welcome to #{selectedChannel.name}!
+          Welcome to #{channelDisplayTitle(selectedChannel)}!
         {:else}
           Pick a channel to get started.
         {/if}

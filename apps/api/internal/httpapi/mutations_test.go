@@ -73,13 +73,21 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Channel store.Channel `json:"channel"`
 	}](t, server.URL+"/api/workspaces/"+workspaces[0].ID+"/channels", map[string]any{
 		"name":             "managed-http",
+		"display_title":    "  Managed HTTP Session  ",
 		"external_managed": true,
 		"external_ref":     "session:http",
 		"external_url":     "https://control.example.com/sessions/http",
 		"sidebar_section":  "Sessions",
 	}).Channel
-	if !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
+	if managedChannel.DisplayTitle == nil || *managedChannel.DisplayTitle != "Managed HTTP Session" || !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
 		t.Fatalf("managed channel fields missing from create response: %#v", managedChannel)
+	}
+	nextDisplayTitle := "Renamed HTTP Session"
+	renamedManaged := patchJSON[struct {
+		Channel store.Channel `json:"channel"`
+	}](t, server.URL+"/api/channels/"+managedChannel.ID, map[string]any{"display_title": nextDisplayTitle}).Channel
+	if renamedManaged.DisplayTitle == nil || *renamedManaged.DisplayTitle != nextDisplayTitle {
+		t.Fatalf("display title missing from patch response: %#v", renamedManaged)
 	}
 	clear := ""
 	archivedManaged := patchJSON[struct {
@@ -87,11 +95,12 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Event   store.Event   `json:"event"`
 	}](t, server.URL+"/api/channels/"+managedChannel.ID, map[string]any{
 		"archived":        true,
+		"display_title":   clear,
 		"external_ref":    clear,
 		"external_url":    clear,
 		"sidebar_section": clear,
 	})
-	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
+	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.DisplayTitle != nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
 		t.Fatalf("managed channel fields not updated through HTTP: %#v", archivedManaged.Channel)
 	}
 	if payload, ok := archivedManaged.Event.Payload.(map[string]any); !ok || payload["archived"] != true {

@@ -863,6 +863,7 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Name            string `json:"name"`
+		DisplayTitle    string `json:"display_title"`
 		Kind            string `json:"kind"`
 		ExternalManaged bool   `json:"external_managed"`
 		ExternalRef     string `json:"external_ref"`
@@ -876,6 +877,7 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 	channel, event, err := s.store.CreateChannel(r.Context(), store.CreateChannelInput{
 		WorkspaceID:     chi.URLParam(r, "workspace_id"),
 		Name:            body.Name,
+		DisplayTitle:    body.DisplayTitle,
 		Kind:            body.Kind,
 		UserID:          act.user.ID,
 		ExternalManaged: body.ExternalManaged,

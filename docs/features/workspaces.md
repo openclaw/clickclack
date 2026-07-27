@@ -55,16 +55,24 @@ POST /api/workspaces/{workspace_id}/channels  # create
 PATCH /api/channels/{channel_id}              # rename, change kind, archive
 ```
 
-Create body: `{name, kind?, external_managed?, external_ref?, external_url?,
-sidebar_section?}`. `name` is slugified to keep `(workspace_id, name)` unique.
+Create body: `{name, display_title?, kind?, external_managed?, external_ref?,
+external_url?, sidebar_section?}`. `name` is slugified to keep
+`(workspace_id, name)` unique. `display_title` is an optional presentation-only
+title; it is trimmed, limited to 200 Unicode characters, and does not affect
+routing or uniqueness.
 `kind` defaults to `public`. External management is opt-in and does not change
 channel authorization: it records an opaque identity and optional deep link for
 the application that owns the channel lifecycle.
 
-`PATCH` accepts any subset of `{name, kind, archived, external_managed,
-external_ref, external_url, sidebar_section}`. Setting `archived=true` fills
+`PATCH` accepts any subset of `{name, display_title, kind, archived,
+external_managed, external_ref, external_url, sidebar_section}`. Setting
+`archived=true` fills
 `archived_at`; `archived=false` clears it. Sending an empty string for any of
-the nullable external or sidebar fields clears that field.
+the nullable display, external, or sidebar fields clears that field.
+
+Channel responses include `display_title` when set. Human-facing web labels use
+it and fall back to `name`; API selectors, links, and routing continue to use
+the slug-like `name`.
 
 Archived channels remain addressable and readable, but the web sidebar removes
 them from the normal channel list and places them in a collapsed Archived group.

@@ -482,11 +482,11 @@ INSERT INTO channels (id, route_id, workspace_id, name, kind, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), 'general', 'public', sqlc.arg(created_at));
 
 -- name: InsertChannel :exec
-INSERT INTO channels (id, route_id, workspace_id, name, kind, created_at, external_managed, external_ref, external_url, sidebar_section)
-VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), sqlc.arg(name), sqlc.arg(kind), sqlc.arg(created_at), sqlc.arg(external_managed), sqlc.arg(external_ref), sqlc.arg(external_url), sqlc.arg(sidebar_section));
+INSERT INTO channels (id, route_id, workspace_id, name, display_title, kind, created_at, external_managed, external_ref, external_url, sidebar_section)
+VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), sqlc.arg(name), sqlc.arg(display_title), sqlc.arg(kind), sqlc.arg(created_at), sqlc.arg(external_managed), sqlc.arg(external_ref), sqlc.arg(external_url), sqlc.arg(sidebar_section));
 
 -- name: ListChannels :many
-SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.kind, c.created_at, c.archived_at,
+SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.display_title, c.kind, c.created_at, c.archived_at,
        c.external_managed, c.external_ref, c.external_url, c.sidebar_section,
        CAST(COALESCE((SELECT MAX(channel_seq) FROM messages WHERE channel_id = c.id AND parent_message_id IS NULL), 0) AS INTEGER) AS last_seq,
        CAST(COALESCE((SELECT cr.last_read_seq FROM channel_reads cr WHERE cr.channel_id = c.id AND cr.user_id = sqlc.arg(reader_user_id)), 0) AS INTEGER) AS last_read_seq,
@@ -1215,20 +1215,20 @@ INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, auth
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(direct_conversation_id), sqlc.arg(author_id), sqlc.arg(parent_message_id), sqlc.arg(thread_root_id), NULL, sqlc.arg(thread_seq), sqlc.arg(body), 'markdown', sqlc.arg(created_at), sqlc.arg(quoted_message_id), sqlc.arg(quoted_body_snapshot), sqlc.arg(quoted_author_id), sqlc.arg(client_nonce));
 
 -- name: GetChannel :one
-SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, kind, created_at, archived_at,
+SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, display_title, kind, created_at, archived_at,
        external_managed, external_ref, external_url, sidebar_section
 FROM channels
 WHERE id = sqlc.arg(id);
 
 -- name: GetChannelByIDAndWorkspace :one
-SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, kind, created_at, archived_at,
+SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, display_title, kind, created_at, archived_at,
        external_managed, external_ref, external_url, sidebar_section
 FROM channels
 WHERE workspace_id = sqlc.arg(workspace_id)
   AND id = sqlc.arg(id);
 
 -- name: GetChannelByRouteIDAndWorkspace :one
-SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, kind, created_at, archived_at,
+SELECT id, COALESCE(route_id, '') AS route_id, workspace_id, name, display_title, kind, created_at, archived_at,
        external_managed, external_ref, external_url, sidebar_section
 FROM channels
 WHERE workspace_id = sqlc.arg(workspace_id)
@@ -1270,6 +1270,7 @@ WHERE dc.workspace_id = sqlc.arg(workspace_id)
 -- name: UpdateChannel :exec
 UPDATE channels
 SET name = sqlc.arg(name),
+    display_title = sqlc.arg(display_title),
     kind = sqlc.arg(kind),
     archived_at = sqlc.arg(archived_at),
     external_managed = sqlc.arg(external_managed),

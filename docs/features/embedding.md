@@ -47,6 +47,44 @@ The channel route ID must be a public `C...` channel route. The channel embed
 uses the same membership and guest-channel visibility checks as the full app;
 archiving a channel does not invalidate its embed URL.
 
+## Following the host theme
+
+An embedding application can select the initial color mode without changing the
+user's standalone ClickClack appearance:
+
+```text
+https://chat.example.com/embed/channel/T01/C01?theme=dark&hostOrigin=https%3A%2F%2Fcontrol.example.com
+```
+
+`theme` accepts `light` or `dark`. `hostOrigin` must be the exact HTTP(S) origin
+of the parent window, without a path or trailing slash. The color mode applies
+before the first paint and continues to take precedence when ClickClack loads the
+user's account preferences.
+
+After the iframe loads, the host can keep its full palette synchronized by
+sending a complete `openclaw:widget-theme` snapshot to the ClickClack origin:
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: "openclaw:widget-theme",
+    mode: "dark",
+    tokens: {
+      surface: "#0e1015",
+      card: "#161920",
+      text: "#d4d4d8",
+      accent: "#ff5c5c",
+    },
+  },
+  "https://chat.example.com",
+);
+```
+
+ClickClack accepts these messages only from the parent window at `hostOrigin`.
+Tokens update the embedded document only; they are not written to local storage
+or the user's account. Send another full snapshot whenever the host theme
+changes. Omitted tokens return to ClickClack's own theme defaults.
+
 ## Allowing a host to frame ClickClack
 
 Only `/embed/*` HTML responses receive a frame policy. With no configuration,

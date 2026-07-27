@@ -11,7 +11,12 @@
       // board, and message-layout choices never flash. Keys and attribute
       // names mirror src/lib/appearance.ts, which owns them afterwards.
       try {
-        var ccMode = localStorage.getItem("clickclack:color-mode:v1");
+        var ccMode;
+        if (/^\/embed\/(?:channel|thread)\//.test(location.pathname)) {
+          var ccHostMode = new URLSearchParams(location.search).get("theme");
+          if (ccHostMode === "light" || ccHostMode === "dark") ccMode = ccHostMode;
+        }
+        if (!ccMode) ccMode = localStorage.getItem("clickclack:color-mode:v1");
         if (ccMode === "light" || ccMode === "dark") {
           document.documentElement.setAttribute("data-color-mode", ccMode);
         }

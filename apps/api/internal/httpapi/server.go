@@ -79,6 +79,9 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.RequestLogger(&pathOnlyLogFormatter{}))
 	r.Use(middleware.Recoverer)
 
+	r.Get("/health", s.health)
+	r.Head("/health", s.health)
+
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.requireCookieCSRF)
 		r.Post("/auth/magic/request", s.requestMagicLink)
@@ -150,6 +153,14 @@ func (s *Server) Handler() http.Handler {
 	r.Head("/*", s.serveSPA)
 	r.Get("/*", s.serveSPA)
 	return r
+}
+
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"service": "clickclack",
+	})
 }
 
 func (s *Server) requireCookieCSRF(next http.Handler) http.Handler {

@@ -707,6 +707,25 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
 	t.Cleanup(server.Close)
 
+	healthResp, err := http.Get(server.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer healthResp.Body.Close()
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected health status 200, got %d", healthResp.StatusCode)
+	}
+	if contentType := healthResp.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("expected health JSON, got content type %q", contentType)
+	}
+	var health map[string]any
+	if err := json.NewDecoder(healthResp.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	if health["ok"] != true || health["service"] != "clickclack" {
+		t.Fatalf("unexpected health response: %#v", health)
+	}
+
 	index := getBody(t, server.URL+"/")
 	if !strings.Contains(index, "ClickClack") {
 		t.Fatalf("expected embedded app shell, got %q", index)

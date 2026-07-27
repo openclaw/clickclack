@@ -43,9 +43,29 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	expectStatusAsUser(
+		t, "missing-user", http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/projects", nil, http.StatusUnauthorized,
+	)
+	expectStatusAsUser(
+		t, "missing-user", http.MethodGet, server.URL+"/api/projects/missing-project", nil, http.StatusUnauthorized,
+	)
+	expectStatusAsUser(
 		t, member.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/projects",
 		strings.NewReader(`{"name":"Denied","repositories":["block/buzz"]}`), http.StatusForbidden,
 	)
+	expectStatusAsUser(
+		t, owner.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/projects",
+		strings.NewReader(`{"name":`), http.StatusBadRequest,
+	)
+	for _, body := range []string{
+		`{"name":"Invalid repository","repositories":["https://example.com/block/buzz"]}`,
+		`{"name":"Empty repository","repositories":[""]}`,
+		`{"name":"Incomplete repository","repositories":["block"]}`,
+	} {
+		expectStatusAsUser(
+			t, owner.ID, http.MethodPost, server.URL+"/api/workspaces/"+workspace.ID+"/projects",
+			strings.NewReader(body), http.StatusBadRequest,
+		)
+	}
 	created := postJSONAsUser[struct {
 		Project store.Project `json:"project"`
 		Webhook struct {
@@ -64,6 +84,21 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 	if created.Webhook.Secret == "" || created.Webhook.URL != server.URL+"/api/hooks/github/projects/"+created.Project.ID {
 		t.Fatalf("unexpected webhook handoff: %#v", created.Webhook)
 	}
+	listResponse := getJSONAsUser[struct {
+		Projects []store.Project `json:"projects"`
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects")
+	if len(listResponse.Projects) != 1 || listResponse.Projects[0].ID != created.Project.ID {
+		t.Fatalf("unexpected project list: %#v", listResponse.Projects)
+	}
+	projectResponse := getJSONAsUser[struct {
+		Project store.Project `json:"project"`
+	}](t, member.ID, server.URL+"/api/projects/"+created.Project.ID)
+	if projectResponse.Project.ID != created.Project.ID {
+		t.Fatalf("unexpected project response: %#v", projectResponse.Project)
+	}
+	expectStatusAsUser(
+		t, member.ID, http.MethodGet, server.URL+"/api/projects/missing-project", nil, http.StatusBadRequest,
+	)
 	contextResponse := getJSONAsUser[struct {
 		Project store.Project `json:"project"`
 		Context struct {
@@ -203,6 +238,19 @@ func TestGitHubProjectUpdateCoverage(t *testing.T) {
 		t.Fatalf("missing review update: %#v", updates)
 	}
 
+	payload.Comment = &struct {
+		Body    string `json:"body"`
+		HTMLURL string `json:"html_url"`
+		User    struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}{Body: "Please rename this", HTMLURL: "https://github.com/block/buzz/pull/7#discussion"}
+	payload.Comment.User.Login = "reviewer"
+	updates = githubProjectUpdates("pull_request_review_comment", payload)
+	if len(updates) != 1 || !strings.Contains(updates[0].Body, "review comment") || !strings.Contains(updates[0].Body, "View on GitHub") {
+		t.Fatalf("missing review comment update: %#v", updates)
+	}
+
 	payload.Issue = &struct {
 		Number      int64  `json:"number"`
 		HTMLURL     string `json:"html_url"`
@@ -231,6 +279,19 @@ func TestGitHubProjectUpdateCoverage(t *testing.T) {
 	updates = githubProjectUpdates("check_suite", payload)
 	if len(updates) != 1 || !strings.Contains(updates[0].Body, "success") {
 		t.Fatalf("missing check update: %#v", updates)
+	}
+
+	payload.CheckRun = &githubCheck{Name: "lint", Status: "in_progress", HTMLURL: "https://github.com/block/buzz/actions"}
+	payload.CheckRun.PullRequests = append(payload.CheckRun.PullRequests, struct {
+		Number int64 `json:"number"`
+	}{Number: 7})
+	updates = githubProjectUpdates("check_run", payload)
+	if len(updates) != 1 || !strings.Contains(updates[0].Body, "in progress") || !strings.Contains(updates[0].Body, "View checks on GitHub") {
+		t.Fatalf("missing check run update: %#v", updates)
+	}
+
+	if updates := githubProjectUpdates("unsupported", payload); len(updates) != 0 {
+		t.Fatalf("unsupported event produced updates: %#v", updates)
 	}
 }
 

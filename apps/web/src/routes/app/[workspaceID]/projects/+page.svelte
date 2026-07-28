@@ -44,7 +44,6 @@
   let setupPhase = $state<"details" | "repositories">(
     untrack(() => (data.githubSetupState === "select" ? "repositories" : "details")),
   );
-  let name = $state("");
   let description = $state("");
   let repositories = $state([""]);
   let memberIDs = $state<string[]>([]);
@@ -72,6 +71,11 @@
       );
     }),
   );
+  const primarySelectedRepository = $derived(
+    selectedRepositories.length > 0
+      ? availableRepositories.find((repository) => repository.full_name === selectedRepositories[0])
+      : undefined,
+  );
 
   onMount(() => {
     if (data.githubSetupError) {
@@ -79,11 +83,9 @@
       if (!savedDraft) return;
       try {
         const draft = JSON.parse(savedDraft) as {
-          name?: string;
           description?: string;
           memberIDs?: string[];
         };
-        name = draft.name || "";
         description = draft.description || "";
         memberIDs = draft.memberIDs || [];
       } catch {
@@ -149,19 +151,9 @@
 
   function projectDetailsRequest() {
     return {
-      name: name.trim(),
       description: description.trim(),
       member_ids: memberIDs,
     };
-  }
-
-  function validateProjectDetails() {
-    formError = "";
-    if (!name.trim()) {
-      formError = "Project name is required.";
-      return false;
-    }
-    return true;
   }
 
   function manualProjectRequest() {
@@ -172,7 +164,7 @@
   }
 
   function validateManualProject() {
-    if (!validateProjectDetails()) return false;
+    formError = "";
     if (manualProjectRequest().repositories.length === 0) {
       formError = "Add at least one GitHub repository.";
       return false;
@@ -181,11 +173,11 @@
   }
 
   async function connectGitHub() {
-    if (!validateProjectDetails()) return;
+    formError = "";
     submitting = true;
     window.sessionStorage.setItem(
       projectDraftKey(),
-      JSON.stringify({ name, description, memberIDs }),
+      JSON.stringify({ description, memberIDs }),
     );
     try {
       const response = await api<{ authorization_url: string }>(
@@ -207,11 +199,10 @@
     formError = "";
     try {
       const response = await api<{
-        setup: { name: string; description: string; expires_at: string };
+        setup: { description: string; expires_at: string };
         repositories: GitHubRepositoryOption[];
         truncated: boolean;
       }>(`/api/workspaces/${data.workspaceID}/projects/github/repositories`);
-      name = response.setup.name;
       description = response.setup.description;
       availableRepositories = response.repositories;
       repositoryListTruncated = response.truncated;
@@ -284,7 +275,6 @@
       });
       projects = [...projects, response.project].sort((a, b) => a.name.localeCompare(b.name));
       webhook = response.webhook;
-      name = "";
       description = "";
       repositories = [""];
       memberIDs = [];
@@ -418,7 +408,7 @@
         <div class="project-form__heading">
           <div>
             <h2 id="new-project-title">
-              {setupPhase === "repositories" ? `Choose repositories for ${name}` : "Add a GitHub project"}
+              {setupPhase === "repositories" ? "Choose repositories" : "Add a GitHub project"}
             </h2>
             <p>
               {setupPhase === "repositories"
@@ -441,10 +431,6 @@
 
         {#if setupPhase === "details"}
           <div class="project-form__grid">
-            <label>
-              <span>Project name</span>
-              <input bind:value={name} maxlength="80" placeholder="ClickClack" autocomplete="off" />
-            </label>
             <label class="project-form__description">
               <span>Description</span>
               <textarea
@@ -573,7 +559,10 @@
                 autocomplete="off"
               />
             </label>
-            <span>{selectedRepositories.length} selected</span>
+            <span>
+              {#if primarySelectedRepository}Project: {primarySelectedRepository.name}, {/if}
+              {selectedRepositories.length} selected
+            </span>
           </div>
 
           <div class="repository-picker" aria-busy={loadingRepositories}>

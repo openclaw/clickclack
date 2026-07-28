@@ -191,7 +191,7 @@
 
 .project-form__grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.7fr) minmax(300px, 1.3fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 

@@ -131,7 +131,6 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 	)
 
 	authorizationURL, bindingCookie := startProjectGitHubOAuth(t, client, server.URL, workspace.ID, owner.ID, map[string]any{
-		"name":       "Buzz",
 		"member_ids": []string{member.ID},
 	})
 	if authorizationURL.Query().Get("scope") != githubProjectRepositoryScope {
@@ -256,7 +255,8 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 	projects := getJSONAsUser[struct {
 		Projects []store.Project `json:"projects"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects")
-	if len(projects.Projects) != 1 || projects.Projects[0].Repositories[0].FullName != "block/buzz" {
+	if len(projects.Projects) != 1 || projects.Projects[0].Name != "Buzz" ||
+		projects.Projects[0].Repositories[0].FullName != "block/buzz" {
 		t.Fatalf("automatic setup did not create the project: %#v", projects.Projects)
 	}
 	sendProjectWebhook(
@@ -312,7 +312,7 @@ func TestGitHubProjectSetupRejectsTamperedGrant(t *testing.T) {
 		server.URL,
 		workspaces[0].ID,
 		owner.ID,
-		map[string]any{"name": "Tamper"},
+		map[string]any{},
 	)
 	setupCookie, _ := finishProjectGitHubOAuth(t, client, server.URL, owner.ID, authorizationURL, bindingCookie)
 	tamperIndex := len(setupCookie.Value) / 2
@@ -411,7 +411,7 @@ func TestGitHubProjectSetupRollsBackPartialHooks(t *testing.T) {
 		server.URL,
 		workspace.ID,
 		owner.ID,
-		map[string]any{"name": "Rollback"},
+		map[string]any{},
 	)
 	setupCookie, _ := finishProjectGitHubOAuth(t, client, server.URL, owner.ID, authorizationURL, bindingCookie)
 	req, err := http.NewRequest(

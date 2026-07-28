@@ -112,6 +112,10 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	projectName := strings.TrimSpace(body.Name)
+	if projectName == "" && len(repositories) > 0 {
+		projectName = repositories[0].Name
+	}
 	secret, err := newProjectWebhookSecret()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -119,7 +123,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	project, event, err := s.store.CreateProject(r.Context(), store.CreateProjectInput{
 		WorkspaceID:   chi.URLParam(r, "workspace_id"),
-		Name:          body.Name,
+		Name:          projectName,
 		Slug:          body.Slug,
 		Description:   body.Description,
 		CreatedBy:     act.user.ID,

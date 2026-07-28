@@ -75,13 +75,15 @@ func TestGitHubProjectRoomHTTPFlow(t *testing.T) {
 			Secret string `json:"secret"`
 		} `json:"webhook"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects", map[string]any{
-		"name":         "Collaboration",
 		"description":  "Shared PR room",
 		"repositories": []string{"https://github.com/Block/Buzz.git", "block/buzz"},
 		"member_ids":   []string{member.ID},
 	})
 	if len(created.Project.Repositories) != 1 || created.Project.Repositories[0].FullName != "block/buzz" {
 		t.Fatalf("expected normalized, deduplicated repositories, got %#v", created.Project.Repositories)
+	}
+	if created.Project.Name != "buzz" {
+		t.Fatalf("project name = %q, want primary repository name", created.Project.Name)
 	}
 	if created.Webhook.Secret == "" || created.Webhook.URL != server.URL+"/api/hooks/github/projects/"+created.Project.ID {
 		t.Fatalf("unexpected webhook handoff: %#v", created.Webhook)

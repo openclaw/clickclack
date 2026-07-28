@@ -1881,15 +1881,14 @@ export interface components {
       unread_count?: number;
     };
     CreateProjectRequest: {
-      name: string;
+      /** @description Optional display name override. Defaults to the first repository name. */
+      name?: string;
       slug?: string;
       description?: string;
       repositories: string[];
       member_ids?: string[];
     };
     StartGitHubProjectSetupRequest: {
-      name: string;
-      slug?: string;
       description?: string;
       member_ids?: string[];
     };
@@ -1956,7 +1955,6 @@ export interface components {
     };
     GitHubProjectRepositoryListResponse: {
       setup: {
-        name: string;
         description: string;
         /** Format: date-time */
         expires_at: string;

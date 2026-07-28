@@ -57,8 +57,6 @@ type githubProjectOAuthDraft struct {
 }
 
 type githubProjectSetupRequest struct {
-	Name        string   `json:"name"`
-	Slug        string   `json:"slug"`
 	Description string   `json:"description"`
 	MemberIDs   []string `json:"member_ids"`
 }
@@ -138,8 +136,6 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 		ProjectID:     "prj_" + ulid.Make().String(),
 		WorkspaceID:   workspaceID,
 		UserID:        act.user.ID,
-		Name:          body.Name,
-		Slug:          body.Slug,
 		Description:   body.Description,
 		WebhookSecret: secret,
 		MemberIDs:     body.MemberIDs,
@@ -217,14 +213,7 @@ func (draft githubProjectOAuthDraft) createProjectInput() store.CreateProjectInp
 }
 
 func validateGitHubProjectDraft(draft githubProjectOAuthDraft) error {
-	name := strings.TrimSpace(draft.Name)
 	description := strings.TrimSpace(draft.Description)
-	if name == "" {
-		return errors.New("project name is required")
-	}
-	if len([]rune(name)) > 80 {
-		return errors.New("project name must be 80 characters or fewer")
-	}
 	if len([]rune(description)) > 500 {
 		return errors.New("project description must be 500 characters or fewer")
 	}
@@ -299,7 +288,6 @@ func (s *Server) listGitHubProjectRepositories(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"setup": map[string]any{
-			"name":        grant.Draft.Name,
 			"description": grant.Draft.Description,
 			"expires_at":  time.Unix(grant.ExpiresAt, 0).UTC().Format(time.RFC3339),
 		},
@@ -331,9 +319,9 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadGateway, errors.New("GitHub repository access could not be verified"))
 		return
 	}
-	adminRepositories := make(map[string]struct{}, len(available))
+	adminRepositories := make(map[string]githubProjectRepositoryOption, len(available))
 	for _, repository := range available {
-		adminRepositories[strings.ToLower(repository.FullName)] = struct{}{}
+		adminRepositories[strings.ToLower(repository.FullName)] = repository
 	}
 	for _, repository := range repositories {
 		if _, ok := adminRepositories[repository.FullName]; !ok {
@@ -341,6 +329,9 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	primaryRepository := adminRepositories[repositories[0].FullName]
+	grant.Draft.Name = strings.TrimSpace(primaryRepository.Name)
+	grant.Draft.Slug = ""
 	grant.Draft.Repositories = repositories
 	if err := store.ValidateCreateProjectInput(grant.Draft.createProjectInput()); err != nil {
 		writeError(w, http.StatusBadRequest, err)

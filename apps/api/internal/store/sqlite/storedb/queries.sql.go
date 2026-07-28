@@ -2159,6 +2159,25 @@ func (q *Queries) GetWorkspaceForSetupClaim(ctx context.Context, workspaceID str
 	return i, err
 }
 
+const getWorkspaceProjectIntegration = `-- name: GetWorkspaceProjectIntegration :one
+SELECT user_id
+FROM workspace_project_integrations
+WHERE workspace_id = ?1
+  AND provider = ?2
+`
+
+type GetWorkspaceProjectIntegrationParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+}
+
+func (q *Queries) GetWorkspaceProjectIntegration(ctx context.Context, arg GetWorkspaceProjectIntegrationParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceProjectIntegration, arg.WorkspaceID, arg.Provider)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const hideDirectConversation = `-- name: HideDirectConversation :exec
 INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
 VALUES (?1, ?2, ?3)
@@ -3176,6 +3195,32 @@ func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspace
 		arg.WorkspaceID,
 		arg.UserID,
 		arg.Role,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertWorkspaceProjectIntegration = `-- name: InsertWorkspaceProjectIntegration :exec
+INSERT INTO workspace_project_integrations (
+  workspace_id, provider, user_id, created_at
+)
+VALUES (
+  ?1, ?2, ?3, ?4
+)
+`
+
+type InsertWorkspaceProjectIntegrationParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+	UserID      string `json:"user_id"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (q *Queries) InsertWorkspaceProjectIntegration(ctx context.Context, arg InsertWorkspaceProjectIntegrationParams) error {
+	_, err := q.db.ExecContext(ctx, insertWorkspaceProjectIntegration,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.UserID,
 		arg.CreatedAt,
 	)
 	return err

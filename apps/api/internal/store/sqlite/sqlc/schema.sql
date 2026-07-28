@@ -572,6 +572,14 @@ CREATE TABLE projects (
   UNIQUE(workspace_id, slug)
 );
 
+CREATE TABLE workspace_project_integrations (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider = 'github'),
+  user_id TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, provider)
+);
+
 CREATE TABLE project_repositories (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

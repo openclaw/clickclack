@@ -480,3 +480,10 @@ type WorkspaceMemberModeration struct {
 	ModerationBy   sql.NullString `json:"moderation_by"`
 	ModerationAt   string         `json:"moderation_at"`
 }
+
+type WorkspaceProjectIntegration struct {
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+	UserID      string `json:"user_id"`
+	CreatedAt   string `json:"created_at"`
+}

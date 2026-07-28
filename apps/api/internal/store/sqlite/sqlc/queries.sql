@@ -1612,6 +1612,20 @@ VALUES (
   sqlc.arg(webhook_secret), sqlc.arg(created_by), sqlc.arg(created_at)
 );
 
+-- name: GetWorkspaceProjectIntegration :one
+SELECT user_id
+FROM workspace_project_integrations
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND provider = sqlc.arg(provider);
+
+-- name: InsertWorkspaceProjectIntegration :exec
+INSERT INTO workspace_project_integrations (
+  workspace_id, provider, user_id, created_at
+)
+VALUES (
+  sqlc.arg(workspace_id), sqlc.arg(provider), sqlc.arg(user_id), sqlc.arg(created_at)
+);
+
 -- name: InsertProjectRepository :exec
 INSERT INTO project_repositories (
   id, project_id, provider, owner, name, full_name, url, created_at

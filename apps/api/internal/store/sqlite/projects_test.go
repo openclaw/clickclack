@@ -63,6 +63,35 @@ func TestProjectRoomLifecycle(t *testing.T) {
 	if integrationUser.Kind != "bot" || integrationUser.DisplayName != "GitHub" {
 		t.Fatalf("unexpected project integration user: %#v", integrationUser)
 	}
+	secondProject, _, err := st.CreateProject(ctx, store.CreateProjectInput{
+		WorkspaceID:   workspace.ID,
+		Name:          "Buzz",
+		CreatedBy:     owner.ID,
+		WebhookSecret: "second-test-secret",
+		Repositories: []store.CreateProjectRepositoryInput{{
+			Owner: "block", Name: "buzz", FullName: "block/buzz", URL: "https://github.com/block/buzz",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondProject.IntegrationUserID != project.IntegrationUserID {
+		t.Fatalf("projects use different GitHub users: %q and %q", project.IntegrationUserID, secondProject.IntegrationUserID)
+	}
+	var githubMemberCount int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM workspace_members wm
+		JOIN users u ON u.id = wm.user_id
+		WHERE wm.workspace_id = ?
+		  AND u.kind = 'bot'
+		  AND u.display_name = 'GitHub'
+	`, workspace.ID).Scan(&githubMemberCount); err != nil {
+		t.Fatal(err)
+	}
+	if githubMemberCount != 1 {
+		t.Fatalf("GitHub workspace member count = %d, want 1", githubMemberCount)
+	}
 
 	contextProject, err := st.GetProject(ctx, project.ID, member.ID)
 	if err != nil {
@@ -151,16 +180,7 @@ func TestGitHubDeliveryRetryMigrationUpgradesExistingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, _, err := st.CreateProject(ctx, store.CreateProjectInput{
-		WorkspaceID: workspaces[0].ID, Name: "Upgrade", CreatedBy: owner.ID, WebhookSecret: "test-secret",
-		Repositories: []store.CreateProjectRepositoryInput{{
-			Owner: "openclaw", Name: "clickclack", FullName: "openclaw/clickclack",
-			URL: "https://github.com/openclaw/clickclack",
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	project := store.Project{ID: seedSQLiteLegacyProject(t, ctx, st, workspaces[0].ID, owner.ID, "Upgrade")}
 	const processingAt = "2026-01-02T03:04:05Z"
 	const completedAt = "2026-01-02T04:05:06Z"
 	if _, err := st.db.ExecContext(ctx, `
@@ -206,6 +226,138 @@ func TestGitHubDeliveryRetryMigrationUpgradesExistingRows(t *testing.T) {
 	if err != nil || claim != store.GitHubDeliveryComplete {
 		t.Fatalf("expected upgraded complete delivery to stay deduplicated, claim=%q err=%v", claim, err)
 	}
+}
+
+func TestWorkspaceProjectIntegrationMigrationDeduplicatesGitHubBots(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := Open(filepath.Join(t.TempDir(), "project-integration-upgrade.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	applySQLiteMigrationsBefore(t, ctx, st, "0042_workspace_project_integrations.sql")
+
+	owner, err := st.EnsureBootstrap(ctx, "Upgrade Owner", "project-integration-upgrade@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaceID := workspaces[0].ID
+	firstProjectID := seedSQLiteLegacyProject(t, ctx, st, workspaceID, owner.ID, "First")
+	secondProjectID := seedSQLiteLegacyProject(t, ctx, st, workspaceID, owner.ID, "Second")
+	unrelatedUserID := newID("usr")
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, avatar_url, created_at, handle, kind, owner_user_id)
+		VALUES (?, 'GitHub', '', ?, '', 'bot', NULL)
+	`, unrelatedUserID, now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES (?, ?, 'bot', ?)
+	`, workspaceID, unrelatedUserID, now()); err != nil {
+		t.Fatal(err)
+	}
+
+	var firstUserID string
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT integration_user_id FROM projects
+		WHERE workspace_id = ?
+		ORDER BY created_at, id
+		LIMIT 1
+	`, workspaceID).Scan(&firstUserID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, projectID := range []string{firstProjectID, secondProjectID} {
+		var integrationUserID string
+		if err := st.db.QueryRowContext(ctx, `SELECT integration_user_id FROM projects WHERE id = ?`, projectID).Scan(&integrationUserID); err != nil {
+			t.Fatal(err)
+		}
+		if integrationUserID != firstUserID {
+			t.Fatalf("project %s integration user = %q, want %q", projectID, integrationUserID, firstUserID)
+		}
+	}
+	var memberCount, userCount int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM workspace_members wm
+		JOIN users u ON u.id = wm.user_id
+		WHERE wm.workspace_id = ? AND u.kind = 'bot' AND u.display_name = 'GitHub'
+	`, workspaceID).Scan(&memberCount); err != nil {
+		t.Fatal(err)
+	}
+	if memberCount != 2 {
+		t.Fatalf("GitHub workspace member count after migration = %d, want canonical and unrelated bots", memberCount)
+	}
+	var unrelatedMemberCount int
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND user_id = ?
+	`, workspaceID, unrelatedUserID).Scan(&unrelatedMemberCount); err != nil {
+		t.Fatal(err)
+	}
+	if unrelatedMemberCount != 1 {
+		t.Fatal("migration removed an unrelated GitHub-named bot")
+	}
+	if err := st.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM users WHERE kind = 'bot' AND display_name = 'GitHub'
+	`).Scan(&userCount); err != nil {
+		t.Fatal(err)
+	}
+	if userCount != 3 {
+		t.Fatalf("GitHub user count after migration = %d, want historical and unrelated users", userCount)
+	}
+}
+
+func seedSQLiteLegacyProject(t *testing.T, ctx context.Context, st *Store, workspaceID, ownerID, name string) string {
+	t.Helper()
+	createdAt := now()
+	integrationUserID := newID("usr")
+	channelID := newID("chn")
+	projectID := newID("prj")
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO users (id, display_name, avatar_url, created_at, handle, kind, owner_user_id)
+		VALUES (?, 'GitHub', '', ?, '', 'bot', NULL)
+	`, integrationUserID, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		VALUES (?, ?, 'bot', ?)
+	`, workspaceID, integrationUserID, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO channels (id, workspace_id, name, kind, created_at)
+		VALUES (?, ?, ?, 'public', ?)
+	`, channelID, workspaceID, slug(name), createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO projects (
+			id, workspace_id, name, slug, description, channel_id, integration_user_id,
+			webhook_secret, created_by, created_at
+		)
+		VALUES (?, ?, ?, ?, '', ?, ?, 'test-secret', ?, ?)
+	`, projectID, workspaceID, name, slug(name), channelID, integrationUserID, ownerID, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return projectID
 }
 
 func TestProjectCreationRequiresWorkspaceManager(t *testing.T) {

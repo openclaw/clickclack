@@ -73,25 +73,41 @@ func (s *Store) CreateProject(ctx context.Context, input store.CreateProjectInpu
 	if projectID == "" {
 		projectID = newID("prj")
 	}
-	integrationUserID := newID("usr")
 	channelID := newID("chn")
 
-	if err := qtx.InsertBotUser(ctx, storedb.InsertBotUserParams{
-		ID:          integrationUserID,
-		OwnerUserID: sqlOptionalText(""),
-		DisplayName: "GitHub",
-		Handle:      "",
-		AvatarUrl:   "",
-		CreatedAt:   createdAt,
-	}); err != nil {
-		return store.Project{}, store.Event{}, err
-	}
-	if err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+	integrationUserID, err := qtx.GetWorkspaceProjectIntegration(ctx, storedb.GetWorkspaceProjectIntegrationParams{
 		WorkspaceID: input.WorkspaceID,
-		UserID:      integrationUserID,
-		Role:        "bot",
-		CreatedAt:   createdAt,
-	}); err != nil {
+		Provider:    "github",
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		integrationUserID = newID("usr")
+		if err := qtx.InsertBotUser(ctx, storedb.InsertBotUserParams{
+			ID:          integrationUserID,
+			OwnerUserID: sqlOptionalText(""),
+			DisplayName: "GitHub",
+			Handle:      "",
+			AvatarUrl:   "",
+			CreatedAt:   createdAt,
+		}); err != nil {
+			return store.Project{}, store.Event{}, err
+		}
+		if err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+			WorkspaceID: input.WorkspaceID,
+			UserID:      integrationUserID,
+			Role:        "bot",
+			CreatedAt:   createdAt,
+		}); err != nil {
+			return store.Project{}, store.Event{}, err
+		}
+		if err := qtx.InsertWorkspaceProjectIntegration(ctx, storedb.InsertWorkspaceProjectIntegrationParams{
+			WorkspaceID: input.WorkspaceID,
+			Provider:    "github",
+			UserID:      integrationUserID,
+			CreatedAt:   createdAt,
+		}); err != nil {
+			return store.Project{}, store.Event{}, err
+		}
+	} else if err != nil {
 		return store.Project{}, store.Event{}, err
 	}
 

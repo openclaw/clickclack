@@ -80,6 +80,7 @@ test("embedded channels follow the exact cross-origin host theme without changin
   );
   embedUrl.searchParams.set("theme", "light");
   embedUrl.searchParams.set("hostOrigin", hostOrigin);
+  embedUrl.searchParams.set("themeTokens", JSON.stringify(lightTokens));
 
   const embedResponse = await page.request.get(embedUrl.href);
   expect(embedResponse.ok()).toBe(true);
@@ -123,6 +124,15 @@ test("embedded channels follow the exact cross-origin host theme without changin
   await expect(embeddedPage.locator("html")).toHaveAttribute("data-color-mode", "light");
   const frame = page.frames().find((candidate) => candidate.url().startsWith(clickClackOrigin));
   expect(frame).toBeDefined();
+  await expect
+    .poll(() =>
+      frame!.evaluate(() => ({
+        background: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+        panel: getComputedStyle(document.documentElement).getPropertyValue("--panel").trim(),
+        accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+      })),
+    )
+    .toEqual({ background: "#faf9f7", panel: "#ffffff", accent: "#bd4531" });
 
   const storedAppearance = await frame!.evaluate(() => ({
     colorMode: localStorage.getItem("clickclack:color-mode:v1"),
@@ -235,5 +245,37 @@ test("embedded channels follow the exact cross-origin host theme without changin
   await postTheme("light", { ...lightTokens, surface: "#ff0000" });
   await expect
     .poll(() => frame!.evaluate(() => document.documentElement.style.getPropertyValue("--bg")))
+    .toBe("");
+
+  await postTheme("dark", customTokens);
+  const firstPaintCustomUrl = new URL(embedUrl.href);
+  firstPaintCustomUrl.searchParams.set("theme", "dark");
+  firstPaintCustomUrl.searchParams.set("themeTokens", JSON.stringify(customTokens));
+  await frame!.goto(firstPaintCustomUrl.href);
+  await expect
+    .poll(() =>
+      frame!.evaluate(() => ({
+        mode: document.documentElement.dataset.colorMode,
+        background: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+        panel: getComputedStyle(document.documentElement).getPropertyValue("--panel").trim(),
+        accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+      })),
+    )
+    .toEqual({ mode: "dark", background: "#171229", panel: "#211a36", accent: "#c084fc" });
+  await captureProof(page, "04-custom-first-paint");
+
+  const malformedTokensUrl = new URL(embedUrl.href);
+  malformedTokensUrl.searchParams.set("theme", "dark");
+  malformedTokensUrl.searchParams.set("themeTokens", "{");
+  await frame!.goto(malformedTokensUrl.href);
+  await expect
+    .poll(() => frame!.evaluate(() => document.documentElement.dataset.colorMode))
+    .toBe("dark");
+
+  const invalidRadiusUrl = new URL(embedUrl.href);
+  invalidRadiusUrl.searchParams.set("themeTokens", JSON.stringify({ radius: "8px 16px" }));
+  await frame!.goto(invalidRadiusUrl.href);
+  await expect
+    .poll(() => frame!.evaluate(() => document.documentElement.style.getPropertyValue("--radius")))
     .toBe("");
 });

@@ -61,6 +61,13 @@ of the parent window, without a path or trailing slash. The color mode applies
 before the first paint and continues to take precedence when ClickClack loads the
 user's account preferences.
 
+For a custom palette, add `themeTokens` containing the JSON-encoded semantic
+token object shown below. Set the parameter with
+`url.searchParams.set("themeTokens", JSON.stringify(tokens))` so it is encoded
+correctly. ClickClack validates each initial CSS value and applies its colors,
+surfaces, borders, and corner radius before the first paint; snapshots larger
+than 16 KiB are ignored.
+
 After the iframe loads, the host can keep its full palette synchronized by
 sending a complete `openclaw:widget-theme` snapshot to the ClickClack origin:
 

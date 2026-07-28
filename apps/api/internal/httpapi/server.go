@@ -105,6 +105,9 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	if cookieNames.Session == "" {
 		cookieNames = authpolicy.DefaultCookieNames()
 	}
+	if cookieNames.GitHubProjectSetup == "" {
+		cookieNames.GitHubProjectSetup = authpolicy.DefaultCookieNames().GitHubProjectSetup
+	}
 	return &Server{
 		store:                 st,
 		hub:                   hub,
@@ -172,6 +175,9 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/workspaces/{workspace_id}/projects", s.listProjects)
 		r.Post("/workspaces/{workspace_id}/projects", s.createProject)
 		r.Post("/workspaces/{workspace_id}/projects/github/connect", s.startGitHubProjectSetup)
+		r.Get("/workspaces/{workspace_id}/projects/github/repositories", s.listGitHubProjectRepositories)
+		r.Post("/workspaces/{workspace_id}/projects/github/complete", s.completeGitHubProjectSetup)
+		r.Post("/workspaces/{workspace_id}/projects/github/cancel", s.cancelGitHubProjectSetup)
 		r.Get("/projects/{project_id}", s.getProject)
 		r.Get("/projects/{project_id}/context", s.getProjectContext)
 		r.Get("/workspaces/{workspace_id}/topics", s.listTopics)

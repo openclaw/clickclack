@@ -13,15 +13,17 @@ import (
 const MaxCookieNamespaceLength = 32
 
 type CookieNames struct {
-	Session      string
-	OAuthBinding string
-	Namespaced   bool
+	Session            string
+	OAuthBinding       string
+	GitHubProjectSetup string
+	Namespaced         bool
 }
 
 func DefaultCookieNames() CookieNames {
 	return CookieNames{
-		Session:      "cc_session",
-		OAuthBinding: "cc_oauth_binding",
+		Session:            "cc_session",
+		OAuthBinding:       "cc_oauth_binding",
+		GitHubProjectSetup: "cc_github_project_setup",
 	}
 }
 
@@ -77,9 +79,10 @@ func NewCookieNames(namespace, publicURL, publicAPIURL string) (CookieNames, err
 		}
 	}
 	return CookieNames{
-		Session:      prefix + "session",
-		OAuthBinding: prefix + "oauth-binding",
-		Namespaced:   true,
+		Session:            prefix + "session",
+		OAuthBinding:       prefix + "oauth-binding",
+		GitHubProjectSetup: prefix + "github-project-setup",
+		Namespaced:         true,
 	}, nil
 }
 

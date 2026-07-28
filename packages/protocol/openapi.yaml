@@ -508,7 +508,7 @@ paths:
   /api/workspaces/{workspace_id}/projects/github/connect:
     post:
       operationId: connectGitHubProject
-      summary: Start one-time GitHub authorization and create repository webhooks
+      summary: Start short-lived GitHub authorization for the project repository picker
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -516,7 +516,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateProjectRequest"
+              $ref: "#/components/schemas/StartGitHubProjectSetupRequest"
       responses:
         "200":
           description: GitHub authorization URL for the pending project
@@ -528,6 +528,59 @@ paths:
           description: Workspace manager permission required
         "501":
           description: GitHub OAuth is not configured
+  /api/workspaces/{workspace_id}/projects/github/repositories:
+    get:
+      operationId: listGitHubProjectRepositories
+      summary: List repositories the temporary GitHub grant can administer
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      responses:
+        "200":
+          description: Admin-accessible GitHub repositories and pending project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubProjectRepositoryListResponse"
+        "401":
+          description: GitHub project setup grant is missing, invalid, or expired
+  /api/workspaces/{workspace_id}/projects/github/complete:
+    post:
+      operationId: completeGitHubProjectSetup
+      summary: Create webhooks for selected repositories and finish the project
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteGitHubProjectSetupRequest"
+      responses:
+        "201":
+          description: Project and selected repository webhooks created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project]
+                properties:
+                  project:
+                    $ref: "#/components/schemas/Project"
+        "401":
+          description: GitHub project setup grant is missing, invalid, or expired
+        "403":
+          description: A selected repository does not grant webhook administration
+  /api/workspaces/{workspace_id}/projects/github/cancel:
+    post:
+      operationId: cancelGitHubProjectSetup
+      summary: Discard the temporary GitHub project setup grant
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      responses:
+        "204":
+          description: GitHub project setup grant discarded
+        "401":
+          description: GitHub project setup grant is missing, invalid, or expired
   /api/projects/{project_id}:
     get:
       operationId: getProject
@@ -2970,6 +3023,23 @@ components:
           type: array
           items:
             type: string
+    StartGitHubProjectSetupRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        slug:
+          type: string
+        description:
+          type: string
+          maxLength: 500
+        member_ids:
+          type: array
+          maxItems: 50
+          items:
+            type: string
     ProjectRepository:
       type: object
       required: [id, project_id, provider, owner, name, full_name, url, created_at]
@@ -3005,7 +3075,19 @@ components:
     Project:
       type: object
       required:
-        [id, workspace_id, name, slug, description, channel, integration_user_id, created_by, created_at, repositories, members]
+        [
+          id,
+          workspace_id,
+          name,
+          slug,
+          description,
+          channel,
+          integration_user_id,
+          created_by,
+          created_at,
+          repositories,
+          members,
+        ]
       properties:
         id:
           type: string
@@ -3060,7 +3142,58 @@ components:
         authorization_url:
           type: string
           format: uri
-          description: One-time GitHub OAuth authorization URL with repository webhook scope.
+          description: Short-lived GitHub OAuth authorization URL for repository selection and webhook creation.
+    GitHubProjectRepositoryOption:
+      type: object
+      required: [full_name, name, owner, private, html_url]
+      properties:
+        full_name:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        private:
+          type: boolean
+        html_url:
+          type: string
+          format: uri
+        description:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    GitHubProjectRepositoryListResponse:
+      type: object
+      required: [setup, repositories, truncated]
+      properties:
+        setup:
+          type: object
+          required: [name, description, expires_at]
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+        repositories:
+          type: array
+          items:
+            $ref: "#/components/schemas/GitHubProjectRepositoryOption"
+        truncated:
+          type: boolean
+    CompleteGitHubProjectSetupRequest:
+      type: object
+      required: [repositories]
+      properties:
+        repositories:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
     ProjectContextResponse:
       type: object
       required: [project, context]

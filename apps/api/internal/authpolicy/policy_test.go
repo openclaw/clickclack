@@ -101,21 +101,30 @@ func TestNewCookieNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if secure.Session != "__Host-cc-prod-2-session" || secure.OAuthBinding != "__Host-cc-prod-2-oauth-binding" || !secure.Namespaced {
+	if secure.Session != "__Host-cc-prod-2-session" ||
+		secure.OAuthBinding != "__Host-cc-prod-2-oauth-binding" ||
+		secure.GitHubProjectSetup != "__Host-cc-prod-2-github-project-setup" ||
+		!secure.Namespaced {
 		t.Fatalf("unexpected secure names: %#v", secure)
 	}
 	pathMounted, err := NewCookieNames("prod-2", "https://chat.example.com", "https://api.example.com/services/clickclack")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pathMounted.Session != "__Secure-cc-prod-2-session" || pathMounted.OAuthBinding != "__Secure-cc-prod-2-oauth-binding" || !pathMounted.Namespaced {
+	if pathMounted.Session != "__Secure-cc-prod-2-session" ||
+		pathMounted.OAuthBinding != "__Secure-cc-prod-2-oauth-binding" ||
+		pathMounted.GitHubProjectSetup != "__Secure-cc-prod-2-github-project-setup" ||
+		!pathMounted.Namespaced {
 		t.Fatalf("unexpected path-mounted secure names: %#v", pathMounted)
 	}
 	loopback, err := NewCookieNames("dev", "http://localhost:8080", "http://localhost:8081")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loopback.Session != "cc-dev-session" || loopback.OAuthBinding != "cc-dev-oauth-binding" || !loopback.Namespaced {
+	if loopback.Session != "cc-dev-session" ||
+		loopback.OAuthBinding != "cc-dev-oauth-binding" ||
+		loopback.GitHubProjectSetup != "cc-dev-github-project-setup" ||
+		!loopback.Namespaced {
 		t.Fatalf("unexpected loopback names: %#v", loopback)
 	}
 	if _, err := NewCookieNames("prod", "", ""); err == nil {

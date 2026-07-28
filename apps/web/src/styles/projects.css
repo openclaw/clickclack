@@ -262,6 +262,113 @@
   gap: 8px;
 }
 
+.repository-picker__toolbar {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.repository-picker__toolbar > span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.repository-search {
+  min-width: 0;
+  flex: 1;
+  position: relative;
+}
+
+.repository-search > svg {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  left: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.repository-search input {
+  padding-left: 34px;
+}
+
+.repository-picker {
+  max-height: 430px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.repository-picker__state {
+  min-height: 112px;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.repository-option {
+  min-height: 58px;
+  padding: 9px 8px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.repository-option:last-child {
+  border-bottom: 0;
+}
+
+.repository-option:hover {
+  background: var(--hover);
+}
+
+.project-form .repository-option > input {
+  width: 15px;
+  height: 15px;
+}
+
+.repository-option__main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.repository-option__main strong,
+.repository-option__main > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-option__main strong {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.repository-option__main > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.repository-option__visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .participant-list {
   max-height: 180px;
   overflow: auto;
@@ -472,6 +579,14 @@
 
   .project-form__actions .projects-button {
     flex: 1 1 auto;
+  }
+
+  .repository-option {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .repository-option__visibility {
+    grid-column: 2;
   }
 
   .project-form__authorization {

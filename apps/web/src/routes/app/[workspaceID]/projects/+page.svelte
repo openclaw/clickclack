@@ -9,7 +9,10 @@
     ExternalLink,
     FolderGit2,
     GitPullRequest,
+    LockKeyhole,
     Plus,
+    Search,
+    ShieldCheck,
     Trash2,
     Users,
     X,
@@ -19,12 +22,38 @@
 
   let { data } = $props();
 
+  type GitHubRepositoryOption = {
+    full_name: string;
+    name: string;
+    owner: string;
+    private: boolean;
+    html_url: string;
+    description?: string;
+    updated_at?: string;
+  };
+
   let projects = $state<Project[]>(untrack(() => [...data.projects]));
-  let formOpen = $state(untrack(() => data.projects.length === 0 || Boolean(data.githubSetupError)));
+  let formOpen = $state(
+    untrack(
+      () =>
+        data.projects.length === 0 ||
+        Boolean(data.githubSetupError) ||
+        data.githubSetupState === "select",
+    ),
+  );
+  let setupPhase = $state<"details" | "repositories">(
+    untrack(() => (data.githubSetupState === "select" ? "repositories" : "details")),
+  );
   let name = $state("");
   let description = $state("");
   let repositories = $state([""]);
   let memberIDs = $state<string[]>([]);
+  let manualMode = $state(false);
+  let availableRepositories = $state<GitHubRepositoryOption[]>([]);
+  let selectedRepositories = $state<string[]>([]);
+  let repositorySearch = $state("");
+  let loadingRepositories = $state(false);
+  let repositoryListTruncated = $state(false);
   let submitting = $state(false);
   let formError = $state(untrack(() => githubSetupMessage(data.githubSetupError)));
   let webhook = $state<{ url: string; secret: string } | null>(null);
@@ -33,30 +62,45 @@
   const canManage = $derived(
     data.workspace?.role === "owner" || data.workspace?.role === "moderator",
   );
+  const filteredRepositories = $derived(
+    availableRepositories.filter((repository) => {
+      const query = repositorySearch.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        repository.full_name.toLowerCase().includes(query) ||
+        repository.description?.toLowerCase().includes(query)
+      );
+    }),
+  );
 
   onMount(() => {
-    if (!data.githubSetupError) return;
-    const savedDraft = window.sessionStorage.getItem(projectDraftKey());
-    if (!savedDraft) return;
-    try {
-      const draft = JSON.parse(savedDraft) as {
-        name?: string;
-        description?: string;
-        repositories?: string[];
-        memberIDs?: string[];
-      };
-      name = draft.name || "";
-      description = draft.description || "";
-      repositories = draft.repositories?.length ? draft.repositories : [""];
-      memberIDs = draft.memberIDs || [];
-    } catch {
-      window.sessionStorage.removeItem(projectDraftKey());
+    if (data.githubSetupError) {
+      const savedDraft = window.sessionStorage.getItem(projectDraftKey());
+      if (!savedDraft) return;
+      try {
+        const draft = JSON.parse(savedDraft) as {
+          name?: string;
+          description?: string;
+          memberIDs?: string[];
+        };
+        name = draft.name || "";
+        description = draft.description || "";
+        memberIDs = draft.memberIDs || [];
+      } catch {
+        window.sessionStorage.removeItem(projectDraftKey());
+      }
+      return;
     }
+    if (data.githubSetupState === "select") void loadGitHubRepositories();
   });
 
-  function closeForm() {
+  async function closeForm() {
+    if (setupPhase === "repositories") {
+      await cancelGitHubSetup();
+    }
     formOpen = false;
     formError = "";
+    manualMode = false;
   }
 
   function addRepository() {
@@ -92,10 +136,10 @@
         return "GitHub could not create the webhook because a repository webhook conflicts with this setup.";
       case "session":
         return "Your ClickClack session changed during GitHub authorization. Start the connection again.";
-      case "create":
-        return "GitHub was connected, but ClickClack could not create the project. Any new hooks were removed.";
+      case "authorization":
+        return "GitHub authorization could not be completed. Connect GitHub again.";
       default:
-        return "GitHub could not finish the webhook setup. Try again or create the webhook manually.";
+        return "GitHub could not start repository setup. Try again or use manual setup.";
     }
   }
 
@@ -103,22 +147,33 @@
     return `clickclack.project-draft.${data.workspaceID}`;
   }
 
-  function projectRequest() {
+  function projectDetailsRequest() {
     return {
       name: name.trim(),
       description: description.trim(),
-      repositories: repositories.map((value) => value.trim()).filter(Boolean),
       member_ids: memberIDs,
     };
   }
 
-  function validateProjectRequest() {
+  function validateProjectDetails() {
     formError = "";
     if (!name.trim()) {
       formError = "Project name is required.";
       return false;
     }
-    if (projectRequest().repositories.length === 0) {
+    return true;
+  }
+
+  function manualProjectRequest() {
+    return {
+      ...projectDetailsRequest(),
+      repositories: repositories.map((value) => value.trim()).filter(Boolean),
+    };
+  }
+
+  function validateManualProject() {
+    if (!validateProjectDetails()) return false;
+    if (manualProjectRequest().repositories.length === 0) {
       formError = "Add at least one GitHub repository.";
       return false;
     }
@@ -126,18 +181,18 @@
   }
 
   async function connectGitHub() {
-    if (!validateProjectRequest()) return;
+    if (!validateProjectDetails()) return;
     submitting = true;
     window.sessionStorage.setItem(
       projectDraftKey(),
-      JSON.stringify({ name, description, repositories, memberIDs }),
+      JSON.stringify({ name, description, memberIDs }),
     );
     try {
       const response = await api<{ authorization_url: string }>(
         `/api/workspaces/${data.workspaceID}/projects/github/connect`,
         {
           method: "POST",
-          body: JSON.stringify(projectRequest()),
+          body: JSON.stringify(projectDetailsRequest()),
         },
       );
       window.location.assign(response.authorization_url);
@@ -147,8 +202,77 @@
     }
   }
 
+  async function loadGitHubRepositories() {
+    loadingRepositories = true;
+    formError = "";
+    try {
+      const response = await api<{
+        setup: { name: string; description: string; expires_at: string };
+        repositories: GitHubRepositoryOption[];
+        truncated: boolean;
+      }>(`/api/workspaces/${data.workspaceID}/projects/github/repositories`);
+      name = response.setup.name;
+      description = response.setup.description;
+      availableRepositories = response.repositories;
+      repositoryListTruncated = response.truncated;
+      window.sessionStorage.removeItem(projectDraftKey());
+    } catch (error) {
+      formError = readableAPIError(error, "Could not load GitHub repositories");
+    } finally {
+      loadingRepositories = false;
+    }
+  }
+
+  function toggleRepository(fullName: string) {
+    selectedRepositories = selectedRepositories.includes(fullName)
+      ? selectedRepositories.filter((repository) => repository !== fullName)
+      : [...selectedRepositories, fullName];
+  }
+
+  async function completeGitHubSetup() {
+    formError = "";
+    if (selectedRepositories.length === 0) {
+      formError = "Select at least one GitHub repository.";
+      return;
+    }
+    submitting = true;
+    try {
+      const response = await api<{ project: Project }>(
+        `/api/workspaces/${data.workspaceID}/projects/github/complete`,
+        {
+          method: "POST",
+          body: JSON.stringify({ repositories: selectedRepositories }),
+        },
+      );
+      window.sessionStorage.removeItem(projectDraftKey());
+      await goto(chatPath(response.project));
+    } catch (error) {
+      formError = readableAPIError(error, "Could not create the GitHub project");
+    } finally {
+      submitting = false;
+    }
+  }
+
+  async function cancelGitHubSetup() {
+    try {
+      await api<void>(`/api/workspaces/${data.workspaceID}/projects/github/cancel`, {
+        method: "POST",
+      });
+    } catch {
+      // Expired setup cookies are already unusable.
+    }
+    setupPhase = "details";
+    availableRepositories = [];
+    selectedRepositories = [];
+    repositorySearch = "";
+    await goto(`/app/${data.workspace?.route_id || data.workspaceID}/projects`, {
+      replaceState: true,
+      noScroll: true,
+    });
+  }
+
   async function createProjectManually() {
-    if (!validateProjectRequest()) return;
+    if (!validateManualProject()) return;
     submitting = true;
     try {
       const response = await api<{
@@ -156,9 +280,7 @@
         webhook: { url: string; secret: string };
       }>(`/api/workspaces/${data.workspaceID}/projects`, {
         method: "POST",
-        body: JSON.stringify({
-          ...projectRequest(),
-        }),
+        body: JSON.stringify(manualProjectRequest()),
       });
       projects = [...projects, response.project].sort((a, b) => a.name.localeCompare(b.name));
       webhook = response.webhook;
@@ -166,6 +288,7 @@
       description = "";
       repositories = [""];
       memberIDs = [];
+      manualMode = false;
       window.sessionStorage.removeItem(projectDraftKey());
       formOpen = false;
     } catch (error) {
@@ -294,106 +417,222 @@
       <section class="project-form" aria-labelledby="new-project-title">
         <div class="project-form__heading">
           <div>
-            <h2 id="new-project-title">Add a GitHub project</h2>
-            <p>A public collaboration channel is created automatically.</p>
+            <h2 id="new-project-title">
+              {setupPhase === "repositories" ? `Choose repositories for ${name}` : "Add a GitHub project"}
+            </h2>
+            <p>
+              {setupPhase === "repositories"
+                ? "Select the repositories that should feed this project's collaboration channel."
+                : "A public collaboration channel is created automatically."}
+            </p>
           </div>
-          {#if projects.length > 0}
-            <button type="button" class="projects-icon-button" aria-label="Close form" title="Close" onclick={closeForm}>
+          {#if projects.length > 0 && setupPhase === "details"}
+            <button
+              type="button"
+              class="projects-icon-button"
+              aria-label="Close form"
+              title="Close"
+              onclick={() => void closeForm()}
+            >
               <X size={17} />
             </button>
           {/if}
         </div>
 
-        <div class="project-form__grid">
-          <label>
-            <span>Project name</span>
-            <input bind:value={name} maxlength="80" placeholder="ClickClack" autocomplete="off" />
-          </label>
-          <label class="project-form__description">
-            <span>Description</span>
-            <textarea bind:value={description} rows="3" maxlength="500" placeholder="What this project owns and where collaboration belongs"></textarea>
-          </label>
-        </div>
+        {#if setupPhase === "details"}
+          <div class="project-form__grid">
+            <label>
+              <span>Project name</span>
+              <input bind:value={name} maxlength="80" placeholder="ClickClack" autocomplete="off" />
+            </label>
+            <label class="project-form__description">
+              <span>Description</span>
+              <textarea
+                bind:value={description}
+                rows="3"
+                maxlength="500"
+                placeholder="What this project owns and where collaboration belongs"
+              ></textarea>
+            </label>
+          </div>
 
-        <fieldset class="project-form__fieldset">
-          <legend><GitPullRequest size={16} /> GitHub repositories</legend>
-          <div class="repository-inputs">
-            {#each repositories as repository, index (index)}
-              <div class="repository-input">
-                <input
-                  value={repository}
-                  oninput={(event) => setRepository(index, event.currentTarget.value)}
-                  placeholder="https://github.com/owner/repository"
-                  aria-label={`GitHub repository ${index + 1}`}
-                />
-                <button
-                  type="button"
-                  class="projects-icon-button"
-                  aria-label={`Remove repository ${index + 1}`}
-                  title="Remove repository"
-                  disabled={repositories.length === 1}
-                  onclick={() => removeRepository(index)}
-                >
-                  <Trash2 size={16} />
-                </button>
+          {#if manualMode}
+            <fieldset class="project-form__fieldset">
+              <legend><GitPullRequest size={16} /> GitHub repositories</legend>
+              <div class="repository-inputs">
+                {#each repositories as repository, index (index)}
+                  <div class="repository-input">
+                    <input
+                      value={repository}
+                      oninput={(event) => setRepository(index, event.currentTarget.value)}
+                      placeholder="https://github.com/owner/repository"
+                      aria-label={`GitHub repository ${index + 1}`}
+                    />
+                    <button
+                      type="button"
+                      class="projects-icon-button"
+                      aria-label={`Remove repository ${index + 1}`}
+                      title="Remove repository"
+                      disabled={repositories.length === 1}
+                      onclick={() => removeRepository(index)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                {/each}
               </div>
-            {/each}
-          </div>
-          <button type="button" class="projects-button projects-button--quiet" onclick={addRepository}>
-            <Plus size={15} />
-            Add repository
-          </button>
-        </fieldset>
-
-        <fieldset class="project-form__fieldset">
-          <legend><Users size={16} /> Participants</legend>
-          <div class="participant-list">
-            {#each data.members as member (member.user.id)}
-              <label class="participant-row">
-                <input
-                  type="checkbox"
-                  checked={memberIDs.includes(member.user.id)}
-                  onchange={() => toggleMember(member.user.id)}
-                />
-                <span class="participant-row__name">{member.user.display_name}</span>
-                <span class="participant-row__meta">
-                  {member.user.kind === "bot" ? "Bot" : member.role}
-                </span>
-              </label>
-            {/each}
-          </div>
-        </fieldset>
-
-        {#if formError}
-          <div class="projects-notice projects-notice--error">{formError}</div>
-        {/if}
-
-        <div class="project-form__actions">
-          {#if projects.length > 0}
-            <button type="button" class="projects-button" onclick={closeForm} disabled={submitting}>Cancel</button>
+              <button type="button" class="projects-button projects-button--quiet" onclick={addRepository}>
+                <Plus size={15} />
+                Add repository
+              </button>
+            </fieldset>
           {/if}
-          <button
-            type="button"
-            class="projects-button"
-            onclick={() => void createProjectManually()}
-            disabled={submitting}
-          >
-            <FolderGit2 size={16} />
-            Create manually
-          </button>
-          <button
-            type="button"
-            class="projects-button projects-button--primary"
-            onclick={() => void connectGitHub()}
-            disabled={submitting}
-          >
-            <GitPullRequest size={16} />
-            {submitting ? "Connecting..." : "Connect GitHub & create"}
-          </button>
-        </div>
-        <p class="project-form__authorization">
-          GitHub will request repository webhook access for this setup. ClickClack does not store the access token.
-        </p>
+
+          <fieldset class="project-form__fieldset">
+            <legend><Users size={16} /> Participants</legend>
+            <div class="participant-list">
+              {#each data.members as member (member.user.id)}
+                <label class="participant-row">
+                  <input
+                    type="checkbox"
+                    checked={memberIDs.includes(member.user.id)}
+                    onchange={() => toggleMember(member.user.id)}
+                  />
+                  <span class="participant-row__name">{member.user.display_name}</span>
+                  <span class="participant-row__meta">
+                    {member.user.kind === "bot" ? "Bot" : member.role}
+                  </span>
+                </label>
+              {/each}
+            </div>
+          </fieldset>
+
+          {#if formError}
+            <div class="projects-notice projects-notice--error">{formError}</div>
+          {/if}
+
+          <div class="project-form__actions">
+            {#if projects.length > 0}
+              <button type="button" class="projects-button" onclick={() => void closeForm()} disabled={submitting}>
+                Cancel
+              </button>
+            {/if}
+            {#if manualMode}
+              <button
+                type="button"
+                class="projects-button"
+                onclick={() => (manualMode = false)}
+                disabled={submitting}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                class="projects-button projects-button--primary"
+                onclick={() => void createProjectManually()}
+                disabled={submitting}
+              >
+                <FolderGit2 size={16} />
+                {submitting ? "Creating..." : "Create manually"}
+              </button>
+            {:else}
+              <button type="button" class="projects-button" onclick={() => (manualMode = true)} disabled={submitting}>
+                <FolderGit2 size={16} />
+                Manual setup
+              </button>
+              <button
+                type="button"
+                class="projects-button projects-button--primary"
+                onclick={() => void connectGitHub()}
+                disabled={submitting}
+              >
+                <GitPullRequest size={16} />
+                {submitting ? "Connecting..." : "Connect GitHub"}
+              </button>
+            {/if}
+          </div>
+          {#if manualMode}
+            <p class="project-form__authorization">
+              ClickClack will show the webhook URL and one-time secret after the project is created.
+            </p>
+          {:else}
+            <p class="project-form__authorization">
+              GitHub grants temporary repository access for the picker and selected webhooks. The access token expires
+              from ClickClack setup after 10 minutes, is revoked after setup or cancellation, and is never saved to the
+              database.
+            </p>
+          {/if}
+        {:else}
+          <div class="repository-picker__toolbar">
+            <label class="repository-search">
+              <Search size={16} />
+              <input
+                bind:value={repositorySearch}
+                placeholder="Search repositories"
+                aria-label="Search GitHub repositories"
+                autocomplete="off"
+              />
+            </label>
+            <span>{selectedRepositories.length} selected</span>
+          </div>
+
+          <div class="repository-picker" aria-busy={loadingRepositories}>
+            {#if loadingRepositories}
+              <div class="repository-picker__state">Loading repositories from GitHub...</div>
+            {:else if availableRepositories.length === 0 && !formError}
+              <div class="repository-picker__state">
+                No repositories with webhook administration access were found.
+              </div>
+            {:else if filteredRepositories.length === 0}
+              <div class="repository-picker__state">No repositories match this search.</div>
+            {:else}
+              {#each filteredRepositories as repository (repository.full_name)}
+                <label class="repository-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedRepositories.includes(repository.full_name)}
+                    onchange={() => toggleRepository(repository.full_name)}
+                  />
+                  <span class="repository-option__main">
+                    <strong>{repository.full_name}</strong>
+                    {#if repository.description}<span>{repository.description}</span>{/if}
+                  </span>
+                  <span class="repository-option__visibility">
+                    {#if repository.private}<LockKeyhole size={13} /> Private{:else}<ShieldCheck size={13} /> Public{/if}
+                  </span>
+                </label>
+              {/each}
+            {/if}
+          </div>
+
+          {#if repositoryListTruncated}
+            <div class="projects-notice">
+              GitHub returned more than 1,000 repositories. Use search or manual setup if the needed repository is not
+              listed.
+            </div>
+          {/if}
+
+          {#if formError}
+            <div class="projects-notice projects-notice--error">{formError}</div>
+          {/if}
+
+          <div class="project-form__actions">
+            <button type="button" class="projects-button" onclick={() => void cancelGitHubSetup()} disabled={submitting}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="projects-button projects-button--primary"
+              onclick={() => void completeGitHubSetup()}
+              disabled={submitting || loadingRepositories || selectedRepositories.length === 0}
+            >
+              <FolderGit2 size={16} />
+              {submitting
+                ? "Creating project..."
+                : `Create project with ${selectedRepositories.length || 0} ${selectedRepositories.length === 1 ? "repository" : "repositories"}`}
+            </button>
+          </div>
+        {/if}
       </section>
     {:else if projects.length === 0 && !data.loadError}
       <div class="projects-empty">

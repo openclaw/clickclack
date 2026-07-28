@@ -354,8 +354,59 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Start one-time GitHub authorization and create repository webhooks */
+    /** Start short-lived GitHub authorization for the project repository picker */
     post: operations["connectGitHubProject"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/projects/github/repositories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List repositories the temporary GitHub grant can administer */
+    get: operations["listGitHubProjectRepositories"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/projects/github/complete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create webhooks for selected repositories and finish the project */
+    post: operations["completeGitHubProjectSetup"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/projects/github/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Discard the temporary GitHub project setup grant */
+    post: operations["cancelGitHubProjectSetup"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1836,6 +1887,12 @@ export interface components {
       repositories: string[];
       member_ids?: string[];
     };
+    StartGitHubProjectSetupRequest: {
+      name: string;
+      slug?: string;
+      description?: string;
+      member_ids?: string[];
+    };
     ProjectRepository: {
       id: string;
       project_id: string;
@@ -1882,9 +1939,33 @@ export interface components {
     GitHubProjectAuthorizationResponse: {
       /**
        * Format: uri
-       * @description One-time GitHub OAuth authorization URL with repository webhook scope.
+       * @description Short-lived GitHub OAuth authorization URL for repository selection and webhook creation.
        */
       authorization_url: string;
+    };
+    GitHubProjectRepositoryOption: {
+      full_name: string;
+      name: string;
+      owner: string;
+      private: boolean;
+      /** Format: uri */
+      html_url: string;
+      description?: string;
+      /** Format: date-time */
+      updated_at?: string;
+    };
+    GitHubProjectRepositoryListResponse: {
+      setup: {
+        name: string;
+        description: string;
+        /** Format: date-time */
+        expires_at: string;
+      };
+      repositories: components["schemas"]["GitHubProjectRepositoryOption"][];
+      truncated: boolean;
+    };
+    CompleteGitHubProjectSetupRequest: {
+      repositories: string[];
     };
     ProjectContextResponse: {
       project: components["schemas"]["Project"];
@@ -2964,7 +3045,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateProjectRequest"];
+        "application/json": components["schemas"]["StartGitHubProjectSetupRequest"];
       };
     };
     responses: {
@@ -2986,6 +3067,104 @@ export interface operations {
       };
       /** @description GitHub OAuth is not configured */
       501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listGitHubProjectRepositories: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Admin-accessible GitHub repositories and pending project details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GitHubProjectRepositoryListResponse"];
+        };
+      };
+      /** @description GitHub project setup grant is missing, invalid, or expired */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  completeGitHubProjectSetup: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CompleteGitHubProjectSetupRequest"];
+      };
+    };
+    responses: {
+      /** @description Project and selected repository webhooks created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            project: components["schemas"]["Project"];
+          };
+        };
+      };
+      /** @description GitHub project setup grant is missing, invalid, or expired */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description A selected repository does not grant webhook administration */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  cancelGitHubProjectSetup: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description GitHub project setup grant discarded */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description GitHub project setup grant is missing, invalid, or expired */
+      401: {
         headers: {
           [name: string]: unknown;
         };

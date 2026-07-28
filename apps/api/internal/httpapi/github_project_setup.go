@@ -2,6 +2,12 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +24,15 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const githubProjectWebhookScope = "admin:repo_hook"
+const (
+	githubProjectRepositoryScope   = "repo"
+	githubProjectSetupGrantTTL     = 10 * time.Minute
+	githubProjectSetupGrantVersion = 1
+	githubProjectSetupMaxMembers   = 50
+	githubRepositoryPageSize       = 100
+	githubRepositoryMaxPages       = 10
+	githubProjectSetupCookieMax    = 4096
+)
 
 var githubProjectWebhookEvents = []string{
 	"check_run",
@@ -40,6 +54,36 @@ type githubProjectOAuthDraft struct {
 	WebhookSecret string                               `json:"webhook_secret"`
 	Repositories  []store.CreateProjectRepositoryInput `json:"repositories"`
 	MemberIDs     []string                             `json:"member_ids"`
+}
+
+type githubProjectSetupRequest struct {
+	Name        string   `json:"name"`
+	Slug        string   `json:"slug"`
+	Description string   `json:"description"`
+	MemberIDs   []string `json:"member_ids"`
+}
+
+type githubProjectSetupGrant struct {
+	Version            int                     `json:"version"`
+	AccessToken        string                  `json:"access_token"`
+	BrowserBindingHash string                  `json:"browser_binding_hash"`
+	Draft              githubProjectOAuthDraft `json:"draft"`
+	IssuedAt           int64                   `json:"issued_at"`
+	ExpiresAt          int64                   `json:"expires_at"`
+}
+
+type githubProjectRepositoryOption struct {
+	FullName    string `json:"full_name"`
+	Name        string `json:"name"`
+	Owner       string `json:"owner"`
+	Private     bool   `json:"private"`
+	HTMLURL     string `json:"html_url"`
+	Description string `json:"description,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+}
+
+type githubProjectSetupCompleteRequest struct {
+	Repositories []string `json:"repositories"`
 }
 
 type githubCreatedHook struct {
@@ -70,7 +114,7 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot create projects"))
 		return
 	}
-	var body createProjectRequest
+	var body githubProjectSetupRequest
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -83,11 +127,6 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 	}
 	if workspace.Role != store.WorkspaceRoleOwner && workspace.Role != store.WorkspaceRoleModerator {
 		writeError(w, http.StatusForbidden, store.ErrNotWorkspaceManager)
-		return
-	}
-	repositories, err := parseGitHubRepositories(body.Repositories)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	secret, err := newProjectWebhookSecret()
@@ -103,10 +142,9 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 		Slug:          body.Slug,
 		Description:   body.Description,
 		WebhookSecret: secret,
-		Repositories:  repositories,
 		MemberIDs:     body.MemberIDs,
 	}
-	if err := store.ValidateCreateProjectInput(draft.createProjectInput()); err != nil {
+	if err := validateGitHubProjectDraft(draft); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -157,7 +195,7 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 		s.writeGitHubOAuthServerError(w, r, "project transaction creation", err)
 		return
 	}
-	authorizationURL := s.oauth2ConfigWithScopes(redirectURL, []string{githubProjectWebhookScope}).AuthCodeURL(
+	authorizationURL := s.oauth2ConfigWithScopes(redirectURL, []string{githubProjectRepositoryScope}).AuthCodeURL(
 		state,
 		oauth2.S256ChallengeOption(pkceVerifier),
 	)
@@ -178,6 +216,27 @@ func (draft githubProjectOAuthDraft) createProjectInput() store.CreateProjectInp
 	}
 }
 
+func validateGitHubProjectDraft(draft githubProjectOAuthDraft) error {
+	name := strings.TrimSpace(draft.Name)
+	description := strings.TrimSpace(draft.Description)
+	if name == "" {
+		return errors.New("project name is required")
+	}
+	if len([]rune(name)) > 80 {
+		return errors.New("project name must be 80 characters or fewer")
+	}
+	if len([]rune(description)) > 500 {
+		return errors.New("project description must be 500 characters or fewer")
+	}
+	if draft.ProjectID == "" || draft.WorkspaceID == "" || draft.UserID == "" || draft.WebhookSecret == "" {
+		return errors.New("project setup is incomplete")
+	}
+	if len(draft.MemberIDs) > githubProjectSetupMaxMembers {
+		return fmt.Errorf("automatic GitHub setup supports at most %d participants", githubProjectSetupMaxMembers)
+	}
+	return nil
+}
+
 func (s *Server) finishGitHubProjectSetup(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -189,7 +248,7 @@ func (s *Server) finishGitHubProjectSetup(
 		s.redirectGitHubProjectSetup(w, r, transaction, "invalid")
 		return
 	}
-	if err := store.ValidateCreateProjectInput(draft.createProjectInput()); err != nil {
+	if err := validateGitHubProjectDraft(draft); err != nil {
 		s.redirectGitHubProjectSetup(w, r, transaction, "invalid")
 		return
 	}
@@ -203,34 +262,368 @@ func (s *Server) finishGitHubProjectSetup(
 		s.redirectGitHubProjectSetup(w, r, transaction, "permission")
 		return
 	}
-	webhookURL := strings.TrimRight(s.apiBaseURL(r), "/") + "/api/hooks/github/projects/" + draft.ProjectID
-	createdHooks := make([]githubCreatedHook, 0, len(draft.Repositories))
-	for _, repository := range draft.Repositories {
-		hookID, err := s.createGitHubRepositoryWebhook(r, token, repository, webhookURL, draft.WebhookSecret)
-		if err != nil {
-			s.deleteGitHubRepositoryWebhooks(r, token, createdHooks)
-			s.redirectGitHubProjectSetup(w, r, transaction, githubProjectSetupErrorCode(err))
-			return
-		}
-		createdHooks = append(createdHooks, githubCreatedHook{Repository: repository, ID: hookID})
+	now := time.Now().UTC()
+	grant := githubProjectSetupGrant{
+		Version:            githubProjectSetupGrantVersion,
+		AccessToken:        token,
+		BrowserBindingHash: transaction.BrowserBindingHash,
+		Draft:              draft,
+		IssuedAt:           now.Unix(),
+		ExpiresAt:          now.Add(githubProjectSetupGrantTTL).Unix(),
 	}
-	project, event, err := s.store.CreateProject(r.Context(), draft.createProjectInput())
-	if err != nil {
-		s.deleteGitHubRepositoryWebhooks(r, token, createdHooks)
-		s.redirectGitHubProjectSetup(w, r, transaction, "create")
+	if err := s.setGitHubProjectSetupGrant(w, r, grant); err != nil {
+		_ = s.revokeGitHubProjectSetupToken(r.Context(), token)
+		s.redirectGitHubProjectSetup(w, r, transaction, "session")
 		return
 	}
-	if event.ID != "" {
-		s.publishEvent(r.Context(), event)
-	}
-	for _, hook := range createdHooks {
-		_ = s.pingGitHubRepositoryWebhook(r, token, hook)
-	}
-	destination := "/app/" + url.PathEscape(project.WorkspaceID) + "/" + url.PathEscape(firstNonEmpty(project.Channel.RouteID, project.Channel.ID))
+	s.scheduleGitHubProjectSetupTokenRevocation(token)
+	destination := "/app/" + url.PathEscape(draft.WorkspaceID) + "/projects?github_setup=select"
 	if s.frontendURL != "" {
 		destination = strings.TrimRight(s.frontendURL, "/") + destination
 	}
 	http.Redirect(w, r, destination, http.StatusFound)
+}
+
+func (s *Server) listGitHubProjectRepositories(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	grant, err := s.authorizedGitHubProjectSetupGrant(r, chi.URLParam(r, "workspace_id"))
+	if err != nil {
+		s.clearGitHubProjectSetupGrant(w, r)
+		writeError(w, http.StatusUnauthorized, errors.New("GitHub project setup expired; connect GitHub again"))
+		return
+	}
+	repositories, truncated, err := s.fetchGitHubProjectRepositories(r, grant.AccessToken)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, errors.New("GitHub repositories could not be loaded"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"setup": map[string]any{
+			"name":        grant.Draft.Name,
+			"description": grant.Draft.Description,
+			"expires_at":  time.Unix(grant.ExpiresAt, 0).UTC().Format(time.RFC3339),
+		},
+		"repositories": repositories,
+		"truncated":    truncated,
+	})
+}
+
+func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	grant, err := s.authorizedGitHubProjectSetupGrant(r, chi.URLParam(r, "workspace_id"))
+	if err != nil {
+		s.clearGitHubProjectSetupGrant(w, r)
+		writeError(w, http.StatusUnauthorized, errors.New("GitHub project setup expired; connect GitHub again"))
+		return
+	}
+	var body githubProjectSetupCompleteRequest
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	repositories, err := parseGitHubRepositories(body.Repositories)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	available, _, err := s.fetchGitHubProjectRepositories(r, grant.AccessToken)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, errors.New("GitHub repository access could not be verified"))
+		return
+	}
+	adminRepositories := make(map[string]struct{}, len(available))
+	for _, repository := range available {
+		adminRepositories[strings.ToLower(repository.FullName)] = struct{}{}
+	}
+	for _, repository := range repositories {
+		if _, ok := adminRepositories[repository.FullName]; !ok {
+			writeError(w, http.StatusForbidden, fmt.Errorf("GitHub webhook access is not available for %s", repository.FullName))
+			return
+		}
+	}
+	grant.Draft.Repositories = repositories
+	if err := store.ValidateCreateProjectInput(grant.Draft.createProjectInput()); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	webhookURL := strings.TrimRight(s.apiBaseURL(r), "/") + "/api/hooks/github/projects/" + grant.Draft.ProjectID
+	createdHooks := make([]githubCreatedHook, 0, len(repositories))
+	for _, repository := range repositories {
+		hookID, err := s.createGitHubRepositoryWebhook(r, grant.AccessToken, repository, webhookURL, grant.Draft.WebhookSecret)
+		if err != nil {
+			s.deleteGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
+			writeError(w, http.StatusBadGateway, errors.New("GitHub could not create all repository webhooks"))
+			return
+		}
+		createdHooks = append(createdHooks, githubCreatedHook{Repository: repository, ID: hookID})
+	}
+	project, event, err := s.store.CreateProject(r.Context(), grant.Draft.createProjectInput())
+	if err != nil {
+		s.deleteGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
+		writeStoreError(w, err)
+		return
+	}
+	s.clearGitHubProjectSetupGrant(w, r)
+	if event.ID != "" {
+		s.publishEvent(r.Context(), event)
+	}
+	for _, hook := range createdHooks {
+		_ = s.pingGitHubRepositoryWebhook(r, grant.AccessToken, hook)
+	}
+	_ = s.revokeGitHubProjectSetupToken(r.Context(), grant.AccessToken)
+	writeJSON(w, http.StatusCreated, map[string]any{"project": project})
+}
+
+func (s *Server) cancelGitHubProjectSetup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	grant, err := s.authorizedGitHubProjectSetupGrant(r, chi.URLParam(r, "workspace_id"))
+	if err != nil {
+		s.clearGitHubProjectSetupGrant(w, r)
+		writeError(w, http.StatusUnauthorized, errors.New("GitHub project setup expired"))
+		return
+	}
+	_ = s.revokeGitHubProjectSetupToken(r.Context(), grant.AccessToken)
+	s.clearGitHubProjectSetupGrant(w, r)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) authorizedGitHubProjectSetupGrant(r *http.Request, workspaceID string) (githubProjectSetupGrant, error) {
+	grant, err := s.githubProjectSetupGrant(r)
+	if err != nil {
+		return githubProjectSetupGrant{}, err
+	}
+	act, err := s.currentActor(r)
+	if err != nil || act.botTokenID != "" || act.user.ID != grant.Draft.UserID || workspaceID != grant.Draft.WorkspaceID {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup does not match this session")
+	}
+	workspace, err := s.store.GetWorkspace(r.Context(), workspaceID, act.user.ID)
+	if err != nil || (workspace.Role != store.WorkspaceRoleOwner && workspace.Role != store.WorkspaceRoleModerator) {
+		return githubProjectSetupGrant{}, store.ErrNotWorkspaceManager
+	}
+	return grant, nil
+}
+
+func (s *Server) fetchGitHubProjectRepositories(
+	r *http.Request,
+	token string,
+) ([]githubProjectRepositoryOption, bool, error) {
+	repositories := make([]githubProjectRepositoryOption, 0, githubRepositoryPageSize)
+	seen := make(map[string]struct{})
+	truncated := false
+	for page := 1; page <= githubRepositoryMaxPages; page++ {
+		endpoint, err := url.Parse(strings.TrimRight(s.githubOAuth.APIURL, "/") + "/user/repos")
+		if err != nil {
+			return nil, false, err
+		}
+		query := endpoint.Query()
+		query.Set("affiliation", "owner,collaborator,organization_member")
+		query.Set("sort", "updated")
+		query.Set("per_page", strconv.Itoa(githubRepositoryPageSize))
+		query.Set("page", strconv.Itoa(page))
+		endpoint.RawQuery = query.Encode()
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint.String(), nil)
+		if err != nil {
+			return nil, false, err
+		}
+		setGitHubAPIHeaders(req, token)
+		resp, err := s.githubOAuth.HTTPClient.Do(req)
+		if err != nil {
+			return nil, false, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			_ = resp.Body.Close()
+			return nil, false, fmt.Errorf("GitHub repository request failed with status %d", resp.StatusCode)
+		}
+		var pageRepositories []struct {
+			Name        string `json:"name"`
+			FullName    string `json:"full_name"`
+			Private     bool   `json:"private"`
+			HTMLURL     string `json:"html_url"`
+			Description string `json:"description"`
+			UpdatedAt   string `json:"updated_at"`
+			Owner       struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+			Permissions struct {
+				Admin bool `json:"admin"`
+			} `json:"permissions"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&pageRepositories)
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, false, err
+		}
+		for _, repository := range pageRepositories {
+			fullName := strings.ToLower(strings.TrimSpace(repository.FullName))
+			if !repository.Permissions.Admin || fullName == "" {
+				continue
+			}
+			if _, ok := seen[fullName]; ok {
+				continue
+			}
+			seen[fullName] = struct{}{}
+			repositories = append(repositories, githubProjectRepositoryOption{
+				FullName:    fullName,
+				Name:        repository.Name,
+				Owner:       repository.Owner.Login,
+				Private:     repository.Private,
+				HTMLURL:     repository.HTMLURL,
+				Description: repository.Description,
+				UpdatedAt:   repository.UpdatedAt,
+			})
+		}
+		if len(pageRepositories) < githubRepositoryPageSize {
+			break
+		}
+		if page == githubRepositoryMaxPages {
+			truncated = true
+		}
+	}
+	return repositories, truncated, nil
+}
+
+func (s *Server) setGitHubProjectSetupGrant(w http.ResponseWriter, r *http.Request, grant githubProjectSetupGrant) error {
+	value, err := s.sealGitHubProjectSetupGrant(grant)
+	if err != nil {
+		return err
+	}
+	if len(s.cookies.GitHubProjectSetup)+len(value) > githubProjectSetupCookieMax {
+		return errors.New("GitHub project setup is too large")
+	}
+	expires := time.Unix(grant.ExpiresAt, 0).UTC()
+	http.SetCookie(w, &http.Cookie{
+		Name:     s.cookies.GitHubProjectSetup,
+		Value:    value,
+		Path:     s.cookiePath(),
+		MaxAge:   int(time.Until(expires).Seconds()),
+		Expires:  expires,
+		HttpOnly: true,
+		Secure:   s.secureCookies(r),
+		SameSite: s.cookieSameSite,
+	})
+	return nil
+}
+
+func (s *Server) clearGitHubProjectSetupGrant(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     s.cookies.GitHubProjectSetup,
+		Value:    "",
+		Path:     s.cookiePath(),
+		MaxAge:   -1,
+		Expires:  time.Unix(1, 0).UTC(),
+		HttpOnly: true,
+		Secure:   s.secureCookies(r),
+		SameSite: s.cookieSameSite,
+	})
+}
+
+func (s *Server) sealGitHubProjectSetupGrant(grant githubProjectSetupGrant) (string, error) {
+	plaintext, err := json.Marshal(grant)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := s.githubProjectSetupAEAD()
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	sealed := gcm.Seal(nonce, nonce, plaintext, s.githubProjectSetupCookieAAD())
+	return base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+func (s *Server) githubProjectSetupGrant(r *http.Request) (githubProjectSetupGrant, error) {
+	cookie, err := requestCookie(r, s.cookies.GitHubProjectSetup)
+	if err != nil || cookie.Value == "" {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is missing")
+	}
+	encoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
+	}
+	gcm, err := s.githubProjectSetupAEAD()
+	if err != nil || len(encoded) < gcm.NonceSize() {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
+	}
+	plaintext, err := gcm.Open(
+		nil,
+		encoded[:gcm.NonceSize()],
+		encoded[gcm.NonceSize():],
+		s.githubProjectSetupCookieAAD(),
+	)
+	if err != nil {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
+	}
+	var grant githubProjectSetupGrant
+	if err := json.Unmarshal(plaintext, &grant); err != nil {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
+	}
+	now := time.Now().UTC().Unix()
+	if grant.Version != githubProjectSetupGrantVersion || grant.AccessToken == "" ||
+		grant.BrowserBindingHash == "" || grant.ExpiresAt <= now || grant.IssuedAt > now {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie expired")
+	}
+	bindingCookie, err := requestCookie(r, s.cookies.OAuthBinding)
+	if err != nil || secretHash(bindingCookie.Value) != grant.BrowserBindingHash {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup browser binding changed")
+	}
+	if err := validateGitHubProjectDraft(grant.Draft); err != nil {
+		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
+	}
+	return grant, nil
+}
+
+func (s *Server) githubProjectSetupAEAD() (cipher.AEAD, error) {
+	key := sha256.Sum256([]byte("clickclack/github-project-setup/v1\x00" + s.githubOAuth.ClientSecret))
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func (s *Server) githubProjectSetupCookieAAD() []byte {
+	return []byte("clickclack/github-project-setup/v1\x00" + s.cookies.GitHubProjectSetup)
+}
+
+func (s *Server) scheduleGitHubProjectSetupTokenRevocation(token string) {
+	time.AfterFunc(githubProjectSetupGrantTTL, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultGitHubHTTPTimeout)
+		defer cancel()
+		_ = s.revokeGitHubProjectSetupToken(ctx, token)
+	})
+}
+
+func (s *Server) revokeGitHubProjectSetupToken(ctx context.Context, token string) error {
+	body, err := json.Marshal(map[string]string{"access_token": token})
+	if err != nil {
+		return err
+	}
+	endpoint := strings.TrimRight(s.githubOAuth.APIURL, "/") + "/applications/" +
+		url.PathEscape(s.githubOAuth.ClientID) + "/token"
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(s.githubOAuth.ClientID, s.githubOAuth.ClientSecret)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	req.Header.Set("User-Agent", "ClickClack")
+	resp, err := s.githubOAuth.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("GitHub token revocation failed with status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (s *Server) createGitHubRepositoryWebhook(

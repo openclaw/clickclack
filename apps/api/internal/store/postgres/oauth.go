@@ -22,6 +22,9 @@ const (
 )
 
 func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OAuthTransaction) error {
+	if transaction.Purpose == "" {
+		transaction.Purpose = store.OAuthPurposeLogin
+	}
 	if err := validateOAuthTransaction(transaction); err != nil {
 		return err
 	}
@@ -59,6 +62,8 @@ func (s *Store) CreateOAuthTransaction(ctx context.Context, transaction store.OA
 		StateHash:          transaction.StateHash,
 		BrowserBindingHash: transaction.BrowserBindingHash,
 		Mode:               transaction.Mode,
+		Purpose:            transaction.Purpose,
+		ContextJson:        transaction.ContextJSON,
 		PkceVerifier:       transaction.PKCEVerifier,
 		DesktopChallenge:   transaction.DesktopChallenge,
 		DesktopProtocol:    transaction.DesktopProtocol,
@@ -194,6 +199,8 @@ func oauthTransactionFromDB(row storedb.OauthTransaction) store.OAuthTransaction
 		StateHash:          row.StateHash,
 		BrowserBindingHash: row.BrowserBindingHash,
 		Mode:               row.Mode,
+		Purpose:            row.Purpose,
+		ContextJSON:        row.ContextJson,
 		PKCEVerifier:       row.PkceVerifier,
 		DesktopChallenge:   row.DesktopChallenge,
 		DesktopProtocol:    row.DesktopProtocol,
@@ -207,6 +214,16 @@ func validateOAuthTransaction(transaction store.OAuthTransaction) error {
 		return store.ErrOAuthTransactionInvalid
 	}
 	if transaction.Mode != store.OAuthModeBrowser && transaction.Mode != store.OAuthModeDesktop {
+		return store.ErrOAuthTransactionInvalid
+	}
+	if transaction.Purpose != store.OAuthPurposeLogin && transaction.Purpose != store.OAuthPurposeProjectWebhook {
+		return store.ErrOAuthTransactionInvalid
+	}
+	if transaction.Purpose == store.OAuthPurposeProjectWebhook &&
+		(transaction.Mode != store.OAuthModeBrowser || strings.TrimSpace(transaction.ContextJSON) == "") {
+		return store.ErrOAuthTransactionInvalid
+	}
+	if transaction.Purpose == store.OAuthPurposeLogin && strings.TrimSpace(transaction.ContextJSON) != "" {
 		return store.ErrOAuthTransactionInvalid
 	}
 	if transaction.Mode == store.OAuthModeDesktop && transaction.DesktopChallenge == "" {

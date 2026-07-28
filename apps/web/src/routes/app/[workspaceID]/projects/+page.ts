@@ -32,8 +32,12 @@ async function loadAllWorkspaceMembers(
   return members;
 }
 
-export async function load({ params }: { params: { workspaceID: string } }) {
+export async function load({ params, url }: { params: { workspaceID: string }; url: URL }) {
   let loadError = "";
+  const githubSetupError =
+    url.searchParams.get("github_setup") === "error"
+      ? url.searchParams.get("reason") || "github"
+      : "";
   try {
     const workspaceData = await api<{ workspaces: Workspace[] }>("/api/workspaces");
     const workspace = workspaceData.workspaces.find(
@@ -46,6 +50,7 @@ export async function load({ params }: { params: { workspaceID: string } }) {
         projects: [] as Project[],
         members: [] as WorkspaceMemberPage["members"],
         loadError: "Workspace not found",
+        githubSetupError,
       };
     }
     const [projectData, members] = await Promise.all([
@@ -58,6 +63,7 @@ export async function load({ params }: { params: { workspaceID: string } }) {
       projects: projectData.projects,
       members: members.filter((member) => member.role !== "guest"),
       loadError,
+      githubSetupError,
     };
   } catch (error) {
     loadError = readableAPIError(error, "Could not load projects");
@@ -67,6 +73,7 @@ export async function load({ params }: { params: { workspaceID: string } }) {
       projects: [] as Project[],
       members: [] as WorkspaceMemberPage["members"],
       loadError,
+      githubSetupError,
     };
   }
 }

@@ -171,6 +171,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces/{workspace_id}/channels", s.createChannel)
 		r.Get("/workspaces/{workspace_id}/projects", s.listProjects)
 		r.Post("/workspaces/{workspace_id}/projects", s.createProject)
+		r.Post("/workspaces/{workspace_id}/projects/github/connect", s.startGitHubProjectSetup)
 		r.Get("/projects/{project_id}", s.getProject)
 		r.Get("/projects/{project_id}/context", s.getProjectContext)
 		r.Get("/workspaces/{workspace_id}/topics", s.listTopics)

@@ -345,6 +345,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/projects/github/connect": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Start one-time GitHub authorization and create repository webhooks */
+    post: operations["connectGitHubProject"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{project_id}": {
     parameters: {
       query?: never;
@@ -1862,6 +1879,13 @@ export interface components {
       project: components["schemas"]["Project"];
       webhook: components["schemas"]["ProjectWebhookHandoff"];
     };
+    GitHubProjectAuthorizationResponse: {
+      /**
+       * Format: uri
+       * @description One-time GitHub OAuth authorization URL with repository webhook scope.
+       */
+      authorization_url: string;
+    };
     ProjectContextResponse: {
       project: components["schemas"]["Project"];
       context: {
@@ -2922,6 +2946,46 @@ export interface operations {
       };
       /** @description Workspace manager permission required */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  connectGitHubProject: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: components["parameters"]["workspace_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateProjectRequest"];
+      };
+    };
+    responses: {
+      /** @description GitHub authorization URL for the pending project */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GitHubProjectAuthorizationResponse"];
+        };
+      };
+      /** @description Workspace manager permission required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description GitHub OAuth is not configured */
+      501: {
         headers: {
           [name: string]: unknown;
         };

@@ -1663,7 +1663,7 @@ func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (G
 }
 
 const getOAuthTransactionForConsume = `-- name: GetOAuthTransactionForConsume :one
-SELECT id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+SELECT id, state_hash, browser_binding_hash, mode, purpose, context_json, pkce_verifier, desktop_challenge,
        desktop_protocol, created_at_unix, expires_at_unix
 FROM oauth_transactions
 WHERE state_hash = ?1
@@ -1677,6 +1677,8 @@ func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash s
 		&i.StateHash,
 		&i.BrowserBindingHash,
 		&i.Mode,
+		&i.Purpose,
+		&i.ContextJson,
 		&i.PkceVerifier,
 		&i.DesktopChallenge,
 		&i.DesktopProtocol,
@@ -2798,12 +2800,13 @@ func (q *Queries) InsertMagicLink(ctx context.Context, arg InsertMagicLinkParams
 
 const insertOAuthTransaction = `-- name: InsertOAuthTransaction :exec
 INSERT INTO oauth_transactions (
-  id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+  id, state_hash, browser_binding_hash, mode, purpose, context_json, pkce_verifier, desktop_challenge,
   desktop_protocol, created_at_unix, expires_at_unix
 ) VALUES (
   ?1, ?2, ?3, ?4,
   ?5, ?6, ?7,
-  ?8, ?9
+  ?8, ?9,
+  ?10, ?11
 )
 `
 
@@ -2812,6 +2815,8 @@ type InsertOAuthTransactionParams struct {
 	StateHash          string `json:"state_hash"`
 	BrowserBindingHash string `json:"browser_binding_hash"`
 	Mode               string `json:"mode"`
+	Purpose            string `json:"purpose"`
+	ContextJson        string `json:"context_json"`
 	PkceVerifier       string `json:"pkce_verifier"`
 	DesktopChallenge   string `json:"desktop_challenge"`
 	DesktopProtocol    int64  `json:"desktop_protocol"`
@@ -2825,6 +2830,8 @@ func (q *Queries) InsertOAuthTransaction(ctx context.Context, arg InsertOAuthTra
 		arg.StateHash,
 		arg.BrowserBindingHash,
 		arg.Mode,
+		arg.Purpose,
+		arg.ContextJson,
 		arg.PkceVerifier,
 		arg.DesktopChallenge,
 		arg.DesktopProtocol,

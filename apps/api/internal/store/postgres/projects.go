@@ -69,7 +69,10 @@ func (s *Store) CreateProject(ctx context.Context, input store.CreateProjectInpu
 	}
 	qtx := s.q.WithTx(tx)
 	createdAt := now()
-	projectID := newID("prj")
+	projectID := strings.TrimSpace(input.ProjectID)
+	if projectID == "" {
+		projectID = newID("prj")
+	}
 	integrationUserID := newID("usr")
 	channelID := newID("chn")
 

@@ -520,6 +520,8 @@ CREATE TABLE oauth_transactions (
   state_hash TEXT NOT NULL UNIQUE,
   browser_binding_hash TEXT NOT NULL,
   mode TEXT NOT NULL CHECK (mode IN ('browser', 'desktop')),
+  purpose TEXT NOT NULL DEFAULT 'login',
+  context_json TEXT NOT NULL DEFAULT '',
   pkce_verifier TEXT NOT NULL,
   desktop_challenge TEXT NOT NULL DEFAULT '',
   desktop_protocol BIGINT NOT NULL DEFAULT 0,

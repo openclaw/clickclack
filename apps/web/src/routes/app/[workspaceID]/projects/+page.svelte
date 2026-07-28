@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
   import { untrack } from "svelte";
   import {
     ArrowLeft,
@@ -19,19 +20,39 @@
   let { data } = $props();
 
   let projects = $state<Project[]>(untrack(() => [...data.projects]));
-  let formOpen = $state(untrack(() => data.projects.length === 0));
+  let formOpen = $state(untrack(() => data.projects.length === 0 || Boolean(data.githubSetupError)));
   let name = $state("");
   let description = $state("");
   let repositories = $state([""]);
   let memberIDs = $state<string[]>([]);
   let submitting = $state(false);
-  let formError = $state("");
+  let formError = $state(untrack(() => githubSetupMessage(data.githubSetupError)));
   let webhook = $state<{ url: string; secret: string } | null>(null);
   let copied = $state<"url" | "secret" | "">("");
 
   const canManage = $derived(
     data.workspace?.role === "owner" || data.workspace?.role === "moderator",
   );
+
+  onMount(() => {
+    if (!data.githubSetupError) return;
+    const savedDraft = window.sessionStorage.getItem(projectDraftKey());
+    if (!savedDraft) return;
+    try {
+      const draft = JSON.parse(savedDraft) as {
+        name?: string;
+        description?: string;
+        repositories?: string[];
+        memberIDs?: string[];
+      };
+      name = draft.name || "";
+      description = draft.description || "";
+      repositories = draft.repositories?.length ? draft.repositories : [""];
+      memberIDs = draft.memberIDs || [];
+    } catch {
+      window.sessionStorage.removeItem(projectDraftKey());
+    }
+  });
 
   function closeForm() {
     formOpen = false;
@@ -57,17 +78,77 @@
       : [...memberIDs, id];
   }
 
-  async function createProject() {
+  function githubSetupMessage(reason: string): string {
+    switch (reason) {
+      case "":
+        return "";
+      case "cancelled":
+        return "GitHub authorization was cancelled. You can try again or create the webhook manually.";
+      case "permission":
+        return "That GitHub account cannot manage webhooks for one of these repositories.";
+      case "repository":
+        return "GitHub could not find one of these repositories for the authorized account.";
+      case "webhook_conflict":
+        return "GitHub could not create the webhook because a repository webhook conflicts with this setup.";
+      case "session":
+        return "Your ClickClack session changed during GitHub authorization. Start the connection again.";
+      case "create":
+        return "GitHub was connected, but ClickClack could not create the project. Any new hooks were removed.";
+      default:
+        return "GitHub could not finish the webhook setup. Try again or create the webhook manually.";
+    }
+  }
+
+  function projectDraftKey(): string {
+    return `clickclack.project-draft.${data.workspaceID}`;
+  }
+
+  function projectRequest() {
+    return {
+      name: name.trim(),
+      description: description.trim(),
+      repositories: repositories.map((value) => value.trim()).filter(Boolean),
+      member_ids: memberIDs,
+    };
+  }
+
+  function validateProjectRequest() {
     formError = "";
-    const repositoryValues = repositories.map((value) => value.trim()).filter(Boolean);
     if (!name.trim()) {
       formError = "Project name is required.";
-      return;
+      return false;
     }
-    if (repositoryValues.length === 0) {
+    if (projectRequest().repositories.length === 0) {
       formError = "Add at least one GitHub repository.";
-      return;
+      return false;
     }
+    return true;
+  }
+
+  async function connectGitHub() {
+    if (!validateProjectRequest()) return;
+    submitting = true;
+    window.sessionStorage.setItem(
+      projectDraftKey(),
+      JSON.stringify({ name, description, repositories, memberIDs }),
+    );
+    try {
+      const response = await api<{ authorization_url: string }>(
+        `/api/workspaces/${data.workspaceID}/projects/github/connect`,
+        {
+          method: "POST",
+          body: JSON.stringify(projectRequest()),
+        },
+      );
+      window.location.assign(response.authorization_url);
+    } catch (error) {
+      formError = readableAPIError(error, "Could not start GitHub authorization");
+      submitting = false;
+    }
+  }
+
+  async function createProjectManually() {
+    if (!validateProjectRequest()) return;
     submitting = true;
     try {
       const response = await api<{
@@ -76,10 +157,7 @@
       }>(`/api/workspaces/${data.workspaceID}/projects`, {
         method: "POST",
         body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim(),
-          repositories: repositoryValues,
-          member_ids: memberIDs,
+          ...projectRequest(),
         }),
       });
       projects = [...projects, response.project].sort((a, b) => a.name.localeCompare(b.name));
@@ -88,6 +166,7 @@
       description = "";
       repositories = [""];
       memberIDs = [];
+      window.sessionStorage.removeItem(projectDraftKey());
       formOpen = false;
     } catch (error) {
       formError = readableAPIError(error, "Could not create project");
@@ -295,14 +374,26 @@
           {/if}
           <button
             type="button"
-            class="projects-button projects-button--primary"
-            onclick={() => void createProject()}
+            class="projects-button"
+            onclick={() => void createProjectManually()}
             disabled={submitting}
           >
             <FolderGit2 size={16} />
-            {submitting ? "Creating..." : "Create project"}
+            Create manually
+          </button>
+          <button
+            type="button"
+            class="projects-button projects-button--primary"
+            onclick={() => void connectGitHub()}
+            disabled={submitting}
+          >
+            <GitPullRequest size={16} />
+            {submitting ? "Connecting..." : "Connect GitHub & create"}
           </button>
         </div>
+        <p class="project-form__authorization">
+          GitHub will request repository webhook access for this setup. ClickClack does not store the access token.
+        </p>
       </section>
     {:else if projects.length === 0 && !data.loadError}
       <div class="projects-empty">

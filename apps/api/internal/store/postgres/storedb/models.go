@@ -290,6 +290,8 @@ type OauthTransaction struct {
 	StateHash          string `json:"state_hash"`
 	BrowserBindingHash string `json:"browser_binding_hash"`
 	Mode               string `json:"mode"`
+	Purpose            string `json:"purpose"`
+	ContextJson        string `json:"context_json"`
 	PkceVerifier       string `json:"pkce_verifier"`
 	DesktopChallenge   string `json:"desktop_challenge"`
 	DesktopProtocol    int64  `json:"desktop_protocol"`

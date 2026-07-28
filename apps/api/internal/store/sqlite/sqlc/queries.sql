@@ -57,16 +57,17 @@ WHERE browser_binding_hash = sqlc.arg(browser_binding_hash);
 
 -- name: InsertOAuthTransaction :exec
 INSERT INTO oauth_transactions (
-  id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+  id, state_hash, browser_binding_hash, mode, purpose, context_json, pkce_verifier, desktop_challenge,
   desktop_protocol, created_at_unix, expires_at_unix
 ) VALUES (
   sqlc.arg(id), sqlc.arg(state_hash), sqlc.arg(browser_binding_hash), sqlc.arg(mode),
-  sqlc.arg(pkce_verifier), sqlc.arg(desktop_challenge), sqlc.arg(desktop_protocol),
+  sqlc.arg(purpose), sqlc.arg(context_json), sqlc.arg(pkce_verifier),
+  sqlc.arg(desktop_challenge), sqlc.arg(desktop_protocol),
   sqlc.arg(created_at_unix), sqlc.arg(expires_at_unix)
 );
 
 -- name: GetOAuthTransactionForConsume :one
-SELECT id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
+SELECT id, state_hash, browser_binding_hash, mode, purpose, context_json, pkce_verifier, desktop_challenge,
        desktop_protocol, created_at_unix, expires_at_unix
 FROM oauth_transactions
 WHERE state_hash = sqlc.arg(state_hash);

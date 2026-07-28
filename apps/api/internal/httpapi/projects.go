@@ -107,19 +107,10 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	repositories := make([]store.CreateProjectRepositoryInput, 0, len(body.Repositories))
-	seen := make(map[string]struct{}, len(body.Repositories))
-	for _, raw := range body.Repositories {
-		repository, err := parseGitHubRepository(raw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		if _, ok := seen[repository.FullName]; ok {
-			continue
-		}
-		seen[repository.FullName] = struct{}{}
-		repositories = append(repositories, repository)
+	repositories, err := parseGitHubRepositories(body.Repositories)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
 	}
 	secret, err := newProjectWebhookSecret()
 	if err != nil {
@@ -148,6 +139,23 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		"project": project,
 		"webhook": map[string]string{"url": webhookURL, "secret": secret},
 	})
+}
+
+func parseGitHubRepositories(rawRepositories []string) ([]store.CreateProjectRepositoryInput, error) {
+	repositories := make([]store.CreateProjectRepositoryInput, 0, len(rawRepositories))
+	seen := make(map[string]struct{}, len(rawRepositories))
+	for _, raw := range rawRepositories {
+		repository, err := parseGitHubRepository(raw)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[repository.FullName]; ok {
+			continue
+		}
+		seen[repository.FullName] = struct{}{}
+		repositories = append(repositories, repository)
+	}
+	return repositories, nil
 }
 
 func parseGitHubRepository(raw string) (store.CreateProjectRepositoryInput, error) {

@@ -312,7 +312,15 @@
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.project-form__authorization {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: right;
 }
 
 .projects-notice {
@@ -460,6 +468,14 @@
 
   .projects-button--channel {
     width: 100%;
+  }
+
+  .project-form__actions .projects-button {
+    flex: 1 1 auto;
+  }
+
+  .project-form__authorization {
+    text-align: left;
   }
 
   .credential-row {

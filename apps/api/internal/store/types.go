@@ -268,6 +268,7 @@ type CreateProjectRepositoryInput struct {
 }
 
 type CreateProjectInput struct {
+	ProjectID     string
 	WorkspaceID   string
 	Name          string
 	Slug          string
@@ -1044,8 +1045,10 @@ type Session struct {
 }
 
 const (
-	OAuthModeBrowser = "browser"
-	OAuthModeDesktop = "desktop"
+	OAuthModeBrowser           = "browser"
+	OAuthModeDesktop           = "desktop"
+	OAuthPurposeLogin          = "login"
+	OAuthPurposeProjectWebhook = "project_webhook"
 )
 
 type OAuthTransaction struct {
@@ -1053,6 +1056,8 @@ type OAuthTransaction struct {
 	StateHash          string
 	BrowserBindingHash string
 	Mode               string
+	Purpose            string
+	ContextJSON        string
 	PKCEVerifier       string
 	DesktopChallenge   string
 	DesktopProtocol    int64

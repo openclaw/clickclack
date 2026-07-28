@@ -505,6 +505,29 @@ paths:
                 $ref: "#/components/schemas/CreateProjectResponse"
         "403":
           description: Workspace manager permission required
+  /api/workspaces/{workspace_id}/projects/github/connect:
+    post:
+      operationId: connectGitHubProject
+      summary: Start one-time GitHub authorization and create repository webhooks
+      parameters:
+        - $ref: "#/components/parameters/workspace_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "200":
+          description: GitHub authorization URL for the pending project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubProjectAuthorizationResponse"
+        "403":
+          description: Workspace manager permission required
+        "501":
+          description: GitHub OAuth is not configured
   /api/projects/{project_id}:
     get:
       operationId: getProject
@@ -3030,6 +3053,14 @@ components:
           $ref: "#/components/schemas/Project"
         webhook:
           $ref: "#/components/schemas/ProjectWebhookHandoff"
+    GitHubProjectAuthorizationResponse:
+      type: object
+      required: [authorization_url]
+      properties:
+        authorization_url:
+          type: string
+          format: uri
+          description: One-time GitHub OAuth authorization URL with repository webhook scope.
     ProjectContextResponse:
       type: object
       required: [project, context]

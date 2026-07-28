@@ -29,6 +29,7 @@ type GitHubOAuthConfig struct {
 	UserURL       string
 	EmailsURL     string
 	MembershipURL string
+	APIURL        string
 	AllowedOrg    string
 	ModeratorOrg  string
 	HTTPClient    *http.Client
@@ -84,6 +85,9 @@ func (c GitHubOAuthConfig) withDefaults() GitHubOAuthConfig {
 	}
 	if c.MembershipURL == "" {
 		c.MembershipURL = "https://api.github.com/user/memberships/orgs/"
+	}
+	if c.APIURL == "" {
+		c.APIURL = "https://api.github.com"
 	}
 	if c.HTTPClient == nil {
 		c.HTTPClient = &http.Client{Timeout: defaultGitHubHTTPTimeout}
@@ -159,6 +163,7 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 		StateHash:          secretHash(state),
 		BrowserBindingHash: secretHash(browserBinding),
 		Mode:               mode,
+		Purpose:            store.OAuthPurposeLogin,
 		PKCEVerifier:       pkceVerifier,
 		DesktopChallenge:   desktopChallenge,
 		DesktopProtocol:    desktopProtocol,
@@ -202,6 +207,10 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
+		if transaction.Purpose == store.OAuthPurposeProjectWebhook {
+			s.redirectGitHubProjectSetup(w, r, transaction, "cancelled")
+			return
+		}
 		writeError(w, http.StatusBadRequest, errors.New("github oauth code is required"))
 		return
 	}
@@ -213,7 +222,19 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 	token, err := s.exchangeGitHubCode(r.Context(), code, transaction.PKCEVerifier, redirectURL)
 	if err != nil {
 		s.recordGitHubOAuthEvent(githubOAuthEventProviderFailed)
+		if transaction.Purpose == store.OAuthPurposeProjectWebhook {
+			s.redirectGitHubProjectSetup(w, r, transaction, "authorization")
+			return
+		}
 		s.writeGitHubOAuthProviderError(w, r, "token exchange", err)
+		return
+	}
+	if transaction.Purpose == store.OAuthPurposeProjectWebhook {
+		s.finishGitHubProjectSetup(w, r, transaction, token)
+		return
+	}
+	if transaction.Purpose != store.OAuthPurposeLogin {
+		writeError(w, http.StatusBadRequest, errors.New("invalid github oauth transaction"))
 		return
 	}
 	profile, err := s.fetchGitHubProfile(r.Context(), token)
@@ -412,6 +433,10 @@ func (s *Server) exchangeGitHubCode(ctx context.Context, code, verifier, redirec
 }
 
 func (s *Server) oauth2Config(redirectURL string) *oauth2.Config {
+	return s.oauth2ConfigWithScopes(redirectURL, strings.Fields(s.githubScope()))
+}
+
+func (s *Server) oauth2ConfigWithScopes(redirectURL string, scopes []string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     s.githubOAuth.ClientID,
 		ClientSecret: s.githubOAuth.ClientSecret,
@@ -421,7 +446,7 @@ func (s *Server) oauth2Config(redirectURL string) *oauth2.Config {
 			AuthStyle: oauth2.AuthStyleInParams,
 		},
 		RedirectURL: redirectURL,
-		Scopes:      strings.Fields(s.githubScope()),
+		Scopes:      scopes,
 	}
 }
 

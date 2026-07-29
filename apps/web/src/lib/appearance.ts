@@ -5,6 +5,7 @@
 // script reads these storage keys before hydration; keep them in sync.
 
 import { api } from "./api";
+import { getEmbedHostThemeMode } from "./embed-theme";
 import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
 
 export type ColorMode = "light" | "dark" | "system";
@@ -126,8 +127,11 @@ export function loadDensity(): Density {
 
 export function applyColorMode(mode: ColorMode) {
   try {
-    if (mode === "system") document.documentElement.removeAttribute("data-color-mode");
-    else document.documentElement.setAttribute("data-color-mode", mode);
+    // Account refreshes must not replace the host-selected embed appearance;
+    // the override is document-local and never enters account preferences.
+    const resolvedMode = getEmbedHostThemeMode() ?? mode;
+    if (resolvedMode === "system") document.documentElement.removeAttribute("data-color-mode");
+    else document.documentElement.setAttribute("data-color-mode", resolvedMode);
   } catch {
     // Non-DOM context (SSR/tests); the stored pref still applies on mount.
   }

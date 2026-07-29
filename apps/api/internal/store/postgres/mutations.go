@@ -262,6 +262,10 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	if name != ch.Name && (name == store.GuestChannelName || ch.Name == store.GuestChannelName) {
 		return store.Channel{}, store.Event{}, errors.New("guest channel name is reserved")
 	}
+	displayTitle := ch.DisplayTitle
+	if input.DisplayTitle != nil {
+		displayTitle = normalizedDisplayTitle(*input.DisplayTitle)
+	}
 	kind := strings.TrimSpace(input.Kind)
 	if kind == "" {
 		kind = ch.Kind
@@ -292,6 +296,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	}
 	if err := qtx.UpdateChannel(ctx, storedb.UpdateChannelParams{
 		Name:            name,
+		DisplayTitle:    nullFromPtr(displayTitle),
 		Kind:            kind,
 		ArchivedAt:      nullFromPtr(archivedValue),
 		ExternalManaged: databaseBool(externalManaged),
@@ -307,6 +312,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 		return store.Channel{}, store.Event{}, err
 	}
 	ch.Name = name
+	ch.DisplayTitle = displayTitle
 	ch.Kind = kind
 	ch.ArchivedAt = archivedValue
 	ch.ExternalManaged = externalManaged

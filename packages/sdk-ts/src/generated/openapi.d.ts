@@ -1693,6 +1693,8 @@ export interface components {
     };
     CreateChannelRequest: {
       name: string;
+      /** @description Optional presentation-only title. Whitespace-only values clear it; longer values are truncated to 200 Unicode code points. */
+      display_title?: string;
       /** @default public */
       kind: string;
       external_managed?: boolean;
@@ -1723,6 +1725,8 @@ export interface components {
     };
     UpdateChannelRequest: {
       name?: string;
+      /** @description Presentation-only title. Send an empty string to clear it; longer values are truncated to 200 Unicode code points. */
+      display_title?: string;
       kind?: string;
       archived?: boolean;
       external_managed?: boolean;
@@ -1858,6 +1862,8 @@ export interface components {
       route_id: string;
       workspace_id: string;
       name: string;
+      /** @description Optional presentation-only title; channel routing and uniqueness continue to use name. */
+      display_title?: string;
       kind: string;
       /** Format: date-time */
       created_at: string;

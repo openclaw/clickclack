@@ -46,6 +46,7 @@ export type Channel = {
   route_id: string;
   workspace_id: string;
   name: string;
+  display_title?: string;
   kind: string;
   created_at: string;
   archived_at?: string;

@@ -2,6 +2,7 @@
 
 ## 0.2.2 - Unreleased
 
+- Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
 - Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
 - Fixed the embedded channel view overflowing narrow host panels (such as OpenClaw's discussion sidebar), where long session channel names clipped the header link and send button off the right edge.

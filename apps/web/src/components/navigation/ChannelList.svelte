@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { channelDisplayTitle } from "../../lib/chat/channels";
   import type { Channel } from "../../lib/types";
 
   type Props = {
@@ -177,7 +178,7 @@
     scopeOrder.splice(scopeTarget + (before ? 0 : 1), 0, channelID);
     if (moved) {
       announceMove(
-        `Moved #${moved.name} to position ${scopeOrder.indexOf(channelID) + 1} of ${scopeOrder.length}`,
+        `Moved #${channelDisplayTitle(moved)} to position ${scopeOrder.indexOf(channelID) + 1} of ${scopeOrder.length}`,
       );
     }
   }
@@ -306,7 +307,7 @@
         type="button"
         class="channel-drag-handle"
         draggable="true"
-        aria-label={`Move #${channel.name}`}
+        aria-label={`Move #${channelDisplayTitle(channel)}`}
         aria-describedby="channel-order-instructions"
         title="Move channel"
         aria-haspopup="menu"
@@ -335,7 +336,7 @@
           class="channel-move-menu"
           role="menu"
           tabindex="-1"
-          aria-label={`Move #${channel.name}`}
+          aria-label={`Move #${channelDisplayTitle(channel)}`}
           data-handles-escape
           bind:this={moveMenuElement}
           onkeydown={(event) => {
@@ -372,7 +373,7 @@
       }}
     >
       <span class="hash">#</span>
-      <span class="nav-label">{channel.name}</span>
+      <span class="nav-label">{channelDisplayTitle(channel)}</span>
       {#if channel.external_managed}
         <span class="managed-channel-marker" title="Externally managed" aria-label="Externally managed">
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">

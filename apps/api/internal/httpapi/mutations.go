@@ -22,6 +22,7 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Name            string  `json:"name"`
+		DisplayTitle    *string `json:"display_title"`
 		Kind            string  `json:"kind"`
 		Archived        *bool   `json:"archived"`
 		ExternalManaged *bool   `json:"external_managed"`
@@ -40,6 +41,7 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		ChannelID:       chi.URLParam(r, "channel_id"),
 		UserID:          act.user.ID,
 		Name:            body.Name,
+		DisplayTitle:    body.DisplayTitle,
 		Kind:            body.Kind,
 		Archived:        body.Archived,
 		ExternalManaged: body.ExternalManaged,

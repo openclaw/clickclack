@@ -11,7 +11,76 @@
       // board, and message-layout choices never flash. Keys and attribute
       // names mirror src/lib/appearance.ts, which owns them afterwards.
       try {
-        var ccMode = localStorage.getItem("clickclack:color-mode:v1");
+        var ccMode;
+        if (/^\/embed\/(?:channel|thread)\//.test(location.pathname)) {
+          var ccEmbedParams = new URLSearchParams(location.search);
+          var ccHostMode = ccEmbedParams.get("theme");
+          if (ccHostMode === "light" || ccHostMode === "dark") ccMode = ccHostMode;
+          var ccInitialTokens = ccEmbedParams.get("themeTokens");
+          if (ccMode && ccInitialTokens && ccInitialTokens.length <= 16384) {
+            var ccTokens;
+            try {
+              ccTokens = JSON.parse(ccInitialTokens);
+            } catch (e) {
+              ccTokens = null;
+            }
+            if (ccTokens && typeof ccTokens === "object" && !Array.isArray(ccTokens)) {
+              var ccColorTargets = {
+                surface: ["--bg", "--rail"],
+                card: ["--panel"],
+                elevated: ["--panel-2", "--panel-3"],
+                text: ["--text"],
+                "text-strong": ["--text-strong"],
+                muted: ["--muted", "--muted-2"],
+                border: ["--line"],
+                "border-strong": ["--line-strong"],
+                accent: ["--accent", "--brand-a"],
+                "accent-fill": ["--accent-hover", "--brand-b"],
+                "accent-fg": ["--accent-contrast", "--brand-contrast"],
+                ok: ["--success"],
+                warn: ["--warn"],
+                danger: ["--danger"],
+                info: ["--info"],
+              };
+              Object.keys(ccColorTargets).forEach(function (ccToken) {
+                var ccValue = ccTokens[ccToken];
+                if (
+                  typeof ccValue !== "string" ||
+                  ccValue.length > 512 ||
+                  !CSS.supports("color", ccValue)
+                ) {
+                  return;
+                }
+                ccColorTargets[ccToken].forEach(function (ccProperty) {
+                  document.documentElement.style.setProperty(ccProperty, ccValue);
+                });
+              });
+              if (
+                typeof ccTokens.radius === "string" &&
+                ccTokens.radius.length <= 512 &&
+                CSS.supports("border-radius", ccTokens.radius) &&
+                CSS.supports("border-radius", "calc(" + ccTokens.radius + " * 0.67)") &&
+                CSS.supports("border-radius", "calc(" + ccTokens.radius + " * 1.67)") &&
+                CSS.supports("border-radius", "calc(" + ccTokens.radius + " * 2.33)")
+              ) {
+                document.documentElement.style.setProperty("--radius", ccTokens.radius);
+                document.documentElement.style.setProperty(
+                  "--radius-sm",
+                  "calc(" + ccTokens.radius + " * 0.67)",
+                );
+                document.documentElement.style.setProperty(
+                  "--radius-lg",
+                  "calc(" + ccTokens.radius + " * 1.67)",
+                );
+                document.documentElement.style.setProperty(
+                  "--radius-xl",
+                  "calc(" + ccTokens.radius + " * 2.33)",
+                );
+              }
+            }
+          }
+        }
+        if (!ccMode) ccMode = localStorage.getItem("clickclack:color-mode:v1");
         if (ccMode === "light" || ccMode === "dark") {
           document.documentElement.setAttribute("data-color-mode", ccMode);
         }
@@ -29,19 +98,20 @@
         }
       } catch (e) {}
     </script>
-    <link href="/_app/immutable/entry/start.UyMj3GEw.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/DAtcQAuj.js" rel="modulepreload">
+    <link href="/_app/immutable/entry/start.D4xXwBHN.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/JzPU68aN.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/CrWriB6k.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DK3Fl9T5.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BuFlayix.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.CGxyD97Z.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.By3xGU8F.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="/_app/immutable/nodes/0.CyLvEpCN.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/CDuOLCxG.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.CI1YnvJc.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DkWO4d0v.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DiELhALK.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BEqsQr3A.js" rel="modulepreload">
 
-		<link href="/_app/immutable/assets/0.C06U6uXU.css" rel="stylesheet">
+		<link href="/_app/immutable/assets/0.CZz3loM4.css" rel="stylesheet">
   </head>
   <body>
     <div>
@@ -54,8 +124,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.UyMj3GEw.js"),
-						import("/_app/immutable/entry/app.CGxyD97Z.js")
+						import("/_app/immutable/entry/start.D4xXwBHN.js"),
+						import("/_app/immutable/entry/app.By3xGU8F.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});

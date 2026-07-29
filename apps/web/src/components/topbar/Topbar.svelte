@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dmTitle } from "../../lib/chat/people";
-  import { safeExternalChannelURL } from "../../lib/chat/channels";
+  import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, DirectConversation } from "../../lib/types";
 
   type Props = {
@@ -41,7 +41,7 @@
     {#if selectedDirect}
       <h1 class="with-glyph dm">{`@${dmTitle(selectedDirect, currentUserID)}`}</h1>
     {:else if selectedChannel}
-      <h1 class="with-glyph channel">{`#${selectedChannel.name}`}</h1>
+      <h1 class="with-glyph channel">{`#${channelDisplayTitle(selectedChannel)}`}</h1>
     {:else}
       <h1 class="with-glyph">ClickClack</h1>
     {/if}

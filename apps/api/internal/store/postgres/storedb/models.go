@@ -107,6 +107,7 @@ type Channel struct {
 	ID              string         `json:"id"`
 	WorkspaceID     string         `json:"workspace_id"`
 	Name            string         `json:"name"`
+	DisplayTitle    sql.NullString `json:"display_title"`
 	Kind            string         `json:"kind"`
 	CreatedAt       string         `json:"created_at"`
 	ArchivedAt      sql.NullString `json:"archived_at"`

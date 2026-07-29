@@ -70,6 +70,7 @@ CREATE TABLE channels (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  display_title TEXT,
   kind TEXT NOT NULL,
   created_at TEXT NOT NULL,
   archived_at TEXT,

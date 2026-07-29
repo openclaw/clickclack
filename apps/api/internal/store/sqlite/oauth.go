@@ -108,6 +108,49 @@ func (s *Store) ConsumeOAuthTransaction(ctx context.Context, stateHash, browserB
 	return oauthTransactionFromDB(row), nil
 }
 
+func (s *Store) CreatePendingGitHubTokenRevocation(
+	ctx context.Context,
+	revocation store.PendingGitHubTokenRevocation,
+) error {
+	if revocation.ID == "" || revocation.EncryptedToken == "" || revocation.CreatedAt.IsZero() ||
+		!revocation.RevokeAfter.After(revocation.CreatedAt) {
+		return store.ErrOAuthTransactionInvalid
+	}
+	return s.q.InsertPendingGitHubTokenRevocation(ctx, storedb.InsertPendingGitHubTokenRevocationParams{
+		ID:              revocation.ID,
+		EncryptedToken:  revocation.EncryptedToken,
+		RevokeAfterUnix: revocation.RevokeAfter.Unix(),
+		CreatedAtUnix:   revocation.CreatedAt.Unix(),
+	})
+}
+
+func (s *Store) ListPendingGitHubTokenRevocations(
+	ctx context.Context,
+	limit int,
+) ([]store.PendingGitHubTokenRevocation, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.q.ListPendingGitHubTokenRevocations(ctx, int64(limit))
+	if err != nil {
+		return nil, err
+	}
+	revocations := make([]store.PendingGitHubTokenRevocation, 0, len(rows))
+	for _, row := range rows {
+		revocations = append(revocations, store.PendingGitHubTokenRevocation{
+			ID:             row.ID,
+			EncryptedToken: row.EncryptedToken,
+			RevokeAfter:    time.Unix(row.RevokeAfterUnix, 0).UTC(),
+			CreatedAt:      time.Unix(row.CreatedAtUnix, 0).UTC(),
+		})
+	}
+	return revocations, nil
+}
+
+func (s *Store) DeletePendingGitHubTokenRevocation(ctx context.Context, revocationID string) error {
+	return s.q.DeletePendingGitHubTokenRevocation(ctx, strings.TrimSpace(revocationID))
+}
+
 func (s *Store) CreateDesktopOAuthGrant(ctx context.Context, grant store.DesktopOAuthGrant) error {
 	if err := validateDesktopOAuthGrant(grant); err != nil {
 		return err
@@ -215,6 +258,9 @@ func validateOAuthTransaction(transaction store.OAuthTransaction) error {
 		return store.ErrOAuthTransactionInvalid
 	}
 	if transaction.Purpose == store.OAuthPurposeLogin && strings.TrimSpace(transaction.ContextJSON) != "" {
+		return store.ErrOAuthTransactionInvalid
+	}
+	if len(transaction.ContextJSON) > store.MaxOAuthTransactionContextBytes {
 		return store.ErrOAuthTransactionInvalid
 	}
 	if transaction.Mode == store.OAuthModeDesktop && transaction.DesktopChallenge == "" {

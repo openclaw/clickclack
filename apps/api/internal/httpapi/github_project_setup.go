@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -25,13 +26,18 @@ import (
 )
 
 const (
-	githubProjectRepositoryScope   = "repo"
-	githubProjectSetupGrantTTL     = 10 * time.Minute
-	githubProjectSetupGrantVersion = 1
-	githubProjectSetupMaxMembers   = 50
-	githubRepositoryPageSize       = 100
-	githubRepositoryMaxPages       = 10
-	githubProjectSetupCookieMax    = 4096
+	githubProjectRepositoryScope      = "repo"
+	githubProjectSetupGrantTTL        = 10 * time.Minute
+	githubProjectSetupGrantVersion    = 2
+	githubProjectSetupMaxMembers      = 50
+	githubProjectSetupMaxMemberID     = 128
+	githubRepositoryPageSize          = 100
+	githubRepositoryMaxPages          = 10
+	githubProjectSetupCookieMax       = 4096
+	githubTokenRevocationRetryDelay   = time.Minute
+	githubTokenRevocationRestoreLimit = 8192
+	githubWebhookRollbackAttempts     = 3
+	githubWebhookRollbackBackoff      = 100 * time.Millisecond
 )
 
 var githubProjectWebhookEvents = []string{
@@ -64,6 +70,7 @@ type githubProjectSetupRequest struct {
 type githubProjectSetupGrant struct {
 	Version            int                     `json:"version"`
 	AccessToken        string                  `json:"access_token"`
+	RevocationID       string                  `json:"revocation_id"`
 	BrowserBindingHash string                  `json:"browser_binding_hash"`
 	Draft              githubProjectOAuthDraft `json:"draft"`
 	IssuedAt           int64                   `json:"issued_at"`
@@ -149,6 +156,10 @@ func (s *Server) startGitHubProjectSetup(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	if len(contextJSON) > store.MaxOAuthTransactionContextBytes {
+		writeError(w, http.StatusBadRequest, errors.New("project setup details are too large"))
+		return
+	}
 	redirectURL, err := s.githubRedirectURL(r)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err)
@@ -223,6 +234,11 @@ func validateGitHubProjectDraft(draft githubProjectOAuthDraft) error {
 	if len(draft.MemberIDs) > githubProjectSetupMaxMembers {
 		return fmt.Errorf("automatic GitHub setup supports at most %d participants", githubProjectSetupMaxMembers)
 	}
+	for _, memberID := range draft.MemberIDs {
+		if memberID == "" || len(memberID) > githubProjectSetupMaxMemberID {
+			return errors.New("project participant id is invalid")
+		}
+	}
 	return nil
 }
 
@@ -232,40 +248,50 @@ func (s *Server) finishGitHubProjectSetup(
 	transaction store.OAuthTransaction,
 	token string,
 ) {
+	revocation, err := s.createPendingGitHubTokenRevocation(r.Context(), token)
+	if err != nil {
+		s.revokeGitHubProjectSetupTokenOrRetry(r.Context(), "", token, "queue")
+		s.redirectGitHubProjectSetup(w, r, transaction, "server")
+		return
+	}
+	revokeAndRedirect := func(code string) {
+		s.revokeGitHubProjectSetupTokenOrRetry(r.Context(), revocation.ID, token, code)
+		s.redirectGitHubProjectSetup(w, r, transaction, code)
+	}
 	var draft githubProjectOAuthDraft
 	if err := json.Unmarshal([]byte(transaction.ContextJSON), &draft); err != nil {
-		s.redirectGitHubProjectSetup(w, r, transaction, "invalid")
+		revokeAndRedirect("invalid")
 		return
 	}
 	if err := validateGitHubProjectDraft(draft); err != nil {
-		s.redirectGitHubProjectSetup(w, r, transaction, "invalid")
+		revokeAndRedirect("invalid")
 		return
 	}
 	act, err := s.currentActor(r)
 	if err != nil || act.botTokenID != "" || act.user.ID != draft.UserID {
-		s.redirectGitHubProjectSetup(w, r, transaction, "session")
+		revokeAndRedirect("session")
 		return
 	}
 	workspace, err := s.store.GetWorkspace(r.Context(), draft.WorkspaceID, act.user.ID)
 	if err != nil || (workspace.Role != store.WorkspaceRoleOwner && workspace.Role != store.WorkspaceRoleModerator) {
-		s.redirectGitHubProjectSetup(w, r, transaction, "permission")
+		revokeAndRedirect("permission")
 		return
 	}
 	now := time.Now().UTC()
 	grant := githubProjectSetupGrant{
 		Version:            githubProjectSetupGrantVersion,
 		AccessToken:        token,
+		RevocationID:       revocation.ID,
 		BrowserBindingHash: transaction.BrowserBindingHash,
 		Draft:              draft,
 		IssuedAt:           now.Unix(),
 		ExpiresAt:          now.Add(githubProjectSetupGrantTTL).Unix(),
 	}
 	if err := s.setGitHubProjectSetupGrant(w, r, grant); err != nil {
-		_ = s.revokeGitHubProjectSetupToken(r.Context(), token)
-		s.redirectGitHubProjectSetup(w, r, transaction, "session")
+		revokeAndRedirect("session")
 		return
 	}
-	s.scheduleGitHubProjectSetupTokenRevocation(token)
+	s.scheduleGitHubProjectSetupTokenRevocation(revocation.ID, token, time.Until(revocation.RevokeAfter))
 	destination := "/app/" + url.PathEscape(draft.WorkspaceID) + "/projects?github_setup=select"
 	if s.frontendURL != "" {
 		destination = strings.TrimRight(s.frontendURL, "/") + destination
@@ -314,6 +340,10 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if len(repositories) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("select at least one GitHub repository"))
+		return
+	}
 	available, _, err := s.fetchGitHubProjectRepositories(r, grant.AccessToken)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, errors.New("GitHub repository access could not be verified"))
@@ -343,7 +373,7 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 	for _, repository := range repositories {
 		hookID, err := s.createGitHubRepositoryWebhook(r, grant.AccessToken, repository, webhookURL, grant.Draft.WebhookSecret)
 		if err != nil {
-			s.deleteGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
+			s.rollbackGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
 			writeError(w, http.StatusBadGateway, errors.New("GitHub could not create all repository webhooks"))
 			return
 		}
@@ -351,7 +381,7 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 	}
 	project, event, err := s.store.CreateProject(r.Context(), grant.Draft.createProjectInput())
 	if err != nil {
-		s.deleteGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
+		s.rollbackGitHubRepositoryWebhooks(r, grant.AccessToken, createdHooks)
 		writeStoreError(w, err)
 		return
 	}
@@ -362,7 +392,7 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 	for _, hook := range createdHooks {
 		_ = s.pingGitHubRepositoryWebhook(r, grant.AccessToken, hook)
 	}
-	_ = s.revokeGitHubProjectSetupToken(r.Context(), grant.AccessToken)
+	s.revokeGitHubProjectSetupTokenOrRetry(r.Context(), grant.RevocationID, grant.AccessToken, "complete")
 	writeJSON(w, http.StatusCreated, map[string]any{"project": project})
 }
 
@@ -374,7 +404,7 @@ func (s *Server) cancelGitHubProjectSetup(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusUnauthorized, errors.New("GitHub project setup expired"))
 		return
 	}
-	_ = s.revokeGitHubProjectSetupToken(r.Context(), grant.AccessToken)
+	s.revokeGitHubProjectSetupTokenOrRetry(r.Context(), grant.RevocationID, grant.AccessToken, "cancel")
 	s.clearGitHubProjectSetupGrant(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -554,7 +584,7 @@ func (s *Server) githubProjectSetupGrant(r *http.Request) (githubProjectSetupGra
 		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie is invalid")
 	}
 	now := time.Now().UTC().Unix()
-	if grant.Version != githubProjectSetupGrantVersion || grant.AccessToken == "" ||
+	if grant.Version != githubProjectSetupGrantVersion || grant.AccessToken == "" || grant.RevocationID == "" ||
 		grant.BrowserBindingHash == "" || grant.ExpiresAt <= now || grant.IssuedAt > now {
 		return githubProjectSetupGrant{}, errors.New("GitHub project setup cookie expired")
 	}
@@ -581,12 +611,127 @@ func (s *Server) githubProjectSetupCookieAAD() []byte {
 	return []byte("clickclack/github-project-setup/v1\x00" + s.cookies.GitHubProjectSetup)
 }
 
-func (s *Server) scheduleGitHubProjectSetupTokenRevocation(token string) {
-	time.AfterFunc(githubProjectSetupGrantTTL, func() {
+func (s *Server) createPendingGitHubTokenRevocation(
+	ctx context.Context,
+	token string,
+) (store.PendingGitHubTokenRevocation, error) {
+	encryptedToken, err := s.sealGitHubProjectSetupToken(token)
+	if err != nil {
+		return store.PendingGitHubTokenRevocation{}, err
+	}
+	now := time.Now().UTC()
+	revocation := store.PendingGitHubTokenRevocation{
+		ID:             "gtr_" + ulid.Make().String(),
+		EncryptedToken: encryptedToken,
+		RevokeAfter:    now.Add(githubProjectSetupGrantTTL),
+		CreatedAt:      now,
+	}
+	if err := s.store.CreatePendingGitHubTokenRevocation(ctx, revocation); err != nil {
+		return store.PendingGitHubTokenRevocation{}, err
+	}
+	return revocation, nil
+}
+
+func (s *Server) sealGitHubProjectSetupToken(token string) (string, error) {
+	gcm, err := s.githubProjectSetupAEAD()
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	sealed := gcm.Seal(nonce, nonce, []byte(token), s.githubProjectSetupTokenAAD())
+	return base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+func (s *Server) unsealGitHubProjectSetupToken(value string) (string, error) {
+	encoded, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := s.githubProjectSetupAEAD()
+	if err != nil || len(encoded) < gcm.NonceSize() {
+		return "", errors.New("invalid encrypted GitHub token")
+	}
+	plaintext, err := gcm.Open(
+		nil,
+		encoded[:gcm.NonceSize()],
+		encoded[gcm.NonceSize():],
+		s.githubProjectSetupTokenAAD(),
+	)
+	if err != nil || len(plaintext) == 0 {
+		return "", errors.New("invalid encrypted GitHub token")
+	}
+	return string(plaintext), nil
+}
+
+func (s *Server) githubProjectSetupTokenAAD() []byte {
+	return []byte("clickclack/github-project-token-revocation/v1")
+}
+
+func (s *Server) restorePendingGitHubTokenRevocations() {
+	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
+		return
+	}
+	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultGitHubHTTPTimeout)
 		defer cancel()
-		_ = s.revokeGitHubProjectSetupToken(ctx, token)
+		revocations, err := s.store.ListPendingGitHubTokenRevocations(ctx, githubTokenRevocationRestoreLimit)
+		if err != nil {
+			log.Printf("github token revocation restore failed error_type=%T", err)
+			return
+		}
+		for _, revocation := range revocations {
+			token, err := s.unsealGitHubProjectSetupToken(revocation.EncryptedToken)
+			if err != nil {
+				log.Printf("github token revocation decrypt failed revocation_id=%q error_type=%T", revocation.ID, err)
+				continue
+			}
+			s.scheduleGitHubProjectSetupTokenRevocation(
+				revocation.ID,
+				token,
+				time.Until(revocation.RevokeAfter),
+			)
+		}
+	}()
+}
+
+func (s *Server) scheduleGitHubProjectSetupTokenRevocation(revocationID, token string, delay time.Duration) {
+	if delay < 0 {
+		delay = 0
+	}
+	time.AfterFunc(delay, func() {
+		s.revokeGitHubProjectSetupTokenOrRetry(context.Background(), revocationID, token, "scheduled")
 	})
+}
+
+func (s *Server) revokeGitHubProjectSetupTokenOrRetry(
+	parent context.Context,
+	revocationID string,
+	token string,
+	reason string,
+) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultGitHubHTTPTimeout)
+	err := s.revokeGitHubProjectSetupToken(ctx, token)
+	if err == nil && revocationID != "" {
+		err = s.store.DeletePendingGitHubTokenRevocation(ctx, revocationID)
+	}
+	cancel()
+	if err == nil {
+		return
+	}
+	log.Printf(
+		"github token revocation deferred revocation_id=%q reason=%q error_type=%T",
+		revocationID,
+		reason,
+		err,
+	)
+	s.scheduleGitHubProjectSetupTokenRevocation(
+		revocationID,
+		token,
+		githubTokenRevocationRetryDelay,
+	)
 }
 
 func (s *Server) revokeGitHubProjectSetupToken(ctx context.Context, token string) error {
@@ -667,22 +812,81 @@ func (s *Server) createGitHubRepositoryWebhook(
 	return created.ID, nil
 }
 
-func (s *Server) deleteGitHubRepositoryWebhooks(r *http.Request, token string, hooks []githubCreatedHook) {
-	for _, hook := range hooks {
-		endpoint := strings.TrimRight(s.githubOAuth.APIURL, "/") + "/repos/" +
-			url.PathEscape(hook.Repository.Owner) + "/" + url.PathEscape(hook.Repository.Name) +
-			"/hooks/" + strconv.FormatInt(hook.ID, 10)
-		req, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, endpoint, nil)
-		if err != nil {
-			continue
+func (s *Server) rollbackGitHubRepositoryWebhooks(
+	r *http.Request,
+	token string,
+	hooks []githubCreatedHook,
+) {
+	if len(hooks) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), defaultGitHubHTTPTimeout)
+	defer cancel()
+	if err := s.deleteGitHubRepositoryWebhooks(ctx, token, hooks); err != nil {
+		log.Printf(
+			"github webhook rollback failed correlation_id=%q hook_count=%d error_type=%T",
+			correlationIDFromContext(r.Context()),
+			len(hooks),
+			err,
+		)
+	}
+}
+
+func (s *Server) deleteGitHubRepositoryWebhooks(
+	ctx context.Context,
+	token string,
+	hooks []githubCreatedHook,
+) error {
+	var rollbackErrors []error
+	for i := len(hooks) - 1; i >= 0; i-- {
+		hook := hooks[i]
+		var err error
+		for attempt := 0; attempt < githubWebhookRollbackAttempts; attempt++ {
+			err = s.deleteGitHubRepositoryWebhook(ctx, token, hook)
+			if err == nil {
+				break
+			}
+			if attempt+1 < githubWebhookRollbackAttempts {
+				timer := time.NewTimer(time.Duration(attempt+1) * githubWebhookRollbackBackoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					err = ctx.Err()
+					attempt = githubWebhookRollbackAttempts
+				case <-timer.C:
+				}
+			}
 		}
-		setGitHubAPIHeaders(req, token)
-		resp, err := s.githubOAuth.HTTPClient.Do(req)
-		if err == nil {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-			_ = resp.Body.Close()
+		if err != nil {
+			rollbackErrors = append(rollbackErrors, err)
 		}
 	}
+	return errors.Join(rollbackErrors...)
+}
+
+func (s *Server) deleteGitHubRepositoryWebhook(
+	ctx context.Context,
+	token string,
+	hook githubCreatedHook,
+) error {
+	endpoint := strings.TrimRight(s.githubOAuth.APIURL, "/") + "/repos/" +
+		url.PathEscape(hook.Repository.Owner) + "/" + url.PathEscape(hook.Repository.Name) +
+		"/hooks/" + strconv.FormatInt(hook.ID, 10)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	setGitHubAPIHeaders(req, token)
+	resp, err := s.githubOAuth.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		return &githubHookError{Repository: hook.Repository.FullName, StatusCode: resp.StatusCode}
+	}
+	return nil
 }
 
 func (s *Server) pingGitHubRepositoryWebhook(r *http.Request, token string, hook githubCreatedHook) error {

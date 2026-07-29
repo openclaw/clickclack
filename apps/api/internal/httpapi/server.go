@@ -108,7 +108,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	if cookieNames.GitHubProjectSetup == "" {
 		cookieNames.GitHubProjectSetup = authpolicy.DefaultCookieNames().GitHubProjectSetup
 	}
-	return &Server{
+	s := &Server{
 		store:                 st,
 		hub:                   hub,
 		uploadDir:             options.UploadDir,
@@ -131,6 +131,8 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 			Commit:      options.Commit,
 		},
 	}
+	s.restorePendingGitHubTokenRevocations()
+	return s
 }
 
 func (s *Server) Handler() http.Handler {

@@ -300,6 +300,13 @@ type OauthTransaction struct {
 	ExpiresAtUnix      int64  `json:"expires_at_unix"`
 }
 
+type PendingGithubTokenRevocation struct {
+	ID              string `json:"id"`
+	EncryptedToken  string `json:"encrypted_token"`
+	RevokeAfterUnix int64  `json:"revoke_after_unix"`
+	CreatedAtUnix   int64  `json:"created_at_unix"`
+}
+
 type PendingUploadCleanup struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`

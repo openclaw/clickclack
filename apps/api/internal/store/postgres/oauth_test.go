@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -70,6 +71,48 @@ func TestPostgresOAuthTransactionsAndDesktopGrants(t *testing.T) {
 	}
 	if _, err := st.ConsumeDesktopOAuthGrant(ctx, grant.GrantHash, grant.DesktopChallenge, now); !errors.Is(err, store.ErrDesktopOAuthGrantInvalid) {
 		t.Fatalf("expected grant replay rejection, got %v", err)
+	}
+}
+
+func TestPostgresOAuthTransactionContextLimitAndPendingGitHubRevocations(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	oversized := store.OAuthTransaction{
+		StateHash:          postgresOAuthHash("oversized-state"),
+		BrowserBindingHash: postgresOAuthHash("oversized-binding"),
+		Mode:               store.OAuthModeBrowser,
+		Purpose:            store.OAuthPurposeProjectWebhook,
+		ContextJSON:        strings.Repeat("x", store.MaxOAuthTransactionContextBytes+1),
+		PKCEVerifier:       "oversized-verifier",
+		CreatedAt:          now,
+		ExpiresAt:          now.Add(10 * time.Minute),
+	}
+	if err := st.CreateOAuthTransaction(ctx, oversized); !errors.Is(err, store.ErrOAuthTransactionInvalid) {
+		t.Fatalf("expected oversized context rejection, got %v", err)
+	}
+
+	revocation := store.PendingGitHubTokenRevocation{
+		ID:             "gtr_postgres",
+		EncryptedToken: "encrypted-token",
+		CreatedAt:      now,
+		RevokeAfter:    now.Add(10 * time.Minute),
+	}
+	if err := st.CreatePendingGitHubTokenRevocation(ctx, revocation); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != revocation {
+		t.Fatalf("unexpected pending revocations: %#v", pending)
+	}
+	if err := st.DeletePendingGitHubTokenRevocation(ctx, revocation.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,53 @@ func TestOAuthTransactionsAndDesktopGrants(t *testing.T) {
 	}
 }
 
+func TestOAuthTransactionContextLimitAndPendingGitHubRevocations(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	oversized := store.OAuthTransaction{
+		StateHash:          testOAuthHash("oversized-state"),
+		BrowserBindingHash: testOAuthHash("oversized-binding"),
+		Mode:               store.OAuthModeBrowser,
+		Purpose:            store.OAuthPurposeProjectWebhook,
+		ContextJSON:        strings.Repeat("x", store.MaxOAuthTransactionContextBytes+1),
+		PKCEVerifier:       "oversized-verifier",
+		CreatedAt:          now,
+		ExpiresAt:          now.Add(10 * time.Minute),
+	}
+	if err := st.CreateOAuthTransaction(ctx, oversized); !errors.Is(err, store.ErrOAuthTransactionInvalid) {
+		t.Fatalf("expected oversized context rejection, got %v", err)
+	}
+
+	revocation := store.PendingGitHubTokenRevocation{
+		ID:             "gtr_sqlite",
+		EncryptedToken: "encrypted-token",
+		CreatedAt:      now,
+		RevokeAfter:    now.Add(10 * time.Minute),
+	}
+	if err := st.CreatePendingGitHubTokenRevocation(ctx, revocation); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != revocation {
+		t.Fatalf("unexpected pending revocations: %#v", pending)
+	}
+	if err := st.DeletePendingGitHubTokenRevocation(ctx, revocation.ID); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("deleted revocation remained pending: %#v", pending)
+	}
+}
+
 func TestOAuthStateSurvivesSQLiteRestart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -125,10 +173,19 @@ func TestOAuthStateSurvivesSQLiteRestart(t *testing.T) {
 		CreatedAt:        now,
 		ExpiresAt:        now.Add(5 * time.Minute),
 	}
+	revocation := store.PendingGitHubTokenRevocation{
+		ID:             "gtr_restart",
+		EncryptedToken: "encrypted-restart-token",
+		CreatedAt:      now,
+		RevokeAfter:    now.Add(10 * time.Minute),
+	}
 	if err := st.CreateOAuthTransaction(ctx, transaction); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateDesktopOAuthGrant(ctx, grant); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreatePendingGitHubTokenRevocation(ctx, revocation); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Close(); err != nil {
@@ -148,6 +205,13 @@ func TestOAuthStateSurvivesSQLiteRestart(t *testing.T) {
 	}
 	if _, err := st.ConsumeDesktopOAuthGrant(ctx, grant.GrantHash, grant.DesktopChallenge, now); err != nil {
 		t.Fatalf("consume grant after restart: %v", err)
+	}
+	pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != revocation {
+		t.Fatalf("pending revocation did not survive restart: %#v", pending)
 	}
 }
 

@@ -77,6 +77,20 @@ FOR UPDATE;
 DELETE FROM oauth_transactions
 WHERE id = sqlc.arg(id) AND state_hash = sqlc.arg(state_hash);
 
+-- name: InsertPendingGitHubTokenRevocation :exec
+INSERT INTO pending_github_token_revocations (id, encrypted_token, revoke_after_unix, created_at_unix)
+VALUES (sqlc.arg(id), sqlc.arg(encrypted_token), sqlc.arg(revoke_after_unix), sqlc.arg(created_at_unix));
+
+-- name: ListPendingGitHubTokenRevocations :many
+SELECT id, encrypted_token, revoke_after_unix, created_at_unix
+FROM pending_github_token_revocations
+ORDER BY revoke_after_unix, id
+LIMIT sqlc.arg(row_limit);
+
+-- name: DeletePendingGitHubTokenRevocation :exec
+DELETE FROM pending_github_token_revocations
+WHERE id = sqlc.arg(id);
+
 -- name: DeleteExpiredDesktopOAuthGrants :execrows
 DELETE FROM desktop_oauth_grants
 WHERE expires_at_unix <= sqlc.arg(now_unix);

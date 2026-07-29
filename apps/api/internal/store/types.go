@@ -1048,10 +1048,11 @@ type Session struct {
 }
 
 const (
-	OAuthModeBrowser           = "browser"
-	OAuthModeDesktop           = "desktop"
-	OAuthPurposeLogin          = "login"
-	OAuthPurposeProjectWebhook = "project_webhook"
+	OAuthModeBrowser                = "browser"
+	OAuthModeDesktop                = "desktop"
+	OAuthPurposeLogin               = "login"
+	OAuthPurposeProjectWebhook      = "project_webhook"
+	MaxOAuthTransactionContextBytes = 16 << 10
 )
 
 type OAuthTransaction struct {
@@ -1066,6 +1067,13 @@ type OAuthTransaction struct {
 	DesktopProtocol    int64
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
+}
+
+type PendingGitHubTokenRevocation struct {
+	ID             string
+	EncryptedToken string
+	RevokeAfter    time.Time
+	CreatedAt      time.Time
 }
 
 type DesktopOAuthGrant struct {
@@ -1249,6 +1257,9 @@ type Store interface {
 	GetSessionUser(ctx context.Context, token string) (User, error)
 	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error
 	ConsumeOAuthTransaction(ctx context.Context, stateHash, browserBindingHash string, now time.Time) (OAuthTransaction, error)
+	CreatePendingGitHubTokenRevocation(ctx context.Context, revocation PendingGitHubTokenRevocation) error
+	ListPendingGitHubTokenRevocations(ctx context.Context, limit int) ([]PendingGitHubTokenRevocation, error)
+	DeletePendingGitHubTokenRevocation(ctx context.Context, revocationID string) error
 	CreateDesktopOAuthGrant(ctx context.Context, grant DesktopOAuthGrant) error
 	ConsumeDesktopOAuthGrant(ctx context.Context, grantHash, desktopChallenge string, now time.Time) (Session, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)

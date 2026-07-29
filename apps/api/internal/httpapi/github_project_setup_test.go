@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -160,6 +161,14 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 	if strings.Contains(setupCookie.Value, "temporary-repo-token") {
 		t.Fatal("setup cookie exposed the GitHub access token")
 	}
+	pendingRevocations, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingRevocations) != 1 ||
+		strings.Contains(pendingRevocations[0].EncryptedToken, "temporary-repo-token") {
+		t.Fatalf("temporary token was not durably encrypted for revocation: %#v", pendingRevocations)
+	}
 
 	listRequest, err := http.NewRequest(
 		http.MethodGet,
@@ -186,6 +195,25 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 	}
 	if len(listed.Repositories) != 1 || listed.Repositories[0].FullName != "block/buzz" || !listed.Repositories[0].Private {
 		t.Fatalf("repository picker did not filter to admin repositories: %#v", listed.Repositories)
+	}
+
+	emptyRequest, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/workspaces/"+workspace.ID+"/projects/github/complete",
+		strings.NewReader(`{"repositories":[]}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyRequest.Header.Set("Content-Type", "application/json")
+	addProjectSetupCookies(emptyRequest, owner.ID, bindingCookie, setupCookie)
+	emptyResponse, err := client.Do(emptyRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyResponse.Body.Close()
+	if emptyResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("empty repository selection returned %s", emptyResponse.Status)
 	}
 
 	deniedRequest, err := http.NewRequest(
@@ -252,6 +280,13 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 	default:
 		t.Fatal("automatic setup did not revoke its temporary GitHub token")
 	}
+	pendingRevocations, err = st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingRevocations) != 0 {
+		t.Fatalf("successful revocation left durable cleanup state: %#v", pendingRevocations)
+	}
 	projects := getJSONAsUser[struct {
 		Projects []store.Project `json:"projects"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects")
@@ -268,6 +303,97 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 		map[string]any{"repository": map[string]any{"full_name": "block/buzz"}},
 		http.StatusOK,
 	)
+}
+
+func TestGitHubProjectSetupRevokesTokenWhenCallbackSessionChanges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "github-connect-session-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser(ctx, store.CreateUserInput{
+		DisplayName: "Other",
+		Email:       "github-connect-session-other@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked := make(chan string, 1)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "session-change-token"})
+		case r.Method == http.MethodDelete && r.URL.Path == "/applications/client/token":
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			revoked <- body["access_token"]
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      provider.URL + "/authorize",
+		TokenURL:     provider.URL + "/token",
+		APIURL:       provider.URL,
+	}}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	authorizationURL, bindingCookie := startProjectGitHubOAuth(
+		t,
+		client,
+		server.URL,
+		workspaces[0].ID,
+		owner.ID,
+		map[string]any{},
+	)
+	callback := server.URL + "/api/auth/github/callback?code=setup-code&state=" +
+		url.QueryEscape(authorizationURL.Query().Get("state"))
+	req, err := http.NewRequest(http.MethodGet, callback, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-ClickClack-User", other.ID)
+	req.AddCookie(bindingCookie)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("unexpected callback response: %s", resp.Status)
+	}
+	if findCookie(resp.Cookies(), "cc_github_project_setup") != nil {
+		t.Fatal("session-mismatched callback received a setup grant")
+	}
+	select {
+	case token := <-revoked:
+		if token != "session-change-token" {
+			t.Fatalf("unexpected revoked token %q", token)
+		}
+	default:
+		t.Fatal("session-mismatched callback did not revoke its token")
+	}
+	pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("session-mismatched callback left pending state: %#v", pending)
+	}
 }
 
 func TestGitHubProjectSetupRejectsTamperedGrant(t *testing.T) {
@@ -360,6 +486,7 @@ func TestGitHubProjectSetupRollsBackPartialHooks(t *testing.T) {
 	workspace := workspaces[0]
 
 	deleted := make(chan string, 1)
+	var deleteRequests atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/token":
@@ -388,6 +515,10 @@ func TestGitHubProjectSetupRollsBackPartialHooks(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/private/denied/hooks":
 			w.WriteHeader(http.StatusForbidden)
 		case r.Method == http.MethodDelete && r.URL.Path == "/repos/block/buzz/hooks/601":
+			if deleteRequests.Add(1) == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			deleted <- r.URL.Path
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -440,11 +571,79 @@ func TestGitHubProjectSetupRollsBackPartialHooks(t *testing.T) {
 	default:
 		t.Fatal("successful repository hook was not rolled back")
 	}
+	if deleteRequests.Load() != 2 {
+		t.Fatalf("expected rollback retry after GitHub failure, got %d delete requests", deleteRequests.Load())
+	}
 	projects := getJSONAsUser[struct {
 		Projects []store.Project `json:"projects"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects")
 	if len(projects.Projects) != 0 {
 		t.Fatalf("failed automatic setup left a local project: %#v", projects.Projects)
+	}
+}
+
+func TestGitHubProjectSetupRestoresPendingTokenRevocation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	revoked := make(chan string, 2)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/applications/client/token" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		revoked <- body["access_token"]
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(provider.Close)
+	options := Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIURL:       provider.URL,
+	}}
+	encrypter := New(st, realtime.NewHub(), options)
+	encryptedToken, err := encrypter.sealGitHubProjectSetupToken("restart-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := st.CreatePendingGitHubTokenRevocation(ctx, store.PendingGitHubTokenRevocation{
+		ID:             "gtr_restart",
+		EncryptedToken: encryptedToken,
+		CreatedAt:      now,
+		RevokeAfter:    now.Add(50 * time.Millisecond),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = New(st, realtime.NewHub(), options)
+	select {
+	case token := <-revoked:
+		if token != "restart-token" {
+			t.Fatalf("unexpected restored token %q", token)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pending token revocation was not restored")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pending) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("restored revocation was not removed: %#v", pending)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

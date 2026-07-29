@@ -536,6 +536,16 @@ CREATE INDEX idx_oauth_transactions_binding_expiry
 CREATE INDEX idx_oauth_transactions_expiry
   ON oauth_transactions(expires_at_unix);
 
+CREATE TABLE pending_github_token_revocations (
+  id TEXT PRIMARY KEY,
+  encrypted_token TEXT NOT NULL,
+  revoke_after_unix BIGINT NOT NULL,
+  created_at_unix BIGINT NOT NULL
+);
+
+CREATE INDEX idx_pending_github_token_revocations_revoke_after
+  ON pending_github_token_revocations(revoke_after_unix, id);
+
 CREATE TABLE desktop_oauth_grants (
   id TEXT PRIMARY KEY,
   grant_hash TEXT NOT NULL UNIQUE,

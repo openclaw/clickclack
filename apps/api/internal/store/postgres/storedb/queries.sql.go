@@ -603,6 +603,16 @@ func (q *Queries) DeleteOAuthTransaction(ctx context.Context, arg DeleteOAuthTra
 	return result.RowsAffected()
 }
 
+const deletePendingGitHubTokenRevocation = `-- name: DeletePendingGitHubTokenRevocation :exec
+DELETE FROM pending_github_token_revocations
+WHERE id = $1
+`
+
+func (q *Queries) DeletePendingGitHubTokenRevocation(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deletePendingGitHubTokenRevocation, id)
+	return err
+}
+
 const deletePendingUploadCleanup = `-- name: DeletePendingUploadCleanup :exec
 DELETE FROM pending_upload_cleanups
 WHERE id = $1
@@ -2878,6 +2888,28 @@ func (q *Queries) InsertOAuthTransaction(ctx context.Context, arg InsertOAuthTra
 	return err
 }
 
+const insertPendingGitHubTokenRevocation = `-- name: InsertPendingGitHubTokenRevocation :exec
+INSERT INTO pending_github_token_revocations (id, encrypted_token, revoke_after_unix, created_at_unix)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertPendingGitHubTokenRevocationParams struct {
+	ID              string `json:"id"`
+	EncryptedToken  string `json:"encrypted_token"`
+	RevokeAfterUnix int64  `json:"revoke_after_unix"`
+	CreatedAtUnix   int64  `json:"created_at_unix"`
+}
+
+func (q *Queries) InsertPendingGitHubTokenRevocation(ctx context.Context, arg InsertPendingGitHubTokenRevocationParams) error {
+	_, err := q.db.ExecContext(ctx, insertPendingGitHubTokenRevocation,
+		arg.ID,
+		arg.EncryptedToken,
+		arg.RevokeAfterUnix,
+		arg.CreatedAtUnix,
+	)
+	return err
+}
+
 const insertPendingUploadCleanup = `-- name: InsertPendingUploadCleanup :one
 INSERT INTO pending_upload_cleanups (id, workspace_id, storage_path, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5)
@@ -4003,6 +4035,41 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.Seq,
 			&i.PayloadJson,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingGitHubTokenRevocations = `-- name: ListPendingGitHubTokenRevocations :many
+SELECT id, encrypted_token, revoke_after_unix, created_at_unix
+FROM pending_github_token_revocations
+ORDER BY revoke_after_unix, id
+LIMIT $1
+`
+
+func (q *Queries) ListPendingGitHubTokenRevocations(ctx context.Context, rowLimit int32) ([]PendingGithubTokenRevocation, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingGitHubTokenRevocations, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PendingGithubTokenRevocation
+	for rows.Next() {
+		var i PendingGithubTokenRevocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncryptedToken,
+			&i.RevokeAfterUnix,
+			&i.CreatedAtUnix,
 		); err != nil {
 			return nil, err
 		}

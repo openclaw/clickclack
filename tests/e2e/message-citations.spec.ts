@@ -194,6 +194,10 @@ test("channel root citations copy, reopen, highlight, and keep their URL after t
     data: { body: `First reply ${suffix}` },
   });
   expect(replyResponse.ok()).toBe(true);
+  const { message: reply } = (await replyResponse.json()) as {
+    message: { route_id?: string };
+  };
+  expect(reply.route_id ?? "").toBe("");
   await page.reload();
   await waitForAppReady(page);
   await expect(page).toHaveURL(expectedURL);

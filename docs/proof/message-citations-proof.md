@@ -63,3 +63,25 @@ CLICKCLACK_POSTGRES_TEST_DSN="$POSTGRES_DSN" \
   go test ./apps/api/internal/store/postgres \
   -run TestMessageRouteIDCreationRespectsChannelAndDirectBoundaries
 ```
+
+## Existing-store upgrade coverage
+
+SQLite and PostgreSQL have different route-ID schema histories. SQLite added
+the columns in `0011_public_route_ids.sql`; PostgreSQL shipped them in
+`0001_schema.sql`. The one-time citation backfill keys off the appropriate
+marker for each backend.
+
+The upgrade tests start from those real historical schemas, insert legacy rows,
+run the current migrator, and verify that workspace, channel, direct
+conversation, and channel-root routes are assigned while direct-message roots
+and replies remain uncited. They also verify that the one-time completion marker
+is recorded.
+
+```sh
+go test ./apps/api/internal/store/sqlite \
+  -run 'TestMigrateBackfillsRouteIDsOnce|TestRouteIDBackfillAllChannelRoots'
+
+CLICKCLACK_POSTGRES_TEST_DSN="$POSTGRES_DSN" \
+  go test ./apps/api/internal/store/postgres \
+  -run 'TestMigrateBackfillsLegacyChannelRootRouteIDs|TestMessageRouteIDCreationRespectsChannelAndDirectBoundaries'
+```

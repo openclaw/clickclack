@@ -11,7 +11,11 @@ import (
 
 const (
 	routeIDInsertAttempts = 5
-	routeIDMigrationName  = "0011_public_route_ids.sql"
+	// PostgreSQL shipped public route-ID columns in its initial schema, unlike
+	// SQLite where they arrived in the later 0011 migration. The backfill must
+	// therefore recognize an existing PostgreSQL deployment by its own schema
+	// marker.
+	routeIDMigrationName  = "0001_schema.sql"
 	routeIDBackfillMarker = "0011_public_route_ids.message_citations_backfill"
 )
 

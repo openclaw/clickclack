@@ -36,6 +36,7 @@ const (
 	githubProjectSetupCookieMax       = 4096
 	githubTokenRevocationRetryDelay   = time.Minute
 	githubTokenRevocationRestoreLimit = 8192
+	githubTokenRevocationRestoreDelay = 10 * time.Millisecond
 	githubWebhookRollbackAttempts     = 3
 	githubWebhookRollbackBackoff      = 100 * time.Millisecond
 )
@@ -94,6 +95,11 @@ type githubProjectSetupCompleteRequest struct {
 type githubCreatedHook struct {
 	Repository store.CreateProjectRepositoryInput
 	ID         int64
+}
+
+type githubProjectRevocationJob struct {
+	timer *time.Timer
+	runAt time.Time
 }
 
 type githubHookError struct {
@@ -361,7 +367,7 @@ func (s *Server) completeGitHubProjectSetup(w http.ResponseWriter, r *http.Reque
 	}
 	primaryRepository := adminRepositories[repositories[0].FullName]
 	grant.Draft.Name = strings.TrimSpace(primaryRepository.Name)
-	grant.Draft.Slug = ""
+	grant.Draft.Slug = strings.TrimSpace(primaryRepository.FullName)
 	grant.Draft.Repositories = repositories
 	if err := store.ValidateCreateProjectInput(grant.Draft.createProjectInput()); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -671,13 +677,17 @@ func (s *Server) githubProjectSetupTokenAAD() []byte {
 }
 
 func (s *Server) restorePendingGitHubTokenRevocations() {
+	s.restorePendingGitHubTokenRevocationsWithLimit(githubTokenRevocationRestoreLimit)
+}
+
+func (s *Server) restorePendingGitHubTokenRevocationsWithLimit(limit int) {
 	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultGitHubHTTPTimeout)
 		defer cancel()
-		revocations, err := s.store.ListPendingGitHubTokenRevocations(ctx, githubTokenRevocationRestoreLimit)
+		revocations, err := s.store.ListPendingGitHubTokenRevocations(ctx, limit)
 		if err != nil {
 			log.Printf("github token revocation restore failed error_type=%T", err)
 			return
@@ -701,8 +711,66 @@ func (s *Server) scheduleGitHubProjectSetupTokenRevocation(revocationID, token s
 	if delay < 0 {
 		delay = 0
 	}
-	time.AfterFunc(delay, func() {
+	if revocationID == "" {
+		time.AfterFunc(delay, func() {
+			s.revokeGitHubProjectSetupTokenOrRetry(context.Background(), revocationID, token, "scheduled")
+		})
+		return
+	}
+
+	runAt := time.Now().Add(delay)
+	s.githubRevocationMu.Lock()
+	if s.githubRevocationJobs == nil {
+		s.githubRevocationJobs = make(map[string]githubProjectRevocationJob)
+	}
+	if existing, ok := s.githubRevocationJobs[revocationID]; ok {
+		if !runAt.Before(existing.runAt) {
+			s.githubRevocationMu.Unlock()
+			return
+		}
+		existing.timer.Stop()
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(delay, func() {
+		s.githubRevocationMu.Lock()
+		if current, ok := s.githubRevocationJobs[revocationID]; ok && current.timer == timer {
+			delete(s.githubRevocationJobs, revocationID)
+		}
+		s.githubRevocationMu.Unlock()
 		s.revokeGitHubProjectSetupTokenOrRetry(context.Background(), revocationID, token, "scheduled")
+	})
+	s.githubRevocationJobs[revocationID] = githubProjectRevocationJob{timer: timer, runAt: runAt}
+	s.githubRevocationMu.Unlock()
+}
+
+func (s *Server) clearGitHubProjectSetupTokenRevocation(revocationID string) {
+	if revocationID == "" {
+		return
+	}
+	s.githubRevocationMu.Lock()
+	if job, ok := s.githubRevocationJobs[revocationID]; ok {
+		job.timer.Stop()
+		delete(s.githubRevocationJobs, revocationID)
+	}
+	s.githubRevocationMu.Unlock()
+}
+
+func (s *Server) queuePendingGitHubTokenRevocationRestore() {
+	if s.githubOAuth.ClientID == "" || s.githubOAuth.ClientSecret == "" {
+		return
+	}
+	s.githubRevocationMu.Lock()
+	if s.githubRestoreQueued {
+		s.githubRevocationMu.Unlock()
+		return
+	}
+	s.githubRestoreQueued = true
+	s.githubRevocationMu.Unlock()
+	time.AfterFunc(githubTokenRevocationRestoreDelay, func() {
+		s.githubRevocationMu.Lock()
+		s.githubRestoreQueued = false
+		s.githubRevocationMu.Unlock()
+		s.restorePendingGitHubTokenRevocations()
 	})
 }
 
@@ -714,11 +782,17 @@ func (s *Server) revokeGitHubProjectSetupTokenOrRetry(
 ) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultGitHubHTTPTimeout)
 	err := s.revokeGitHubProjectSetupToken(ctx, token)
+	deleted := false
 	if err == nil && revocationID != "" {
 		err = s.store.DeletePendingGitHubTokenRevocation(ctx, revocationID)
+		deleted = err == nil
 	}
 	cancel()
 	if err == nil {
+		if deleted {
+			s.clearGitHubProjectSetupTokenRevocation(revocationID)
+			s.queuePendingGitHubTokenRevocationRestore()
+		}
 		return
 	}
 	log.Printf(

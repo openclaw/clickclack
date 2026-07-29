@@ -337,7 +337,10 @@ export interface paths {
     /** List GitHub-linked project rooms in a workspace */
     get: operations["listProjects"];
     put?: never;
-    /** Create a GitHub-linked project room and collaboration channel */
+    /**
+     * Create a GitHub-linked project room and collaboration channel
+     * @description Project collaboration channels are visible to authenticated workspace members. GitHub permissions continue to control repository access.
+     */
     post: operations["createProject"];
     delete?: never;
     options?: never;
@@ -388,7 +391,10 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create webhooks for selected repositories and finish the project */
+    /**
+     * Create webhooks for selected repositories and finish the project
+     * @description Selected repository activity is delivered to a collaboration channel visible to authenticated workspace members. GitHub permissions continue to control repository access.
+     */
     post: operations["completeGitHubProjectSetup"];
     delete?: never;
     options?: never;

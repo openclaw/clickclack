@@ -294,6 +294,7 @@ func TestGitHubProjectSetupSelectsRepositoriesAndCreatesProject(t *testing.T) {
 		Projects []store.Project `json:"projects"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/projects")
 	if len(projects.Projects) != 1 || projects.Projects[0].Name != "Buzz" ||
+		projects.Projects[0].Slug != "block-buzz" ||
 		projects.Projects[0].Repositories[0].FullName != "block/buzz" {
 		t.Fatalf("automatic setup did not create the project: %#v", projects.Projects)
 	}
@@ -609,32 +610,43 @@ func TestGitHubProjectSetupRestoresPendingTokenRevocation(t *testing.T) {
 		ClientSecret: "secret",
 		APIURL:       provider.URL,
 	}}
-	encrypter := New(st, realtime.NewHub(), options)
-	encryptedToken, err := encrypter.sealGitHubProjectSetupToken("restart-token")
-	if err != nil {
-		t.Fatal(err)
+	server := &Server{
+		store:                st,
+		githubOAuth:          options.GitHubOAuth.withDefaults(),
+		githubRevocationJobs: make(map[string]githubProjectRevocationJob),
 	}
 	now := time.Now().UTC()
-	if err := st.CreatePendingGitHubTokenRevocation(ctx, store.PendingGitHubTokenRevocation{
-		ID:             "gtr_restart",
-		EncryptedToken: encryptedToken,
-		CreatedAt:      now,
-		RevokeAfter:    now.Add(50 * time.Millisecond),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	_ = New(st, realtime.NewHub(), options)
-	select {
-	case token := <-revoked:
-		if token != "restart-token" {
-			t.Fatalf("unexpected restored token %q", token)
+	for index, token := range []string{"restart-token-1", "restart-token-2"} {
+		encryptedToken, err := server.sealGitHubProjectSetupToken(token)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("pending token revocation was not restored")
+		if err := st.CreatePendingGitHubTokenRevocation(ctx, store.PendingGitHubTokenRevocation{
+			ID:             fmt.Sprintf("gtr_restart_%d", index),
+			EncryptedToken: encryptedToken,
+			CreatedAt:      now,
+			RevokeAfter:    now.Add(50 * time.Millisecond),
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
+	server.restorePendingGitHubTokenRevocationsWithLimit(1)
+	revokedTokens := make(map[string]struct{}, 2)
 	deadline := time.Now().Add(2 * time.Second)
+	for len(revokedTokens) < 2 {
+		select {
+		case token := <-revoked:
+			revokedTokens[token] = struct{}{}
+		case <-time.After(time.Until(deadline)):
+			t.Fatalf("pending token revocation batch did not continue: %#v", revokedTokens)
+		}
+	}
+	for _, token := range []string{"restart-token-1", "restart-token-2"} {
+		if _, ok := revokedTokens[token]; !ok {
+			t.Fatalf("pending token %q was not restored", token)
+		}
+	}
 	for {
 		pending, err := st.ListPendingGitHubTokenRevocations(ctx, 10)
 		if err != nil {
@@ -922,6 +934,18 @@ func TestGitHubProjectSetupDraftAndGrantValidation(t *testing.T) {
 	if _, err := s.unsealGitHubProjectSetupToken(emptyToken); err == nil {
 		t.Fatal("empty encrypted token was accepted")
 	}
+
+	unconfigured := &Server{}
+	unconfigured.clearGitHubProjectSetupTokenRevocation("")
+	unconfigured.queuePendingGitHubTokenRevocationRestore()
+	if unconfigured.githubRestoreQueued {
+		t.Fatal("unconfigured GitHub OAuth queued a token restoration")
+	}
+	unconfigured.scheduleGitHubProjectSetupTokenRevocation("gtr_direct", "token", time.Hour)
+	if _, ok := unconfigured.githubRevocationJobs["gtr_direct"]; !ok {
+		t.Fatal("directly constructed server did not initialize its revocation jobs")
+	}
+	unconfigured.clearGitHubProjectSetupTokenRevocation("gtr_direct")
 }
 
 func TestGitHubProjectSetupCancellationRevokesToken(t *testing.T) {

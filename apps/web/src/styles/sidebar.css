@@ -205,6 +205,11 @@
   background: var(--hover);
 }
 
+.projects-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .workspace-header {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);

@@ -488,6 +488,7 @@ paths:
     post:
       operationId: createProject
       summary: Create a GitHub-linked project room and collaboration channel
+      description: Project collaboration channels are visible to authenticated workspace members. GitHub permissions continue to control repository access.
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:
@@ -547,6 +548,7 @@ paths:
     post:
       operationId: completeGitHubProjectSetup
       summary: Create webhooks for selected repositories and finish the project
+      description: Selected repository activity is delivered to a collaboration channel visible to authenticated workspace members. GitHub permissions continue to control repository access.
       parameters:
         - $ref: "#/components/parameters/workspace_id"
       requestBody:

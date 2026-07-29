@@ -98,6 +98,15 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, err)
 		return
 	}
+	if err := act.requireScope("workspaces:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 	if act.botTokenID != "" {
 		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot create projects"))
 		return
@@ -122,7 +131,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	project, event, err := s.store.CreateProject(r.Context(), store.CreateProjectInput{
-		WorkspaceID:   chi.URLParam(r, "workspace_id"),
+		WorkspaceID:   workspaceID,
 		Name:          projectName,
 		Slug:          body.Slug,
 		Description:   body.Description,

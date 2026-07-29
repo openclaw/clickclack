@@ -369,8 +369,8 @@
           <div>
             <strong>Individual events</strong>
             <span>
-              Pull requests, Pull request reviews, Pull request review comments, Issue comments, Check runs, and
-              Check suites
+              Pull requests, Pull request reviews, Pull request review comments, Issues, Issue comments, Check runs,
+              and Check suites
             </span>
           </div>
         </div>

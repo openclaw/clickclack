@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -44,6 +45,9 @@ type Server struct {
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
+	githubRevocationMu    sync.Mutex
+	githubRevocationJobs  map[string]githubProjectRevocationJob
+	githubRestoreQueued   bool
 }
 
 const (
@@ -125,6 +129,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
+		githubRevocationJobs:  make(map[string]githubProjectRevocationJob),
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,

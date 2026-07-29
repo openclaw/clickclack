@@ -3,7 +3,10 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -644,6 +647,576 @@ func TestGitHubProjectSetupRestoresPendingTokenRevocation(t *testing.T) {
 			t.Fatalf("restored revocation was not removed: %#v", pending)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestGitHubProjectSetupStartValidation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "github-connect-validation@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unconfigured := httptest.NewServer(New(st, realtime.NewHub(), Options{}).Handler())
+	t.Cleanup(unconfigured.Close)
+	configured := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      "https://github.test/authorize",
+		TokenURL:     "https://github.test/token",
+		APIURL:       "https://api.github.test",
+	}}).Handler())
+	t.Cleanup(configured.Close)
+
+	post := func(serverURL, workspaceID, userID, body string) int {
+		t.Helper()
+		request, err := http.NewRequest(
+			http.MethodPost,
+			serverURL+"/api/workspaces/"+workspaceID+"/projects/github/connect",
+			strings.NewReader(body),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		if userID != "" {
+			request.Header.Set("X-ClickClack-User", userID)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		return response.StatusCode
+	}
+
+	if status := post(unconfigured.URL, workspaces[0].ID, owner.ID, `{}`); status != http.StatusNotImplemented {
+		t.Fatalf("unconfigured GitHub OAuth returned %d", status)
+	}
+	if status := post(configured.URL, workspaces[0].ID, "missing-user", `{}`); status != http.StatusUnauthorized {
+		t.Fatalf("unknown-user setup returned %d", status)
+	}
+	if status := post(configured.URL, workspaces[0].ID, owner.ID, `{`); status != http.StatusBadRequest {
+		t.Fatalf("malformed setup returned %d", status)
+	}
+	if status := post(configured.URL, "ws_01ARZ3NDEKTSV4RRFFQ69G5FAV", owner.ID, `{}`); status != http.StatusBadRequest {
+		t.Fatalf("unknown workspace setup returned %d", status)
+	}
+	invalidBodies := []string{
+		`{"description":"` + strings.Repeat("x", 501) + `"}`,
+		func() string {
+			memberIDs := make([]string, githubProjectSetupMaxMembers+1)
+			for index := range memberIDs {
+				memberIDs[index] = fmt.Sprintf("usr_%d", index)
+			}
+			encoded, err := json.Marshal(map[string]any{"member_ids": memberIDs})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(encoded)
+		}(),
+		`{"member_ids":[""]}`,
+	}
+	for index, body := range invalidBodies {
+		if status := post(configured.URL, workspaces[0].ID, owner.ID, body); status != http.StatusBadRequest {
+			t.Fatalf("invalid setup %d returned %d", index, status)
+		}
+	}
+}
+
+func TestGitHubProjectSetupDraftAndGrantValidation(t *testing.T) {
+	t.Parallel()
+	validDraft := githubProjectOAuthDraft{
+		ProjectID:     "prj_test",
+		WorkspaceID:   "ws_test",
+		UserID:        "usr_test",
+		WebhookSecret: "webhook-secret",
+		MemberIDs:     []string{"usr_member"},
+	}
+	draftCases := []githubProjectOAuthDraft{
+		func() githubProjectOAuthDraft {
+			draft := validDraft
+			draft.Description = strings.Repeat("x", 501)
+			return draft
+		}(),
+		func() githubProjectOAuthDraft {
+			draft := validDraft
+			draft.ProjectID = ""
+			return draft
+		}(),
+		func() githubProjectOAuthDraft {
+			draft := validDraft
+			draft.MemberIDs = make([]string, githubProjectSetupMaxMembers+1)
+			return draft
+		}(),
+		func() githubProjectOAuthDraft {
+			draft := validDraft
+			draft.MemberIDs = []string{""}
+			return draft
+		}(),
+		func() githubProjectOAuthDraft {
+			draft := validDraft
+			draft.MemberIDs = []string{strings.Repeat("x", githubProjectSetupMaxMemberID+1)}
+			return draft
+		}(),
+	}
+	for index, draft := range draftCases {
+		if err := validateGitHubProjectDraft(draft); err == nil {
+			t.Fatalf("invalid draft %d was accepted", index)
+		}
+	}
+	if err := validateGitHubProjectDraft(validDraft); err != nil {
+		t.Fatalf("valid draft rejected: %v", err)
+	}
+
+	st := newEmptyHTTPStore(t)
+	s := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+	}})
+	now := time.Now().UTC()
+	binding := "browser-binding"
+	validGrant := githubProjectSetupGrant{
+		Version:            githubProjectSetupGrantVersion,
+		AccessToken:        "temporary-token",
+		RevocationID:       "gtr_test",
+		BrowserBindingHash: secretHash(binding),
+		Draft:              validDraft,
+		IssuedAt:           now.Add(-time.Minute).Unix(),
+		ExpiresAt:          now.Add(time.Minute).Unix(),
+	}
+	grantRequest := func(value, browserBinding string) *http.Request {
+		request := httptest.NewRequest(http.MethodGet, "https://clickclack.test/projects", nil)
+		if value != "" {
+			request.AddCookie(&http.Cookie{Name: s.cookies.GitHubProjectSetup, Value: value})
+		}
+		if browserBinding != "" {
+			request.AddCookie(&http.Cookie{Name: s.cookies.OAuthBinding, Value: browserBinding})
+		}
+		return request
+	}
+	sealGrant := func(grant githubProjectSetupGrant) string {
+		t.Helper()
+		value, err := s.sealGitHubProjectSetupGrant(grant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+
+	if _, err := s.githubProjectSetupGrant(grantRequest("", "")); err == nil {
+		t.Fatal("missing setup grant cookie was accepted")
+	}
+	if _, err := s.githubProjectSetupGrant(grantRequest("%", binding)); err == nil {
+		t.Fatal("invalid setup grant encoding was accepted")
+	}
+	shortValue := base64.RawURLEncoding.EncodeToString([]byte("short"))
+	if _, err := s.githubProjectSetupGrant(grantRequest(shortValue, binding)); err == nil {
+		t.Fatal("short setup grant was accepted")
+	}
+
+	gcm, err := s.githubProjectSetupAEAD()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+	invalidJSON := base64.RawURLEncoding.EncodeToString(
+		gcm.Seal(nonce, nonce, []byte("{"), s.githubProjectSetupCookieAAD()),
+	)
+	if _, err := s.githubProjectSetupGrant(grantRequest(invalidJSON, binding)); err == nil {
+		t.Fatal("non-JSON setup grant was accepted")
+	}
+
+	tampered, err := base64.RawURLEncoding.DecodeString(sealGrant(validGrant))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered[len(tampered)-1] ^= 0xff
+	if _, err := s.githubProjectSetupGrant(grantRequest(
+		base64.RawURLEncoding.EncodeToString(tampered),
+		binding,
+	)); err == nil {
+		t.Fatal("tampered setup grant was accepted")
+	}
+
+	invalidGrants := []githubProjectSetupGrant{
+		func() githubProjectSetupGrant {
+			grant := validGrant
+			grant.ExpiresAt = now.Add(-time.Minute).Unix()
+			return grant
+		}(),
+		func() githubProjectSetupGrant {
+			grant := validGrant
+			grant.IssuedAt = now.Add(time.Minute).Unix()
+			return grant
+		}(),
+		func() githubProjectSetupGrant {
+			grant := validGrant
+			grant.RevocationID = ""
+			return grant
+		}(),
+	}
+	for index, grant := range invalidGrants {
+		if _, err := s.githubProjectSetupGrant(grantRequest(sealGrant(grant), binding)); err == nil {
+			t.Fatalf("invalid grant %d was accepted", index)
+		}
+	}
+	if _, err := s.githubProjectSetupGrant(grantRequest(sealGrant(validGrant), "wrong-binding")); err == nil {
+		t.Fatal("setup grant with the wrong browser binding was accepted")
+	}
+	invalidDraftGrant := validGrant
+	invalidDraftGrant.Draft.WebhookSecret = ""
+	if _, err := s.githubProjectSetupGrant(grantRequest(sealGrant(invalidDraftGrant), binding)); err == nil {
+		t.Fatal("setup grant with an invalid draft was accepted")
+	}
+	grant, err := s.githubProjectSetupGrant(grantRequest(sealGrant(validGrant), binding))
+	if err != nil || grant.AccessToken != validGrant.AccessToken {
+		t.Fatalf("valid setup grant rejected: %#v, %v", grant, err)
+	}
+
+	oversizedGrant := validGrant
+	oversizedGrant.AccessToken = strings.Repeat("x", githubProjectSetupCookieMax)
+	if err := s.setGitHubProjectSetupGrant(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "https://clickclack.test/projects", nil),
+		oversizedGrant,
+	); err == nil {
+		t.Fatal("oversized setup grant was accepted")
+	}
+
+	encryptedToken, err := s.sealGitHubProjectSetupToken("temporary-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.unsealGitHubProjectSetupToken(encryptedToken)
+	if err != nil || token != "temporary-token" {
+		t.Fatalf("encrypted token did not round trip: %q, %v", token, err)
+	}
+	for _, value := range []string{"%", shortValue} {
+		if _, err := s.unsealGitHubProjectSetupToken(value); err == nil {
+			t.Fatalf("invalid encrypted token %q was accepted", value)
+		}
+	}
+	encryptedBytes, err := base64.RawURLEncoding.DecodeString(encryptedToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encryptedBytes[len(encryptedBytes)-1] ^= 0xff
+	if _, err := s.unsealGitHubProjectSetupToken(
+		base64.RawURLEncoding.EncodeToString(encryptedBytes),
+	); err == nil {
+		t.Fatal("tampered encrypted token was accepted")
+	}
+	emptyToken, err := s.sealGitHubProjectSetupToken("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.unsealGitHubProjectSetupToken(emptyToken); err == nil {
+		t.Fatal("empty encrypted token was accepted")
+	}
+}
+
+func TestGitHubProjectSetupCancellationRevokesToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "github-connect-cancel@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked := make(chan string, 1)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "cancel-token"})
+		case r.Method == http.MethodDelete && r.URL.Path == "/applications/client/token":
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			revoked <- body["access_token"]
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		AuthURL:      provider.URL + "/authorize",
+		TokenURL:     provider.URL + "/token",
+		APIURL:       provider.URL,
+	}}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	authorizationURL, bindingCookie := startProjectGitHubOAuth(
+		t,
+		client,
+		server.URL,
+		workspaces[0].ID,
+		owner.ID,
+		map[string]any{},
+	)
+	setupCookie, _ := finishProjectGitHubOAuth(
+		t,
+		client,
+		server.URL,
+		owner.ID,
+		authorizationURL,
+		bindingCookie,
+	)
+
+	cancelRequest, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/workspaces/"+workspaces[0].ID+"/projects/github/cancel",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addProjectSetupCookies(cancelRequest, owner.ID, bindingCookie, setupCookie)
+	cancelResponse, err := client.Do(cancelRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelResponse.Body.Close()
+	if cancelResponse.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected cancel status: %s", cancelResponse.Status)
+	}
+	cleared := findCookie(cancelResponse.Cookies(), "cc_github_project_setup")
+	if cleared == nil || cleared.MaxAge != -1 {
+		t.Fatalf("cancel did not clear its setup grant: %#v", cancelResponse.Cookies())
+	}
+	select {
+	case token := <-revoked:
+		if token != "cancel-token" {
+			t.Fatalf("unexpected revoked token %q", token)
+		}
+	default:
+		t.Fatal("cancel did not revoke its temporary token")
+	}
+
+	expiredRequest, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/workspaces/"+workspaces[0].ID+"/projects/github/cancel",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredRequest.Header.Set("X-ClickClack-User", owner.ID)
+	expiredResponse, err := client.Do(expiredRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredResponse.Body.Close()
+	if expiredResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing setup grant returned %s", expiredResponse.Status)
+	}
+}
+
+func TestGitHubProjectSetupGitHubAPIErrorPaths(t *testing.T) {
+	t.Parallel()
+	var repositoryMode atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/user/repos":
+			switch repositoryMode.Load() {
+			case 1:
+				w.WriteHeader(http.StatusInternalServerError)
+			case 2:
+				_, _ = w.Write([]byte("{"))
+			default:
+				page := r.URL.Query().Get("page")
+				repositories := make([]map[string]any, githubRepositoryPageSize)
+				for index := range repositories {
+					name := "repo-" + page + "-" + fmt.Sprint(index)
+					repositories[index] = map[string]any{
+						"name":        name,
+						"full_name":   "acme/" + name,
+						"html_url":    "https://github.com/acme/" + name,
+						"owner":       map[string]string{"login": "acme"},
+						"permissions": map[string]bool{"admin": true},
+					}
+				}
+				_ = json.NewEncoder(w).Encode(repositories)
+			}
+		case r.Method == http.MethodDelete && r.URL.Path == "/applications/client/token":
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/denied/hooks":
+			w.WriteHeader(http.StatusForbidden)
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/malformed/hooks":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte("{"))
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/missing/hooks":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":0}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/repos/acme/delete/hooks/2":
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/ping/hooks/1/pings":
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	st := newEmptyHTTPStore(t)
+	s := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIURL:       provider.URL,
+	}})
+	request := httptest.NewRequest(http.MethodGet, "https://clickclack.test/projects", nil)
+
+	repositoryMode.Store(1)
+	if _, _, err := s.fetchGitHubProjectRepositories(request, "token"); err == nil {
+		t.Fatal("GitHub repository status failure was accepted")
+	}
+	repositoryMode.Store(2)
+	if _, _, err := s.fetchGitHubProjectRepositories(request, "token"); err == nil {
+		t.Fatal("malformed GitHub repository response was accepted")
+	}
+	repositoryMode.Store(3)
+	repositories, truncated, err := s.fetchGitHubProjectRepositories(request, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || len(repositories) != githubRepositoryPageSize*githubRepositoryMaxPages {
+		t.Fatalf("unexpected paginated repositories: count=%d truncated=%v", len(repositories), truncated)
+	}
+
+	for _, name := range []string{"denied", "malformed", "missing"} {
+		repository := store.CreateProjectRepositoryInput{
+			Owner:    "acme",
+			Name:     name,
+			FullName: "acme/" + name,
+		}
+		if _, err := s.createGitHubRepositoryWebhook(
+			request,
+			"token",
+			repository,
+			"https://clickclack.test/hook",
+			"secret",
+		); err == nil {
+			t.Fatalf("invalid webhook response for %s was accepted", name)
+		}
+	}
+	hook := githubCreatedHook{
+		Repository: store.CreateProjectRepositoryInput{
+			Owner:    "acme",
+			Name:     "delete",
+			FullName: "acme/delete",
+		},
+		ID: 2,
+	}
+	if err := s.deleteGitHubRepositoryWebhooks(request.Context(), "token", []githubCreatedHook{hook}); err == nil {
+		t.Fatal("failed webhook rollback was reported as successful")
+	}
+	if err := s.deleteGitHubRepositoryWebhooks(request.Context(), "token", nil); err != nil {
+		t.Fatalf("empty webhook rollback failed: %v", err)
+	}
+	s.rollbackGitHubRepositoryWebhooks(request, "token", nil)
+	pingHook := githubCreatedHook{
+		Repository: store.CreateProjectRepositoryInput{
+			Owner:    "acme",
+			Name:     "ping",
+			FullName: "acme/ping",
+		},
+		ID: 1,
+	}
+	if err := s.pingGitHubRepositoryWebhook(request, "token", pingHook); err == nil {
+		t.Fatal("failed webhook ping was reported as successful")
+	}
+	if err := s.revokeGitHubProjectSetupToken(request.Context(), "token"); err == nil {
+		t.Fatal("failed token revocation was reported as successful")
+	}
+	s.revokeGitHubProjectSetupTokenOrRetry(request.Context(), "", "token", "test")
+	s.rollbackGitHubRepositoryWebhooks(request, "token", []githubCreatedHook{hook})
+
+	invalidURLServer := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIURL:       "://invalid",
+	}})
+	if _, _, err := invalidURLServer.fetchGitHubProjectRepositories(request, "token"); err == nil {
+		t.Fatal("invalid GitHub repository API URL was accepted")
+	}
+	invalidRepository := store.CreateProjectRepositoryInput{
+		Owner:    "acme",
+		Name:     "repo",
+		FullName: "acme/repo",
+	}
+	if _, err := invalidURLServer.createGitHubRepositoryWebhook(
+		request,
+		"token",
+		invalidRepository,
+		"https://clickclack.test/hook",
+		"secret",
+	); err == nil {
+		t.Fatal("invalid GitHub webhook API URL was accepted")
+	}
+	invalidHook := githubCreatedHook{Repository: invalidRepository, ID: 1}
+	if err := invalidURLServer.deleteGitHubRepositoryWebhook(
+		request.Context(),
+		"token",
+		invalidHook,
+	); err == nil {
+		t.Fatal("invalid GitHub webhook delete URL was accepted")
+	}
+	if err := invalidURLServer.pingGitHubRepositoryWebhook(request, "token", invalidHook); err == nil {
+		t.Fatal("invalid GitHub webhook ping URL was accepted")
+	}
+	if err := invalidURLServer.revokeGitHubProjectSetupToken(request.Context(), "token"); err == nil {
+		t.Fatal("invalid GitHub token revocation URL was accepted")
+	}
+
+	transportFailureServer := New(st, realtime.NewHub(), Options{GitHubOAuth: GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIURL:       "https://api.github.test",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("GitHub transport unavailable")
+		})},
+	}})
+	if err := transportFailureServer.revokeGitHubProjectSetupToken(request.Context(), "token"); err == nil {
+		t.Fatal("GitHub token revocation transport failure was accepted")
+	}
+	if _, err := transportFailureServer.createGitHubRepositoryWebhook(
+		request,
+		"token",
+		invalidRepository,
+		"https://clickclack.test/hook",
+		"secret",
+	); err == nil {
+		t.Fatal("GitHub webhook creation transport failure was accepted")
+	}
+	if err := transportFailureServer.deleteGitHubRepositoryWebhook(
+		request.Context(),
+		"token",
+		invalidHook,
+	); err == nil {
+		t.Fatal("GitHub webhook deletion transport failure was accepted")
+	}
+	if err := transportFailureServer.pingGitHubRepositoryWebhook(request, "token", invalidHook); err == nil {
+		t.Fatal("GitHub webhook ping transport failure was accepted")
+	}
+	if got := (&githubHookError{Repository: "acme/repo", StatusCode: http.StatusForbidden}).Error(); got == "" {
+		t.Fatal("GitHub hook error string was empty")
 	}
 }
 

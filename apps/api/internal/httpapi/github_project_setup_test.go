@@ -741,6 +741,38 @@ func TestGitHubProjectSetupStartValidation(t *testing.T) {
 	}
 }
 
+func TestGitHubProjectSetupSchedulesTransientTokenRevocation(t *testing.T) {
+	t.Parallel()
+	revoked := make(chan string, 1)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode revocation request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		revoked <- body["access_token"]
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(provider.Close)
+
+	server := &Server{githubOAuth: (GitHubOAuthConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIURL:       provider.URL,
+	}).withDefaults()}
+	server.scheduleGitHubProjectSetupTokenRevocation("", "transient-token", -time.Second)
+
+	select {
+	case token := <-revoked:
+		if token != "transient-token" {
+			t.Fatalf("unexpected transient token %q", token)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("transient token revocation was not attempted")
+	}
+}
+
 func TestGitHubProjectSetupDraftAndGrantValidation(t *testing.T) {
 	t.Parallel()
 	validDraft := githubProjectOAuthDraft{
@@ -941,11 +973,62 @@ func TestGitHubProjectSetupDraftAndGrantValidation(t *testing.T) {
 	if unconfigured.githubRestoreQueued {
 		t.Fatal("unconfigured GitHub OAuth queued a token restoration")
 	}
-	unconfigured.scheduleGitHubProjectSetupTokenRevocation("gtr_direct", "token", time.Hour)
-	if _, ok := unconfigured.githubRevocationJobs["gtr_direct"]; !ok {
+	unconfigured.scheduleGitHubProjectSetupTokenRevocation("gtr_direct", "token", 2*time.Hour)
+	firstJob, ok := unconfigured.githubRevocationJobs["gtr_direct"]
+	if !ok {
 		t.Fatal("directly constructed server did not initialize its revocation jobs")
 	}
+	unconfigured.scheduleGitHubProjectSetupTokenRevocation("gtr_direct", "token", 3*time.Hour)
+	if unconfigured.githubRevocationJobs["gtr_direct"].timer != firstJob.timer {
+		t.Fatal("later duplicate revocation replaced the earlier job")
+	}
+	unconfigured.scheduleGitHubProjectSetupTokenRevocation("gtr_direct", "token", time.Hour)
+	if unconfigured.githubRevocationJobs["gtr_direct"].timer == firstJob.timer {
+		t.Fatal("earlier duplicate revocation did not replace the later job")
+	}
 	unconfigured.clearGitHubProjectSetupTokenRevocation("gtr_direct")
+	if len(unconfigured.githubRevocationJobs) != 0 {
+		t.Fatal("cleared revocation job was retained")
+	}
+
+	queued := &Server{
+		githubOAuth:         GitHubOAuthConfig{ClientID: "client", ClientSecret: "secret"},
+		githubRestoreQueued: true,
+	}
+	queued.queuePendingGitHubTokenRevocationRestore()
+	if !queued.githubRestoreQueued {
+		t.Fatal("queued token restoration lost its coalescing marker")
+	}
+
+	s.queuePendingGitHubTokenRevocationRestore()
+	deadline := time.Now().Add(time.Second)
+	for {
+		s.githubRevocationMu.Lock()
+		restoreQueued := s.githubRestoreQueued
+		s.githubRevocationMu.Unlock()
+		if !restoreQueued {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("queued token restoration did not run")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	listCalled := make(chan struct{}, 1)
+	failingRestore := &Server{
+		store: &failingPendingRevocationListStore{
+			Store:  st,
+			called: listCalled,
+		},
+		githubOAuth: GitHubOAuthConfig{ClientID: "client", ClientSecret: "secret"},
+	}
+	failingRestore.restorePendingGitHubTokenRevocationsWithLimit(1)
+	select {
+	case <-listCalled:
+	case <-time.After(time.Second):
+		t.Fatal("pending token restoration did not query the durable queue")
+	}
 }
 
 func TestGitHubProjectSetupCancellationRevokesToken(t *testing.T) {
@@ -1334,4 +1417,17 @@ func addProjectSetupCookies(
 	req.Header.Set("X-ClickClack-User", userID)
 	req.AddCookie(bindingCookie)
 	req.AddCookie(setupCookie)
+}
+
+type failingPendingRevocationListStore struct {
+	store.Store
+	called chan<- struct{}
+}
+
+func (s *failingPendingRevocationListStore) ListPendingGitHubTokenRevocations(
+	context.Context,
+	int,
+) ([]store.PendingGitHubTokenRevocation, error) {
+	s.called <- struct{}{}
+	return nil, fmt.Errorf("injected pending revocation list failure")
 }

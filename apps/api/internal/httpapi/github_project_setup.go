@@ -917,23 +917,6 @@ func setGitHubAPIHeaders(req *http.Request, token string) {
 	req.Header.Set("User-Agent", "ClickClack")
 }
 
-func githubProjectSetupErrorCode(err error) string {
-	var hookError *githubHookError
-	if errors.As(err, &hookError) {
-		switch hookError.StatusCode {
-		case http.StatusUnauthorized:
-			return "authorization"
-		case http.StatusForbidden:
-			return "permission"
-		case http.StatusNotFound:
-			return "repository"
-		case http.StatusUnprocessableEntity:
-			return "webhook_conflict"
-		}
-	}
-	return "github"
-}
-
 func (s *Server) redirectGitHubProjectSetup(
 	w http.ResponseWriter,
 	r *http.Request,

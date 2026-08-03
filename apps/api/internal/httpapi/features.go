@@ -1584,7 +1584,7 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusBadRequest, err)
+		writeStoreError(w, err)
 		return
 	}
 	body := strings.TrimSpace(command + " " + text)
@@ -1625,7 +1625,7 @@ func (s *Server) invokeRegisteredSlashCommand(w http.ResponseWriter, r *http.Req
 		PayloadJSON: string(payloadJSON),
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeStoreError(w, err)
 		return
 	}
 	payload["trigger_id"] = invocation.ID

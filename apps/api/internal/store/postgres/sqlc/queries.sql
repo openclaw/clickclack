@@ -829,14 +829,24 @@ UPDATE bot_tokens
 SET last_used_at = sqlc.arg(last_used_at)
 WHERE id = sqlc.arg(id);
 
--- name: CountRecentWorkspaceMessagesByAuthor :one
+-- name: CountRecentGuestWritesByAuthor :one
 SELECT COUNT(*)
-FROM messages m
-WHERE m.workspace_id = sqlc.arg(workspace_id)
-  AND m.author_id = sqlc.arg(author_id)
-  AND m.direct_conversation_id IS NULL
-  AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = sqlc.arg(workspace_id) AND c.name = 'guest')
-  AND m.created_at >= sqlc.arg(cutoff);
+FROM (
+  SELECT 1 AS guest_write
+  FROM messages m
+  WHERE m.workspace_id = sqlc.arg(workspace_id)
+    AND m.author_id = sqlc.arg(author_id)
+    AND m.direct_conversation_id IS NULL
+    AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = sqlc.arg(workspace_id) AND c.name = 'guest')
+    AND m.created_at >= sqlc.arg(cutoff)
+  UNION ALL
+  SELECT 1 AS guest_write
+  FROM slash_command_invocations sci
+  WHERE sci.workspace_id = sqlc.arg(workspace_id)
+    AND sci.user_id = sqlc.arg(author_id)
+    AND sci.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = sqlc.arg(workspace_id) AND c.name = 'guest')
+    AND sci.created_at >= sqlc.arg(cutoff)
+) AS guest_writes;
 
 -- name: ListWorkspaceMembersForModeration :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
@@ -1026,6 +1036,12 @@ ON CONFLICT DO NOTHING;
 SELECT workspace_id
 FROM channels
 WHERE id = sqlc.arg(id);
+
+-- name: GetActiveSlashCommandWorkspace :one
+SELECT workspace_id
+FROM slash_commands
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL
+FOR KEY SHARE;
 
 -- name: GetDirectConversationWorkspace :one
 SELECT workspace_id

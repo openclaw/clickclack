@@ -138,7 +138,9 @@ func TestRegisteredSlashCommandHonorsCallerModeration(t *testing.T) {
 		t.Fatalf("blocked member invocation reached callback %d times", got)
 	}
 
-	for i := 0; i < store.GuestPostLimit; i++ {
+	// The successful registered invocation above consumes one slot from the
+	// same rolling guest write budget as waiting-room messages.
+	for i := 1; i < store.GuestPostLimit; i++ {
 		if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: guestChannelID, AuthorID: guest.ID, Body: "budget"}); err != nil {
 			t.Fatal(err)
 		}

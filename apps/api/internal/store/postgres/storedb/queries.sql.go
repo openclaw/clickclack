@@ -265,24 +265,34 @@ func (q *Queries) CountPinnedMessages(ctx context.Context, channelID string) (in
 	return count, err
 }
 
-const countRecentWorkspaceMessagesByAuthor = `-- name: CountRecentWorkspaceMessagesByAuthor :one
+const countRecentGuestWritesByAuthor = `-- name: CountRecentGuestWritesByAuthor :one
 SELECT COUNT(*)
-FROM messages m
-WHERE m.workspace_id = $1
-  AND m.author_id = $2
-  AND m.direct_conversation_id IS NULL
-  AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $1 AND c.name = 'guest')
-  AND m.created_at >= $3
+FROM (
+  SELECT 1 AS guest_write
+  FROM messages m
+  WHERE m.workspace_id = $1
+    AND m.author_id = $2
+    AND m.direct_conversation_id IS NULL
+    AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $1 AND c.name = 'guest')
+    AND m.created_at >= $3
+  UNION ALL
+  SELECT 1 AS guest_write
+  FROM slash_command_invocations sci
+  WHERE sci.workspace_id = $1
+    AND sci.user_id = $2
+    AND sci.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $1 AND c.name = 'guest')
+    AND sci.created_at >= $3
+) AS guest_writes
 `
 
-type CountRecentWorkspaceMessagesByAuthorParams struct {
+type CountRecentGuestWritesByAuthorParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	AuthorID    string `json:"author_id"`
 	Cutoff      string `json:"cutoff"`
 }
 
-func (q *Queries) CountRecentWorkspaceMessagesByAuthor(ctx context.Context, arg CountRecentWorkspaceMessagesByAuthorParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countRecentWorkspaceMessagesByAuthor, arg.WorkspaceID, arg.AuthorID, arg.Cutoff)
+func (q *Queries) CountRecentGuestWritesByAuthor(ctx context.Context, arg CountRecentGuestWritesByAuthorParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRecentGuestWritesByAuthor, arg.WorkspaceID, arg.AuthorID, arg.Cutoff)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -947,6 +957,20 @@ func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string)
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getActiveSlashCommandWorkspace = `-- name: GetActiveSlashCommandWorkspace :one
+SELECT workspace_id
+FROM slash_commands
+WHERE id = $1 AND revoked_at IS NULL
+FOR KEY SHARE
+`
+
+func (q *Queries) GetActiveSlashCommandWorkspace(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getActiveSlashCommandWorkspace, id)
+	var workspace_id string
+	err := row.Scan(&workspace_id)
+	return workspace_id, err
 }
 
 const getAppearancePreferences = `-- name: GetAppearancePreferences :one

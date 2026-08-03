@@ -162,7 +162,19 @@ func (s *Store) RotateSlashCommandSecret(ctx context.Context, commandID, request
 
 func (s *Store) GetSlashCommandForChannel(ctx context.Context, channelID, command, requesterID string) (store.SlashCommand, error) {
 	command = normalizeSlashCommand(command)
-	return scanSlashCommand(s.db.QueryRowContext(ctx, slashCommandSelect(true)+`
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	defer tx.Rollback()
+	workspaceID, err := s.q.WithTx(tx).GetChannelWorkspace(ctx, channelID)
+	if err != nil {
+		return store.SlashCommand{}, err
+	}
+	if err := requireCanPostTx(ctx, tx, workspaceID, channelID, requesterID); err != nil {
+		return store.SlashCommand{}, err
+	}
+	return scanSlashCommand(tx.QueryRowContext(ctx, slashCommandSelect(true)+`
 		JOIN channels c ON c.workspace_id = sc.workspace_id
 		JOIN workspace_members wm ON wm.workspace_id = sc.workspace_id AND wm.user_id = ?
 		WHERE c.id = ? AND sc.command = ? AND sc.revoked_at IS NULL`,
@@ -186,7 +198,27 @@ func (s *Store) CreateSlashCommandInvocation(ctx context.Context, input store.Cr
 	if invocation.CommandID == "" || invocation.WorkspaceID == "" || invocation.ChannelID == "" || invocation.UserID == "" {
 		return store.SlashCommandInvocation{}, errors.New("slash command invocation is incomplete")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.SlashCommandInvocation{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	commandWorkspaceID, err := qtx.GetActiveSlashCommandWorkspace(ctx, invocation.CommandID)
+	if err != nil {
+		return store.SlashCommandInvocation{}, err
+	}
+	channelWorkspaceID, err := qtx.GetChannelWorkspace(ctx, invocation.ChannelID)
+	if err != nil {
+		return store.SlashCommandInvocation{}, err
+	}
+	if commandWorkspaceID != invocation.WorkspaceID || channelWorkspaceID != invocation.WorkspaceID {
+		return store.SlashCommandInvocation{}, errors.New("slash command invocation scope does not match command and channel")
+	}
+	if err := requireCanPostTx(ctx, tx, channelWorkspaceID, invocation.ChannelID, invocation.UserID); err != nil {
+		return store.SlashCommandInvocation{}, err
+	}
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO slash_command_invocations (id, command_id, workspace_id, channel_id, user_id, text, payload_json, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		invocation.ID,
@@ -198,7 +230,10 @@ func (s *Store) CreateSlashCommandInvocation(ctx context.Context, input store.Cr
 		invocation.PayloadJSON,
 		invocation.CreatedAt,
 	)
-	return invocation, err
+	if err != nil {
+		return store.SlashCommandInvocation{}, err
+	}
+	return invocation, tx.Commit()
 }
 
 func (s *Store) CompleteSlashCommandInvocation(ctx context.Context, invocationID string, status int, responseBody, invokeError string) (store.SlashCommandInvocation, error) {

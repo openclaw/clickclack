@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"net/netip"
 	"time"
 )
@@ -44,25 +43,6 @@ var publicIPv6Prefix = netip.MustParsePrefix("2000::/3")
 type callbackDialer struct {
 	lookupNetIP func(context.Context, string, string) ([]netip.Addr, error)
 	dialContext func(context.Context, string, string) (net.Conn, error)
-}
-
-func newCallbackHTTPClient() *http.Client {
-	resolver := net.DefaultResolver
-	dialer := &net.Dialer{Timeout: callbackTimeout}
-	policyDialer := &callbackDialer{
-		lookupNetIP: resolver.LookupNetIP,
-		dialContext: dialer.DialContext,
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	transport.DialContext = policyDialer.DialContext
-	return &http.Client{
-		Transport: transport,
-		Timeout:   callbackTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
 }
 
 func (d *callbackDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {

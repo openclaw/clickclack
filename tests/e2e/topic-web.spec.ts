@@ -447,14 +447,11 @@ test("switching topic filters discards delayed pagination from the previous filt
   const releaseDelayed = new Promise<void>((resolve) => {
     releaseDelayedPage = resolve;
   });
-  let releaseRequestSeen: (() => void) | undefined;
-  const releaseRequested = new Promise<void>((resolve) => {
-    releaseRequestSeen = resolve;
-  });
+  let releaseRequestSeen = false;
   await page.route(`**/api/channels/${channel.id}/messages?*`, async (route) => {
     const url = new URL(route.request().url());
     if (url.searchParams.has("before_seq") && url.searchParams.get("topic_id") === release.id) {
-      releaseRequestSeen?.();
+      releaseRequestSeen = true;
       await releaseDelayed;
     }
     await route.continue();
@@ -469,16 +466,17 @@ test("switching topic filters discards delayed pagination from the previous filt
   await expect
     .poll(() => scrollport.evaluate((element) => element.scrollHeight - element.clientHeight))
     .toBeGreaterThan(0);
-  await scrollport.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-    element.dispatchEvent(new Event("scroll", { bubbles: true }));
-  });
-  await expect.poll(() => scrollport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  await scrollport.evaluate((element) => {
-    element.scrollTop = 0;
-    element.dispatchEvent(new Event("scroll", { bubbles: true }));
-  });
-  await releaseRequested;
+  await expect
+    .poll(async () => {
+      await scrollport.focus();
+      await page.keyboard.press("Home");
+      await scrollport.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+      );
+      await scrollport.dispatchEvent("scroll");
+      return releaseRequestSeen;
+    })
+    .toBe(true);
 
   await page.getByRole("button", { name: "Clear filter" }).click();
   await expect(page.getByText("Showing topic")).toHaveCount(0);

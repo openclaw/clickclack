@@ -1576,6 +1576,10 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	registered, err := s.store.GetSlashCommandForChannel(r.Context(), chi.URLParam(r, "channel_id"), command, act.user.ID)
 	if err == nil {
+		if err := s.store.CanPublishEphemeral(r.Context(), registered.WorkspaceID, chi.URLParam(r, "channel_id"), "", act.user.ID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 		s.invokeRegisteredSlashCommand(w, r, act, registered, text)
 		return
 	}
@@ -1630,7 +1634,7 @@ func (s *Server) invokeRegisteredSlashCommand(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	status, responseBody, callbackErr := postSlashCallback(r.Context(), command, payloadJSON)
+	status, responseBody, callbackErr := s.postSlashCallback(r.Context(), command, payloadJSON)
 	invokeErr := ""
 	if callbackErr != nil {
 		invokeErr = callbackErr.Error()
@@ -1710,7 +1714,7 @@ func (s *Server) deliverEventSubscriptions(ctx context.Context, event store.Even
 		if err != nil {
 			continue
 		}
-		status, responseBody, deliveryErr := postEventCallback(ctx, subscription, event, payload)
+		status, responseBody, deliveryErr := s.postEventCallback(ctx, subscription, event, payload)
 		errorText := ""
 		if deliveryErr != nil {
 			errorText = deliveryErr.Error()
@@ -1728,7 +1732,7 @@ func (s *Server) deliverEventSubscriptions(ctx context.Context, event store.Even
 	}
 }
 
-func postEventCallback(ctx context.Context, subscription store.EventSubscription, event store.Event, payload []byte) (int, string, error) {
+func (s *Server) postEventCallback(ctx context.Context, subscription store.EventSubscription, event store.Event, payload []byte) (int, string, error) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, subscription.CallbackURL, bytes.NewReader(payload))
 	if err != nil {
@@ -1738,8 +1742,7 @@ func postEventCallback(ctx context.Context, subscription store.EventSubscription
 	req.Header.Set("X-ClickClack-Timestamp", timestamp)
 	req.Header.Set("X-ClickClack-Event-ID", event.ID)
 	req.Header.Set("X-ClickClack-Signature", signSlashCallback(subscription.SigningSecret, timestamp, payload))
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.callbackClient.Do(req)
 	if err != nil {
 		return 0, "", err
 	}
@@ -1754,7 +1757,7 @@ func postEventCallback(ctx context.Context, subscription store.EventSubscription
 	return resp.StatusCode, string(body), nil
 }
 
-func postSlashCallback(ctx context.Context, command store.SlashCommand, payload []byte) (int, string, error) {
+func (s *Server) postSlashCallback(ctx context.Context, command store.SlashCommand, payload []byte) (int, string, error) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, command.CallbackURL, bytes.NewReader(payload))
 	if err != nil {
@@ -1763,8 +1766,7 @@ func postSlashCallback(ctx context.Context, command store.SlashCommand, payload 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-ClickClack-Timestamp", timestamp)
 	req.Header.Set("X-ClickClack-Signature", signSlashCallback(command.SigningSecret, timestamp, payload))
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.callbackClient.Do(req)
 	if err != nil {
 		return 0, "", err
 	}

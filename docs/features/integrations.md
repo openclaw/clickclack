@@ -123,6 +123,11 @@ Behavior:
   `callback_url` with `X-ClickClack-Timestamp` and
   `X-ClickClack-Signature: sha256=<hex hmac>`, where the signed string is
   `<timestamp>.<raw-json-body>`.
+- Invocation requires the caller's current write authority for the exact
+  channel, including guest-channel, timeout, block, and guest-budget checks.
+- Callback delivery connects directly to public IP addresses only. It rejects
+  private, loopback, link-local, reserved, or mixed public/private DNS answers,
+  does not use environment-configured proxies, and does not follow redirects.
 - If the callback returns `{"response_type":"in_channel","text":"..."}`, the
   server posts that text as the command's bot user. `response_type` defaults to
   `in_channel`.
@@ -188,6 +193,8 @@ Behavior:
   callback URL.
 - Delivery uses the same signature headers as slash commands, plus
   `X-ClickClack-Event-ID`.
+- Delivery uses the same public-address, no-proxy, no-redirect policy as slash
+  command callbacks.
 - Every delivery attempt is stored with response status, response body, error,
   and attempt number.
 - `GET /api/event-subscriptions/{subscription_id}/deliveries` accepts `limit`

@@ -51,7 +51,10 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	}
 
 	hub := realtime.NewHub()
-	server := httptest.NewServer(New(st, hub, Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	server := httptest.NewServer(New(st, hub, Options{
+		UploadDir:      filepath.Join(dataDir, "uploads"),
+		callbackClient: &http.Client{Timeout: callbackTimeout},
+	}).Handler())
 	t.Cleanup(server.Close)
 
 	expectStatus(t, http.MethodHead, server.URL+"/", nil, http.StatusOK)
@@ -1313,7 +1316,10 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := channels[0]
-	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{
+		UploadDir:      filepath.Join(dataDir, "uploads"),
+		callbackClient: &http.Client{Timeout: callbackTimeout},
+	}).Handler())
 	t.Cleanup(server.Close)
 
 	index := getBody(t, server.URL+"/")

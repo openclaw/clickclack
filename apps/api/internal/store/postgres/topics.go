@@ -14,6 +14,14 @@ func (s *Store) ListTopics(ctx context.Context, workspaceID, requesterID string)
 	if err := s.requireMembership(ctx, workspaceID, requesterID); err != nil {
 		return nil, err
 	}
+	channels, err := s.ListChannels(ctx, workspaceID, requesterID)
+	if err != nil {
+		return nil, err
+	}
+	visibleChannels := make(map[string]struct{}, len(channels))
+	for _, channel := range channels {
+		visibleChannels[channel.ID] = struct{}{}
+	}
 	rows, err := s.db.QueryContext(ctx, topicSelect()+`
 		WHERE workspace_id = $1 AND archived_at IS NULL
 		ORDER BY name`, workspaceID)
@@ -21,7 +29,21 @@ func (s *Store) ListTopics(ctx context.Context, workspaceID, requesterID string)
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTopics(rows)
+	topics, err := scanTopics(rows)
+	if err != nil {
+		return nil, err
+	}
+	visible := topics[:0]
+	for _, topic := range topics {
+		if topic.ChannelID == "" {
+			visible = append(visible, topic)
+			continue
+		}
+		if _, ok := visibleChannels[topic.ChannelID]; ok {
+			visible = append(visible, topic)
+		}
+	}
+	return visible, nil
 }
 
 func (s *Store) CreateTopic(ctx context.Context, input store.CreateTopicInput) (store.Topic, error) {
@@ -42,6 +64,9 @@ func (s *Store) CreateTopic(ctx context.Context, input store.CreateTopicInput) (
 	if err := requireMembershipTx(ctx, tx, workspaceID, createdBy); err != nil {
 		return store.Topic{}, err
 	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, createdBy); err != nil {
+		return store.Topic{}, err
+	}
 	channelID := strings.TrimSpace(input.ChannelID)
 	if channelID != "" {
 		var channelWorkspace string
@@ -51,6 +76,11 @@ func (s *Store) CreateTopic(ctx context.Context, input store.CreateTopicInput) (
 		if channelWorkspace != workspaceID {
 			return store.Topic{}, errors.New("topic channel is not in workspace")
 		}
+		if err := requireCanPostTx(ctx, tx, workspaceID, channelID, createdBy); err != nil {
+			return store.Topic{}, err
+		}
+	} else if err := requireNonGuestTx(ctx, tx, workspaceID, createdBy); err != nil {
+		return store.Topic{}, err
 	}
 	topic := store.Topic{
 		ID:          newID("top"),

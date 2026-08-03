@@ -55,6 +55,11 @@ Guests are deliberately narrow:
 - Guests cannot create channels, rename channels, create DMs, send DMs,
   upload files, attach files, search hidden rooms, resolve hidden routes, or
   receive hidden realtime events.
+- Guests see topics only from `#guest` plus workspace-global topics. They may
+  create topics only in `#guest` while they still have post budget; they cannot
+  create hidden-channel or workspace-global topics.
+- Registered slash commands enforce the same channel, timeout, block, and
+  guest-budget checks as ordinary channel writes before contacting an app.
 - Posts made before a demotion to `guest` are not counted against the guest
   budget. Guest posts that are later deleted still count.
 

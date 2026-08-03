@@ -44,6 +44,7 @@ type Server struct {
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
+	callbackClient        *http.Client
 }
 
 const (
@@ -90,6 +91,7 @@ type Options struct {
 	Environment         string
 	Version             string
 	Commit              string
+	callbackClient      *http.Client
 }
 
 func New(st store.Store, hub *realtime.Hub, options Options) *Server {
@@ -104,6 +106,10 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	cookieNames := options.CookieNames
 	if cookieNames.Session == "" {
 		cookieNames = authpolicy.DefaultCookieNames()
+	}
+	callbackClient := options.callbackClient
+	if callbackClient == nil {
+		callbackClient = newCallbackHTTPClient()
 	}
 	return &Server{
 		store:                 st,
@@ -122,6 +128,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
+		callbackClient:        callbackClient,
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,

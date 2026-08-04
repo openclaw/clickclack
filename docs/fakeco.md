@@ -156,8 +156,10 @@ channel round trip.
 The canary accepts either a synthetic human session token or a scoped ClickClack
 bot token. A human caller proves the ordinary inbound path. A bot caller proves
 bot-to-bot delivery and requires the receiving OpenClaw account to set
-`allowBots: true` (or `allowBots: "mentions"` when the canary message mentions
-the receiver) and include the sender bot user ID in `allowFrom`.
+`allowBots: true` and include the sender bot user ID in `allowFrom`. The fixed
+canary prompt does not mention a receiver, so `allowBots: "mentions"` is not a
+supported mode for this command; exercise mention mode with a separate,
+explicitly mentioned message test.
 
 For a bot-to-bot proof, create two distinct bots in the same workspace: use one
 token as `CLICKCLACK_TOKEN` for the canary sender and configure the other bot's

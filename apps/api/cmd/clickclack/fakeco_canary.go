@@ -30,6 +30,8 @@ type canaryResult struct {
 	Status              string `json:"status"`
 	CorrelationID       string `json:"correlation_id"`
 	RunID               string `json:"run_id,omitempty"`
+	RequesterID         string `json:"requester_id"`
+	RequesterKind       string `json:"requester_kind"`
 	CaseID              string `json:"case_id"`
 	GatewayPreflight    bool   `json:"gateway_preflight"`
 	WorkspaceID         string `json:"workspace_id"`
@@ -102,9 +104,6 @@ func (c apiClient) runCanary(parent context.Context, options canaryOptions) (can
 	if err != nil {
 		return canaryResult{}, fmt.Errorf("resolve canary user: %w", err)
 	}
-	if user.Kind != "human" {
-		return canaryResult{}, errors.New("canary requires a human session token because OpenClaw ignores bot-authored messages")
-	}
 	channel, err := c.resolveChannelContext(ctx)
 	if err != nil {
 		return canaryResult{}, fmt.Errorf("resolve canary channel: %w", err)
@@ -141,6 +140,8 @@ func (c apiClient) runCanary(parent context.Context, options canaryOptions) (can
 				Status:              "passed",
 				CorrelationID:       correlationID,
 				RunID:               runID,
+				RequesterID:         user.ID,
+				RequesterKind:       user.Kind,
 				CaseID:              created.Message.ID,
 				GatewayPreflight:    gatewayPreflight,
 				WorkspaceID:         channel.WorkspaceID,

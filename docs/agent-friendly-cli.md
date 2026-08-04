@@ -38,7 +38,7 @@ Implemented now:
 - `send`, `messages send`, `messages list`.
 - `threads open`, `threads reply`, and `reply`.
 - `reactions add` and `reactions remove`.
-- `canary` for a correlated human-to-OpenClaw quoted-reply check.
+- `canary` for a correlated human- or bot-to-OpenClaw quoted-reply check.
 - `--server`, `--token`, `--user` / `--user-id`, `--workspace`, `--channel`,
   `--json`, `--plain`, `--no-input`, and `--verbose`.
 

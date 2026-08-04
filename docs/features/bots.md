@@ -416,7 +416,10 @@ Inbound:
 
 - The extension subscribes to ClickClack realtime events.
 - `message.created` events become OpenClaw inbound turns.
-- Events authored by the configured bot user are ignored.
+- Events authored by the configured bot user are ignored. Events authored by
+  other bots are admitted when the OpenClaw account sets `allowBots: true` (or
+  `allowBots: "mentions"` for mention-gated group traffic), and still pass the
+  configured `allowFrom` policy.
 - Channel messages map to OpenClaw group/channel turns.
 - DMs map to direct turns.
 - Thread replies preserve the source thread/message ID.
@@ -431,6 +434,10 @@ The live proof must configure two ClickClack accounts:
 
 - `openclaw-service`: independent service bot.
 - `peter-openclaw`: user-owned bot with Peter as owner.
+
+For bot-to-bot proof, the sender bot must be included in the receiving
+OpenClaw account's `allowFrom` list and the receiver must opt in with
+`allowBots: true` or `allowBots: "mentions"`.
 
 ## Crabbox Live Proof
 

@@ -30,7 +30,7 @@ func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 		case r.URL.Path == "/gateway-healthz":
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		case r.URL.Path == "/api/me":
-			_ = json.NewEncoder(w).Encode(map[string]any{"user": store.User{ID: "usr_alice", Kind: "human", DisplayName: "Alice"}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"user": store.User{ID: "usr_openclaw_sender", Kind: "bot", DisplayName: "OpenClaw sender"}})
 		case r.URL.Path == "/api/workspaces":
 			_ = json.NewEncoder(w).Encode(map[string]any{"workspaces": []store.Workspace{{ID: "wsp_fakeco", Slug: "fakeco", Name: "FakeCo"}}})
 		case r.URL.Path == "/api/workspaces/wsp_fakeco/channels":
@@ -89,7 +89,7 @@ func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "passed" || !result.GatewayPreflight || result.RunID != runID || result.CaseID != quoted || result.RequestMessageID != quoted || result.ResponseMessageID != "msg_reply" {
+	if result.Status != "passed" || !result.GatewayPreflight || result.RunID != runID || result.RequesterID != "usr_openclaw_sender" || result.RequesterKind != "bot" || result.CaseID != quoted || result.RequestMessageID != quoted || result.ResponseMessageID != "msg_reply" {
 		t.Fatalf("unexpected canary result: %#v", result)
 	}
 	mu.Lock()
@@ -104,7 +104,7 @@ func TestRunCanaryProvesGatewayAndQuotedBotRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRunCanaryRejectsBotSessionAndUnsafeInputs(t *testing.T) {
+func TestRunCanaryRejectsUnsafeInputs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/me" {
@@ -123,10 +123,6 @@ func TestRunCanaryRejectsBotSessionAndUnsafeInputs(t *testing.T) {
 	_, err = c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco-run", RunID: "unsafe run", Timeout: time.Second, PollInterval: time.Millisecond})
 	if err == nil || !strings.Contains(err.Error(), "run ID") {
 		t.Fatalf("expected invalid run ID error, got %v", err)
-	}
-	_, err = c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco-bot", Timeout: time.Second, PollInterval: time.Millisecond})
-	if err == nil || !strings.Contains(err.Error(), "human session token") {
-		t.Fatalf("expected bot session rejection, got %v", err)
 	}
 	_, err = c.runCanary(context.Background(), canaryOptions{CorrelationID: "fakeco-url", GatewayHealthURL: "https://user:pass@example.test/healthz", Timeout: time.Second, PollInterval: time.Millisecond})
 	if err == nil || !strings.Contains(err.Error(), "without embedded credentials") {

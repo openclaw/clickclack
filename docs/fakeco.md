@@ -153,10 +153,16 @@ channel round trip.
 
 ## End-to-end canary
 
-The canary must authenticate as a synthetic human because OpenClaw correctly
-ignores bot-authored events. Mint and consume a magic link for one seeded human,
-then store the resulting session token in the approved secret store used by the
-canary job. Inject it only as `CLICKCLACK_TOKEN`.
+The canary accepts either a synthetic human session token or a scoped ClickClack
+bot token. A human caller proves the ordinary inbound path. A bot caller proves
+bot-to-bot delivery and requires the receiving OpenClaw account to set
+`allowBots: true` (or `allowBots: "mentions"` when the canary message mentions
+the receiver) and include the sender bot user ID in `allowFrom`.
+
+For a bot-to-bot proof, create two distinct bots in the same workspace: use one
+token as `CLICKCLACK_TOKEN` for the canary sender and configure the other bot's
+OpenClaw account as the receiver. Store the token in the approved secret store;
+never put it in the rendered config, logs, or proof artifact.
 
 ```sh
 CLICKCLACK_SERVER=https://chat.fakeco.example \
@@ -167,10 +173,11 @@ clickclack canary --run-id fakeco-smoke-20260709 --json
 ```
 
 The command first checks the configured Gateway health URL, then posts a unique
-human message and polls for an ordinary bot reply that quotes that exact
-message and equals `fakeco-canary-ok <correlation-id>`. It exits non-zero on
-gateway failure, wrong credentials, a missing workspace/channel, a bot caller,
-or timeout. The correlation ID is also sent on every HTTP request as
+human or bot message and polls for an ordinary bot reply that quotes that exact
+message and equals `fakeco-canary-ok <correlation-id>`. Its JSON result records
+`requester_id` and `requester_kind` so the proof distinguishes the bot-to-bot
+path. It exits non-zero on gateway failure, wrong credentials, a missing
+workspace/channel, or timeout. The correlation ID is also sent on every HTTP request as
 `X-Correlation-ID`, returned by ClickClack in the response header, and retained
 as optional metadata on the durable creation event. `--run-id` adds an external
 run identifier to JSON evidence only; `case_id` always equals the canary request

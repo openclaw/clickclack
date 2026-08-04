@@ -24,7 +24,7 @@ Commands:
   logout     remove stored client credentials
   whoami     print the current server-side user
   status     print selected server/user/workspace/channel
-  canary     prove a human ClickClack -> OpenClaw -> quoted bot reply round trip
+  canary     prove a human- or bot-to-OpenClaw quoted bot reply round trip
   workspaces list
   channels list
   send
@@ -276,7 +276,9 @@ OPENCLAW_GATEWAY_HEALTH_URL=http://openclaw.internal:18789/healthz \
 clickclack canary --workspace fakeco --channel e2e-canary --json
 ```
 
-Requires a human session token. It optionally preflights the OpenClaw health
+Accepts either a human session token or a scoped bot token. For a bot caller,
+the receiving OpenClaw ClickClack account must enable `allowBots` and allow the
+caller in `allowFrom`. It optionally preflights the OpenClaw health
 URL, posts a unique correlated prompt, and waits for a bot reply quoting the
 request and carrying the same marker. `--timeout`, `--poll-interval`, and
 `--correlation-id` are available for controlled tests. Optional `--run-id`

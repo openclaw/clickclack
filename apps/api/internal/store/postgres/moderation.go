@@ -169,6 +169,7 @@ func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, u
 		WorkspaceID: workspaceID,
 		AuthorID:    userID,
 		Cutoff:      cutoff,
+		WriteLimit:  int32(store.GuestPostLimit),
 	})
 	if err != nil {
 		return err
@@ -207,6 +208,7 @@ func postsRemainingTx(ctx context.Context, q storedb.DBTX, workspaceID, userID, 
 		WorkspaceID: workspaceID,
 		AuthorID:    userID,
 		Cutoff:      cutoff,
+		WriteLimit:  int32(store.GuestPostLimit),
 	})
 	if err != nil {
 		return 0, 0, err

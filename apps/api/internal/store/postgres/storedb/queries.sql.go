@@ -270,29 +270,36 @@ SELECT COUNT(*)
 FROM (
   SELECT 1 AS guest_write
   FROM messages m
-  WHERE m.workspace_id = $1
-    AND m.author_id = $2
+  WHERE m.workspace_id = $2
+    AND m.author_id = $3
     AND m.direct_conversation_id IS NULL
-    AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $1 AND c.name = 'guest')
-    AND m.created_at >= $3
+    AND m.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $2 AND c.name = 'guest')
+    AND m.created_at >= $4
   UNION ALL
   SELECT 1 AS guest_write
   FROM slash_command_invocations sci
-  WHERE sci.workspace_id = $1
-    AND sci.user_id = $2
-    AND sci.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $1 AND c.name = 'guest')
-    AND sci.created_at >= $3
+  WHERE sci.workspace_id = $2
+    AND sci.user_id = $3
+    AND sci.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = $2 AND c.name = 'guest')
+    AND sci.created_at >= $4
+  LIMIT $1
 ) AS guest_writes
 `
 
 type CountRecentGuestWritesByAuthorParams struct {
+	WriteLimit  int32  `json:"write_limit"`
 	WorkspaceID string `json:"workspace_id"`
 	AuthorID    string `json:"author_id"`
 	Cutoff      string `json:"cutoff"`
 }
 
 func (q *Queries) CountRecentGuestWritesByAuthor(ctx context.Context, arg CountRecentGuestWritesByAuthorParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countRecentGuestWritesByAuthor, arg.WorkspaceID, arg.AuthorID, arg.Cutoff)
+	row := q.db.QueryRowContext(ctx, countRecentGuestWritesByAuthor,
+		arg.WriteLimit,
+		arg.WorkspaceID,
+		arg.AuthorID,
+		arg.Cutoff,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -963,7 +970,7 @@ const getActiveSlashCommandWorkspace = `-- name: GetActiveSlashCommandWorkspace 
 SELECT workspace_id
 FROM slash_commands
 WHERE id = $1 AND revoked_at IS NULL
-FOR KEY SHARE
+FOR SHARE
 `
 
 func (q *Queries) GetActiveSlashCommandWorkspace(ctx context.Context, id string) (string, error) {

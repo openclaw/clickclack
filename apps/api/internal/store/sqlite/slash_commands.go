@@ -213,7 +213,7 @@ func (s *Store) CreateSlashCommandInvocation(ctx context.Context, input store.Cr
 		return store.SlashCommandInvocation{}, err
 	}
 	if commandWorkspaceID != invocation.WorkspaceID || channelWorkspaceID != invocation.WorkspaceID {
-		return store.SlashCommandInvocation{}, errors.New("slash command invocation scope does not match command and channel")
+		return store.SlashCommandInvocation{}, store.ErrSlashCommandScopeMismatch
 	}
 	if err := requireCanPostTx(ctx, tx, channelWorkspaceID, invocation.ChannelID, invocation.UserID); err != nil {
 		return store.SlashCommandInvocation{}, err

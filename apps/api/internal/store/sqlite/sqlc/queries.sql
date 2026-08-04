@@ -824,6 +824,7 @@ FROM (
     AND sci.user_id = sqlc.arg(author_id)
     AND sci.channel_id IN (SELECT c.id FROM channels c WHERE c.workspace_id = sqlc.arg(workspace_id) AND c.name = 'guest')
     AND sci.created_at >= sqlc.arg(cutoff)
+  LIMIT sqlc.arg(write_limit)
 ) AS guest_writes;
 
 -- name: ListWorkspaceMembersForModeration :many

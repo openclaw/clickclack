@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -74,6 +75,19 @@ func TestHTTPSlashCommandRequiresChannelWriteAuthorityBeforeCallback(t *testing.
 	if generalChannelID == "" || guestChannelID == "" {
 		t.Fatalf("expected general and guest channels, got %#v", channels)
 	}
+	otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "HTTP Slash Other Workspace"}, moderator.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherGeneralChannel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID: otherWorkspace.ID,
+		Name:        "general",
+		UserID:      moderator.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherGeneralChannelID := otherGeneralChannel.ID
 
 	blocked := true
 	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
@@ -116,13 +130,14 @@ func TestHTTPSlashCommandRequiresChannelWriteAuthorityBeforeCallback(t *testing.
 		})
 	}))
 	t.Cleanup(callback.Close)
-	if _, err := st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
+	registeredCommand, err := st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
 		WorkspaceID: workspace.ID,
 		Command:     "/deploy",
 		CallbackURL: callback.URL,
 		BotUserID:   bot.ID,
 		CreatedBy:   moderator.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.CreateSlashCommand(ctx, store.CreateSlashCommandInput{
@@ -226,7 +241,26 @@ func TestHTTPSlashCommandRequiresChannelWriteAuthorityBeforeCallback(t *testing.
 
 	beforeCallbacks := callbackCount.Load()
 	beforeInvocations := trackedStore.persistedInvocations.Load()
-	status, body := invoke(member.ID, "", generalChannelID, "/unregistered")
+	status, body := invoke("", botToken.Token, otherGeneralChannelID, "/deploy")
+	if status != http.StatusForbidden {
+		t.Fatalf("cross-workspace bot invocation: expected 403, got %d %#v", status, body)
+	}
+	if callbackCount.Load() != beforeCallbacks || trackedStore.persistedInvocations.Load() != beforeInvocations {
+		t.Fatal("cross-workspace bot invocation reached callback or persisted an invocation")
+	}
+	encodedBody, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sensitive := range []string{registeredCommand.ID, registeredCommand.CallbackURL, registeredCommand.SigningSecret} {
+		if sensitive != "" && strings.Contains(string(encodedBody), sensitive) {
+			t.Fatalf("cross-workspace error exposed registered command detail %q: %s", sensitive, encodedBody)
+		}
+	}
+
+	beforeCallbacks = callbackCount.Load()
+	beforeInvocations = trackedStore.persistedInvocations.Load()
+	status, body = invoke(member.ID, "", generalChannelID, "/unregistered")
 	message, _ := body["message"].(map[string]any)
 	if status != http.StatusCreated || body["response_type"] != "in_channel" || body["text"] != "/unregistered prod" || message["author_id"] != member.ID {
 		t.Fatalf("unregistered fallback changed: status=%d body=%#v", status, body)

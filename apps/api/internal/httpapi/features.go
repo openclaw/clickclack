@@ -1576,10 +1576,6 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	registered, err := s.store.GetSlashCommandForChannel(r.Context(), chi.URLParam(r, "channel_id"), command, act.user.ID)
 	if err == nil {
-		if err := s.store.CanPublishEphemeral(r.Context(), registered.WorkspaceID, chi.URLParam(r, "channel_id"), "", act.user.ID); err != nil {
-			writeStoreError(w, err)
-			return
-		}
 		s.invokeRegisteredSlashCommand(w, r, act, registered, text)
 		return
 	}

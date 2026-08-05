@@ -411,6 +411,62 @@
   }
 }
 
+/* ---------- CHANNEL SETTINGS ---------- */
+
+.channel-settings-scrim {
+  padding: 20px;
+}
+
+.channel-settings-modal {
+  width: min(460px, 100%);
+}
+
+.channel-settings-content {
+  display: grid;
+  gap: 18px;
+  padding: 14px 20px 20px;
+}
+
+.channel-settings-name {
+  display: block;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.channel-settings-content p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.channel-settings-content .channel-settings-warning {
+  margin: 0;
+  padding: 12px;
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel-2));
+  color: var(--text);
+}
+
+.channel-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 0;
+}
+
+.channel-settings-actions button {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .channel-settings-content,
+  .channel-settings-modal > header {
+    padding-inline: 16px;
+  }
+}
+
 /* ---------- IMAGE VIEWER ---------- */
 
 .image-viewer-scrim {

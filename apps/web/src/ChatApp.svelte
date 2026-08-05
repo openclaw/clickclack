@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
-  import { APIError, api, apiResourceURL, apiURL } from "./lib/api";
+  import { APIError, api, apiResourceURL, apiURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
@@ -45,6 +45,7 @@
   import ProfilePane from "./components/profile/ProfilePane.svelte";
   import PinnedPanel from "./components/pins/PinnedPanel.svelte";
   import SearchResults from "./components/search/SearchResults.svelte";
+  import ChannelSettingsModal from "./components/settings/ChannelSettingsModal.svelte";
   import SettingsModal from "./components/settings/SettingsModal.svelte";
   import ThreadEmptyState from "./components/thread/ThreadEmptyState.svelte";
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
@@ -138,6 +139,9 @@
   let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
+  let channelSettingsOpen = false;
+  let channelSettingsSaving = false;
+  let channelSettingsError = "";
   let showCreateChannel = false;
   let showCreateDirect = false;
   let gifQuery = "";
@@ -242,6 +246,9 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
+  $: canManageSelectedChannel =
+    Boolean(selectedChannel) &&
+    (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator");
   $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
@@ -509,6 +516,36 @@
     const workspaceID = selectedWorkspace?.route_id || selectedWorkspaceID || routeWorkspaceID;
     if (!workspaceID) return;
     void goto(workspaceSettingsPath(workspaceID));
+  }
+
+  function openChannelSettings() {
+    if (!canManageSelectedChannel) return;
+    channelSettingsError = "";
+    channelSettingsOpen = true;
+  }
+
+  async function setSelectedChannelArchived(archived: boolean) {
+    const channel = selectedChannel;
+    if (!channel || !canManageSelectedChannel || channelSettingsSaving) return;
+    channelSettingsSaving = true;
+    channelSettingsError = "";
+    try {
+      const data = await api<{ channel: Channel }>(`/api/channels/${channel.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived }),
+      });
+      channels = channels.map((candidate) =>
+        candidate.id === data.channel.id ? data.channel : candidate,
+      );
+      channelSettingsOpen = false;
+    } catch (error) {
+      channelSettingsError = readableAPIError(
+        error,
+        archived ? "Could not archive channel" : "Could not restore channel",
+      );
+    } finally {
+      channelSettingsSaving = false;
+    }
   }
 
   function handleSettingsUserUpdated(updated: User) {
@@ -2701,7 +2738,7 @@
   }
 
   function isModalOpen(): boolean {
-    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || showCreateChannel || showCreateDirect;
+    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || showCreateDirect;
   }
 
   function activeComposerTarget(): HTMLTextAreaElement | null {
@@ -3966,10 +4003,13 @@
 
   function closeModal() {
     if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
+    if (channelSettingsSaving) return;
     pendingDeleteMessage = null;
     deleteMessageError = "";
     selectedImage = null;
     settingsModalOpen = false;
+    channelSettingsOpen = false;
+    channelSettingsError = "";
     showCreateChannel = false;
     showCreateDirect = false;
   }
@@ -4044,6 +4084,7 @@
           : undefined}
       externalURL={selectedDirect ? undefined : selectedChannel?.external_url}
       pinsAvailable={Boolean(selectedChannel)}
+      channelSettingsAvailable={canManageSelectedChannel}
       {connected}
       platform={desktop.platform}
       {searchQuery}
@@ -4051,6 +4092,7 @@
       {mobileNavOpen}
       mobileNavigation={mobileNavViewport}
       workspaceName={selectedWorkspace?.name}
+      onOpenChannelSettings={openChannelSettings}
       onOpenWorkspaceSettings={openWorkspaceSettings}
       onResetSearch={resetSearch}
       onSearch={() => void searchMessages()}
@@ -4137,12 +4179,14 @@
         pinnedOpen={pinnedPanelOpen}
         {channelNotifPreference}
         {channelNotifSaving}
+        channelSettingsAvailable={canManageSelectedChannel}
         onSearchQuery={(value) => (searchQuery = value)}
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
         onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
         onPinnedItems={togglePinnedPanel}
+        onOpenChannelSettings={openChannelSettings}
       />
     {/if}
 
@@ -4419,6 +4463,15 @@
     onOtherAlign={setOtherAlign}
     onBrowserNotificationsChanged={(value) => (browserNotificationsEnabled = value)}
     onClose={closeModal}
+  />
+{/if}
+{#if channelSettingsOpen && selectedChannel}
+  <ChannelSettingsModal
+    channel={selectedChannel}
+    saving={channelSettingsSaving}
+    error={channelSettingsError}
+    onClose={closeModal}
+    onArchivedChange={(archived) => void setSelectedChannelArchived(archived)}
   />
 {/if}
 {#if showCreateChannel}

@@ -13,11 +13,13 @@
     pinnedOpen?: boolean;
     channelNotifPreference?: ChannelNotificationPreference | null;
     channelNotifSaving?: boolean;
+    channelSettingsAvailable?: boolean;
     onSearchQuery: (value: string) => void;
     onSearch: () => void;
     onResetSearch: () => void;
     onToggleThread: () => void;
     onPinnedItems: () => void;
+    onOpenChannelSettings?: () => void;
     onToggleChannelNotifications?: () => void;
   };
 
@@ -37,11 +39,13 @@
     pinnedOpen = false,
     channelNotifPreference = undefined,
     channelNotifSaving = false,
+    channelSettingsAvailable = false,
     onSearchQuery,
     onSearch,
     onResetSearch,
     onToggleThread,
     onPinnedItems,
+    onOpenChannelSettings = () => {},
     onToggleChannelNotifications = () => {},
   }: Props = $props();
 
@@ -130,6 +134,19 @@
       >
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
+        </svg>
+      </button>
+    {/if}
+    {#if selectedChannel && channelSettingsAvailable}
+      <button
+        type="button"
+        title="Channel settings"
+        aria-label="Channel settings"
+        onclick={onOpenChannelSettings}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.38.35.73.6 1 .3.3.68.48 1.1.5h.1v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
         </svg>
       </button>
     {/if}

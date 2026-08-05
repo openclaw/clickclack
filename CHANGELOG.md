@@ -2,6 +2,7 @@
 
 ## 0.3.0 - Unreleased
 
+- Fixed blank embedded views caused by stale browser assets and returned proper JSON errors for unknown API routes while preserving app deep links.
 - Hardened integration callbacks against server-side requests to non-public networks and enforced guest visibility, moderation, and write limits for topics and registered slash commands. Thanks @jason-allen-oneal.
 - Updated web font packages and the Cloudflare Wrangler toolchain.
 - Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, resolved mention highlighting whose current-user emphasis follows that preference, and workspace-visible responding-agent identity beside channel and thread composers. Thanks @PollyBot13 and @jjjhenriksen.

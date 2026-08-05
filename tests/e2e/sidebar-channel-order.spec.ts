@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { waitForAppReady } from "./app-ready";
 
 type Workspace = { id: string; route_id: string };
 
@@ -34,6 +35,7 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
 }) => {
   const { workspace, names } = await createWorkspaceWithChannels(page, "Channel order");
   await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
 
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
 
@@ -43,6 +45,7 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[2], names[0], names[1]]);
 
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[2], names[0], names[1]]);
 
   await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
@@ -76,6 +79,7 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
   });
   expect(addedResponse.ok()).toBe(true);
   await page.reload();
+  await waitForAppReady(page);
   await expect
     .poll(() => visibleChannelNames(page))
     .toEqual([names[2], names[0], names[1], addedName]);
@@ -89,6 +93,7 @@ test("channel ordering is isolated by workspace", async ({ page }) => {
   const { user } = (await meResponse.json()) as { user: { id: string } };
 
   await page.goto(`/app/${first.workspace.route_id}`);
+  await waitForAppReady(page);
   await page.getByRole("button", { name: `Move #${first.names[0]}` }).click();
   await page
     .getByRole("menu", { name: `Move #${first.names[0]}` })
@@ -99,6 +104,7 @@ test("channel ordering is isolated by workspace", async ({ page }) => {
     .toEqual([first.names[1], first.names[0], first.names[2]]);
 
   await page.goto(`/app/${second.workspace.route_id}`);
+  await waitForAppReady(page);
   await expect.poll(() => visibleChannelNames(page)).toEqual(second.names);
   const secondStorageKey = `clickclack:sidebar-channel-order:v1:${user.id}:${second.workspace.id}`;
   await expect
@@ -106,6 +112,7 @@ test("channel ordering is isolated by workspace", async ({ page }) => {
     .toBeNull();
 
   await page.goto(`/app/${first.workspace.route_id}`);
+  await waitForAppReady(page);
   await expect
     .poll(() => visibleChannelNames(page))
     .toEqual([first.names[1], first.names[0], first.names[2]]);
@@ -122,6 +129,7 @@ test("invalid saved channel ordering falls back to server order", async ({ page 
   }, storageKey);
 
   await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
 });
 
@@ -142,6 +150,7 @@ test("unavailable channel order storage keeps session reordering functional", as
   });
 
   await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
   await page.getByRole("button", { name: `Move #${names[0]}` }).click();
   await page
@@ -151,5 +160,6 @@ test("unavailable channel order storage keeps session reordering functional", as
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[1], names[0], names[2]]);
 
   await page.reload();
+  await waitForAppReady(page);
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
 });

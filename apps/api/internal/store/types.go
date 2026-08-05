@@ -44,6 +44,10 @@ var ErrDirectConversationNoActivePeer = errors.New("direct conversation has no a
 // daily post budget.
 var ErrPostRateLimited = errors.New("waiting room post limit reached")
 
+// ErrSlashCommandScopeMismatch is returned when an invocation's supplied
+// workspace does not match the registered command and channel workspaces.
+var ErrSlashCommandScopeMismatch = errors.New("slash command invocation scope does not match command and channel")
+
 // ErrSetupCodeInvalid is returned for any unusable bot setup code — unknown,
 // expired, already claimed, or pointing at a bot that is no longer eligible.
 // The single error keeps claim responses uniform so callers cannot probe

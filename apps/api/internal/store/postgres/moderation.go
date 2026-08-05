@@ -165,10 +165,11 @@ func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, u
 		return err
 	}
 	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339Nano)
-	count, err := storedb.New(tx).CountRecentWorkspaceMessagesByAuthor(ctx, storedb.CountRecentWorkspaceMessagesByAuthorParams{
+	count, err := storedb.New(tx).CountRecentGuestWritesByAuthor(ctx, storedb.CountRecentGuestWritesByAuthorParams{
 		WorkspaceID: workspaceID,
 		AuthorID:    userID,
 		Cutoff:      cutoff,
+		WriteLimit:  int32(store.GuestPostLimit),
 	})
 	if err != nil {
 		return err
@@ -203,10 +204,11 @@ func postsRemainingTx(ctx context.Context, q storedb.DBTX, workspaceID, userID, 
 		return 0, 0, nil
 	}
 	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339Nano)
-	count, err := storedb.New(q).CountRecentWorkspaceMessagesByAuthor(ctx, storedb.CountRecentWorkspaceMessagesByAuthorParams{
+	count, err := storedb.New(q).CountRecentGuestWritesByAuthor(ctx, storedb.CountRecentGuestWritesByAuthorParams{
 		WorkspaceID: workspaceID,
 		AuthorID:    userID,
 		Cutoff:      cutoff,
+		WriteLimit:  int32(store.GuestPostLimit),
 	})
 	if err != nil {
 		return 0, 0, err

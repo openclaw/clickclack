@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -1597,6 +1598,11 @@ func (a actor) requireWorkspace(workspaceID string) error {
 }
 
 func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+		writeError(w, http.StatusNotFound, errors.New("route not found"))
+		return
+	}
+
 	dist, err := fs.Sub(webassets.Dist, "dist")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1608,6 +1614,10 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 			http.FileServer(http.FS(dist)).ServeHTTP(w, r)
 			return
 		}
+	}
+	if isMissingBrowserAssetPath(r.URL.Path) {
+		http.NotFound(w, r)
+		return
 	}
 	fallback := "index.html"
 	if r.URL.Path != "/" {
@@ -1631,6 +1641,20 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	}
 	index = s.injectRuntimeConfig(index)
 	_, _ = w.Write(index)
+}
+
+func isMissingBrowserAssetPath(urlPath string) bool {
+	if strings.HasPrefix(urlPath, "/_app/") || strings.HasPrefix(urlPath, "/assets/") {
+		return true
+	}
+	switch strings.ToLower(path.Ext(urlPath)) {
+	case ".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".json",
+		".map", ".mjs", ".otf", ".png", ".svg", ".ttf", ".wasm", ".webmanifest",
+		".webp", ".woff", ".woff2":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {

@@ -1182,6 +1182,74 @@ func TestHTTPServesEmbeddedAsset(t *testing.T) {
 	}
 }
 
+func TestHTTPNotFoundPreservesAPIAndAssetBoundaries(t *testing.T) {
+	t.Parallel()
+	handler := New(nil, nil, Options{}).Handler()
+
+	tests := []struct {
+		name        string
+		method      string
+		path        string
+		bearer      bool
+		wantStatus  int
+		wantType    string
+		wantAPIJSON bool
+	}{
+		{name: "api root", method: http.MethodGet, path: "/api", wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "api root slash", method: http.MethodGet, path: "/api/", wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "missing api get", method: http.MethodGet, path: "/api/does-not-exist", wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "missing api post", method: http.MethodPost, path: "/api/does-not-exist", wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "missing api patch", method: http.MethodPatch, path: "/api/does-not-exist", wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "missing api head", method: http.MethodHead, path: "/api/does-not-exist", wantStatus: http.StatusNotFound, wantType: "application/json"},
+		{name: "missing api with bearer", method: http.MethodGet, path: "/api/does-not-exist", bearer: true, wantStatus: http.StatusNotFound, wantType: "application/json", wantAPIJSON: true},
+		{name: "missing javascript chunk", method: http.MethodGet, path: "/_app/immutable/chunks/missing.js", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing javascript chunk head", method: http.MethodHead, path: "/_app/immutable/chunks/missing.js", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing stylesheet", method: http.MethodGet, path: "/_app/immutable/assets/missing.css", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing extensionless app asset", method: http.MethodGet, path: "/_app/immutable/missing", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing extensionless asset", method: http.MethodGet, path: "/assets/missing", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing javascript worker", method: http.MethodGet, path: "/service-worker.js", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing javascript module", method: http.MethodGet, path: "/workers/missing.mjs", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing source map", method: http.MethodGet, path: "/scripts/missing.js.map", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing font", method: http.MethodGet, path: "/fonts/missing.woff2", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing icon", method: http.MethodGet, path: "/icons/missing.svg", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing favicon", method: http.MethodGet, path: "/favicon.ico", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing image", method: http.MethodGet, path: "/images/missing.webp", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing web manifest", method: http.MethodGet, path: "/manifest.webmanifest", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "existing embedded favicon", method: http.MethodGet, path: "/favicon.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml"},
+		{name: "api lookalike remains spa", method: http.MethodGet, path: "/apiary/deep-link", wantStatus: http.StatusOK, wantType: "text/html"},
+		{name: "app deep link remains spa", method: http.MethodGet, path: "/app/TEXAMPLE/CEXAMPLE", wantStatus: http.StatusOK, wantType: "text/html"},
+		{name: "embed deep link remains spa", method: http.MethodGet, path: "/embed/channel/TEXAMPLE/CEXAMPLE", wantStatus: http.StatusOK, wantType: "text/html"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Accept", "application/json")
+			if tc.bearer {
+				req.Header.Set("Authorization", "Bearer invalid")
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			if response.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; content type = %q", response.Code, tc.wantStatus, response.Header().Get("Content-Type"))
+			}
+			if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, tc.wantType) {
+				t.Fatalf("content type = %q, want prefix %q", got, tc.wantType)
+			}
+			if tc.wantAPIJSON {
+				var body struct {
+					Error string `json:"error"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+					t.Fatalf("API response is not JSON: %v", err)
+				}
+				if body.Error != "route not found" {
+					t.Fatalf("API error = %q, want %q", body.Error, "route not found")
+				}
+			}
+		})
+	}
+}
+
 func TestListenAndServeStopsWithContext(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

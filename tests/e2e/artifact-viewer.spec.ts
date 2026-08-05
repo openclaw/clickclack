@@ -13,6 +13,7 @@ import {
   PDF_CANVAS_PIXEL_LIMIT,
 } from "../../apps/web/src/lib/pdf";
 import type { Upload } from "../../apps/web/src/lib/types";
+import { waitForAppReady } from "./app-ready";
 
 type Fixture = { filename: string; contentType: string; body: Buffer };
 type ZipCompression = 0 | 8;
@@ -686,6 +687,7 @@ test("opens spreadsheets and slide decks with navigation", async ({ page }) => {
     },
   ]);
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
   const closeViewer = async () => {
@@ -888,6 +890,7 @@ test("opens safe code, Markdown, PDF, and HTML previews with DOCX download-only"
   const { channel } = await seedArtifacts(page, fixtures);
 
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
 
   await page.getByRole("button", { name: "Open viewer-proof.ts" }).click();
@@ -1017,10 +1020,12 @@ test("falls back to source before structured previews can exhaust the DOM", asyn
     },
   ]);
   await page.goto("/app");
+  await waitForAppReady(page);
   const channelHref = await page
     .getByRole("link", { name: `# ${channel.name}` })
     .getAttribute("href");
   await page.goto(channelHref!);
+  await waitForAppReady(page);
 
   await page.getByRole("button", { name: "Open complex.html" }).click();
   let viewer = page.getByRole("complementary", { name: "Artifact viewer" });
@@ -1052,10 +1057,12 @@ test("makes a viewer opened at the mobile breakpoint modal immediately", async (
     },
   ]);
   await page.goto("/app");
+  await waitForAppReady(page);
   const channelHref = await page
     .getByRole("link", { name: `# ${channel.name}` })
     .getAttribute("href");
   await page.goto(channelHref!);
+  await waitForAppReady(page);
   await page.getByRole("button", { name: "Open mobile.md" }).click();
 
   const viewer = page.getByRole("dialog", { name: "Artifact viewer" });
@@ -1111,6 +1118,7 @@ test("shows local fallbacks for oversized and malformed artifacts", async ({ pag
   ];
   const { channel } = await seedArtifacts(page, fixtures);
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
 
@@ -1193,6 +1201,7 @@ test("near-limit code remains interruptible and falls back to escaped source", a
     },
   ]);
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
 
   await page.getByRole("button", { name: "Open near-limit.ts" }).click();
@@ -1228,6 +1237,7 @@ test("enforces the actual streamed byte limit instead of trusting upload metadat
     });
   });
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await page.getByRole("button", { name: "Open metadata-lie.txt" }).click();
 
@@ -1243,6 +1253,7 @@ test("adds an attachment from message.updated without reloading", async ({ page 
   });
   const { message } = (await messageResponse.json()) as { message: { id: string } };
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByText("Realtime artifact delivery")).toBeVisible();
 
@@ -1274,6 +1285,7 @@ test("returns to the routed thread after closing an artifact", async ({ page }) 
     },
   ]);
   await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
 
   const message = page.locator(`[data-message-id="${messages["thread-proof.md"]}"]`);

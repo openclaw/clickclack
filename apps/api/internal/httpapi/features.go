@@ -1576,15 +1576,11 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	registered, err := s.store.GetSlashCommandForChannel(r.Context(), chi.URLParam(r, "channel_id"), command, act.user.ID)
 	if err == nil {
-		if err := s.store.CanPublishEphemeral(r.Context(), registered.WorkspaceID, chi.URLParam(r, "channel_id"), "", act.user.ID); err != nil {
-			writeStoreError(w, err)
-			return
-		}
 		s.invokeRegisteredSlashCommand(w, r, act, registered, text)
 		return
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusBadRequest, err)
+		writeStoreError(w, err)
 		return
 	}
 	body := strings.TrimSpace(command + " " + text)
@@ -1625,7 +1621,7 @@ func (s *Server) invokeRegisteredSlashCommand(w http.ResponseWriter, r *http.Req
 		PayloadJSON: string(payloadJSON),
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeStoreError(w, err)
 		return
 	}
 	payload["trigger_id"] = invocation.ID

@@ -475,6 +475,9 @@ CREATE TABLE slash_command_invocations (
 CREATE INDEX idx_slash_command_invocations_command
   ON slash_command_invocations(command_id, created_at);
 
+CREATE INDEX idx_slash_command_invocations_guest_budget
+  ON slash_command_invocations(workspace_id, user_id, channel_id, created_at);
+
 CREATE TABLE event_subscriptions (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

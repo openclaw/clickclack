@@ -13,28 +13,31 @@ import (
 )
 
 type Config struct {
-	Addr                string   `json:"addr"`
-	Data                string   `json:"data"`
-	DB                  string   `json:"db"`
-	Uploads             string   `json:"uploads"`
-	Environment         string   `json:"environment"`
-	MetricsEnabled      bool     `json:"metrics_enabled"`
-	PublicURL           string   `json:"public_url"`
-	PublicAPIURL        string   `json:"public_api_url"`
-	EmbedFrameAncestors []string `json:"embed_frame_ancestors"`
-	CookieNamespace     string   `json:"cookie_namespace"`
-	DevBootstrap        bool     `json:"dev_bootstrap"`
-	GitHubClientID      string   `json:"github_client_id"`
-	GitHubClientSecret  string   `json:"github_client_secret"`
-	GitHubAllowedOrg    string   `json:"github_allowed_org"`
-	GitHubModeratorOrg  string   `json:"github_moderator_org"`
-	AccessTeamDomain    string   `json:"access_team_domain"`
-	AccessAUD           string   `json:"access_aud"`
-	PushoverAPIToken    string   `json:"pushover_api_token"`
-	R2AccountID         string   `json:"r2_account_id"`
-	R2AccessKeyID       string   `json:"r2_access_key_id"`
-	R2SecretAccessKey   string   `json:"r2_secret_access_key"`
-	R2Endpoint          string   `json:"r2_endpoint"`
+	Addr                   string   `json:"addr"`
+	Data                   string   `json:"data"`
+	DB                     string   `json:"db"`
+	Uploads                string   `json:"uploads"`
+	Environment            string   `json:"environment"`
+	MetricsEnabled         bool     `json:"metrics_enabled"`
+	PublicURL              string   `json:"public_url"`
+	PublicAPIURL           string   `json:"public_api_url"`
+	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
+	CookieNamespace        string   `json:"cookie_namespace"`
+	DevBootstrap           bool     `json:"dev_bootstrap"`
+	GitHubClientID         string   `json:"github_client_id"`
+	GitHubClientSecret     string   `json:"github_client_secret"`
+	GitHubAllowedOrg       string   `json:"github_allowed_org"`
+	GitHubModeratorOrg     string   `json:"github_moderator_org"`
+	AccessTeamDomain       string   `json:"access_team_domain"`
+	AccessAUD              string   `json:"access_aud"`
+	PushoverAPIToken       string   `json:"pushover_api_token"`
+	WebPushVAPIDSubject    string   `json:"web_push_vapid_subject"`
+	WebPushVAPIDPublicKey  string   `json:"web_push_vapid_public_key"`
+	WebPushVAPIDPrivateKey string   `json:"web_push_vapid_private_key"`
+	R2AccountID            string   `json:"r2_account_id"`
+	R2AccessKeyID          string   `json:"r2_access_key_id"`
+	R2SecretAccessKey      string   `json:"r2_secret_access_key"`
+	R2Endpoint             string   `json:"r2_endpoint"`
 }
 
 func Defaults() Config {
@@ -120,6 +123,15 @@ func Load(path string) (Config, error) {
 	if env := os.Getenv("CLICKCLACK_PUSHOVER_API_TOKEN"); env != "" {
 		cfg.PushoverAPIToken = env
 	}
+	if env := os.Getenv("CLICKCLACK_WEB_PUSH_VAPID_SUBJECT"); env != "" {
+		cfg.WebPushVAPIDSubject = env
+	}
+	if env := os.Getenv("CLICKCLACK_WEB_PUSH_VAPID_PUBLIC_KEY"); env != "" {
+		cfg.WebPushVAPIDPublicKey = env
+	}
+	if env := os.Getenv("CLICKCLACK_WEB_PUSH_VAPID_PRIVATE_KEY"); env != "" {
+		cfg.WebPushVAPIDPrivateKey = env
+	}
 	if env := os.Getenv("CLICKCLACK_R2_ACCOUNT_ID"); env != "" {
 		cfg.R2AccountID = env
 	}
@@ -181,6 +193,22 @@ func (c *Config) ValidateServe() error {
 	}
 	if (allowedOrg != "" || moderatorOrg != "") && !hasClientID {
 		return errors.New("GitHub organization settings require GitHub OAuth credentials")
+	}
+	webPushPublicKey := strings.TrimSpace(c.WebPushVAPIDPublicKey)
+	webPushPrivateKey := strings.TrimSpace(c.WebPushVAPIDPrivateKey)
+	if (webPushPublicKey == "") != (webPushPrivateKey == "") {
+		return errors.New("CLICKCLACK_WEB_PUSH_VAPID_PUBLIC_KEY and CLICKCLACK_WEB_PUSH_VAPID_PRIVATE_KEY must be configured together")
+	}
+	if webPushPublicKey != "" {
+		c.WebPushVAPIDPublicKey = webPushPublicKey
+		c.WebPushVAPIDPrivateKey = webPushPrivateKey
+		if strings.TrimSpace(c.WebPushVAPIDSubject) == "" {
+			subject := "mailto:clickclack@localhost"
+			if parsed, err := url.Parse(publicURL); err == nil && parsed.Hostname() != "" {
+				subject = "mailto:clickclack@" + parsed.Hostname()
+			}
+			c.WebPushVAPIDSubject = subject
+		}
 	}
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)

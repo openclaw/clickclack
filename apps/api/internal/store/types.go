@@ -186,6 +186,22 @@ type NotificationSettings struct {
 	PushoverUserKey string `json:"pushover_user_key"`
 }
 
+type WebPushSubscriptionKeys struct {
+	P256DH string `json:"p256dh"`
+	Auth   string `json:"auth"`
+}
+
+type WebPushSubscription struct {
+	Endpoint       string                  `json:"endpoint"`
+	ExpirationTime *string                 `json:"expirationTime,omitempty"`
+	Keys           WebPushSubscriptionKeys `json:"keys"`
+}
+
+type UpsertWebPushSubscriptionInput struct {
+	UserID       string
+	Subscription WebPushSubscription
+}
+
 type UpdateNotificationSettingsInput struct {
 	UserID          string
 	PushoverEnabled bool
@@ -1182,6 +1198,9 @@ type Store interface {
 	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
 	UpdateAppearancePreferences(ctx context.Context, input UpdateAppearancePreferencesInput) (*AppearancePreferences, error)
+	UpsertWebPushSubscription(ctx context.Context, input UpsertWebPushSubscriptionInput) (WebPushSubscription, error)
+	DeleteWebPushSubscription(ctx context.Context, userID, endpoint string) error
+	ListWebPushSubscriptions(ctx context.Context, userID string) ([]WebPushSubscription, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)

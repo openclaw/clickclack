@@ -21,7 +21,9 @@ type PushNotifier interface {
 
 func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message, mentionedUserIDs []string) {
 	if s.pushNotifier == nil {
-		return
+		if s.webPush == nil {
+			return
+		}
 	}
 	recipients, err := s.store.ListPushNotificationRecipients(ctx, message.ID, mentionedUserIDs)
 	if err != nil {
@@ -41,6 +43,7 @@ func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message
 			log.Printf("push notification failed for user %s: %v", recipient.UserID, err)
 		}
 	}
+	s.sendWebPushForMessage(ctx, message, recipients)
 }
 
 func messageEventMentionedUserIDs(events []store.Event) []string {

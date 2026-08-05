@@ -249,6 +249,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html[data-display-mode="standalone"] body {
+  overscroll-behavior: none;
+}
+
 button,
 input,
 textarea {

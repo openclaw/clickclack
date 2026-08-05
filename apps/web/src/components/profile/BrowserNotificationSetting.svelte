@@ -3,6 +3,11 @@
     readBrowserNotificationsEnabled,
     writeBrowserNotificationsEnabled,
   } from "../../lib/browserNotifications";
+  import {
+    disableWebPushSubscription,
+    enableWebPushSubscription,
+    isWebPushSupported,
+  } from "../../lib/webPush";
   import type { User } from "../../lib/types";
 
   type Props = {
@@ -79,15 +84,41 @@
         : Notification.permission;
     supported = true;
     if (permission === "granted") {
+      if (isWebPushSupported()) {
+        try {
+          await enableWebPushSubscription();
+        } catch (error) {
+          writeBrowserNotificationsEnabled(user.id, false);
+          enabled = false;
+          onChanged?.(false);
+          status =
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : "Browser notifications could not be enabled";
+          statusError = true;
+          return;
+        }
+      }
       enabled = writeBrowserNotificationsEnabled(user.id, true);
       onChanged?.(enabled);
-      status = enabled
-        ? "Browser notifications enabled"
-        : "Browser notification preference could not be saved";
+      status = isWebPushSupported()
+        ? (enabled ? "Browser notifications enabled" : "Browser notification preference could not be saved")
+        : (enabled
+            ? "Browser notifications enabled for foreground alerts"
+            : "Browser notification preference could not be saved");
       statusError = !enabled;
       return;
     }
 
+    if (isWebPushSupported()) {
+      try {
+        await disableWebPushSubscription();
+      } catch (error) {
+        status = error instanceof Error && error.message.trim() ? error.message : "Browser notifications could not be disabled";
+        statusError = true;
+        return;
+      }
+    }
     writeBrowserNotificationsEnabled(user.id, false);
     enabled = false;
     onChanged?.(false);

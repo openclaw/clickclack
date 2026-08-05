@@ -41,6 +41,7 @@ type Server struct {
 	cookieSameSite        http.SameSite
 	disableDevAuth        bool
 	pushNotifier          PushNotifier
+	webPush               *WebPushService
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
@@ -78,21 +79,24 @@ type actor struct {
 }
 
 type Options struct {
-	UploadDir           string
-	UploadStorage       uploadstore.Store
-	GitHubOAuth         GitHubOAuthConfig
-	Access              AccessConfig
-	FrontendURL         string
-	PublicAPIURL        string
-	EmbedFrameAncestors []string
-	CookieNames         authpolicy.CookieNames
-	DisableDevAuth      bool
-	PushNotifier        PushNotifier
-	MetricsEnabled      bool
-	Environment         string
-	Version             string
-	Commit              string
-	callbackClient      *http.Client
+	UploadDir              string
+	UploadStorage          uploadstore.Store
+	GitHubOAuth            GitHubOAuthConfig
+	Access                 AccessConfig
+	FrontendURL            string
+	PublicAPIURL           string
+	EmbedFrameAncestors    []string
+	CookieNames            authpolicy.CookieNames
+	DisableDevAuth         bool
+	PushNotifier           PushNotifier
+	WebPushSubscriber      string
+	WebPushVAPIDPublicKey  string
+	WebPushVAPIDPrivateKey string
+	MetricsEnabled         bool
+	Environment            string
+	Version                string
+	Commit                 string
+	callbackClient         *http.Client
 }
 
 func New(st store.Store, hub *realtime.Hub, options Options) *Server {
@@ -126,6 +130,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
 		disableDevAuth:        options.DisableDevAuth,
 		pushNotifier:          options.PushNotifier,
+		webPush:               newWebPushService(options.WebPushSubscriber, options.WebPushVAPIDPublicKey, options.WebPushVAPIDPrivateKey),
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
@@ -213,6 +218,9 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
 		r.Get("/channels/{channel_id}/notification-settings", s.getChannelNotificationSettings)
 		r.Patch("/channels/{channel_id}/notification-settings", s.updateChannelNotificationSettings)
+		r.Get("/web-push/public-key", s.getWebPushPublicKey)
+		r.Put("/me/web-push-subscriptions", s.upsertWebPushSubscription)
+		r.Delete("/me/web-push-subscriptions", s.deleteWebPushSubscription)
 		r.Get("/channels/{channel_id}/pins", s.listPinnedMessages)
 		r.Post("/channels/{channel_id}/pins", s.pinMessage)
 		r.Delete("/channels/{channel_id}/pins/{message_id}", s.unpinMessage)

@@ -153,11 +153,14 @@ func serve(args []string) error {
 			TeamDomain: cfg.AccessTeamDomain,
 			Audience:   cfg.AccessAUD,
 		},
-		PushNotifier:   pushNotifier,
-		MetricsEnabled: cfg.MetricsEnabled,
-		Environment:    cfg.Environment,
-		Version:        version,
-		Commit:         commit,
+		PushNotifier:           pushNotifier,
+		WebPushSubscriber:      cfg.WebPushVAPIDSubject,
+		WebPushVAPIDPublicKey:  cfg.WebPushVAPIDPublicKey,
+		WebPushVAPIDPrivateKey: cfg.WebPushVAPIDPrivateKey,
+		MetricsEnabled:         cfg.MetricsEnabled,
+		Environment:            cfg.Environment,
+		Version:                version,
+		Commit:                 commit,
 	})
 	if uploads != nil {
 		if err := server.CleanupPendingUploadObjects(ctx, 0); err != nil {

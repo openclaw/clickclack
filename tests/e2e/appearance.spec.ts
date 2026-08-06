@@ -266,7 +266,7 @@ test("board theme retunes the app palette and survives reload", async ({ page })
   await expect(html).toHaveAttribute("data-board", "ember");
 
   await openAppearanceSettings(page);
-  await page.getByRole("radio", { name: /^Signal/ }).click();
+  await page.getByRole("radio", { name: /^Galactic/ }).click();
   await expect(html).not.toHaveAttribute("data-board");
   await expect.poll(accentOf).toBe(signalAccent);
 });
@@ -376,7 +376,7 @@ test("appearance choices support radio keyboard navigation", async ({ page }) =>
   await expect(system).toHaveAttribute("tabindex", "-1");
 
   const boards = page.getByRole("radiogroup", { name: "Board theme" });
-  const signal = boards.getByRole("radio", { name: /^Signal/ });
+  const signal = boards.getByRole("radio", { name: /^Galactic/ });
   const iris = boards.getByRole("radio", { name: /^Iris/ });
   await signal.focus();
   await page.keyboard.press("ArrowLeft");

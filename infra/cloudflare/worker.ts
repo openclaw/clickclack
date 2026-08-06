@@ -37,6 +37,31 @@ export class ClickClackContainer extends Container {
 
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
+    const requestURL = new URL(request.url);
+    const shouldProxyToUpstream =
+      workerEnv.CLICKCLACK_UPSTREAM_URL &&
+      (requestURL.pathname === "/api" || requestURL.pathname.startsWith("/api/"));
+
+    if (shouldProxyToUpstream) {
+      const incoming = new URL(request.url);
+      const upstream = new URL(workerEnv.CLICKCLACK_UPSTREAM_URL);
+      upstream.pathname = incoming.pathname;
+      upstream.search = incoming.search;
+
+      const headers = new Headers(request.headers);
+      headers.set("X-Forwarded-Host", incoming.host);
+      headers.set("X-Forwarded-Proto", incoming.protocol.replace(":", ""));
+
+      return fetch(
+        new Request(upstream.toString(), {
+          method: request.method,
+          headers,
+          body: request.method === "GET" || request.method === "HEAD" ? null : request.body,
+          redirect: "manual",
+        }),
+      );
+    }
+
     const container = getContainer(workerEnv.CLICKCLACK_CONTAINER, workerEnv.CLICKCLACK_CONTAINER_NAME || "prod");
     return container.fetch(request);
   },

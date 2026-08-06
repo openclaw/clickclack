@@ -1,21 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "clickclack",
-  "account_id": "91b59577e757131d68d55a471fe32aca",
+  "account_id": "fbfc23520c471e4dba1834827a980a14",
   "main": "infra/cloudflare/worker.ts",
   "compatibility_date": "2026-05-17",
-  "workers_dev": true,
+  "workers_dev": false,
   "routes": [
-    { "pattern": "clickclack.chat", "custom_domain": true },
-    { "pattern": "www.clickclack.chat", "custom_domain": true },
-    { "pattern": "app.clickclack.chat", "custom_domain": true }
+    { "pattern": "app.catabolicsolutions.com", "custom_domain": true }
   ],
   "vars": {
-    "CLICKCLACK_PUBLIC_URL": "https://app.clickclack.chat",
+    "CLICKCLACK_PUBLIC_URL": "https://app.catabolicsolutions.com",
+    "CLICKCLACK_UPSTREAM_URL": "http://137.184.144.196.nip.io:8090",
     "CLICKCLACK_CONTAINER_NAME": "prod-20260722-embed-fit",
     "CLICKCLACK_GITHUB_MODERATOR_ORG": "openclaw",
     "CLICKCLACK_UPLOADS": "r2://clickclack-uploads/prod",
-    "CLICKCLACK_R2_ACCOUNT_ID": "91b59577e757131d68d55a471fe32aca"
+    "CLICKCLACK_R2_ACCOUNT_ID": "fbfc23520c471e4dba1834827a980a14"
   },
   "secrets": {
     "required": [

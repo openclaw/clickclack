@@ -19,50 +19,49 @@
   --font-display: "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui,
     sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* "Switchboard" identity — the Signal board (default): porcelain keycap
-     surfaces over a cool aluminum plate by day, the same board anodized
-     navy-black by night, electric cyan signal accent. Alternate boards
-     (data-board below) override this block wholesale. */
-  --rail: light-dark(#e2e5ea, #0b0e14);
-  --bg: light-dark(#edeff2, #0e1219);
-  --panel: light-dark(#f8f9fb, #141926);
-  --panel-2: light-dark(#e8ebef, #1b2232);
-  --panel-3: light-dark(#dde1e7, #232c3f);
+  /* "Marketscape" identity — AGORA deep-space deckplates: near-black navy
+     canvas, gold filigree, cyan telemetry, translucent glass panels. Alternate
+     boards (data-board below) override this block wholesale. */
+  --rail: light-dark(#e8e6df, #04060e);
+  --bg: light-dark(#f2f0ea, #040713);
+  --panel: light-dark(#faf8f1, rgba(10, 16, 32, 0.72));
+  --panel-2: light-dark(#efece2, #0a1122);
+  --panel-3: light-dark(#e5e1d5, #111b33);
   --surface: var(--panel-2);
-  --hover: light-dark(rgba(16, 21, 29, 0.05), rgba(214, 228, 255, 0.045));
-  --hover-strong: light-dark(rgba(16, 21, 29, 0.08), rgba(214, 228, 255, 0.08));
-  --line: light-dark(rgba(16, 21, 29, 0.1), rgba(190, 210, 255, 0.09));
-  --line-strong: light-dark(rgba(16, 21, 29, 0.17), rgba(190, 210, 255, 0.16));
-  --text: light-dark(#232a35, #dbe2ec);
-  --text-strong: light-dark(#10151d, #f4f7fb);
-  --muted: light-dark(#5d6878, #8a95a8);
-  --muted-2: light-dark(#8b94a3, #5c6577);
-  --accent: light-dark(#0080c4, #41c6ff);
-  --accent-hover: light-dark(#006aa6, #6ad3ff);
-  --accent-contrast: light-dark(#ffffff, #061420);
-  --accent-2: light-dark(#f56a1d, #ff9550);
-  --accent-soft: light-dark(rgba(0, 128, 196, 0.13), rgba(65, 198, 255, 0.15));
-  /* Brand identity gradient (home tile, auth mark, empty states). The light
-     cyan stop is held at #0072b0 so white 14px lettering keeps >=4.5:1 across
-     the whole gradient. */
-  --brand-a: light-dark(#0072b0, #41c6ff);
-  --brand-b: light-dark(#2653e8, #6d8bff);
-  --brand-contrast: light-dark(#ffffff, #061420);
-  /* Two-tone agent turn: the preamble (working log) is amber while the turn
+  /* Marketscape brand moments use AGORA's editorial serif display face. */
+  --font-display: "Times New Roman", "Book Antiqua", "Palatino Linotype", Georgia, serif;
+  --hover: light-dark(rgba(30, 26, 16, 0.05), rgba(201, 169, 110, 0.07));
+  --hover-strong: light-dark(rgba(30, 26, 16, 0.09), rgba(201, 169, 110, 0.12));
+  --line: light-dark(rgba(30, 26, 16, 0.1), rgba(201, 169, 110, 0.18));
+  --line-strong: light-dark(rgba(30, 26, 16, 0.17), rgba(201, 169, 110, 0.3));
+  --text: light-dark(#2b2922, #c9d2e4);
+  --text-strong: light-dark(#17150f, #edf0f8);
+  --muted: light-dark(#6d675a, #8a97ab);
+  --muted-2: light-dark(#97907f, #5d6a80);
+  --accent: light-dark(#0a6ea8, #82cdff);
+  --accent-hover: light-dark(#095c8c, #9fdcff);
+  --accent-contrast: light-dark(#ffffff, #04101c);
+  --accent-2: light-dark(#a07c3f, #c9a96e);
+  --accent-soft: light-dark(rgba(10, 110, 168, 0.12), rgba(130, 205, 255, 0.16));
+  /* Brand identity gradient (home tile, auth mark, empty states): gold filigree
+     to cyan telemetry, the Marketscape signature. */
+  --brand-a: light-dark(#a07c3f, #c9a96e);
+  --brand-b: light-dark(#0a6ea8, #82cdff);
+  --brand-contrast: light-dark(#ffffff, #05070f);
+  /* Two-tone agent turn: the preamble (working log) is gold while the turn
      streams and as it collapses to the bar on top, and the final delivered
-     answer owns the indigo. These are semantic constants shared by every
-     board theme so agent turns read the same on all of them. */
-  --activity-accent: light-dark(#c07e0a, #e8b23e);
-  --activity-accent-soft: light-dark(rgba(192, 126, 10, 0.09), rgba(232, 178, 62, 0.1));
-  /* Delivery accent: the final answer's indigo. This is the hero color of the
-     turn; the preamble's amber deliberately recedes beneath it. Indigo keeps
-     clear daylight from the interaction accent on every board. */
-  --delivery-accent: light-dark(#5558d9, #8b8df2);
-  --delivery-accent-soft: light-dark(rgba(85, 88, 217, 0.06), rgba(139, 141, 242, 0.08));
-  /* Tool-call rows inside the preamble: a light indigo wash, distinct from the
+     answer owns the cyan. Marketscape telemetry signature — gold filigree
+     working log, cyan delivery. */
+  --activity-accent: light-dark(#a07c3f, #c9a96e);
+  --activity-accent-soft: light-dark(rgba(160, 124, 63, 0.1), rgba(201, 169, 110, 0.12));
+  /* Delivery accent: the final answer's cyan. This is the hero color of the
+     turn; the gold preamble deliberately recedes beneath it. */
+  --delivery-accent: light-dark(#0a6ea8, #82cdff);
+  --delivery-accent-soft: light-dark(rgba(10, 110, 168, 0.07), rgba(130, 205, 255, 0.1));
+  /* Tool-call rows inside the preamble: a cyan wash, distinct from the
      preamble background without shouting. */
-  --tool-call-bg: light-dark(rgba(85, 88, 217, 0.09), rgba(139, 141, 242, 0.12));
-  --tool-call-bg-hover: light-dark(rgba(85, 88, 217, 0.14), rgba(139, 141, 242, 0.18));
+  --tool-call-bg: light-dark(rgba(10, 110, 168, 0.09), rgba(130, 205, 255, 0.12));
+  --tool-call-bg-hover: light-dark(rgba(10, 110, 168, 0.13), rgba(130, 205, 255, 0.17));
   /* Derived from the live accent so boards and modes inherit it. */
   --accent-glow:
     0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent),
@@ -70,9 +69,9 @@
   --success: light-dark(#14876a, #30c48d);
   --warn: #e8a33e;
   --danger: light-dark(#d13438, #ff6d68);
-  --scrollbar: light-dark(rgba(16, 21, 29, 0.18), rgba(190, 210, 255, 0.12));
-  --scrollbar-hover: light-dark(rgba(16, 21, 29, 0.3), rgba(190, 210, 255, 0.22));
-  --shadow: 0 24px 60px -22px light-dark(rgba(16, 21, 29, 0.3), rgba(2, 5, 10, 0.7));
+  --scrollbar: light-dark(rgba(26, 34, 64, 0.2), rgba(164, 192, 255, 0.18));
+  --scrollbar-hover: light-dark(rgba(26, 34, 64, 0.32), rgba(164, 192, 255, 0.3));
+  --shadow: 0 24px 60px -22px light-dark(rgba(24, 32, 66, 0.28), rgba(2, 6, 16, 0.78));
   /* Tooltips are inverse ink chips on both schemes. */
   --tooltip-bg: light-dark(#10151d, #2b3448);
   --tooltip-fg: light-dark(#f0f4fa, #f4f7fb);
@@ -192,31 +191,65 @@
   --scrollbar-hover: light-dark(rgba(18, 19, 39, 0.3), rgba(210, 205, 255, 0.22));
 }
 
-/* Signal spelled out explicitly (duplicating the :root board tokens above) so
-   a scoped element — the Signal swatch in Appearance settings — can preview
-   the default board even while another board is active on the root. */
+/* Marketscape spelled out explicitly (duplicating the :root board tokens above)
+   so a scoped element — the Marketscape swatch in Appearance settings — can
+   preview the default board even while another board is active on the root. */
+[data-board="agora"] {
+  --rail: light-dark(#e8e6df, #04060e);
+  --bg: light-dark(#f2f0ea, #040713);
+  --panel: light-dark(#faf8f1, rgba(10, 16, 32, 0.72));
+  --panel-2: light-dark(#efece2, #0a1122);
+  --panel-3: light-dark(#e5e1d5, #111b33);
+  --font-display: "Times New Roman", "Book Antiqua", "Palatino Linotype", Georgia, serif;
+  --hover: light-dark(rgba(30, 26, 16, 0.05), rgba(201, 169, 110, 0.07));
+  --hover-strong: light-dark(rgba(30, 26, 16, 0.09), rgba(201, 169, 110, 0.12));
+  --line: light-dark(rgba(30, 26, 16, 0.1), rgba(201, 169, 110, 0.18));
+  --line-strong: light-dark(rgba(30, 26, 16, 0.17), rgba(201, 169, 110, 0.3));
+  --text: light-dark(#2b2922, #c9d2e4);
+  --text-strong: light-dark(#17150f, #edf0f8);
+  --muted: light-dark(#6d675a, #8a97ab);
+  --muted-2: light-dark(#97907f, #5d6a80);
+  --accent: light-dark(#0a6ea8, #82cdff);
+  --accent-hover: light-dark(#095c8c, #9fdcff);
+  --accent-contrast: light-dark(#ffffff, #04101c);
+  --accent-2: light-dark(#a07c3f, #c9a96e);
+  --accent-soft: light-dark(rgba(10, 110, 168, 0.12), rgba(130, 205, 255, 0.16));
+  --brand-a: light-dark(#a07c3f, #c9a96e);
+  --brand-b: light-dark(#0a6ea8, #82cdff);
+  --brand-contrast: light-dark(#ffffff, #05070f);
+  /* Marketscape agent-turn semantics: gold working log, cyan delivery. */
+  --activity-accent: light-dark(#a07c3f, #c9a96e);
+  --activity-accent-soft: light-dark(rgba(160, 124, 63, 0.1), rgba(201, 169, 110, 0.12));
+  --delivery-accent: light-dark(#0a6ea8, #82cdff);
+  --delivery-accent-soft: light-dark(rgba(10, 110, 168, 0.07), rgba(130, 205, 255, 0.1));
+  --tool-call-bg: light-dark(rgba(10, 110, 168, 0.09), rgba(130, 205, 255, 0.12));
+  --tool-call-bg-hover: light-dark(rgba(10, 110, 168, 0.13), rgba(130, 205, 255, 0.17));
+}
+
+/* Galactic spelled out explicitly as an alternate board so a scoped element —
+   the Galactic swatch in Appearance settings — can preview it. */
 [data-board="signal"] {
-  --rail: light-dark(#e2e5ea, #0b0e14);
-  --bg: light-dark(#edeff2, #0e1219);
-  --panel: light-dark(#f8f9fb, #141926);
-  --panel-2: light-dark(#e8ebef, #1b2232);
-  --panel-3: light-dark(#dde1e7, #232c3f);
-  --hover: light-dark(rgba(16, 21, 29, 0.05), rgba(214, 228, 255, 0.045));
-  --hover-strong: light-dark(rgba(16, 21, 29, 0.08), rgba(214, 228, 255, 0.08));
-  --line: light-dark(rgba(16, 21, 29, 0.1), rgba(190, 210, 255, 0.09));
-  --line-strong: light-dark(rgba(16, 21, 29, 0.17), rgba(190, 210, 255, 0.16));
-  --text: light-dark(#232a35, #dbe2ec);
-  --text-strong: light-dark(#10151d, #f4f7fb);
-  --muted: light-dark(#5d6878, #8a95a8);
-  --muted-2: light-dark(#8b94a3, #5c6577);
-  --accent: light-dark(#0080c4, #41c6ff);
-  --accent-hover: light-dark(#006aa6, #6ad3ff);
-  --accent-contrast: light-dark(#ffffff, #061420);
-  --accent-2: light-dark(#f56a1d, #ff9550);
-  --accent-soft: light-dark(rgba(0, 128, 196, 0.13), rgba(65, 198, 255, 0.15));
-  --brand-a: light-dark(#0072b0, #41c6ff);
-  --brand-b: light-dark(#2653e8, #6d8bff);
-  --brand-contrast: light-dark(#ffffff, #061420);
+  --rail: light-dark(#dfe3f7, #070b16);
+  --bg: light-dark(#ebefff, #0a0f1d);
+  --panel: light-dark(#f7f8ff, #121a2c);
+  --panel-2: light-dark(#e7ebfb, #1a2440);
+  --panel-3: light-dark(#dce2f7, #233056);
+  --hover: light-dark(rgba(26, 34, 64, 0.055), rgba(198, 216, 255, 0.07));
+  --hover-strong: light-dark(rgba(26, 34, 64, 0.09), rgba(198, 216, 255, 0.12));
+  --line: light-dark(rgba(26, 34, 64, 0.12), rgba(164, 192, 255, 0.14));
+  --line-strong: light-dark(rgba(26, 34, 64, 0.2), rgba(164, 192, 255, 0.22));
+  --text: light-dark(#26315a, #dbe4ff);
+  --text-strong: light-dark(#121a38, #f4f7ff);
+  --muted: light-dark(#5f6e9a, #90a2d4);
+  --muted-2: light-dark(#8a97bd, #60729f);
+  --accent: light-dark(#5a40f8, #8a75ff);
+  --accent-hover: light-dark(#4931e8, #a293ff);
+  --accent-contrast: light-dark(#ffffff, #0f0d2a);
+  --accent-2: light-dark(#00a7de, #56d6ff);
+  --accent-soft: light-dark(rgba(90, 64, 248, 0.14), rgba(138, 117, 255, 0.2));
+  --brand-a: light-dark(#5a40f8, #8a75ff);
+  --brand-b: light-dark(#2e73ff, #4fb9ff);
+  --brand-contrast: light-dark(#ffffff, #100f2c);
 }
 
 * {
@@ -247,6 +280,30 @@ body {
     var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Marketscape: AGORA deep-space canvas — layered nebula glows (cyan / rose /
+   gold) over near-black by night, soft parchment by day. Default board (no
+   data-board attribute) and the explicit agora board share this canvas. */
+:root:not([data-board]) body,
+:root[data-board="agora"] body {
+  background:
+    radial-gradient(
+      circle at 18% 14%,
+      light-dark(rgba(120, 156, 255, 0.1), rgba(120, 156, 255, 0.12)),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at 78% 22%,
+      light-dark(rgba(255, 166, 201, 0.06), rgba(255, 166, 201, 0.1)),
+      transparent 20%
+    ),
+    radial-gradient(
+      circle at 55% 82%,
+      light-dark(rgba(255, 210, 126, 0.07), rgba(255, 210, 126, 0.08)),
+      transparent 26%
+    ),
+    var(--bg);
 }
 
 html[data-display-mode="standalone"] body {

@@ -9,7 +9,7 @@ import { getEmbedHostThemeMode } from "./embed-theme";
 import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
 
 export type ColorMode = "light" | "dark" | "system";
-export type BoardTheme = "signal" | "ember" | "moss" | "iris";
+export type BoardTheme = "agora" | "signal" | "ember" | "moss" | "iris";
 export type MessageLayout = "standard" | "outlined";
 export type Density = "comfortable" | "compact";
 
@@ -20,7 +20,7 @@ export const DENSITY_STORAGE_KEY = "clickclack:density:v1";
 const APPEARANCE_CACHE_USER_STORAGE_KEY = "clickclack:appearance-user:v1";
 
 export const DEFAULT_COLOR_MODE: ColorMode = "system";
-export const DEFAULT_BOARD_THEME: BoardTheme = "signal";
+export const DEFAULT_BOARD_THEME: BoardTheme = "agora";
 export const DEFAULT_MESSAGE_LAYOUT: MessageLayout = "standard";
 export const DEFAULT_DENSITY: Density = "comfortable";
 
@@ -31,7 +31,8 @@ export const COLOR_MODES: { id: ColorMode; label: string }[] = [
 ];
 
 export const BOARD_THEMES: { id: BoardTheme; label: string; blurb: string }[] = [
-  { id: "signal", label: "Signal", blurb: "Porcelain board, electric cyan" },
+  { id: "agora", label: "Marketscape", blurb: "Deep-space glass, gold deckplates, cyan telemetry" },
+  { id: "signal", label: "Galactic", blurb: "Deep-space indigo, neon telemetry" },
   { id: "ember", label: "Ember", blurb: "Warm paper, ember coral" },
   { id: "moss", label: "Moss", blurb: "Sage plate, verdant green" },
   { id: "iris", label: "Iris", blurb: "Violet plate, twilight iris" },
@@ -249,7 +250,7 @@ export function serializeAppearancePreferences(): AppearancePreferences {
   const density = loadDensity();
   return {
     color_mode: colorMode === "system" ? "" : colorMode,
-    board_theme: boardTheme === "signal" ? "" : boardTheme,
+    board_theme: boardTheme === DEFAULT_BOARD_THEME ? "" : boardTheme,
     message_layout: messageLayout === "standard" ? "" : messageLayout,
     density: density === "comfortable" ? "" : density,
   };

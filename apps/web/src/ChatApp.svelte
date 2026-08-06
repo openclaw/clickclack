@@ -4003,12 +4003,12 @@
         <div class="mark">cc</div>
         <div class="brand-text">
           <strong>ClickClack</strong>
-          <span>OpenClaw workspace chat</span>
+          <span>Catabolic workspace chat</span>
         </div>
       </div>
       <div class="auth-copy">
         <h1>Welcome.</h1>
-        <p>Sign in with GitHub to join the guest room.</p>
+        <p>Sign in with GitHub to open your workspace and bots.</p>
       </div>
       <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

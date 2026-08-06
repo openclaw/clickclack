@@ -26,7 +26,7 @@ export type AppearancePreferences = {
 
 export type AppearancePreferencesPatch = {
   color_mode?: "" | "system" | "light" | "dark";
-  board_theme?: "" | "signal" | "ember" | "moss" | "iris";
+  board_theme?: "" | "agora" | "signal" | "ember" | "moss" | "iris";
   message_layout?: "" | "standard" | "outlined";
   density?: "" | "comfortable" | "compact";
 };

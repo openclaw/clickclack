@@ -156,3 +156,24 @@ A **standalone companion application** (own app, own URL, own deploy) where:
   LOGOS-C realtime) were running at handoff time — verify their work landed
   before building on top of it (`git log --oneline -10`, check
   `apps/cognition/src/index.ts` for /respond).
+
+## 6. REALTIME SEAM (LANDED — LOGOS-C)
+
+`apps/logos/src/lib/clickclack/chat.ts` now opens a WebSocket instead of
+10s polling:
+- **WS path:** `/api/realtime/ws?workspace_id=<id>[&after_cursor=<cursor>]`
+  (same-origin cookie auth; works through the Cloudflare worker /api proxy)
+- **Event shape:** `{id, cursor, type, workspace_id, channel_id?, seq?,
+  created_at, payload}` — handle `type: "message.created"` by REST-fetching
+  the new message (`GET /api/channels/{id}/messages?after_seq=...`)
+- **Bootstrap:** tail cursor via `GET /api/realtime/events?workspace_id=...
+  &limit=1&include_tail=true` to skip historical events
+- **Reconnect:** 1s → 2s → fall back to 10s polling + WS retry every 60s;
+  `chatState.realtime` reflects `"ws" | "poll"`
+- **sendMessage:** still POST /api/channels/{id}/messages (no WS send path)
+- **TODO gaps for the companion build:** telemetry.ts hardcodes
+  `pipeline: "poll"` (should read `$chat.realtime`); worker websocket
+  Upgrade not explicitly verified; live WS test needs a browser session.
+- Reference impls: `apps/web/src/lib/realtime.svelte.ts` (cookie WS URL +
+  tail bootstrap), `packages/sdk-ts` `ClickClackClient.events.subscribe()`
+  (bearer-token variant: `clickclack.bearer.<token>` sub-protocol).

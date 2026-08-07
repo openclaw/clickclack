@@ -161,3 +161,9 @@ Copilot auth (device code) — this is the designated frontier lane per Conor.
 | Container + droplet | ✅ | wrangler v5791826f, droplet binary v4, cognition v2 |
 
 **Known n/a:** logprobs omitted (DeepSeek API doesn't return them — never faked).
+
+## 8. NEXT BUILD BLOCK (2026-08-07)
+
+- **`PHASE-B-BLOCK.md`** (repo root, commit c7b096a) — paste-ready build block for
+  GitHub Copilot / VS Code: verified deployed state, Phase B/C work, known gaps,
+  verify-before-shipping, deploy steps. Start there before any LOGOS work.

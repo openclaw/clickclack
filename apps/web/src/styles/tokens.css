@@ -1,98 +1,85 @@
-/* COGNITIVE OS — Design Token System
-   Strict black + off-white monochrome operator palette.
-   0px border-radius, no gradients, no decorative shadows. */
+/* PROJECT LOGOS — Design Token System v2
+   Upgraded-app chassis spec (LOGOS_SPEC §8):
+   pure black bg, off-white type, charcoal borders, strict 0px radius,
+   functional 2px accent markers only. Dual-font: Inter (body) + JetBrains Mono (telemetry). */
 
 :root {
-  /* ---------- Monochrome Palette ---------- */
-  --cog-black: #000000;
-  --cog-void: #0a0a0a;
-  --cog-steel: #111111;
-  --cog-plate: #1a1a1a;
-  --cog-deck: #222222;
-  --cog-line: #333333;
-  --cog-rule: #444444;
-  --cog-fog: #666666;
-  --cog-slate: #888888;
-  --cog-cloud: #bbbbbb;
-  --cog-mist: #d5d5d5;
-  --cog-chalk: #ebebeb;
-  --cog-ash: #f5f5f5;
-  --cog-snow: #fafafa;
-  --cog-white: #ffffff;
+  /* ---------- Monochromatic Precision Palette (§8.1) ---------- */
+  --cog-bg: #000000;          /* pure black background */
+  --cog-fg: #F4F4F0;          /* off-white typography */
+  --cog-line: #1A1A1A;        /* structural charcoal borders */
+  --cog-void: #050505;
+  --cog-steel: #0d0d0d;
+  --cog-plate: #121212;
+  --cog-deck: #161616;
+  --cog-rule: #2a2a2a;
+  --cog-fog: #555555;
+  --cog-slate: #777777;
+  --cog-cloud: #a0a0a0;
+  --cog-mist: #c8c8c4;
+  --cog-chalk: #e0e0dc;
+  --cog-ash: #eaeae6;
 
-  /* ---------- Intent Color Bands (functional, high-contrast) ---------- */
-  --intent-ask: #0066cc;
-  --intent-command: #cc3300;
-  --intent-reflect: #8855bb;
-  --intent-draft: #228855;
-  --intent-clarify: #cc8800;
-  --intent-explore: #2288aa;
+  /* ---------- Intent Edge Bands (§8.4 — exact) ---------- */
+  --intent-ask: #D1D1D1;      /* neutral light gray */
+  --intent-command: #FFB000;  /* high-contrast amber */
+  --intent-reflect: #4A5568;  /* deep slate */
+  --intent-draft: #00FF66;    /* phosphor green */
+  --intent-clarify: #FF0055;  /* signal magenta */
+  --intent-explore: #0088FF;  /* cobalt blue */
   --intent-default: var(--cog-fog);
 
-  /* ---------- Status ---------- */
-  --status-success: #22aa55;
-  --status-warn: #cc8800;
-  --status-danger: #cc3333;
-  --status-pending: var(--cog-cloud);
-  --status-executing: var(--cog-fog);
+  /* ---------- Functional Accent Markers (2px only) ---------- */
+  --accent-verified: #00FF66; /* phosphor green — verified commands */
+  --accent-intent: #FFB000;   /* high-contrast amber — intent bounds */
+  --accent-thread: #0088FF;   /* cobalt cyan — thread routing */
+  --accent-exec: #F4F4F0;
 
   /* ---------- Semantic Aliases ---------- */
   --rail: var(--cog-void);
-  --bg: var(--cog-black);
+  --bg: var(--cog-bg);
   --panel: var(--cog-steel);
   --panel-2: var(--cog-plate);
   --panel-3: var(--cog-deck);
   --surface: var(--panel-2);
-  --hover: rgba(255, 255, 255, 0.05);
-  --hover-strong: rgba(255, 255, 255, 0.09);
+  --hover: rgba(244, 244, 240, 0.05);
+  --hover-strong: rgba(244, 244, 240, 0.09);
   --line: var(--cog-line);
   --line-strong: var(--cog-rule);
   --text: var(--cog-cloud);
-  --text-strong: var(--cog-snow);
+  --text-strong: var(--cog-fg);
   --muted: var(--cog-fog);
   --muted-2: var(--cog-slate);
-  --accent: var(--cog-white);
+  --accent: var(--cog-fg);
   --accent-hover: var(--cog-ash);
-  --accent-contrast: var(--cog-black);
+  --accent-contrast: var(--cog-bg);
   --accent-2: var(--cog-fog);
-  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-soft: rgba(244, 244, 240, 0.08);
 
-  /* Agent activity tones (monochrome variants) */
-  --activity-accent: var(--cog-fog);
-  --activity-accent-soft: rgba(255, 255, 255, 0.06);
-  --delivery-accent: var(--cog-white);
-  --delivery-accent-soft: rgba(255, 255, 255, 0.09);
-  --tool-call-bg: rgba(255, 255, 255, 0.06);
-  --tool-call-bg-hover: rgba(255, 255, 255, 0.1);
-
-  /* Brand identity: pure monochrome */
-  --brand-a: var(--cog-white);
-  --brand-b: var(--cog-slate);
-  --brand-contrast: var(--cog-black);
-
-  /* ---------- Geometry ---------- */
+  /* ---------- Geometry (hard, §8.2) ---------- */
   --radius-sm: 0px;
   --radius: 0px;
   --radius-lg: 0px;
   --radius-xl: 0px;
 
-  /* ---------- Typography ---------- */
-  --font-display: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* ---------- Dual-Font System (§8.2) ---------- */
+  --font-body: "Inter Variable", "Inter", "Neue Haas Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  /* ---------- Shadows: NONE (0px radius, no decorative shadows) ---------- */
+  /* ---------- Motion (§8.6 — rigid, no easing) ---------- */
+  --motion-fast: 100ms linear;
+  --motion-med: 150ms linear;
+  --motion-step: steps(2, jump-none);
+
+  /* ---------- Shadows: NONE ---------- */
   --accent-glow: none;
   --key-edge: none;
   --key-edge-pressed: none;
   --shadow: none;
 
   /* ---------- Scrollbar ---------- */
-  --scrollbar: rgba(255, 255, 255, 0.12);
-  --scrollbar-hover: rgba(255, 255, 255, 0.24);
-
-  /* ---------- Tooltip ---------- */
-  --tooltip-bg: var(--cog-plate);
-  --tooltip-fg: var(--cog-snow);
+  --scrollbar: rgba(244, 244, 240, 0.12);
+  --scrollbar-hover: rgba(244, 244, 240, 0.24);
 
   /* ---------- Safe Area ---------- */
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -102,18 +89,16 @@
 
   /* ---------- System ---------- */
   color-scheme: dark;
-  font-family: "Geist Variable", "Inter", "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "ss01", "cv11";
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
 }
 
-/* Light mode maps to the same operator palette but flipped ink values.
-   Operator dark is the default; the system light mode is monochrome bright. */
+/* Light mode: monochrome bright, same functional accents. */
 :root[data-color-mode="light"] {
   color-scheme: light;
   --rail: var(--cog-chalk);
-  --bg: var(--cog-white);
+  --bg: var(--cog-fg);
   --panel: var(--cog-ash);
   --panel-2: var(--cog-chalk);
   --panel-3: var(--cog-mist);
@@ -122,25 +107,14 @@
   --line: var(--cog-mist);
   --line-strong: var(--cog-cloud);
   --text: var(--cog-slate);
-  --text-strong: var(--cog-black);
+  --text-strong: var(--cog-bg);
   --muted: var(--cog-fog);
   --muted-2: var(--cog-slate);
-  --accent: var(--cog-black);
+  --accent: var(--cog-bg);
   --accent-hover: var(--cog-steel);
-  --accent-contrast: var(--cog-white);
+  --accent-contrast: var(--cog-fg);
   --accent-2: var(--cog-slate);
   --accent-soft: rgba(0, 0, 0, 0.06);
-  --activity-accent: var(--cog-slate);
-  --activity-accent-soft: rgba(0, 0, 0, 0.04);
-  --delivery-accent: var(--cog-black);
-  --delivery-accent-soft: rgba(0, 0, 0, 0.07);
-  --tool-call-bg: rgba(0, 0, 0, 0.04);
-  --tool-call-bg-hover: rgba(0, 0, 0, 0.08);
-  --brand-a: var(--cog-black);
-  --brand-b: var(--cog-slate);
-  --brand-contrast: var(--cog-white);
   --scrollbar: rgba(0, 0, 0, 0.15);
   --scrollbar-hover: rgba(0, 0, 0, 0.28);
-  --tooltip-bg: var(--cog-deck);
-  --tooltip-fg: var(--cog-snow);
 }

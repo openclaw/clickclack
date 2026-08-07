@@ -148,13 +148,16 @@ export async function transform(
 }
 
 /** POST /threads/cluster — semantic thread clustering. */
-export async function cluster(contents: string[]): Promise<ClusterResult | null> {
+export async function cluster(items: Array<{ id: string; content: string }>): Promise<ClusterResult | null> {
   if (!COGNITION_URL) return null;
   try {
     const res = await fetch(`${COGNITION_URL}/threads/cluster`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents }),
+      body: JSON.stringify({
+        message_ids: items.map(i => i.id),
+        contents: items.map(i => i.content),
+      }),
     });
     if (!res.ok) {
       console.warn("[cognition] cluster returned", res.status);

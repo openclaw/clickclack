@@ -81,10 +81,10 @@ export async function runClustering(
       const chunk = items.slice(i, i + CHUNK_SIZE);
 
       // Build contents array mapped to indices for assignment remapping
-      const contents = chunk.map(item => item.content);
+      const chunkItems = chunk.map(item => ({ id: item.id, content: item.content }));
       const idMap = chunk.map(item => item.id);
 
-      const result = await cluster(contents);
+      const result = await cluster(chunkItems);
       if (!result) continue;
 
       // Remap cluster IDs to avoid collisions across chunks
@@ -97,26 +97,16 @@ export async function runClustering(
         allClusters.set(newId, {
           id: newId,
           label: newLabel,
-          message_ids: cl.message_ids.map((mid: string) => {
-            // message_ids in the response may reference original message IDs
-            // Try to match via index or direct ID
-            const idx = parseInt(mid, 10);
-            if (!isNaN(idx) && idx >= 0 && idx < idMap.length) {
-              return idMap[idx];
-            }
-            return mid;
-          }),
+          // Server returns real message IDs now (message_ids echoed from request)
+          message_ids: cl.message_ids.map((mid: string) => (idMap.includes(mid) ? mid : mid)),
         });
       }
 
       for (const assignment of result.assignments) {
         const originalClusterId = assignment.cluster_id;
         const remappedClusterId = idRemap.get(originalClusterId) ?? originalClusterId;
-        // message_id from server may be an index or a real id
-        const msgId = assignment.message_id;
-        const idx = parseInt(msgId, 10);
-        const realMsgId = (!isNaN(idx) && idx >= 0 && idx < idMap.length) ? idMap[idx] : msgId;
-        allAssignments.set(realMsgId, remappedClusterId);
+        // Server echoes real message IDs (request message_ids)
+        allAssignments.set(assignment.message_id, remappedClusterId);
       }
     }
 

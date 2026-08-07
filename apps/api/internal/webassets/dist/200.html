@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="clickclack-desktop-titlebar" content="1" />
+    <meta name="theme-color" content="#0a1030" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ClickClack" />
+    <meta name="application-name" content="ClickClack" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>ClickClack</title>
     <script>
       // Apply stored appearance prefs before first paint so forced color,
@@ -85,7 +92,7 @@
           document.documentElement.setAttribute("data-color-mode", ccMode);
         }
         var ccBoard = localStorage.getItem("clickclack:board-theme:v1");
-        if (ccBoard === "ember" || ccBoard === "moss" || ccBoard === "iris") {
+        if (ccBoard === "signal" || ccBoard === "ember" || ccBoard === "moss" || ccBoard === "iris") {
           document.documentElement.setAttribute("data-board", ccBoard);
         }
         var ccMessageLayout = localStorage.getItem("clickclack:message-layout:v1");
@@ -103,15 +110,15 @@
 		<link href="/_app/immutable/chunks/-xOSXMZB.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DK3Fl9T5.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/Dt-HX3Vu.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.CwYEP4Yc.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.CuB_WY6C.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="/_app/immutable/nodes/0.CxiTm_8M.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.B9rYAEnX.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DhjMpuoL.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/UXt3B2YI.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/BFcAbcNt.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BEqsQr3A.js" rel="modulepreload">
 
-		<link href="/_app/immutable/assets/0.DS0KV7Iu.css" rel="stylesheet">
+		<link href="/_app/immutable/assets/0.D0Teg1qx.css" rel="stylesheet">
   </head>
   <body>
     <div>
@@ -125,10 +132,22 @@
 
 					Promise.all([
 						import("/_app/immutable/entry/start.CfWZRA5o.js"),
-						import("/_app/immutable/entry/app.CwYEP4Yc.js")
+						import("/_app/immutable/entry/app.CuB_WY6C.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
+
+					if ('serviceWorker' in navigator) {
+						const script_url = '/service-worker.js';
+						const policy = globalThis?.window?.trustedTypes?.createPolicy(
+							'sveltekit-trusted-url',
+							{ createScriptURL(url) { return url; } }
+						);
+						const sanitised = policy?.createScriptURL(script_url) ?? script_url;
+						addEventListener('load', function () {
+							navigator.serviceWorker.register(sanitised);
+						});
+					}
 				}
 			</script>
 		</div>

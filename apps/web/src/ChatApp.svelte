@@ -50,24 +50,11 @@
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
-  import SemanticMargin from "./components/SemanticMargin.svelte";
-  import CommandPalette from "./components/CommandPalette.svelte";
-  import SemanticThreadPane from "./components/cognition/SemanticThreadPane.svelte";
-  import {
-    activeMessageId,
-    commandPaletteOpen,
-    currentPersona,
-    inspectMode,
-    semanticPaneOpen,
-    telemetryOpen,
-    type Persona,
-  } from "./lib/ui";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
-  import { get } from "svelte/store";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
@@ -300,9 +287,6 @@
     { hideCommentary, hideToolCalls },
     activityClock,
   );
-
-  // Count for SemanticMargin line numbers
-  $: messageCount = visibleMessages.length;
 
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
@@ -3912,93 +3896,9 @@
     }
   }
 
-
-  // ============================================================
-  // PROJECT LOGOS — Keyboard-First Navigation (§8.6)
-  // ============================================================
-
-  // Alt/Option held -> inspectMode
-  function handleAltKey(event: KeyboardEvent) {
-    if (event.key === "Alt" || event.key === "Meta") {
-      const next = event.type === "keydown";
-      inspectMode.set(next);
-      if (next) {
-        try { document.documentElement.setAttribute("data-inspect-mode", "on"); } catch { /* noop */ }
-      } else {
-        try { document.documentElement.removeAttribute("data-inspect-mode"); } catch { /* noop */ }
-      }
-    }
-  }
-
-  // Cmd+K or / opens command palette (not when typing / in composer)
-  function handleCommandPaletteTrigger(event: KeyboardEvent) {
-    if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      commandPaletteOpen.update((v) => !v);
-      return;
-    }
-    if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
-      const active = document.activeElement;
-      const inInput = active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLElement && active.isContentEditable);
-      if (!inInput && !isModalOpen() && !mobileNavOpen) {
-        event.preventDefault();
-        commandPaletteOpen.set(true);
-      }
-    }
-  }
-
-  // j/k or arrow up/down for message navigation
-  function handleMessageNavigation(event: KeyboardEvent) {
-    if (get(commandPaletteOpen)) return;
-    const active = document.activeElement;
-    const inInput = active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement ||
-      (active instanceof HTMLElement && active.isContentEditable);
-    if (inInput || isModalOpen() || mobileNavOpen) return;
-
-    const currentId = get(activeMessageId);
-
-    if ((event.key === "j" && !event.metaKey && !event.ctrlKey) || event.key === "ArrowDown") {
-      event.preventDefault();
-      // Navigate to next message — Track B handles the DOM scroll
-      const current = $activeMessageId;
-      const allRows = document.querySelectorAll<HTMLElement>('[data-message-id]');
-      if (allRows.length === 0) return;
-      const idx = currentId ? Array.from(allRows).findIndex((el) => el.dataset.messageId === currentId) : -1;
-      const next = allRows[Math.min(idx + 1, allRows.length - 1)];
-      if (next) {
-        activeMessageId.set(next.dataset.messageId || null);
-        next.focus({ preventScroll: false });
-      }
-    } else if ((event.key === "k" && !event.metaKey && !event.ctrlKey) || event.key === "ArrowUp") {
-      event.preventDefault();
-      const prevId = get(activeMessageId);
-      const allRows = document.querySelectorAll<HTMLElement>('[data-message-id]');
-      if (allRows.length === 0) return;
-      const idx = prevId ? Array.from(allRows).findIndex((el) => el.dataset.messageId === prevId) : allRows.length;
-      const prev = allRows[Math.max(idx - 1, 0)];
-      if (prev) {
-        activeMessageId.set(prev.dataset.messageId || null);
-        prev.focus({ preventScroll: false });
-      }
-    }
-  }
-
   function handleWindowKeydown(event: KeyboardEvent) {
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
-
-    // Alt/Option tracking
-    handleAltKey(event);
-
-    // Command palette triggers
-    handleCommandPaletteTrigger(event);
-
-    // Message navigation (j/k, arrows)
-    handleMessageNavigation(event);
-
     if (event.key === "Escape") {
       if (
         event.target instanceof Element &&
@@ -4007,11 +3907,6 @@
         return;
       }
       if (selectedImage) return;
-      if (get(commandPaletteOpen)) {
-        event.preventDefault();
-        commandPaletteOpen.set(false);
-        return;
-      }
       if (isModalOpen()) {
         closeModal();
       } else if (mobileNavOpen) {
@@ -4096,7 +3991,7 @@
   <meta name="color-scheme" content="light dark" />
 </svelte:head>
 
-<svelte:window onkeydowncapture={handleWindowKeydown} onkeyupcapture={handleAltKey} onpointerdowncapture={rememberTypeToFocusPointer} />
+<svelte:window onkeydowncapture={handleWindowKeydown} onpointerdowncapture={rememberTypeToFocusPointer} />
 
 {#if authRequired}
   {#if integratedTitleBar && desktop}
@@ -4131,11 +4026,9 @@
   class:desktop-shell={integratedTitleBar}
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
-  class:thread-open={sidePanelOpen && !searchPaneVisible && !$semanticPaneOpen}
-  class:semantic-open={$semanticPaneOpen}
+  class:thread-open={sidePanelOpen && !searchPaneVisible}
   class:search-open={searchPaneVisible}
   class:artifact-open={selectedArtifact !== null}
-  class:telemetry-open={$telemetryOpen}
   data-connected={connected}
   data-app-ready={connected && status === "ready"}
 >
@@ -4231,7 +4124,6 @@
   />
 
   <main class="timeline" inert={mobileNavOpen}>
-    <SemanticMargin {messageCount} />
     <!-- The integrated title bar owns the conversation title, so desktop drops
          this header row entirely. -->
     {#if !integratedTitleBar}
@@ -4249,8 +4141,6 @@
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
-        semanticPaneOpen={$semanticPaneOpen}
-        onToggleSemanticPane={() => semanticPaneOpen.update(v => !v)}
         onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
         onPinnedItems={togglePinnedPanel}
       />
@@ -4310,11 +4200,6 @@
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
       onDeleteMessage={requestMessageDelete}
-      onSendMessage={(content) => {
-        // Send clarification as a channel/DM message
-        appendToComposer(content);
-        void sendMessage();
-      }}
       {editController}
       editScope={activeConversationKey}
       onMessageEdited={applyEditedMessage}
@@ -4368,10 +4253,8 @@
       </label>
     {/if}
 
-    <div class="composer-wrapper">
-      <CommandPalette />
-      <ChatComposer
-        value={messageBody}
+    <ChatComposer
+      value={messageBody}
       placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${channelDisplayTitle(selectedChannel)}` : "Pick a channel to start"}
       ariaLabel="Message body"
       submitLabel="Send"
@@ -4406,10 +4289,9 @@
       onPickGif={pickGif}
     />
     </div>
-    </div>
   </main>
 
-  {#if selectedArtifact && !$semanticPaneOpen}
+  {#if selectedArtifact}
     <aside
       bind:this={artifactViewerElement}
       class="artifact-viewer open"
@@ -4422,17 +4304,7 @@
       <ArtifactViewer upload={selectedArtifact} onClose={closeArtifactViewer} />
     </aside>
   {/if}
-  {#if $semanticPaneOpen}
-    <SemanticThreadPane
-      messages={visibleMessages}
-      onClose={() => semanticPaneOpen.set(false)}
-      onScrollToMessage={(messageId) => {
-        messageList?.scrollToMessage(messageId);
-      }}
-    />
-  {/if}
-
-  {#if searchPaneVisible && searchSession && !$semanticPaneOpen}
+  {#if searchPaneVisible && searchSession}
     <SearchResults
       session={searchSession}
       covered={selectedArtifact !== null}
@@ -4445,10 +4317,10 @@
   {:else}
   <aside
     class="thread"
-    class:open={sidePanelOpen && !$semanticPaneOpen}
-    class:covered={selectedArtifact !== null || $semanticPaneOpen}
-    inert={mobileNavOpen || selectedArtifact !== null || $semanticPaneOpen}
-    aria-hidden={selectedArtifact || $semanticPaneOpen ? "true" : undefined}
+    class:open={sidePanelOpen}
+    class:covered={selectedArtifact !== null}
+    inert={mobileNavOpen || selectedArtifact !== null}
+    aria-hidden={selectedArtifact ? "true" : undefined}
     aria-label={pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
   >
     {#if pinnedPanelOpen}
@@ -4529,14 +4401,6 @@
     {/if}
   </aside>
   {/if}
-
-  <!-- Telemetry blade rail (§8.3) -->
-  <div class="telemetry-rail" aria-label="Telemetry rail" role="complementary">
-    <div class="telemetry-rail__indicator" title="Inspect mode">INS</div>
-    <div class="telemetry-rail__indicator" title="Active persona">PER</div>
-    <div class="telemetry-rail__indicator" title="Pipeline status">PPL</div>
-    <div class="telemetry-rail__indicator" title="Token usage">TKN</div>
-  </div>
 </div>
 {#if settingsModalOpen && user}
   <SettingsModal

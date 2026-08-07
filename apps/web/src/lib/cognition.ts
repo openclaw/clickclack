@@ -148,16 +148,13 @@ export async function transform(
 }
 
 /** POST /threads/cluster — semantic thread clustering. */
-export async function cluster(items: Array<{ id: string; content: string }>): Promise<ClusterResult | null> {
+export async function cluster(contents: string[]): Promise<ClusterResult | null> {
   if (!COGNITION_URL) return null;
   try {
     const res = await fetch(`${COGNITION_URL}/threads/cluster`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message_ids: items.map(i => i.id),
-        contents: items.map(i => i.content),
-      }),
+      body: JSON.stringify({ contents }),
     });
     if (!res.ok) {
       console.warn("[cognition] cluster returned", res.status);
@@ -231,69 +228,26 @@ export async function patchMessageMetadata(
 
 // ── Composite helpers ──
 
-/** Analyze message content and persist intent/persona/confidence + telemetry via API. */
+/** Analyze message content and persist intent/persona/confidence via API. */
 export async function analyzeAndPersist(
   messageId: string,
   content: string,
-  options?: { telemetry?: { latency_ms: number; total_tokens?: number; model?: string } },
 ): Promise<AnalysisResult | null> {
   if (!COGNITION_URL) return null;
   if (isAnalyzed(messageId)) return null;
   markAnalyzed(messageId);
 
-  const start = performance.now();
   const result = await analyze(content);
-  const elapsed = Math.round(performance.now() - start);
-
   if (!result) return null;
 
-  // Build the PATCH payload with intent/persona/confidence + telemetry
-  const patch: MessageMetadataPatch = {
+  await patchMessageMetadata(messageId, {
     intent: result.intent ?? null,
     persona: result.persona ?? null,
     confidence: result.confidence ?? null,
     context: result.context_tags ? { tags: result.context_tags } : null,
-    metadata: {
-      telemetry: {
-        latency_ms: options?.telemetry?.latency_ms ?? elapsed,
-        total_tokens: options?.telemetry?.total_tokens ?? null,
-        model: options?.telemetry?.model ?? null,
-        execution_stack: ["intent_parser", "persona_engine"],
-      },
-    },
-  };
-
-  await patchMessageMetadata(messageId, patch);
+  });
 
   return result;
-}
-
-/**
- * GET /memory/anchors — list recent memory anchors.
- * If the endpoint supports ?limit=N, returns up to that many.
- * Falls back to memoryQuery("") with a note if unsupported.
- */
-export async function listMemoryAnchors(limit = 20): Promise<{ nodes: MemoryNode[] } | null> {
-  if (!COGNITION_URL) return null;
-  try {
-    const params = new URLSearchParams({ limit: String(limit) });
-    const res = await fetch(`${COGNITION_URL}/memory/anchors?${params}`);
-    if (!res.ok) {
-      // Fallback: try memoryQuery with empty query
-      if (res.status === 404 || res.status === 405) {
-        console.warn("[cognition] /memory/anchors GET unsupported, falling back to memoryQuery('')");
-        const fallback = await memoryQuery("");
-        return fallback;
-      }
-      console.warn("[cognition] list anchors returned", res.status);
-      return null;
-    }
-    return (await res.json()) as { nodes: MemoryNode[] };
-  } catch (err) {
-    console.error("[cognition] list anchors failed:", err);
-    // Fallback
-    return memoryQuery("");
-  }
 }
 
 // ── Legacy stubs kept for backward compat (MessageUtilities T1 path) ──

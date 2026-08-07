@@ -81,7 +81,6 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
-    onSendMessage?: (content: string) => void;
     channelID?: string;
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
@@ -134,7 +133,6 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
-    onSendMessage,
     channelID = "",
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
@@ -909,7 +907,6 @@
               {onRetry}
               {onDiscard}
               {onDeleteMessage}
-              {onSendMessage}
               {topics}
               {onSelectTopic}
               {channelID}

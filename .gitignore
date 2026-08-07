@@ -25,3 +25,4 @@ cloudflare-seed/uploads/*
 supabase/.temp/
 deploy/fakeco/.env
 deploy/fakeco/seed-manifest.json
+apps/logos/.svelte-kit/

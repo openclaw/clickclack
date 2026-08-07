@@ -1,3 +1,10 @@
+/* PROJECT LOGOS — Font System (§8.2)
+   App shell: Inter (body) + JetBrains Mono (telemetry/meta/code).
+   ProductSite keeps Geist via product.css; keep Geist imports for
+   backward compat with any styles still referencing it. */
+
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 

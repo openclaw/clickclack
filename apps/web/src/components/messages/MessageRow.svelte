@@ -21,6 +21,7 @@
   import CognitiveMarkers from "./CognitiveMarkers.svelte";
   import MessageUtilities from "./MessageUtilities.svelte";
   import CognitiveResultStrip from "./CognitiveResultStrip.svelte";
+  import InspectorBlade from "./InspectorBlade.svelte";
   import {
     analyzeAndPersist,
     isAnalyzed,
@@ -31,6 +32,7 @@
     type PersonaID,
     type TransformOp,
   } from "../../lib/cognition";
+  import { inspectMode, activeMessageId } from "../../lib/ui";
 
   type Props = {
     message: Message;
@@ -186,6 +188,53 @@
   let cogApplyingResult = $state(false);
   let personaSwitchIndex = $state(0);
   const personaCycle: PersonaID[] = ["analyst", "creative", "socratic", "archivist", "operator"];
+
+  // ── PROJECT LOGOS: intent edge band color ──
+  const intentColors: Record<string, string> = {
+    ask: "var(--intent-ask)",
+    command: "var(--intent-command)",
+    reflect: "var(--intent-reflect)",
+    draft: "var(--intent-draft)",
+    clarify: "var(--intent-clarify)",
+    explore: "var(--intent-explore)",
+  };
+  const msgIntentColor = $derived(cogIntent ? (intentColors[cogIntent] ?? "var(--intent-default)") : "var(--intent-default)");
+
+  // ── PROJECT LOGOS: inspector blade + latency ──
+  let inspectorOpen = $state(false);
+  let renderLatencyMs: number | null = $state(null);
+  const mountStart = typeof performance !== "undefined" ? performance.now() : 0;
+  let isInspectMode = $state(false);
+
+  // Subscribe to inspectMode store (global Alt/Option diagnostic mode)
+  const unsubInspect = inspectMode.subscribe((v) => {
+    isInspectMode = v;
+  });
+  onDestroy(() => unsubInspect());
+
+  // Measure client-side render latency
+  $effect(() => {
+    void message.id;
+    if (mountStart > 0) {
+      tick().then(() => {
+        renderLatencyMs = performance.now() - mountStart;
+      });
+    }
+  });
+
+  function toggleInspector() {
+    inspectorOpen = !inspectorOpen;
+    if (inspectorOpen) {
+      activeMessageId.set(message.id);
+    } else {
+      activeMessageId.set(null);
+    }
+  }
+
+  function closeInspector() {
+    inspectorOpen = false;
+    activeMessageId.set(null);
+  }
 
   function dismissResult() {
     cogResultStrip = null;
@@ -723,6 +772,7 @@
   bind:this={rowEl}
   class="message-row"
   class:selected
+  class:inspect-mode={isInspectMode}
   class:is-pending={isPending}
   class:is-failed={isFailed}
   class:is-deleted={isDeleted}
@@ -756,7 +806,7 @@
   }}
 >
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
-  <div class="message-content">
+  <div class="message-content" style="--msg-intent: {msgIntentColor}">
     {#if preambleBlock}
       <PreambleBlock block={preambleBlock} {mentionPeople} {mentionAttentionUserID} />
     {:else if isDeleted}
@@ -779,10 +829,13 @@
       confidence={cogConfidence}
       threadAffiliation={cogThreadAffil}
       executionStatus={cogExecStatus}
+      latencyMs={renderLatencyMs}
       analyzing={cogIsAnalyzing}
       transforming={cogIsTransforming}
       semanticThreadId={cogSemanticThreadId}
       onSemanticThreadClick={handleSemanticThreadClick}
+      onInspect={toggleInspector}
+      inspectorOpen={inspectorOpen}
     />
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
@@ -799,6 +852,10 @@
       applying={cogApplyingResult}
       onDismiss={dismissResult}
     />
+    <!-- PROJECT LOGOS — Deep-inspection blade (slides open within grid) -->
+    {#if inspectorOpen}
+      <InspectorBlade message={message} latencyMs={renderLatencyMs} onClose={closeInspector} />
+    {/if}
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}
@@ -857,22 +914,24 @@
       {/if}
     </button>
     {/if}
+    {#if !preambleBlock && !isDeleted && !editing}
+    <!-- PROJECT LOGOS — Inline action rail (bottom edge of message frame on hover) -->
+    <MessageUtilities
+      messageId={message.id}
+      visible={rowActive}
+      flip={actionsFlipped}
+      onTransform={handleTransformAction}
+      onSummarize={handleSummarizeAction}
+      onExpand={handleExpandAction}
+      onThreadLink={handleThreadLinkAction}
+      onMemoryLink={handleMemoryLinkAction}
+      onPersonaSwitch={handlePersonaSwitchAction}
+      transforming={cogIsTransforming}
+      querying={cogIsQuerying}
+    />
+    {/if}
   </div>
   {#if !preambleBlock && !isDeleted && !editing}
-  <!-- COGNITIVE OS — Inline utility bar (non-modal, hover/tap reveal) -->
-  <MessageUtilities
-    messageId={message.id}
-    visible={rowActive}
-    flip={actionsFlipped}
-    onTransform={handleTransformAction}
-    onSummarize={handleSummarizeAction}
-    onExpand={handleExpandAction}
-    onThreadLink={handleThreadLinkAction}
-    onMemoryLink={handleMemoryLinkAction}
-    onPersonaSwitch={handlePersonaSwitchAction}
-    transforming={cogIsTransforming}
-    querying={cogIsQuerying}
-  />
   <div class="message-actions" aria-label="Message actions">
     {#if copyStatus}
       <span

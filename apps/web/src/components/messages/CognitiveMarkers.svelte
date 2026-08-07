@@ -1,13 +1,13 @@
 <script lang="ts">
   /**
-   * COGNITIVE OS — Cognitive State Markers (T4)
+   * PROJECT LOGOS — Message Metadata Header (Track B)
    *
-   * Renders message metadata markers: intent color band, persona tag,
-   * confidence indicator, thread affiliation marker, execution status marker,
-   * and semantic thread chip.
+   * Renders the monospaced metadata strip above every message body per spec §8.4:
+   *   [INTENT: COMMAND] [PERSONA: OPERATOR] [CONFIDENCE: 98.4%] [THREAD: #TH-042] [LATENCY: 14ms]
    *
-   * Every marker renders as a graceful absent state when its field is missing.
-   * Transient "analyzing" / "transforming" states shown while requests are in flight.
+   * Absent fields render [--] or omit. Confidence tag is clickable → opens
+   * the deep-inspection blade. Semantic thread chip renders as th:XXXXXXXX
+   * with cobalt-cyan 2px accent.
    */
 
   interface Props {
@@ -16,6 +16,8 @@
     confidence?: number | null;
     threadAffiliation?: string | null;
     executionStatus?: "pending" | "executing" | "complete" | "failed" | null;
+    /** Measured client-side render/transform latency in ms. */
+    latencyMs?: number | null;
     /** Transient: cognition analysis is in flight. */
     analyzing?: boolean;
     /** Transient: a transform op is in flight. */
@@ -24,6 +26,10 @@
     semanticThreadId?: string | null;
     /** Callback when semantic thread chip is clicked. */
     onSemanticThreadClick?: (threadId: string) => void;
+    /** Callback when confidence tag is clicked → opens inspector blade. */
+    onInspect?: () => void;
+    /** Whether the inspector blade is currently open. */
+    inspectorOpen?: boolean;
   }
 
   let {
@@ -32,274 +38,255 @@
     confidence = null,
     threadAffiliation = null,
     executionStatus = null,
+    latencyMs = null,
     analyzing = false,
     transforming = false,
     semanticThreadId = null,
     onSemanticThreadClick,
+    onInspect,
+    inspectorOpen = false,
   }: Props = $props();
 
-  // Intent → color mapping. Absent = no band.
-  const intentColors: Record<string, string> = {
-    ask: "var(--intent-ask)",
-    command: "var(--intent-command)",
-    reflect: "var(--intent-reflect)",
-    draft: "var(--intent-draft)",
-    clarify: "var(--intent-clarify)",
-    explore: "var(--intent-explore)",
-  };
-
-  const intentColor = $derived(intent ? (intentColors[intent] ?? "var(--intent-default)") : null);
-  const hasAnyMarker = $derived(
-    intentColor !== null ||
+  const hasAny = $derived(
+    intent !== null ||
       persona !== null ||
       confidence !== null ||
       threadAffiliation !== null ||
       executionStatus !== null ||
+      latencyMs !== null ||
       analyzing ||
-      transforming ||
-      semanticThreadId !== null,
+      transforming,
   );
 
-  function fmtConfidence(value: number): string {
-    return `${Math.round(value * 100)}%`;
+  function fmtIntent(v: string): string {
+    return v.toUpperCase();
   }
 
-  function confidenceWidth(value: number): string {
-    return `${Math.round(value * 100)}%`;
+  function fmtPersona(v: string): string {
+    return v.toUpperCase();
+  }
+
+  function fmtConfidence(v: number): string {
+    return `${(v * 100).toFixed(1)}%`;
+  }
+
+  function fmtLatency(v: number): string {
+    return `${Math.round(v)}ms`;
+  }
+
+  function fmtExec(v: string): string {
+    return v.toUpperCase();
   }
 </script>
 
-{#if hasAnyMarker}
-  <div class="cog-markers" aria-label="Cognitive state markers">
-    {#if intentColor !== null}
-      <span
-        class="cog-marker cog-intent-band"
-        style="--intent-color: {intentColor}"
-        title="Intent: {intent ?? 'unknown'}"
-        aria-label="Intent: {intent}"
-      ></span>
+{#if hasAny}
+  <div class="msg-meta-header" aria-label="Message metadata">
+    {#if intent !== null}
+      <span class="meta-tag meta-intent">
+        <span class="meta-bracket">[</span>INTENT<span class="meta-colon">:</span> {fmtIntent(intent)}<span class="meta-bracket">]</span>
+      </span>
+    {:else}
+      <span class="meta-tag meta-absent">[INTENT: --]</span>
     {/if}
+
     {#if persona !== null}
-      <span class="cog-marker cog-persona-tag" title="Persona: {persona}" aria-label="Persona: {persona}">
-        {persona}
+      <span class="meta-tag meta-persona">
+        <span class="meta-bracket">[</span>PERSONA<span class="meta-colon">:</span> {fmtPersona(persona)}<span class="meta-bracket">]</span>
       </span>
     {/if}
+
     {#if confidence !== null}
-      <span class="cog-marker cog-confidence" title="Confidence: {fmtConfidence(confidence)}" aria-label="Confidence: {fmtConfidence(confidence)}">
-        <span class="cog-confidence-bar" style="width: {confidenceWidth(confidence)}"></span>
-        <span class="cog-confidence-label">{fmtConfidence(confidence)}</span>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <span
+        class="meta-tag meta-confidence"
+        class:meta-clickable={onInspect !== undefined}
+        class:meta-active={inspectorOpen}
+        role={onInspect ? "button" : undefined}
+        tabindex={onInspect ? 0 : undefined}
+        title={onInspect ? "Inspect message telemetry" : `Confidence: ${fmtConfidence(confidence)}`}
+        aria-label={onInspect ? "Open message inspector" : undefined}
+        onclick={() => onInspect?.()}
+        onkeydown={(e: KeyboardEvent) => {
+          if ((e.key === "Enter" || e.key === " ") && onInspect) {
+            e.preventDefault();
+            onInspect();
+          }
+        }}
+      >
+        <span class="meta-bracket">[</span>CONF<span class="meta-colon">:</span> {fmtConfidence(confidence)}<span class="meta-bracket">]</span>
       </span>
+    {:else}
+      <span class="meta-tag meta-absent">[CONF: --]</span>
     {/if}
+
     {#if threadAffiliation !== null}
-      <span class="cog-marker cog-thread-affil" title="Thread: {threadAffiliation}" aria-label="Thread: {threadAffiliation}">
-        <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z"/>
-        </svg>
-        <span>{threadAffiliation}</span>
+      <span class="meta-tag meta-thread">
+        <span class="meta-bracket">[</span>THREAD<span class="meta-colon">:</span> {threadAffiliation}<span class="meta-bracket">]</span>
       </span>
     {/if}
+
     {#if executionStatus !== null}
       <span
-        class="cog-marker cog-exec-status"
+        class="meta-tag meta-exec"
         class:exec-pending={executionStatus === "pending"}
         class:exec-executing={executionStatus === "executing"}
         class:exec-complete={executionStatus === "complete"}
         class:exec-failed={executionStatus === "failed"}
-        title="Execution: {executionStatus}"
-        aria-label="Execution status: {executionStatus}"
       >
-        <span class="cog-exec-dot" aria-hidden="true"></span>
-        <span>{executionStatus}</span>
+        <span class="meta-bracket">[</span>EXEC<span class="meta-colon">:</span> {fmtExec(executionStatus)}<span class="meta-bracket">]</span>
       </span>
     {/if}
-    <!-- Semantic thread chip (T4) -->
-    {#if semanticThreadId !== null}
-      <button
-        type="button"
-        class="cog-marker cog-semantic-chip"
-        title="Semantic thread: {semanticThreadId}"
-        aria-label="Semantic thread: {semanticThreadId}"
-        onclick={() => onSemanticThreadClick?.(semanticThreadId!)}
-      >
-        <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-        </svg>
-        <span>th:{semanticThreadId.slice(0, 8)}</span>
-      </button>
+
+    {#if latencyMs !== null}
+      <span class="meta-tag meta-latency">
+        <span class="meta-bracket">[</span>LATENCY<span class="meta-colon">:</span> {fmtLatency(latencyMs)}<span class="meta-bracket">]</span>
+      </span>
     {/if}
-    <!-- Transient states (shown when inflight, even if metadata absent) -->
+
     {#if analyzing}
-      <span class="cog-marker cog-transient" title="Analyzing…" aria-label="Analyzing message">
-        <span class="cog-transient-dot analyzing"></span>
-        analyzing
+      <span class="meta-tag meta-transient analyzing" title="Analyzing…" aria-label="Analyzing message">
+        <span class="meta-bracket">[</span>ANALYZING<span class="meta-bracket">]</span>
       </span>
     {/if}
+
     {#if transforming}
-      <span class="cog-marker cog-transient" title="Transforming…" aria-label="Transforming message">
-        <span class="cog-transient-dot transforming"></span>
-        transforming
+      <span class="meta-tag meta-transient transforming" title="Transforming…" aria-label="Transforming message">
+        <span class="meta-bracket">[</span>TRANSFORMING<span class="meta-bracket">]</span>
       </span>
     {/if}
   </div>
 {/if}
 
-<style>
-  .cog-markers {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-bottom: 4px;
-    min-height: 0;
-  }
+{#if semanticThreadId !== null}
+  <button
+    type="button"
+    class="semantic-thread-chip"
+    title="Semantic thread: {semanticThreadId}"
+    aria-label="Semantic thread: {semanticThreadId}"
+    onclick={() => onSemanticThreadClick?.(semanticThreadId!)}
+  >
+    th:{semanticThreadId.slice(0, 8)}
+  </button>
+{/if}
 
-  .cog-marker {
-    display: inline-flex;
-    align-items: center;
+<style>
+  /* ── Metadata header strip ── */
+  .msg-meta-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+    margin-bottom: 6px;
     font-family: var(--font-mono);
     font-size: 9.5px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    line-height: 1;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: 0.03em;
+    color: var(--muted-2);
+    user-select: none;
+  }
+
+  .meta-tag {
+    display: inline;
     white-space: nowrap;
   }
 
-  /* Intent color band: high-contrast left edge bar */
-  .cog-intent-band {
-    width: 3px;
-    height: 14px;
-    background: var(--intent-color);
-    flex-shrink: 0;
-    border-radius: 0;
-  }
-
-  /* Persona tag */
-  .cog-persona-tag {
-    padding: 2px 6px;
-    border: 1px solid var(--line);
-    color: var(--muted);
-    background: var(--panel-2);
-    border-radius: 0;
-  }
-
-  /* Confidence indicator: density bar + numeric */
-  .cog-confidence {
-    gap: 5px;
-    min-width: 50px;
-  }
-
-  .cog-confidence-bar {
-    height: 4px;
-    background: var(--text-strong);
-    border-radius: 0;
-    transition: width 120ms ease;
-  }
-
-  .cog-confidence-label {
-    color: var(--muted);
-    font-size: 9px;
-  }
-
-  /* Thread affiliation marker */
-  .cog-thread-affil {
-    gap: 3px;
+  .meta-bracket,
+  .meta-colon {
     color: var(--muted);
   }
 
-  .cog-thread-affil svg {
-    flex-shrink: 0;
-  }
+  .meta-intent { color: var(--muted-2); }
+  .meta-persona { color: var(--muted-2); }
+  .meta-thread { color: var(--muted-2); }
+  .meta-latency { color: var(--muted-2); }
+  .meta-absent { color: var(--muted); opacity: 0.5; font-style: italic; }
 
-  /* Execution status marker */
-  .cog-exec-status {
-    gap: 4px;
-    color: var(--muted);
-  }
-
-  .cog-exec-dot {
-    width: 5px;
-    height: 5px;
-    background: var(--muted);
-    border-radius: 0;
-  }
-
-  .exec-pending .cog-exec-dot {
-    background: var(--status-pending);
-  }
-
-  .exec-executing .cog-exec-dot {
-    background: var(--status-executing);
-    animation: cog-exec-pulse 1.2s ease-in-out infinite;
-  }
-
-  .exec-complete .cog-exec-dot {
-    background: var(--status-success);
-  }
-
-  .exec-failed .cog-exec-dot {
-    background: var(--status-danger);
-  }
-
-  /* Semantic thread chip */
-  .cog-semantic-chip {
-    padding: 2px 6px;
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--muted-2);
+  /* ── Confidence tag: clickable → inspector blade ── */
+  .meta-confidence { color: var(--text); }
+  .meta-clickable {
     cursor: pointer;
-    gap: 4px;
+    color: var(--accent-thread); /* cobalt cyan */
+    font-weight: 600;
+  }
+
+  .meta-clickable:hover {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .meta-clickable:focus-visible {
+    outline: 1px solid var(--text-strong);
+    outline-offset: 2px;
+  }
+
+  .meta-active {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* ── Execution status colors ── */
+  .exec-pending { color: var(--muted-2); }
+  .exec-executing {
+    color: var(--accent-thread);
+    animation: meta-exec-pulse 1.2s steps(2, jump-none) infinite;
+  }
+  .exec-complete { color: var(--accent-verified); }
+  .exec-failed { color: var(--status-danger); }
+
+  @keyframes meta-exec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Transient states ── */
+  .meta-transient {
+    color: var(--muted-2);
+    font-style: italic;
+  }
+  .meta-transient.analyzing {
+    animation: meta-exec-pulse 1.2s steps(2, jump-none) infinite;
+  }
+  .meta-transient.transforming {
+    animation: meta-exec-pulse 0.8s steps(2, jump-none) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .exec-executing,
+    .meta-transient.analyzing,
+    .meta-transient.transforming {
+      animation: none;
+    }
+  }
+
+  /* ── Semantic thread chip (th:XXXXXXXX) ── */
+  .semantic-thread-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    margin-top: 2px;
+    border: 0;
+    border-left: 2px solid var(--accent-thread);
+    background: var(--panel-2);
+    color: var(--accent-thread);
     font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
+    cursor: pointer;
+    line-height: 1.4;
   }
 
-  .cog-semantic-chip:hover {
+  .semantic-thread-chip:hover {
     background: var(--hover-strong);
-    color: var(--text);
+    color: var(--text-strong);
+    border-left-color: var(--text-strong);
   }
 
-  .cog-semantic-chip:focus-visible {
+  .semantic-thread-chip:focus-visible {
     outline: 1px solid var(--text-strong);
-    outline-offset: -1px;
-  }
-
-  /* Transient analyzing/transforming */
-  .cog-transient {
-    gap: 4px;
-    color: var(--muted-2);
-    font-style: italic;
-  }
-
-  .cog-transient-dot {
-    width: 5px;
-    height: 5px;
-    background: var(--muted-2);
-    border-radius: 0;
-  }
-
-  .cog-transient-dot.analyzing {
-    animation: cog-exec-pulse 1.2s ease-in-out infinite;
-    background: var(--status-executing);
-  }
-
-  .cog-transient-dot.transforming {
-    animation: cog-exec-pulse 0.9s ease-in-out infinite;
-    background: var(--status-executing);
-  }
-
-  @keyframes cog-exec-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .exec-executing .cog-exec-dot,
-    .cog-transient-dot.analyzing,
-    .cog-transient-dot.transforming {
-      animation: none;
-    }
+    outline-offset: 1px;
   }
 </style>

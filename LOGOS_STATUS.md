@@ -49,13 +49,14 @@
   pulled from the tree and verified directly by RINCON (build, tests, route,
   store impls, migration all confirmed)
 
-### T3 — Cognition Service Scaffold: IN PROGRESS 🔄 (subagent running)
-- `apps/cognition` TS service skeleton: /healthz, /analyze, /transform,
-  /threads/cluster, /memory/query, /memory/anchors
-- Message-object types, intent/persona/transform-op unions
-- LLM client interface + stub impl (LLM_PROVIDER=stub|deepseek|openai)
-- Store interface (SQLite or JSON-file)
-- **To be followed by the intelligence handoff** (Copilot CLI / VS Code CLI)
+### T3 — Cognition Service Scaffold: DONE ✅ (commit 1ad3bdc)
+- `apps/cognition` Hono TS service: /healthz, /analyze, /transform,
+  /threads/cluster, /memory/anchors|query|list — all smoke-tested live
+- Message-object types, intent/persona/transform-op unions (LOGOS_SPEC 6.2)
+- LlmClient interface + StubLlmClient (LLM_PROVIDER=stub|deepseek|openai)
+- JsonFileStore (anchors/threads); validation + 404 handling
+- **Verified by RINCON:** tsc clean, live endpoint smoke test passed
+- **Next: intelligence handoff** (Copilot CLI / VS Code CLI) — Phase B below
 
 ---
 
@@ -86,10 +87,10 @@ considered "finishing" if Conor wants deeper completeness:
 - [ ] (optional) Client SDK type regeneration from OpenAPI
 
 ### T3: Cognition Service — the brain
-**Phase A — Scaffold (running now, deepseek lane):**
-- [ ] apps/cognition service skeleton + health + route contracts + types
-- [ ] LLM client interface + stub; store interface
-- [ ] typecheck passes
+**Phase A — Scaffold (DONE ✅ commit 1ad3bdc):**
+- [x] apps/cognition service skeleton + health + route contracts + types
+- [x] LLM client interface + stub; store interface
+- [x] typecheck passes; live smoke test passed
 
 **Phase B — Intelligence handoff (Copilot CLI / VS Code CLI):** 🔑 blocked on
 Copilot auth (device code) — this is the designated frontier lane per Conor.

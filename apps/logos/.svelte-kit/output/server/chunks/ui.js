@@ -1,5 +1,6 @@
 import { d as derived, w as writable } from "./index2.js";
 const inspectMode = writable(false);
+const activeMessageId = writable(null);
 const commandPaletteOpen = writable(false);
 const telemetryOpen = writable(false);
 const semanticPaneOpen = writable(false);
@@ -8,6 +9,7 @@ derived(
   ([$cmd, $telem]) => $cmd || $telem
 );
 export {
+  activeMessageId as a,
   inspectMode as i,
   semanticPaneOpen as s,
   telemetryOpen as t

@@ -3,6 +3,7 @@
   import "../styles/chassis.css";
   import SemanticMargin from "$lib/components/SemanticMargin.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
+  import TelemetryRail from "$lib/components/TelemetryRail.svelte";
   import { inspectMode, telemetryOpen } from "$lib/ui";
 
   let mounted = false;
@@ -33,5 +34,13 @@
   <main class="logos-main">
     <slot />
   </main>
+  {#if $telemetryOpen}
+    <TelemetryRail
+      intents={null}
+      personas={null}
+      pipeline={null}
+      tokens={null}
+    />
+  {/if}
   <CommandPalette />
 </div>

@@ -119,7 +119,7 @@
       "_ui.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.DCCLt9h2.css"
+      "_app/immutable/assets/_layout.qhvEhHhz.css"
     ]
   },
   "src/routes/+page.svelte": {
@@ -129,10 +129,11 @@
     "isEntry": true,
     "imports": [
       "_index.js",
-      "_ui.js"
+      "_ui.js",
+      "_index2.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.u_St6cDX.css"
+      "_app/immutable/assets/_page.B8k6EGoz.css"
     ]
   },
   "virtual:__sveltekit/env": {

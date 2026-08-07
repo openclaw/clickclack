@@ -1,4 +1,4 @@
-import { a as attr_class, e as ensure_array_like, b as escape_html, s as store_get, c as slot, u as unsubscribe_stores } from "../../chunks/index.js";
+import { a as attr_class, e as ensure_array_like, b as escape_html, d as derived, s as store_get, c as slot, u as unsubscribe_stores } from "../../chunks/index.js";
 import { t as telemetryOpen, i as inspectMode } from "../../chunks/ui.js";
 function SemanticMargin($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
@@ -40,6 +40,21 @@ function CommandPalette($$renderer, $$props) {
     $$renderer2.push(`<!--]-->`);
   });
 }
+function TelemetryRail($$renderer, $$props) {
+  $$renderer.component(($$renderer2) => {
+    let {
+      intents = null,
+      personas = null,
+      pipeline = null,
+      tokens = null
+    } = $$props;
+    const fmtIntents = derived(() => intents != null ? String(intents) : "--");
+    const fmtPersonas = derived(() => personas != null ? String(personas) : "--");
+    const fmtPipeline = derived(() => pipeline ?? "--");
+    const fmtTokens = derived(() => tokens != null ? tokens.toLocaleString() : "--");
+    $$renderer2.push(`<div class="telemetry-rail svelte-1xkmetj" aria-label="Telemetry rail"><div class="rail-indicator svelte-1xkmetj"><span class="rail-label svelte-1xkmetj">INS</span> <span class="rail-value svelte-1xkmetj">${escape_html(fmtIntents())}</span></div> <div class="rail-indicator svelte-1xkmetj"><span class="rail-label svelte-1xkmetj">PER</span> <span class="rail-value svelte-1xkmetj">${escape_html(fmtPersonas())}</span></div> <div class="rail-indicator svelte-1xkmetj"><span class="rail-label svelte-1xkmetj">PPL</span> <span class="rail-value svelte-1xkmetj">${escape_html(fmtPipeline())}</span></div> <div class="rail-indicator svelte-1xkmetj"><span class="rail-label svelte-1xkmetj">TKN</span> <span class="rail-value svelte-1xkmetj">${escape_html(fmtTokens())}</span></div></div>`);
+  });
+}
 function _layout($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
@@ -51,6 +66,13 @@ function _layout($$renderer, $$props) {
     $$renderer2.push(`<!----> <main class="logos-main"><!--[-->`);
     slot($$renderer2, $$props, "default", {});
     $$renderer2.push(`<!--]--></main> `);
+    if (store_get($$store_subs ??= {}, "$telemetryOpen", telemetryOpen)) {
+      $$renderer2.push("<!--[0-->");
+      TelemetryRail($$renderer2, { intents: null, personas: null, pipeline: null, tokens: null });
+    } else {
+      $$renderer2.push("<!--[-1-->");
+    }
+    $$renderer2.push(`<!--]--> `);
     CommandPalette($$renderer2);
     $$renderer2.push(`<!----></div>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);

@@ -1,5 +1,8 @@
 <script lang="ts">
   import { currentPersona, semanticPaneOpen, telemetryOpen, type Persona } from "$lib/ui";
+  import ChatStream from "$lib/components/ChatStream.svelte";
+  import SemanticThreadPane from "$lib/components/SemanticThreadPane.svelte";
+  import { chatState } from "$lib/clickclack/chat";
 
   let persona = $state<Persona>("operator");
   $effect(() => {
@@ -7,7 +10,22 @@
     return unsub;
   });
 
-  let statusLine = $state("LOGOS console — awaiting workspace connection");
+  // Feed the semantic pane with the current message window
+  let threadMessages = $state<Array<{ id: string; content: string }>>([]);
+  $effect(() => {
+    const unsub = chatState.subscribe((v) => {
+      threadMessages = v.messages.map((m) => ({ id: m.id, content: m.body ?? "" }));
+    });
+    return unsub;
+  });
+
+  function focusMessage(messageId: string) {
+    // Find the message row and scroll it into view
+    const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+    el?.scrollIntoView({ block: "center" });
+    el?.classList.add("flash-highlight");
+    setTimeout(() => el?.classList.remove("flash-highlight"), 1200);
+  }
 </script>
 
 <div class="console">
@@ -15,26 +33,24 @@
     <span class="brand">LOGOS</span>
     <span class="spacer"></span>
     <span class="persona-tag accent-intent">PERSONA: {persona.toUpperCase()}</span>
-    <button class="ghost" onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>THREADS</button>
-    <button class="ghost" onclick={() => telemetryOpen.set(!$telemetryOpen)}>TELEMETRY</button>
+    <button class="ghost" class:active={$semanticPaneOpen} onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>THREADS</button>
+    <button class="ghost" class:active={$telemetryOpen} onclick={() => telemetryOpen.set(!$telemetryOpen)}>TELEMETRY</button>
   </header>
 
-  <div class="console-body">
+  <div class="console-body" class:semantic-open={$semanticPaneOpen}>
     <section class="pane chat-pane">
       <div class="pane-head logos-mono">CHAT STREAM <span class="accent-thread">· substrate: clickclack API</span></div>
-      <div class="chat-placeholder logos-mono">
-        <p>Chat pane — the only piece inherited from clickclack.</p>
-        <p>Wired to the clickclack API (messages, realtime) as substrate.</p>
-        <p class="accent-verified">[STATUS: {statusLine}]</p>
+      <div class="pane-body chat-body">
+        <ChatStream />
       </div>
     </section>
 
     <aside class="pane right-pane" class:open={$semanticPaneOpen}>
-      <div class="pane-head logos-mono">SEMANTIC THREADS</div>
-      <div class="pane-body logos-mono">
-        <p class="muted">Cluster workspace → CL-01, CL-02…</p>
-        <p class="muted">Cross-thread retrieval → #NODE-XX (score)</p>
-      </div>
+      <SemanticThreadPane
+        messages={threadMessages}
+        onClose={() => semanticPaneOpen.set(false)}
+        onFocusMessage={focusMessage}
+      />
     </aside>
   </div>
 
@@ -77,14 +93,18 @@
     padding: 2px 8px;
     cursor: pointer;
   }
-  .ghost:hover { color: var(--text-strong); border-color: var(--line-strong); }
+  .ghost:hover,
+  .ghost.active {
+    color: var(--text-strong);
+    border-color: var(--line-strong);
+  }
   .console-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 0px;
     min-height: 0;
     transition: grid-template-columns var(--motion-med);
   }
-  .console-body:has(.right-pane.open) {
+  .console-body.semantic-open {
     grid-template-columns: minmax(0, 1fr) 340px;
   }
   .pane {
@@ -101,6 +121,9 @@
     background: var(--panel-2);
     color: var(--muted-2);
   }
+  .chat-body {
+    min-height: 0;
+  }
   .right-pane {
     overflow: hidden;
     transition: all var(--motion-med);
@@ -109,17 +132,6 @@
     opacity: 0;
     pointer-events: none;
   }
-  .pane-body {
-    padding: 10px;
-    color: var(--muted);
-    line-height: 1.7;
-  }
-  .chat-placeholder {
-    padding: 14px;
-    color: var(--muted);
-    line-height: 1.8;
-  }
-  .muted { color: var(--muted); }
   .console-statusbar {
     display: flex;
     align-items: center;

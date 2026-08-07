@@ -49,17 +49,25 @@ export default {
       workerEnv.CLICKCLACK_COGNITION_URL &&
       (requestURL.pathname === "/cognition" || requestURL.pathname.startsWith("/cognition/"));
 
-    if (shouldProxyToUpstream || shouldProxyCognition) {
+    // PROJECT LOGOS: serve the LOGOS application (droplet :8788) at /logos/*
+    // on the same origin so /api auth + /cognition stay same-origin.
+    const shouldProxyLogos =
+      workerEnv.CLICKCLACK_LOGOS_URL &&
+      (requestURL.pathname === "/logos" || requestURL.pathname.startsWith("/logos/"));
+
+    if (shouldProxyToUpstream || shouldProxyCognition || shouldProxyLogos) {
       const incoming = new URL(request.url);
-      const upstream = new URL(
-        shouldProxyCognition
-          ? workerEnv.CLICKCLACK_COGNITION_URL!
-          : workerEnv.CLICKCLACK_UPSTREAM_URL!,
-      );
+      let upstreamBase = workerEnv.CLICKCLACK_UPSTREAM_URL!;
+      if (shouldProxyCognition) upstreamBase = workerEnv.CLICKCLACK_COGNITION_URL!;
+      else if (shouldProxyLogos) upstreamBase = workerEnv.CLICKCLACK_LOGOS_URL!;
+      const upstream = new URL(upstreamBase);
       if (shouldProxyCognition) {
         // Strip the /cognition prefix — cognition routes are /analyze, /transform, etc.
-        const stripped = incoming.pathname.replace(/^\/cognition(\/|$)/, "/");
-        upstream.pathname = stripped;
+        upstream.pathname = incoming.pathname.replace(/^\/cognition(\/|$)/, "/");
+      } else if (shouldProxyLogos) {
+        // Strip the /logos prefix so the static server resolves /logos/ → index
+        upstream.pathname = incoming.pathname.replace(/^\/logos(\/|$)/, "/");
+        if (incoming.pathname === "/logos") upstream.pathname = "/";
       } else {
         upstream.pathname = incoming.pathname;
       }

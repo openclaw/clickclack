@@ -4,7 +4,7 @@ function set_building() {
 function set_prerendering() {
   prerendering = true;
 }
-let base = "";
+let base = "/logos";
 let assets = base;
 const app_dir = "_app";
 const relative = true;

@@ -131,3 +131,17 @@ Copilot auth (device code) — this is the designated frontier lane per Conor.
    deepseek-v4-pro as the workhorse and reserving frontier for design review
 3. **T2 extras** — proceed as-is (recommended) or add the optional finishing items
 4. **Deploy cadence** — ship T1/T2 slice to production now, or batch with T3?
+
+## 6. Upgraded-App Chassis (spec §8) — DEPLOYED 2026-08-07
+
+| Component | Status | Evidence |
+|---|---|---|
+| Spec §8 recorded | ✅ | LOGOS_SPEC.md section 8 (committed) |
+| v2 design tokens | ✅ | pure black/off-white/charcoal, 2px intent bands, Inter + JetBrains Mono |
+| Chassis A (spatial shell) | ✅ | fixed tiled grid, semantic margin (grid marks/line counters/intent ticks), CommandPalette (Cmd+K //, :persona/:inspect/:transform/:thread), lib/ui.ts stores, 100-150ms linear motion |
+| Chassis B (message anatomy) | ✅ | 2px intent edge band, mono metadata header [INTENT][PERSONA][CONF][THREAD][LATENCY], action rail [XFORM][CONDENSE][EXPAND][MEM-NODE][REWRITE], InspectorBlade (TELEMETRY/MEMORY/LOGPROBS/PAYLOAD/STACK), Alt diagnostic mode |
+| Integration | ✅ | typecheck clean, build passes, ui.ts merged (both tracks) |
+| Deployed | ✅ | droplet binary v2 + container rebuild; served CSS hashes match local build (0.B7lXNjHl, MessageList.CYw6YbP1) |
+| Verified live | ✅ | SPA 200 w/ chassis markers, /cognition/healthz ok, analyze→command/operator/0.95 |
+
+**Remaining:** OpenAI embeddings key (semantic memory degraded), T5 telemetry canvas + live logprobs (InspectorBlade renders n/a until cognition returns logprobs), Copilot review of full cognitive-os diff.

@@ -248,8 +248,11 @@ app.post("/threads/cluster", async (c: Context) => {
       }
     }
 
-    // Connected-components clustering with similarity threshold
-    const SIMILARITY_THRESHOLD = 0.55;
+    // Connected-components clustering with similarity threshold.
+    // all-MiniLM-L6-v2 scores tighter than OpenAI embeddings: related short
+    // texts land ~0.34-0.44, unrelated <=0.17. 0.55 (OpenAI-space) would
+    // cluster nothing. Measured 2026-08-07 against live model.
+    const SIMILARITY_THRESHOLD = 0.25;
     const visited = new Array(n).fill(false);
     const clusterGroups: number[][] = [];
 

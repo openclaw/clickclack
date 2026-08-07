@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
-   * COGNITIVE OS — Cognitive State Markers (T1)
+   * COGNITIVE OS — Cognitive State Markers (T4)
    *
    * Renders message metadata markers: intent color band, persona tag,
-   * confidence indicator, thread affiliation marker, execution status marker.
+   * confidence indicator, thread affiliation marker, execution status marker,
+   * and semantic thread chip.
    *
    * Every marker renders as a graceful absent state when its field is missing.
-   * The cognition service is not live yet (T3).
+   * Transient "analyzing" / "transforming" states shown while requests are in flight.
    */
 
   interface Props {
@@ -15,6 +16,14 @@
     confidence?: number | null;
     threadAffiliation?: string | null;
     executionStatus?: "pending" | "executing" | "complete" | "failed" | null;
+    /** Transient: cognition analysis is in flight. */
+    analyzing?: boolean;
+    /** Transient: a transform op is in flight. */
+    transforming?: boolean;
+    /** Semantic thread id for the chip affordance. */
+    semanticThreadId?: string | null;
+    /** Callback when semantic thread chip is clicked. */
+    onSemanticThreadClick?: (threadId: string) => void;
   }
 
   let {
@@ -23,6 +32,10 @@
     confidence = null,
     threadAffiliation = null,
     executionStatus = null,
+    analyzing = false,
+    transforming = false,
+    semanticThreadId = null,
+    onSemanticThreadClick,
   }: Props = $props();
 
   // Intent → color mapping. Absent = no band.
@@ -41,7 +54,10 @@
       persona !== null ||
       confidence !== null ||
       threadAffiliation !== null ||
-      executionStatus !== null,
+      executionStatus !== null ||
+      analyzing ||
+      transforming ||
+      semanticThreadId !== null,
   );
 
   function fmtConfidence(value: number): string {
@@ -94,6 +110,34 @@
       >
         <span class="cog-exec-dot" aria-hidden="true"></span>
         <span>{executionStatus}</span>
+      </span>
+    {/if}
+    <!-- Semantic thread chip (T4) -->
+    {#if semanticThreadId !== null}
+      <button
+        type="button"
+        class="cog-marker cog-semantic-chip"
+        title="Semantic thread: {semanticThreadId}"
+        aria-label="Semantic thread: {semanticThreadId}"
+        onclick={() => onSemanticThreadClick?.(semanticThreadId!)}
+      >
+        <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+        </svg>
+        <span>th:{semanticThreadId.slice(0, 8)}</span>
+      </button>
+    {/if}
+    <!-- Transient states (shown when inflight, even if metadata absent) -->
+    {#if analyzing}
+      <span class="cog-marker cog-transient" title="Analyzing…" aria-label="Analyzing message">
+        <span class="cog-transient-dot analyzing"></span>
+        analyzing
+      </span>
+    {/if}
+    {#if transforming}
+      <span class="cog-marker cog-transient" title="Transforming…" aria-label="Transforming message">
+        <span class="cog-transient-dot transforming"></span>
+        transforming
       </span>
     {/if}
   </div>
@@ -197,13 +241,64 @@
     background: var(--status-danger);
   }
 
+  /* Semantic thread chip */
+  .cog-semantic-chip {
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted-2);
+    cursor: pointer;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .cog-semantic-chip:hover {
+    background: var(--hover-strong);
+    color: var(--text);
+  }
+
+  .cog-semantic-chip:focus-visible {
+    outline: 1px solid var(--text-strong);
+    outline-offset: -1px;
+  }
+
+  /* Transient analyzing/transforming */
+  .cog-transient {
+    gap: 4px;
+    color: var(--muted-2);
+    font-style: italic;
+  }
+
+  .cog-transient-dot {
+    width: 5px;
+    height: 5px;
+    background: var(--muted-2);
+    border-radius: 0;
+  }
+
+  .cog-transient-dot.analyzing {
+    animation: cog-exec-pulse 1.2s ease-in-out infinite;
+    background: var(--status-executing);
+  }
+
+  .cog-transient-dot.transforming {
+    animation: cog-exec-pulse 0.9s ease-in-out infinite;
+    background: var(--status-executing);
+  }
+
   @keyframes cog-exec-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .exec-executing .cog-exec-dot {
+    .exec-executing .cog-exec-dot,
+    .cog-transient-dot.analyzing,
+    .cog-transient-dot.transforming {
       animation: none;
     }
   }

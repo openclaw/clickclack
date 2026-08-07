@@ -1,17 +1,20 @@
 /**
- * COGNITIVE OS — Cognition Service Client Stub (T1)
+ * COGNITIVE OS — Cognition Service Client (T4)
  *
- * The cognition service (apps/cognition) is NOT live yet (T3).
- * All handlers here log/queue; the markers render as absent states
- * when metadata fields are missing.
+ * Real client for the cognition service at same-origin /cognition
+ * (proxied by Cloudflare worker, strips /cognition prefix).
  *
- * Cognition API base is configurable via VITE_COGNITION_URL.
- * Default '' means no backend — all actions are no-ops.
+ * All handlers degrade gracefully on network failure (log + return null).
+ * Never throws into the UI.
  */
+
+import { api } from "./api";
 
 const COGNITION_URL = import.meta.env.VITE_COGNITION_URL || "/cognition";
 
-type TransformOp =
+// ── Types (exported for consumers) ──
+
+export type TransformOp =
   | "summarize"
   | "expand"
   | "rewrite"
@@ -28,22 +31,52 @@ type TransformOp =
   | "draft"
   | "diagnose";
 
-type PersonaID = "operator" | "analyst" | "creative" | "socratic" | "archivist";
+export type PersonaID = "operator" | "analyst" | "creative" | "socratic" | "archivist";
 
-interface TransformRequest {
-  messageId: string;
+export interface AnalysisResult {
+  intent?: string;
+  persona?: string;
+  confidence?: number;
+  context_tags?: string[];
+  clarification_question?: string;
+}
+
+export interface TransformResult {
+  original_content: string;
+  transformed_content: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface ClusterResult {
+  clusters: Array<{ id: string; label: string; message_ids: string[] }>;
+  assignments: Array<{ message_id: string; cluster_id: string }>;
+}
+
+export interface MemoryNode {
   content: string;
-  op: TransformOp;
-  persona?: PersonaID;
+  score: number;
 }
 
-interface UtilityAction {
-  kind: "transform" | "summarize" | "expand" | "thread_link" | "memory_link" | "persona_switch";
-  messageId: string;
-  payload?: string;
+export interface TransformHistoryEntry {
+  op: string;
+  at: string;
+  preview: string;
 }
 
-const actionQueue: UtilityAction[] = [];
+export interface MessageMetadataPatch {
+  intent?: string | null;
+  persona?: string | null;
+  confidence?: number | null;
+  context?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  transform_history?: TransformHistoryEntry[] | null;
+}
+
+// ── Idempotence tracking (module-level, survives component remounts) ──
+
+const analyzed = new Set<string>();
+
+// ── Public helpers ──
 
 /** Check if cognition service is available. */
 export function cognitionAvailable(): boolean {
@@ -55,59 +88,190 @@ export function cognitionURL(): string {
   return COGNITION_URL;
 }
 
-/** Queue a utility action for later processing (T4 integration). */
-export function queueAction(action: UtilityAction): void {
-  actionQueue.push(action);
-  if (COGNITION_URL) {
-    console.debug("[cognition] queued action:", action.kind, action.messageId);
-  }
+/** Check if a message has already been analyzed (in-memory, this session). */
+export function isAnalyzed(messageId: string): boolean {
+  return analyzed.has(messageId);
 }
 
-/** Drain and return all queued actions. */
-export function drainQueue(): UtilityAction[] {
-  return actionQueue.splice(0, actionQueue.length);
+/** Mark a message as analyzed so it won't be re-triggered. */
+export function markAnalyzed(messageId: string): void {
+  analyzed.add(messageId);
 }
 
-/** Stub: request a transform. In T4 this will POST to the cognition service. */
-export async function requestTransform(req: TransformRequest): Promise<string | null> {
-  if (!COGNITION_URL) {
-    console.debug("[cognition] transform stub:", req.op, req.messageId);
+// ── Cognition API calls ──
+
+/** POST /analyze — classify message intent / persona / confidence. */
+export async function analyze(
+  content: string,
+  context?: Record<string, unknown>,
+): Promise<AnalysisResult | null> {
+  if (!COGNITION_URL) return null;
+  try {
+    const res = await fetch(`${COGNITION_URL}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, context }),
+    });
+    if (!res.ok) {
+      console.warn("[cognition] analyze returned", res.status);
+      return null;
+    }
+    return (await res.json()) as AnalysisResult;
+  } catch (err) {
+    console.error("[cognition] analyze failed:", err);
     return null;
   }
+}
+
+/** POST /transform — apply an inline transform op. */
+export async function transform(
+  content: string,
+  op: TransformOp,
+  persona?: PersonaID,
+): Promise<TransformResult | null> {
+  if (!COGNITION_URL) return null;
   try {
     const res = await fetch(`${COGNITION_URL}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
+      body: JSON.stringify({ content, op, persona }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.content ?? null;
+    if (!res.ok) {
+      console.warn("[cognition] transform returned", res.status);
+      return null;
+    }
+    return (await res.json()) as TransformResult;
   } catch (err) {
     console.error("[cognition] transform failed:", err);
     return null;
   }
 }
 
-/** Stub: request analysis of message content. */
-export async function requestAnalysis(
-  messageId: string,
-  content: string,
-): Promise<{ intent?: string; persona?: string; confidence?: number } | null> {
-  if (!COGNITION_URL) {
-    console.debug("[cognition] analyze stub:", messageId);
-    return null;
-  }
+/** POST /threads/cluster — semantic thread clustering. */
+export async function cluster(contents: string[]): Promise<ClusterResult | null> {
+  if (!COGNITION_URL) return null;
   try {
-    const res = await fetch(`${COGNITION_URL}/analyze`, {
+    const res = await fetch(`${COGNITION_URL}/threads/cluster`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message_id: messageId, content }),
+      body: JSON.stringify({ contents }),
     });
-    if (!res.ok) return null;
-    return await res.json();
+    if (!res.ok) {
+      console.warn("[cognition] cluster returned", res.status);
+      return null;
+    }
+    return (await res.json()) as ClusterResult;
   } catch (err) {
-    console.error("[cognition] analyze failed:", err);
+    console.error("[cognition] cluster failed:", err);
     return null;
   }
+}
+
+/** GET /memory/query — semantic memory search. */
+export async function memoryQuery(q: string): Promise<{ nodes: MemoryNode[] } | null> {
+  if (!COGNITION_URL) return null;
+  try {
+    const params = new URLSearchParams({ q });
+    const res = await fetch(`${COGNITION_URL}/memory/query?${params}`);
+    if (!res.ok) {
+      console.warn("[cognition] memory query returned", res.status);
+      return null;
+    }
+    return (await res.json()) as { nodes: MemoryNode[] };
+  } catch (err) {
+    console.error("[cognition] memory query failed:", err);
+    return null;
+  }
+}
+
+/** POST /memory/anchors — pin a message as a memory anchor. */
+export async function memoryAnchor(
+  content: string,
+  source_message_id?: string,
+): Promise<{ id: string } | null> {
+  if (!COGNITION_URL) return null;
+  try {
+    const res = await fetch(`${COGNITION_URL}/memory/anchors`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, source_message_id }),
+    });
+    if (!res.ok) {
+      console.warn("[cognition] memory anchor returned", res.status);
+      return null;
+    }
+    return (await res.json()) as { id: string };
+  } catch (err) {
+    console.error("[cognition] memory anchor failed:", err);
+    return null;
+  }
+}
+
+// ── Message metadata patching (main API, not cognition service) ──
+
+/** PATCH /api/messages/{id}/metadata — persist cognitive metadata. */
+export async function patchMessageMetadata(
+  messageId: string,
+  metadata: MessageMetadataPatch,
+): Promise<boolean> {
+  try {
+    await api(`/api/messages/${messageId}/metadata`, {
+      method: "PATCH",
+      body: JSON.stringify(metadata),
+    });
+    return true;
+  } catch (err) {
+    console.error("[cognition] patch metadata failed:", err);
+    return false;
+  }
+}
+
+// ── Composite helpers ──
+
+/** Analyze message content and persist intent/persona/confidence via API. */
+export async function analyzeAndPersist(
+  messageId: string,
+  content: string,
+): Promise<AnalysisResult | null> {
+  if (!COGNITION_URL) return null;
+  if (isAnalyzed(messageId)) return null;
+  markAnalyzed(messageId);
+
+  const result = await analyze(content);
+  if (!result) return null;
+
+  await patchMessageMetadata(messageId, {
+    intent: result.intent ?? null,
+    persona: result.persona ?? null,
+    confidence: result.confidence ?? null,
+    context: result.context_tags ? { tags: result.context_tags } : null,
+  });
+
+  return result;
+}
+
+// ── Legacy stubs kept for backward compat (MessageUtilities T1 path) ──
+
+let _actionQueue: Array<{
+  kind: string;
+  messageId: string;
+  payload?: string;
+}> = [];
+
+/** Queue a utility action. Kept for backward compat but deprecated in T4. */
+export function queueAction(action: {
+  kind: string;
+  messageId: string;
+  payload?: string;
+}): void {
+  _actionQueue.push(action);
+}
+
+/** Drain queued actions. */
+export function drainQueue(): Array<{
+  kind: string;
+  messageId: string;
+  payload?: string;
+}> {
+  return _actionQueue.splice(0, _actionQueue.length);
 }

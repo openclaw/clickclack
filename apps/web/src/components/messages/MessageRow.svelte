@@ -20,6 +20,17 @@
   import TopicBadge from "./TopicBadge.svelte";
   import CognitiveMarkers from "./CognitiveMarkers.svelte";
   import MessageUtilities from "./MessageUtilities.svelte";
+  import CognitiveResultStrip from "./CognitiveResultStrip.svelte";
+  import {
+    analyzeAndPersist,
+    isAnalyzed,
+    transform,
+    memoryQuery,
+    patchMessageMetadata,
+    cognitionAvailable,
+    type PersonaID,
+    type TransformOp,
+  } from "../../lib/cognition";
 
   type Props = {
     message: Message;
@@ -157,6 +168,158 @@
   let cogConfidence = $derived(message.confidence ?? null);
   let cogThreadAffil = $derived(message.semantic_thread_id ?? null);
   let cogExecStatus = $derived(message.execution_status ?? null);
+  let cogSemanticThreadId = $derived(message.semantic_thread_id ?? null);
+
+  // ── COGNITIVE OS: transient states ──
+  let cogIsAnalyzing = $state(false);
+  let cogIsTransforming = $state(false);
+  let cogIsQuerying = $state(false);
+  let cogResultStrip = $state<{
+    kind: "transform";
+    op: string;
+    original: string;
+    transformed: string;
+  } | {
+    kind: "memory";
+    nodes: Array<{ content: string; score: number }>;
+  } | null>(null);
+  let cogApplyingResult = $state(false);
+  let personaSwitchIndex = $state(0);
+  const personaCycle: PersonaID[] = ["analyst", "creative", "socratic", "archivist", "operator"];
+
+  function dismissResult() {
+    cogResultStrip = null;
+  }
+
+  async function applyTransformResult() {
+    if (!cogResultStrip || cogResultStrip.kind !== "transform") return;
+    cogApplyingResult = true;
+    const entry = {
+      op: cogResultStrip.op,
+      at: new Date().toISOString(),
+      preview: cogResultStrip.transformed.slice(0, 200),
+    };
+    // Append to existing transform_history if any
+    const existing = message.transform_history_json ?? [];
+    await patchMessageMetadata(message.id, {
+      transform_history: [...existing, entry],
+    });
+    cogApplyingResult = false;
+    dismissResult();
+  }
+
+  // ── COGNITIVE OS: analyze-on-ingest (render + no intent → fire) ──
+  $effect(() => {
+    // Only fire for real messages with content, not pending/failed/preamble/editing
+    const shouldAnalyze =
+      cognitionAvailable() &&
+      !isAnalyzed(message.id) &&
+      !message.intent &&
+      message.body &&
+      !message.preamble_block &&
+      !message.deleted_at &&
+      message.status !== "pending" &&
+      message.status !== "failed" &&
+      !editing;
+    if (!shouldAnalyze) return;
+
+    cogIsAnalyzing = true;
+    analyzeAndPersist(message.id, message.body).finally(() => {
+      cogIsAnalyzing = false;
+    });
+  });
+
+  // ── COGNITIVE OS: utility action handlers ──
+
+  async function handleTransformAction() {
+    if (cogIsTransforming || !message.body) return;
+    cogIsTransforming = true;
+    cogResultStrip = null;
+    const result = await transform(message.body, "rewrite");
+    cogIsTransforming = false;
+    if (result) {
+      cogResultStrip = {
+        kind: "transform",
+        op: "rewrite",
+        original: result.original_content,
+        transformed: result.transformed_content,
+      };
+    }
+  }
+
+  async function handleSummarizeAction() {
+    if (cogIsTransforming || !message.body) return;
+    cogIsTransforming = true;
+    cogResultStrip = null;
+    const result = await transform(message.body, "summarize");
+    cogIsTransforming = false;
+    if (result) {
+      cogResultStrip = {
+        kind: "transform",
+        op: "summarize",
+        original: result.original_content,
+        transformed: result.transformed_content,
+      };
+    }
+  }
+
+  async function handleExpandAction() {
+    if (cogIsTransforming || !message.body) return;
+    cogIsTransforming = true;
+    cogResultStrip = null;
+    const result = await transform(message.body, "expand");
+    cogIsTransforming = false;
+    if (result) {
+      cogResultStrip = {
+        kind: "transform",
+        op: "expand",
+        original: result.original_content,
+        transformed: result.transformed_content,
+      };
+    }
+  }
+
+  function handleThreadLinkAction() {
+    if (canOpenThread) onOpenThread(message);
+  }
+
+  async function handleMemoryLinkAction() {
+    if (cogIsQuerying || !message.body) return;
+    cogIsQuerying = true;
+    cogResultStrip = null;
+    const result = await memoryQuery(message.body);
+    cogIsQuerying = false;
+    if (result?.nodes?.length) {
+      cogResultStrip = {
+        kind: "memory",
+        nodes: result.nodes,
+      };
+    }
+  }
+
+  async function handlePersonaSwitchAction() {
+    if (cogIsTransforming || !message.body) return;
+    const persona = personaCycle[personaSwitchIndex % personaCycle.length];
+    personaSwitchIndex++;
+    cogIsTransforming = true;
+    cogResultStrip = null;
+    const result = await transform(message.body, "persona_rewrite", persona);
+    cogIsTransforming = false;
+    if (result) {
+      cogResultStrip = {
+        kind: "transform",
+        op: `persona_rewrite (${persona})`,
+        original: result.original_content,
+        transformed: result.transformed_content,
+      };
+    }
+  }
+
+  // If message has semantic thread id but no thread handler, nav to the parent thread
+  function handleSemanticThreadClick(threadId: string) {
+    // Sematic threads don't map 1:1 to UI threads, so open the parent thread for now
+    if (canOpenThread) onOpenThread(message);
+  }
 
   function openThreadFromRow(event: MouseEvent) {
     if (suppressRowClick || showActionSheet) {
@@ -616,6 +779,10 @@
       confidence={cogConfidence}
       threadAffiliation={cogThreadAffil}
       executionStatus={cogExecStatus}
+      analyzing={cogIsAnalyzing}
+      transforming={cogIsTransforming}
+      semanticThreadId={cogSemanticThreadId}
+      onSemanticThreadClick={handleSemanticThreadClick}
     />
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
@@ -624,6 +791,14 @@
       use:enhanceMarkdown
       use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
     >{@html markdown(message.body)}</div>
+    <!-- COGNITIVE OS — Inline result strip (transform / memory query results) -->
+    <CognitiveResultStrip
+      data={cogResultStrip}
+      loading={cogIsTransforming || cogIsQuerying}
+      onApply={cogResultStrip?.kind === "transform" ? applyTransformResult : undefined}
+      applying={cogApplyingResult}
+      onDismiss={dismissResult}
+    />
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}
@@ -689,6 +864,14 @@
     messageId={message.id}
     visible={rowActive}
     flip={actionsFlipped}
+    onTransform={handleTransformAction}
+    onSummarize={handleSummarizeAction}
+    onExpand={handleExpandAction}
+    onThreadLink={handleThreadLinkAction}
+    onMemoryLink={handleMemoryLinkAction}
+    onPersonaSwitch={handlePersonaSwitchAction}
+    transforming={cogIsTransforming}
+    querying={cogIsQuerying}
   />
   <div class="message-actions" aria-label="Message actions">
     {#if copyStatus}

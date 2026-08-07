@@ -112,7 +112,19 @@ Copilot auth (device code) — this is the designated frontier lane per Conor.
 
 ---
 
-## 4. Decision Points for Conor
+## 5. Deploy Log — T1/T2/T3 Complete Pass (2026-08-06 22:5x MDT)
+
+| Component | Status | Evidence |
+|---|---|---|
+| Droplet binary (T1 reskin + T2 schema) | ✅ deployed | `/opt/clickclack/clickclack` replaced (backup `.bak-20260806`), service active, root HTTP 200 |
+| SQLite migration 0041 | ✅ applied | all 6 columns on `messages` (intent/persona/confidence/context_json/metadata_json/transform_history_json) |
+| Cognition service (T3) | ✅ live | systemd `logos-cognition` on :8787, healthz ok, real DeepSeek analyze/transform responses |
+| Firewall | ✅ locked | 8787 open to Cloudflare IP ranges only |
+| Cloudflare worker | ✅ deployed | /cognition/* → :8787 (prefix-stripped), /api/* → droplet :8090; version b27103ca |
+| Container (Neon) | ✅ rebuilt | new image hash; postgres migration 0042 additive |
+| Public checks | ✅ green | SPA 200 + served CSS hash == reskinned local build; /cognition/analyze → real LLM output; /cognition/healthz ok |
+
+**Open items:** OpenAI embeddings key is expired/invalid (semantic memory/clustering falls back to substring/stub — graceful). Copilot auth device flow was pending at deploy time. T4 (SPA→cognition wiring) not yet done — markers still absent-state until then.
 
 1. **Copilot auth** — complete the device flow so Phase B handoff can start
 2. **T3 Phase B lane** — Copilot CLI (once authed) vs VS Code CLI vs keeping

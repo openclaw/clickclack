@@ -5,8 +5,21 @@
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import TelemetryRail from "$lib/components/TelemetryRail.svelte";
   import { inspectMode, telemetryOpen } from "$lib/ui";
+  import { telemetrySnapshot, marginSnapshot } from "$lib/telemetry";
 
   let mounted = false;
+  let tdata = $state($telemetrySnapshot);
+  let mdata = $state($marginSnapshot);
+
+  $effect(() => {
+    const unsubTelemetry = telemetrySnapshot.subscribe((v) => (tdata = v));
+    const unsubMargin = marginSnapshot.subscribe((v) => (mdata = v));
+    return () => {
+      unsubTelemetry();
+      unsubMargin();
+    };
+  });
+
   $effect(() => {
     mounted = true;
     const setInspect = (down: boolean) => inspectMode.set(down);
@@ -30,16 +43,16 @@
 </script>
 
 <div class="logos-shell" class:inspect={$inspectMode} class:telemetry={$telemetryOpen}>
-  <SemanticMargin />
+  <SemanticMargin messageCount={mdata.messageCount} intents={mdata.intents} />
   <main class="logos-main">
     <slot />
   </main>
   {#if $telemetryOpen}
     <TelemetryRail
-      intents={null}
-      personas={null}
-      pipeline={null}
-      tokens={null}
+      intents={tdata.intents}
+      personas={tdata.personas}
+      pipeline={tdata.pipeline}
+      tokens={tdata.tokens}
     />
   {/if}
   <CommandPalette />

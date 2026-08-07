@@ -26,6 +26,8 @@ import type {
   ClusterResult,
   HealthResponse,
   MemoryNode,
+  RespondRequest,
+  RespondResult,
   Telemetry,
   TransformRequest,
   TransformResult,
@@ -34,6 +36,7 @@ import type {
 import { createLlmClient } from "./lib/llm.js";
 import { createEmbedProvider } from "./lib/embed.js";
 import { getStore, cosineSimilarity } from "./lib/store.js";
+import { handleRespond } from "./lib/respond.js";
 
 // ─── Version (bumped on release) ─────────────────────────────────────────────
 
@@ -136,6 +139,51 @@ app.post("/analyze", async (c: Context) => {
     }
   }
 
+  return c.json(result);
+});
+
+// ─── POST /respond ───────────────────────────────────────────────────────────
+
+app.post("/respond", async (c: Context) => {
+  const body = await c.req.json<RespondRequest>();
+
+  // Validate input
+  if (!body.content || typeof body.content !== "string") {
+    return c.json({ error: "content is required (string)" }, 400);
+  }
+  if (body.content.length > 32000) {
+    return c.json({ error: "content exceeds 32000 char limit" }, 400);
+  }
+  if (
+    body.intent &&
+    !(INTENTS as readonly string[]).includes(body.intent)
+  ) {
+    return c.json(
+      { error: `intent must be one of: ${INTENTS.join(", ")} or omitted` },
+      400,
+    );
+  }
+  if (
+    body.persona &&
+    !(PERSONAS as readonly string[]).includes(body.persona)
+  ) {
+    return c.json(
+      { error: `persona must be one of: ${PERSONAS.join(", ")} or omitted` },
+      400,
+    );
+  }
+  if (
+    body.context_messages &&
+    (!Array.isArray(body.context_messages) ||
+      body.context_messages.length > 20)
+  ) {
+    return c.json(
+      { error: "context_messages must be an array of up to 20 messages" },
+      400,
+    );
+  }
+
+  const result: RespondResult = await handleRespond(body, llm, store);
   return c.json(result);
 });
 

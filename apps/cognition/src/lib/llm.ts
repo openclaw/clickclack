@@ -25,12 +25,29 @@ import { withPersona, getPersonaDef } from "./personas.js";
 
 // ─── Interface ───────────────────────────────────────────────────────────────
 
+/** Parameters for the respond (chat) method */
+export interface RespondParams {
+  systemPrompt: string;
+  userContent: string;
+  contextMessages?: { role: "user" | "assistant"; content: string }[];
+}
+
+/** Result from the respond (chat) method */
+export interface RespondLlmResult {
+  content: string;
+  model: string;
+  totalTokens?: number;
+}
+
 export interface LlmClient {
   /** Analyze content for intent, persona, and confidence. */
   analyze(req: AnalyzeRequest): Promise<AnalyzeResult>;
 
   /** Apply a transform op to content, optionally filtered through a persona. */
   transform(req: TransformRequest): Promise<TransformResult>;
+
+  /** Generate a companion reply with a fully-built system prompt (persona + style). */
+  respond(params: RespondParams): Promise<RespondLlmResult>;
 }
 
 // ─── Provider resolution ─────────────────────────────────────────────────────
@@ -174,6 +191,22 @@ export class StubLlmClient implements LlmClient {
         confidence: 0.72,
       },
       telemetry,
+    };
+  }
+
+  async respond(params: RespondParams): Promise<RespondLlmResult> {
+    this.callCount++;
+    console.log("[cognition:stub] respond()", {
+      userLen: params.userContent.length,
+      contextLen: params.contextMessages?.length ?? 0,
+      call: this.callCount,
+    });
+
+    // Simple stub that echoes the input with a persona-aware prefix
+    const prefix = "[STUB RESPONSE — cognition offline]";
+    return {
+      content: `${prefix}\n\nInput: ${params.userContent.slice(0, 200)}`,
+      model: "stub",
     };
   }
 }
@@ -418,6 +451,80 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
       );
       return new StubLlmClient().transform(req);
     }
+  }
+
+  // ── respond (adaptive response generator) ───────────────────────────────
+
+  async respond(params: RespondParams): Promise<RespondLlmResult> {
+    this.callCount++;
+    console.log("[cognition:deepseek] respond()", {
+      userLen: params.userContent.length,
+      contextLen: params.contextMessages?.length ?? 0,
+      call: this.callCount,
+    });
+
+    try {
+      // Build messages array: system + optional context + user
+      const messages: { role: string; content: string }[] = [
+        { role: "system", content: params.systemPrompt },
+      ];
+
+      if (params.contextMessages && params.contextMessages.length > 0) {
+        for (const msg of params.contextMessages.slice(0, 10)) {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+
+      messages.push({ role: "user", content: params.userContent });
+
+      const chatResult = await this.chatMessages(messages);
+
+      return {
+        content: chatResult.content,
+        model: this.model,
+        totalTokens: chatResult.total_tokens,
+      };
+    } catch (err) {
+      console.warn(
+        "[cognition:deepseek] respond failed, falling back to stub:",
+        err,
+      );
+      return new StubLlmClient().respond(params);
+    }
+  }
+
+  /** Chat with explicit messages array (for respond which needs context injection) */
+  private async chatMessages(
+    messages: { role: string; content: string }[],
+    opts?: { temperature?: number; maxTokens?: number },
+  ): Promise<ChatResult> {
+    const res = await fetchWithTimeout(`${DEEPSEEK_BASE}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        temperature: opts?.temperature ?? 0.5,
+        max_tokens: opts?.maxTokens ?? 2048,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`DeepSeek API error ${res.status}: ${text}`);
+    }
+
+    const data = (await res.json()) as {
+      choices: { message: { content: string } }[];
+      usage?: { total_tokens: number };
+    };
+    return {
+      content: data.choices[0]?.message?.content ?? "",
+      total_tokens: data.usage?.total_tokens,
+    };
   }
 }
 

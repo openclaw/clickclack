@@ -9,13 +9,16 @@
   //
   // Graceful states: booting (spinner text), error (mono error line), empty channel.
 
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { chatState, boot, selectChannel, selectWorkspace, sendMessage } from "$lib/clickclack/chat";
   import type { Channel } from "$lib/clickclack/types";
   import type { MessageMetadata } from "$lib/clickclack/types";
   import MessageFrame, { type LogosMessage } from "$lib/components/MessageFrame.svelte";
   import InspectorBlade from "$lib/components/InspectorBlade.svelte";
-  import { activeMessageId } from "$lib/ui";
+  import ResultStrip from "$lib/components/ResultStrip.svelte";
+  import ClarificationPrompt from "$lib/components/ClarificationPrompt.svelte";
+  import { activeMessageId, currentPersona } from "$lib/ui";
+  import { transform, memoryQuery } from "$lib/cognition";
 
   // ── Local state ──────────────────────────────────────────────
 
@@ -23,6 +26,22 @@
   let composerRef: HTMLTextAreaElement | null = $state(null);
   let messageListRef: HTMLDivElement | null = $state(null);
   let inspecting: LogosMessage | null = $state(null);
+
+  // ── Transform & clarification state ───────────────────────────
+
+  /** Active transform results: messageId → { content, op, model, loading } */
+  let activeTransforms = $state<Map<string, {
+    content: string;
+    op: string;
+    model: string | null;
+    loading: boolean;
+  }>>(new Map());
+
+  /** Dismissed clarification prompts: messageId → true */
+  let dismissedClarifications = $state<Set<string>>(new Set());
+
+  /** Non-persistent body overrides from applied transforms: messageId → newBody */
+  let appliedOverrides = $state<Map<string, string>>(new Map());
 
   // ── Derived from chatState ───────────────────────────────────
 
@@ -40,12 +59,16 @@
     return unsub;
   });
 
+  let persona = $state("operator");
+  $effect(() => {
+    const unsub = currentPersona.subscribe((v) => (persona = v));
+    return unsub;
+  });
+
   // ── Metadata extraction (spec §8.4) ──────────────────────────
 
-  function messageMeta(msg: { body?: string } & Record<string, unknown>): MessageMetadata {
-    // Metadata is stored on the message object via PATCH /api/messages/{id}/metadata
-    // The clickclack API stores it in the message.metadata field (JSON object).
-    const raw = (msg as Record<string, unknown>).metadata;
+  function messageMeta(msg: Record<string, unknown>): MessageMetadata {
+    const raw = msg.metadata;
     if (raw && typeof raw === "object") return raw as MessageMetadata;
     return {};
   }
@@ -103,11 +126,14 @@
     }
   }
 
+  // ── Message → LogosMessage adapter ─────────────────────────────
+
   function messageToLogos(msg: { body?: string } & Record<string, unknown>): LogosMessage {
     const m = messageMeta(msg);
+    const id = String(msg.id ?? "");
     return {
-      id: String(msg.id ?? ""),
-      body: String(msg.body ?? ""),
+      id,
+      body: appliedOverrides.get(id) ?? String(msg.body ?? ""),
       intent: m.intent ?? null,
       persona: m.persona ?? null,
       confidence: m.confidence ?? null,
@@ -117,6 +143,8 @@
       created_at: msg.created_at ? String(msg.created_at) : null,
     };
   }
+
+  // ── Inspector ──────────────────────────────────────────────────
 
   function onInspect(msg: LogosMessage) {
     inspecting = inspecting?.id === msg.id ? null : msg;
@@ -128,6 +156,8 @@
     activeMessageId.set(null);
   }
 
+  // ── Row focus for keyboard / hover ─────────────────────────────
+
   function onRowFocus(msg: { id?: string }) {
     activeMessageId.set(String(msg.id ?? ""));
   }
@@ -138,10 +168,198 @@
     return "unknown";
   }
 
-  // ── Bootstrap ────────────────────────────────────────────────
+  // ── Action rail wiring: transforms + memory ────────────────────
+
+  interface TransformEventDetail {
+    op: string;
+    messageId: string;
+  }
+
+  async function handleTransformEvent(detail: TransformEventDetail) {
+    const msg = snapshot.messages.find((m) => m.id === detail.messageId);
+    if (!msg) return;
+    const body = (msg as Record<string, unknown>).body;
+    if (typeof body !== "string" || !body.trim()) return;
+
+    // Show loading strip
+    activeTransforms.set(detail.messageId, { content: "", op: detail.op, model: null, loading: true });
+    activeTransforms = new Map(activeTransforms); // trigger reactivity
+
+    const result = await transform(body, detail.op, persona);
+    if (result) {
+      const model = (result.meta && typeof result.meta === "object"
+        ? (result.meta as Record<string, unknown>).model as string | undefined
+        : undefined) ?? null;
+      activeTransforms.set(detail.messageId, {
+        content: result.transformed_content,
+        op: detail.op,
+        model,
+        loading: false,
+      });
+    } else {
+      activeTransforms.set(detail.messageId, {
+        content: "[ERR] Cognition service returned no result.",
+        op: detail.op,
+        model: null,
+        loading: false,
+      });
+    }
+    activeTransforms = new Map(activeTransforms);
+  }
+
+  async function handleMemoryEvent(detail: { messageId: string }) {
+    const msg = snapshot.messages.find((m) => m.id === detail.messageId);
+    if (!msg) return;
+    const body = (msg as Record<string, unknown>).body;
+    if (typeof body !== "string" || !body.trim()) return;
+
+    // Show loading strip
+    activeTransforms.set(detail.messageId, { content: "", op: "memory", model: null, loading: true });
+    activeTransforms = new Map(activeTransforms);
+
+    const result = await memoryQuery(body.slice(0, 500));
+    if (result?.nodes?.length) {
+      const lines = result.nodes.map(
+        (n) => `#NODE-${n.id.slice(0, 12)}  (${n.score.toFixed(3)})  ${n.content.slice(0, 80)}`
+      );
+      activeTransforms.set(detail.messageId, {
+        content: lines.join("\n"),
+        op: "memory",
+        model: null,
+        loading: false,
+      });
+    } else {
+      activeTransforms.set(detail.messageId, {
+        content: "[MEMORY] No matching anchors found.",
+        op: "memory",
+        model: null,
+        loading: false,
+      });
+    }
+    activeTransforms = new Map(activeTransforms);
+  }
+
+  function dismissTransform(messageId: string) {
+    activeTransforms.delete(messageId);
+    activeTransforms = new Map(activeTransforms);
+  }
+
+  function applyTransform(messageId: string, content: string) {
+    appliedOverrides.set(messageId, content);
+    appliedOverrides = new Map(appliedOverrides);
+    dismissTransform(messageId);
+  }
+
+  // ── Clarification handling ─────────────────────────────────────
+
+  function getClarificationQuestion(msg: Record<string, unknown>): string | null {
+    const m = messageMeta(msg);
+    const cq = (m as Record<string, unknown>).clarification_question;
+    if (typeof cq === "string" && cq.trim()) return cq.trim();
+    return null;
+  }
+
+  function handleClarifyAsk(messageId: string, question: string) {
+    const chId = snapshot.activeChannelId;
+    if (!chId) return;
+    sendMessage(chId, question);
+    dismissedClarifications.add(messageId);
+    dismissedClarifications = new Set(dismissedClarifications);
+  }
+
+  function dismissClarification(messageId: string) {
+    dismissedClarifications.add(messageId);
+    dismissedClarifications = new Set(dismissedClarifications);
+  }
+
+  // ── Keyboard navigation (spec §8.6) ────────────────────────────
+
+  function getVisibleMessageIds(): string[] {
+    if (!messageListRef) return [];
+    const rows = messageListRef.querySelectorAll("[data-msg-id]");
+    return Array.from(rows).map((el) => el.getAttribute("data-msg-id") ?? "").filter(Boolean);
+  }
+
+  function scrollToMessageId(id: string) {
+    const el = messageListRef?.querySelector(`[data-msg-id="${id}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }
+
+  function navigateMessage(direction: 1 | -1) {
+    const ids = getVisibleMessageIds();
+    if (ids.length === 0) return;
+    const current = $activeMessageId;
+    const idx = current ? ids.indexOf(current) : -1;
+    const nextIdx = idx === -1 ? 0 : Math.min(Math.max(idx + direction, 0), ids.length - 1);
+    const nextId = ids[nextIdx];
+    if (nextId) {
+      activeMessageId.set(nextId);
+      scrollToMessageId(nextId);
+    }
+  }
+
+  function openInspectorForActive() {
+    const aid = $activeMessageId;
+    if (!aid) return;
+    const msg = snapshot.messages.find((m) => m.id === aid);
+    if (msg) {
+      inspecting = messageToLogos(msg);
+    }
+  }
+
+  function handleListKeydown(e: KeyboardEvent) {
+    // Only handle when not typing in composer
+    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      navigateMessage(1);
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      navigateMessage(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      openInspectorForActive();
+    } else if (e.key === "Escape") {
+      closeInspector();
+    }
+  }
+
+  // ── Event listeners for MessageFrame CustomEvents ──────────────
+
+  function handleBubbledTransform(e: Event) {
+    const ce = e as CustomEvent<TransformEventDetail>;
+    if (ce.detail?.messageId && ce.detail?.op) {
+      e.stopPropagation();
+      void handleTransformEvent(ce.detail);
+    }
+  }
+
+  function handleBubbledMemory(e: Event) {
+    const ce = e as CustomEvent<{ messageId: string }>;
+    if (ce.detail?.messageId) {
+      e.stopPropagation();
+      void handleMemoryEvent(ce.detail);
+    }
+  }
 
   onMount(() => {
     boot();
+
+    // Listen for bubbled CustomEvents from MessageFrame
+    const listEl = messageListRef;
+    if (listEl) {
+      listEl.addEventListener("onTransform", handleBubbledTransform);
+      listEl.addEventListener("onMemory", handleBubbledMemory);
+    }
+
+    // Focus the message list for keyboard nav
+    messageListRef?.focus();
+  });
+
+  onDestroy(() => {
+    messageListRef?.removeEventListener("onTransform", handleBubbledTransform);
+    messageListRef?.removeEventListener("onMemory", handleBubbledMemory);
   });
 </script>
 
@@ -183,7 +401,15 @@
   </div>
 
   <!-- ═══ MESSAGE LIST ═══ -->
-  <div class="cs-messages" bind:this={messageListRef}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="cs-messages"
+    bind:this={messageListRef}
+    tabindex="0"
+    role="list"
+    aria-label="Message stream"
+    onkeydown={handleListKeydown}
+  >
     {#if snapshot.status === "booting"}
       <div class="cs-state logos-mono">SUBSTRATE BOOTING — awaiting workspace connection…</div>
     {:else if snapshot.status === "error"}
@@ -198,16 +424,42 @@
       </div>
     {:else}
       {#each snapshot.messages as msg (msg.id)}
+        {@const msgId = String(msg.id)}
+        {@const logosMsg = messageToLogos(msg)}
+        {@const rawMsg = msg as Record<string, unknown>}
+        {@const clarifyQ = getClarificationQuestion(rawMsg)}
+        {@const showClarify = clarifyQ != null && !dismissedClarifications.has(msgId)}
+        {@const hasTransform = activeTransforms.has(msgId)}
+        {@const tform = activeTransforms.get(msgId)}
         <div
           class="cs-row"
-          data-msg-id={msg.id}
-          class:cs-active={$activeMessageId === msg.id}
+          data-msg-id={msgId}
+          class:cs-active={$activeMessageId === msgId}
           onmouseenter={() => onRowFocus(msg)}
         >
-          <MessageFrame message={messageToLogos(msg)} onInspect={onInspect} />
-          {#if inspecting?.id === msg.id}
-            <InspectorBlade message={inspecting} open={true} onClose={closeInspector} />
-          {/if}
+          <div class="cs-row-inner">
+            <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} />
+            {#if inspecting?.id === msgId}
+              <InspectorBlade message={inspecting} open={true} onClose={closeInspector} />
+            {/if}
+            {#if showClarify && clarifyQ}
+              <ClarificationPrompt
+                question={clarifyQ}
+                onAsk={(q) => handleClarifyAsk(msgId, q)}
+                onDismiss={() => dismissClarification(msgId)}
+              />
+            {/if}
+            {#if hasTransform && tform}
+              <ResultStrip
+                result={tform.loading ? "…" : tform.content}
+                op={tform.op}
+                model={tform.model}
+                messageId={msgId}
+                onApply={applyTransform}
+                onDismiss={dismissTransform}
+              />
+            {/if}
+          </div>
         </div>
       {/each}
     {/if}
@@ -305,6 +557,11 @@
     overflow-y: auto;
     padding: 0;
     min-height: 0;
+    outline: none;
+  }
+  .cs-messages:focus-visible {
+    outline: 1px solid var(--line-strong);
+    outline-offset: -2px;
   }
   .cs-state {
     padding: 20px;
@@ -318,95 +575,17 @@
 
   /* ── Message row ──────────────────────────── */
   .cs-row {
-    display: flex;
     border-bottom: 1px solid var(--line);
-    min-height: 0;
   }
   .cs-row:last-child {
     border-bottom: none;
   }
-  .cs-intent-bar {
-    width: 2px;
-    flex-shrink: 0;
-    background: var(--intent-bar-color, var(--intent-default));
-  }
-  .cs-row-body {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 12px;
-  }
-  .cs-meta {
-    color: var(--muted-2);
-    margin-bottom: 4px;
-    letter-spacing: 0.03em;
-    word-break: break-all;
-  }
-  .cs-byline {
+  .cs-row-inner {
     display: flex;
-    gap: 10px;
-    align-items: baseline;
-    margin-bottom: 4px;
-    color: var(--muted);
+    flex-direction: column;
   }
-  .cs-author {
-    color: var(--text-strong);
-    font-weight: 600;
-  }
-  .cs-time {
-    color: var(--muted-2);
-  }
-  .cs-body {
-    color: var(--text);
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-size: 13px;
-  }
-
-  /* ── Composer ─────────────────────────────── */
-  .cs-composer {
-    display: flex;
-    gap: 0;
-    border-top: 1px solid var(--line);
+  .cs-row.cs-active > .cs-row-inner > :global(.msg-frame) {
+    border-color: var(--line-strong);
     background: var(--panel);
-    padding: 6px 8px;
-  }
-  .cs-input {
-    flex: 1;
-    background: var(--panel-2);
-    border: 1px solid var(--line-strong);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    padding: 6px 8px;
-    resize: none;
-    outline: none;
-    line-height: 1.5;
-  }
-  .cs-input:focus {
-    border-color: var(--accent-intent);
-  }
-  .cs-input::placeholder {
-    color: var(--muted-2);
-  }
-  .cs-send-btn {
-    background: var(--panel-2);
-    border: 1px solid var(--line-strong);
-    border-left: none;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 4px 14px;
-    cursor: pointer;
-    transition: color var(--motion-fast), border-color var(--motion-fast);
-    white-space: nowrap;
-  }
-  .cs-send-btn:hover:not(:disabled) {
-    color: var(--accent-intent);
-    border-color: var(--accent-intent);
-  }
-  .cs-send-btn:disabled {
-    opacity: 0.3;
-    cursor: default;
   }
 </style>

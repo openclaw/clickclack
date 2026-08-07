@@ -10,6 +10,7 @@ export type {
   Message,
   MessagePage,
   User,
+  RealtimeEvent,
 } from "@clickclack/sdk-ts";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,8 @@ export interface ChatStateSnapshot {
   messages: import("@clickclack/sdk-ts").Message[];
   error?: string;
   user?: import("@clickclack/sdk-ts").User;
+  /** Active realtime transport: WebSocket or polling fallback. */
+  realtime: "ws" | "poll";
 }
 
 // ---------------------------------------------------------------------------

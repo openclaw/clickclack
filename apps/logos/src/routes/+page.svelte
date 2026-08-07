@@ -56,7 +56,8 @@
 
   <footer class="console-statusbar logos-mono">
     <span>⌘K palette</span><span>·</span><span>Alt inspect</span><span>·</span>
-    <span>j/k navigate</span><span>·</span><span class="accent-thread">:{persona} switch</span>
+    <span>j/k navigate</span><span>·</span><span>Enter inspect</span><span>·</span>
+    <span>Esc close</span><span>·</span><span class="accent-thread">:{persona} switch</span>
   </footer>
 </div>
 

@@ -178,6 +178,36 @@ export interface Telemetry {
   logprobs?: { token: string; prob: number }[];
 }
 
+// ─── Adaptive Response Generator (§6.1) ─────────────────────────────────────
+
+/** POST /respond request body */
+export interface RespondRequest {
+  content: string;
+  /** Requested persona (defaults to operator if omitted) */
+  persona?: Persona;
+  /** Pre-classified intent (if omitted, runs intent parser) */
+  intent?: Intent;
+  /** Recent conversation context for the LLM */
+  context_messages?: { role: "user" | "assistant"; content: string }[];
+}
+
+/** POST /respond response */
+export interface RespondResult {
+  /** The generated companion reply */
+  content: string;
+  meta: {
+    intent: Intent;
+    persona: Persona;
+    confidence: number;
+    model: string;
+    latency_ms: number;
+    /** Top-k memory node IDs relevant to the input (ask/command intents only) */
+    memory_citations?: string[];
+    /** Steps actually executed in order */
+    execution_stack: string[];
+  };
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export interface HealthResponse {

@@ -145,3 +145,19 @@ Copilot auth (device code) — this is the designated frontier lane per Conor.
 | Verified live | ✅ | SPA 200 w/ chassis markers, /cognition/healthz ok, analyze→command/operator/0.95 |
 
 **Remaining:** OpenAI embeddings key (semantic memory degraded), T5 telemetry canvas + live logprobs (InspectorBlade renders n/a until cognition returns logprobs), Copilot review of full cognitive-os diff.
+
+## 7. Semantic Layer + Telemetry — DEPLOYED 2026-08-07 01:0x MDT
+
+| Item | Status | Evidence |
+|---|---|---|
+| Local embeddings (transformers.js all-MiniLM-L6-v2) | ✅ live | model loads in ~2s on droplet; zero API key; OpenAI key dead (401) no longer matters |
+| Semantic memory | ✅ live | /memory/query cosine-ranked (0.483 on option-stop query, no substring) |
+| Semantic clustering | ✅ live | /threads/cluster real; threshold tuned 0.55→0.25 (all-MiniLM space, measured) |
+| Telemetry on analyze/transform | ✅ live | latency_ms, total_tokens, model, execution_stack, intent_vector_score, memory_citations |
+| Semantic thread sidebar + memory viewer | ✅ live | SemanticThreadPane (THREADS\|MEMORY tabs), CL-XX chips, cross-thread retrieval |
+| Clarification prompts | ✅ live | inline ? question with [ASK]/[DISMISS] |
+| InspectorBlade telemetry wiring | ✅ live | reads metadata_json.telemetry + THREAD tab |
+| Cluster contract fixed | ✅ | client sends message_ids+contents (server echoes real IDs) |
+| Container + droplet | ✅ | wrangler v5791826f, droplet binary v4, cognition v2 |
+
+**Known n/a:** logprobs omitted (DeepSeek API doesn't return them — never faked).

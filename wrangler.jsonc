@@ -11,6 +11,7 @@
   "vars": {
     "CLICKCLACK_PUBLIC_URL": "https://app.catabolicsolutions.com",
     "CLICKCLACK_UPSTREAM_URL": "http://137.184.144.196.nip.io:8090",
+    "CLICKCLACK_COGNITION_URL": "http://137.184.144.196.nip.io:8787",
     "CLICKCLACK_CONTAINER_NAME": "prod-20260722-embed-fit",
     "CLICKCLACK_GITHUB_MODERATOR_ORG": "openclaw",
     "CLICKCLACK_UPLOADS": "r2://clickclack-uploads/prod",

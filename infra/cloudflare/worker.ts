@@ -42,10 +42,27 @@ export default {
       workerEnv.CLICKCLACK_UPSTREAM_URL &&
       (requestURL.pathname === "/api" || requestURL.pathname.startsWith("/api/"));
 
-    if (shouldProxyToUpstream) {
+    // PROJECT LOGOS: proxy cognition service requests to the cognition
+    // service (droplet :8787 by default) — the "brain" for intent/persona/
+    // transforms/memory. Falls back to the container when unset.
+    const shouldProxyCognition =
+      workerEnv.CLICKCLACK_COGNITION_URL &&
+      (requestURL.pathname === "/cognition" || requestURL.pathname.startsWith("/cognition/"));
+
+    if (shouldProxyToUpstream || shouldProxyCognition) {
       const incoming = new URL(request.url);
-      const upstream = new URL(workerEnv.CLICKCLACK_UPSTREAM_URL);
-      upstream.pathname = incoming.pathname;
+      const upstream = new URL(
+        shouldProxyCognition
+          ? workerEnv.CLICKCLACK_COGNITION_URL!
+          : workerEnv.CLICKCLACK_UPSTREAM_URL!,
+      );
+      if (shouldProxyCognition) {
+        // Strip the /cognition prefix — cognition routes are /analyze, /transform, etc.
+        const stripped = incoming.pathname.replace(/^\/cognition(\/|$)/, "/");
+        upstream.pathname = stripped;
+      } else {
+        upstream.pathname = incoming.pathname;
+      }
       upstream.search = incoming.search;
 
       const headers = new Headers(request.headers);

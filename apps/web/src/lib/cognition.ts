@@ -9,7 +9,7 @@
  * Default '' means no backend — all actions are no-ops.
  */
 
-const COGNITION_URL = import.meta.env.VITE_COGNITION_URL || "";
+const COGNITION_URL = import.meta.env.VITE_COGNITION_URL || "/cognition";
 
 type TransformOp =
   | "summarize"

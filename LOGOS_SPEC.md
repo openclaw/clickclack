@@ -4,7 +4,7 @@
 **Project Class:** Hyper-Utility Cognitive Messaging System
 **Status:** Authoritative vision record — source of truth for all builds
 **Owner:** Conor Ross / RINCON
-**Implementation plan:** see `COGNITIVE_OS.md` (tracks, architecture, verification)
+**Implementation plan:** see `LOGOS.md` (tracks, architecture, verification)
 
 ---
 
@@ -310,7 +310,7 @@ overlay windows, or page transitions:
 
 ## Engineering Mapping
 
-| Spec section | System module | Build track (COGNITIVE_OS.md) |
+| Spec section | System module | Build track (LOGOS.md) |
 |---|---|---|
 | 2.1 Intent Parsing Engine | Intent Parser | T3 (cognition) |
 | 2.2 Adaptive Persona Engine | Persona Engine | T3 (cognition) |

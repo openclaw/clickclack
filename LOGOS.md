@@ -1,4 +1,4 @@
-# COGNITIVE OS — Hyper-Utility Cognitive Messaging System
+# PROJECT LOGOS — Hyper-Utility Cognitive Messaging System
 
 **Status:** ACTIVE BUILD (kickoff 2026-08-06)
 **Owner:** Conor Ross / RINCON
@@ -129,7 +129,7 @@ Persisted on the message row: `intent`, `persona`, `confidence`,
 - `cd apps/api && go build ./... && go test ./...` must pass
 - Migration must be additive; existing API contract stays backward compatible
 - **No `git add -A`** — stage only files you changed
-- Commit messages: `cognitive-os: <track> — <what>`
+- Commit messages: `logos: <track> — <what>`
 
 ## Deploy (existing path, unchanged)
 

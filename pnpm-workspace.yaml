@@ -7,6 +7,7 @@ overrides:
 allowBuilds:
   electron-winstaller: true
   esbuild: true
+  protobufjs: true
   sharp: true
   workerd: true
 minimumReleaseAge: 2880

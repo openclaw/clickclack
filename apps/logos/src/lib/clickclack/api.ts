@@ -154,8 +154,11 @@ export async function ensureSession(): Promise<boolean> {
   const session = await getSession();
   if (session) return true;
 
-  // Redirect to GitHub OAuth — same-origin, browser navigates away
-  window.location.href = apiURL("/api/auth/github/start");
+  // Redirect to GitHub OAuth — same-origin, browser navigates away.
+  // Pass return_to=/logos/ so the callback lands back inside the LOGOS app
+  // instead of the clickclack root (server honors it via cookie).
+  const base = window.location.pathname.startsWith("/logos") ? "/logos/" : "/";
+  window.location.href = apiURL(`/api/auth/github/start?return_to=${encodeURIComponent(base)}`);
   // The browser will navigate away; return value is never observed.
   return false;
 }

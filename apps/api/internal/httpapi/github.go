@@ -140,6 +140,20 @@ func (s *Server) startGitHubOAuth(w http.ResponseWriter, r *http.Request, deskto
 		s.writeGitHubOAuthServerError(w, r, "browser binding", err)
 		return
 	}
+	// PROJECT LOGOS: remember where the user came from so the callback can
+	// return them to the LOGOS app (/logos/) instead of the clickclack root.
+	if returnTo := strings.TrimSpace(r.URL.Query().Get("return_to")); validReturnTo(returnTo) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     s.cookies.OAuthBinding + "_return_to",
+			Value:    returnTo,
+			Path:     s.cookiePath(),
+			MaxAge:   int(oauthBrowserBindingTTL / time.Second),
+			Expires:  time.Now().UTC().Add(oauthBrowserBindingTTL),
+			HttpOnly: true,
+			Secure:   s.secureCookies(r),
+			SameSite: s.cookieSameSite,
+		})
+	}
 	state, err := randomOAuthSecret()
 	if err != nil {
 		s.writeGitHubOAuthServerError(w, r, "state generation", err)
@@ -258,6 +272,20 @@ func (s *Server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		destination := "/"
 		if s.frontendURL != "" {
 			destination = s.frontendURL + "/"
+		}
+		// PROJECT LOGOS: honor the return_to cookie so OAuth lands the user
+		// inside the LOGOS app (/logos/) instead of the clickclack root.
+		if rc, err := requestCookie(r, s.cookies.OAuthBinding+"_return_to"); err == nil && validReturnTo(rc.Value) {
+			destination = rc.Value
+			http.SetCookie(w, &http.Cookie{
+				Name:     s.cookies.OAuthBinding + "_return_to",
+				Value:    "",
+				Path:     s.cookiePath(),
+				MaxAge:   -1,
+				HttpOnly: true,
+				Secure:   s.secureCookies(r),
+				SameSite: s.cookieSameSite,
+			})
 		}
 		http.Redirect(w, r, destination, http.StatusFound)
 		return
@@ -617,6 +645,21 @@ func randomOAuthSecret() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+// validReturnTo allows only same-origin relative paths (e.g. "/logos/") so
+// the OAuth callback can never be abused as an open redirect.
+func validReturnTo(path string) bool {
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return false
+	}
+	if strings.HasPrefix(path, "//") {
+		return false
+	}
+	if strings.Contains(path, "\\") {
+		return false
+	}
+	return true
 }
 
 func randomLegacyOAuthGrant() (string, error) {

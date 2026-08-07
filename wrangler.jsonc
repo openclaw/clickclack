@@ -6,7 +6,8 @@
   "compatibility_date": "2026-05-17",
   "workers_dev": false,
   "routes": [
-    { "pattern": "app.catabolicsolutions.com", "custom_domain": true }
+    { "pattern": "app.catabolicsolutions.com", "custom_domain": true },
+    { "pattern": "logos.catabolicsolutions.com", "custom_domain": true }
   ],
   "vars": {
     "CLICKCLACK_PUBLIC_URL": "https://app.catabolicsolutions.com",

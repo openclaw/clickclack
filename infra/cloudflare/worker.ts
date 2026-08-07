@@ -38,6 +38,50 @@ export class ClickClackContainer extends Container {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const requestURL = new URL(request.url);
+
+    // PROJECT LOGOS: on the standalone logos origin, serve the LOGOS app at
+    // the root (NOT a subpath) with same-origin /api + /cognition so cookie
+    // auth and cognition token injection keep working. clickclack stays
+    // plumbing underneath; LOGOS is the upspun surface.
+    const isLogosOrigin =
+      requestURL.hostname === "logos.catabolicsolutions.com" ||
+      requestURL.hostname.endsWith(".logos.catabolicsolutions.com");
+    if (isLogosOrigin) {
+      const incoming = new URL(request.url);
+      const isApi = incoming.pathname === "/api" || incoming.pathname.startsWith("/api/");
+      const isCognition =
+        incoming.pathname === "/cognition" || incoming.pathname.startsWith("/cognition/");
+      const upstreamBase = isCognition
+        ? workerEnv.CLICKCLACK_COGNITION_URL!
+        : isApi
+          ? workerEnv.CLICKCLACK_UPSTREAM_URL!
+          : workerEnv.CLICKCLACK_LOGOS_URL!;
+      const upstream = new URL(upstreamBase);
+      if (isCognition) {
+        upstream.pathname = incoming.pathname.replace(/^\/cognition(\/|$)/, "/");
+      } else {
+        upstream.pathname = incoming.pathname;
+        if (!isApi && incoming.pathname === "/") upstream.pathname = "/";
+      }
+      upstream.search = incoming.search;
+
+      const headers = new Headers(request.headers);
+      headers.set("X-Forwarded-Host", incoming.host);
+      headers.set("X-Forwarded-Proto", incoming.protocol.replace(":", ""));
+      if (isCognition && workerEnv.CLICKCLACK_COGNITION_TOKEN) {
+        headers.set("Authorization", `Bearer ${workerEnv.CLICKCLACK_COGNITION_TOKEN}`);
+      }
+
+      return fetch(
+        new Request(upstream.toString(), {
+          method: request.method,
+          headers,
+          body: request.method === "GET" || request.method === "HEAD" ? null : request.body,
+          redirect: "manual",
+        }),
+      );
+    }
+
     const shouldProxyToUpstream =
       workerEnv.CLICKCLACK_UPSTREAM_URL &&
       (requestURL.pathname === "/api" || requestURL.pathname.startsWith("/api/"));

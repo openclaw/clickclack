@@ -69,6 +69,12 @@ export default {
       headers.set("X-Forwarded-Host", incoming.host);
       headers.set("X-Forwarded-Proto", incoming.protocol.replace(":", ""));
 
+      // PROJECT LOGOS: inject the shared cognition token on proxied calls so
+      // browsers never see it and arbitrary callers get 401 from the service.
+      if (shouldProxyCognition && workerEnv.CLICKCLACK_COGNITION_TOKEN) {
+        headers.set("Authorization", `Bearer ${workerEnv.CLICKCLACK_COGNITION_TOKEN}`);
+      }
+
       return fetch(
         new Request(upstream.toString(), {
           method: request.method,

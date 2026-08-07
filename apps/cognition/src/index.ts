@@ -40,6 +40,26 @@ const VERSION = "0.0.0-dev";
 
 const app = new Hono();
 
+// PROJECT LOGOS hardening: optional shared-secret gate. When LOGOS_AUTH_TOKEN
+// is set, every request must carry it as `Authorization: Bearer <token>` or
+// `X-Logos-Token`. The Cloudflare worker injects it on proxied /cognition/*
+// calls, so browsers never see it and arbitrary internet callers get 401.
+const AUTH_TOKEN = process.env.LOGOS_AUTH_TOKEN ?? "";
+
+app.use("*", async (c, next) => {
+  if (!AUTH_TOKEN) {
+    await next();
+    return;
+  }
+  const auth = c.req.header("authorization") ?? "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const header = c.req.header("x-logos-token") ?? "";
+  if (bearer !== AUTH_TOKEN && header !== AUTH_TOKEN) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});
+
 // CORS: allow SPA origin (configurable via env)
 app.use(
   "*",

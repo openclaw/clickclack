@@ -1,0 +1,71 @@
+/* PROJECT LOGOS — Design Tokens (app shell)
+   Spec LOGOS_SPEC §8: pure black bg, off-white type, charcoal borders,
+   0px radius, functional 2px accents, Inter + JetBrains Mono. */
+
+:root {
+  --cog-bg: #000000;
+  --cog-fg: #F4F4F0;
+  --cog-line: #1A1A1A;
+  --cog-void: #050505;
+  --cog-steel: #0d0d0d;
+  --cog-plate: #121212;
+  --cog-deck: #161616;
+  --cog-rule: #2a2a2a;
+  --cog-fog: #555555;
+  --cog-slate: #777777;
+  --cog-cloud: #a0a0a0;
+  --cog-mist: #c8c8c4;
+  --cog-chalk: #e0e0dc;
+  --cog-ash: #eaeae6;
+
+  --intent-ask: #D1D1D1;
+  --intent-command: #FFB000;
+  --intent-reflect: #4A5568;
+  --intent-draft: #00FF66;
+  --intent-clarify: #FF0055;
+  --intent-explore: #0088FF;
+  --intent-default: var(--cog-fog);
+
+  --accent-verified: #00FF66;
+  --accent-intent: #FFB000;
+  --accent-thread: #0088FF;
+  --accent-exec: #F4F4F0;
+
+  --rail: var(--cog-void);
+  --bg: var(--cog-bg);
+  --panel: var(--cog-steel);
+  --panel-2: var(--cog-plate);
+  --panel-3: var(--cog-deck);
+  --surface: var(--panel-2);
+  --hover: rgba(244, 244, 240, 0.05);
+  --hover-strong: rgba(244, 244, 240, 0.09);
+  --line: var(--cog-line);
+  --line-strong: var(--cog-rule);
+  --text: var(--cog-cloud);
+  --text-strong: var(--cog-fg);
+  --muted: var(--cog-fog);
+  --muted-2: var(--cog-slate);
+
+  --radius-sm: 0px;
+  --radius: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  --font-body: "Inter Variable", "Inter", "Neue Haas Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --motion-fast: 100ms linear;
+  --motion-med: 150ms linear;
+  --motion-step: steps(2, jump-none);
+
+  --shadow: none;
+  --accent-glow: none;
+
+  --scrollbar: rgba(244, 244, 240, 0.12);
+  --scrollbar-hover: rgba(244, 244, 240, 0.24);
+
+  color-scheme: dark;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+}

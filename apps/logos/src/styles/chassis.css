@@ -1,0 +1,78 @@
+/* PROJECT LOGOS — Chassis (spec §8.3): fixed tiled grid operator console.
+   Panes tile flush on 1px lines, 0px radius, rigid motion. */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  height: 100%;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+  border-radius: 0 !important;
+}
+
+.logos-shell {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 0px;
+  grid-template-rows: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  transition: grid-template-columns var(--motion-med);
+}
+
+.logos-shell.inspect {
+  grid-template-columns: 48px minmax(0, 1fr) 0px;
+}
+
+.logos-shell.telemetry {
+  grid-template-columns: 48px minmax(0, 1fr) 340px;
+}
+
+.logos-main {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+/* Mono system text */
+.logos-mono,
+.logos-meta,
+.logos-palette {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* 2px functional accents only */
+.accent-verified { color: var(--accent-verified); }
+.accent-intent { color: var(--accent-intent); }
+.accent-thread { color: var(--accent-thread); }
+
+/* Inspect mode: text 60% opacity, dashed association lines */
+.logos-shell.inspect .logos-main {
+  opacity: 0.6;
+}
+.logos-shell.inspect .logos-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 7px,
+    rgba(0, 136, 255, 0.10) 7px,
+    rgba(0, 136, 255, 0.10) 8px
+  );
+}

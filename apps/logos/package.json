@@ -1,0 +1,30 @@
+{
+  "name": "@clickclack/logos",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 5180",
+    "build": "vite build",
+    "typecheck": "svelte-kit sync && tsc --noEmit -p tsconfig.json",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@clickclack/sdk-ts": "workspace:*",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "dompurify": "^3.4.12",
+    "marked": "^18.0.7",
+    "svelte": "^5.56.8"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.2",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@types/node": "^26.1.2",
+    "svelte-check": "^4.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vite": "^6.0.0"
+  }
+}

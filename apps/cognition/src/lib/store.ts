@@ -13,6 +13,7 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import type { AnchorRequest, AnchorResult, MemoryNode } from "../types.js";
+import type { LlmClient } from "./llm.js";
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ interface MemoryAnchor {
   source_message_id?: string;
   created_at: string;
   tags: string[];
+  /** Pre-computed embedding vector for semantic search */
+  embedding?: number[];
 }
 
 interface ThreadCluster {
@@ -36,8 +39,11 @@ interface ThreadCluster {
 
 export interface MemoryStore {
   saveAnchor(req: AnchorRequest): Promise<AnchorResult>;
+  /** Query anchors by semantic similarity (embedding-based) or fallback to text match */
   queryAnchors(q: string, limit?: number): Promise<MemoryNode[]>;
   listAnchors(): Promise<MemoryNode[]>;
+  /** Set the LLM client for embedding generation */
+  setLlmClient(client: LlmClient): void;
 }
 
 export interface ThreadStore {
@@ -47,12 +53,29 @@ export interface ThreadStore {
   deleteThread(id: string): Promise<boolean>;
 }
 
+// ─── Cosine similarity ──────────────────────────────────────────────────────
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
 // ─── JSON file store implementation ──────────────────────────────────────────
 
 export class JsonFileStore implements MemoryStore, ThreadStore {
   private dataDir: string;
   private anchorsFile: string;
   private threadsFile: string;
+  private llmClient: LlmClient | null = null;
 
   constructor(dataDir?: string) {
     this.dataDir = dataDir ?? process.env.DATA_DIR ?? "./data";
@@ -61,27 +84,76 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
     this.ensureDataDir();
   }
 
+  setLlmClient(client: LlmClient): void {
+    this.llmClient = client;
+  }
+
   // ── Memory anchors ───────────────────────────────────────────────────────
 
   async saveAnchor(req: AnchorRequest): Promise<AnchorResult> {
     const anchors = this.readAnchors();
     const now = new Date().toISOString();
+
+    // Generate embedding if LLM client available
+    let embedding: number[] | undefined;
+    if (this.llmClient) {
+      try {
+        embedding = await this.llmClient.embed(req.content);
+      } catch (err) {
+        console.warn("[cognition:store] embed failed for anchor, storing without:", err);
+      }
+    }
+
     const record: MemoryAnchor = {
       id: randomUUID(),
       content: req.content,
       source_message_id: req.source_message_id,
       created_at: now,
       tags: req.tags ?? [],
+      embedding,
     };
     anchors.push(record);
     this.writeAnchors(anchors);
-    return record;
+
+    const { embedding: _, ...result } = record;
+    return result;
   }
 
   async queryAnchors(q: string, limit = 10): Promise<MemoryNode[]> {
     const anchors = this.readAnchors();
+
+    // Try semantic search if we have an LLM client
+    if (this.llmClient) {
+      try {
+        const queryEmbedding = await this.llmClient.embed(q);
+
+        // Check if embedding is a stub (all zeros)
+        const isStubEmbedding = queryEmbedding.length === 0 ||
+          queryEmbedding.every((v) => v === 0);
+
+        if (!isStubEmbedding) {
+          // Semantic search: cosine similarity over stored embeddings
+          const scored = anchors
+            .map((a) => {
+              if (!a.embedding || a.embedding.length === 0) {
+                return { ...a, score: 0 };
+              }
+              const score = cosineSimilarity(queryEmbedding, a.embedding);
+              return { ...a, score };
+            })
+            .filter((a) => a.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit);
+
+          return scored.map(({ embedding: _, ...rest }) => rest);
+        }
+      } catch (err) {
+        console.warn("[cognition:store] semantic search failed, falling back to text:", err);
+      }
+    }
+
+    // Fallback: substring search (original behavior)
     const lower = q.toLowerCase();
-    // Naive substring match (placeholder — real impl uses embeddings + vector search)
     const scored = anchors
       .map((a) => {
         const contentLower = a.content.toLowerCase();
@@ -94,11 +166,12 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
-    return scored;
+    return scored.map(({ embedding: _, ...rest }) => rest);
   }
 
   async listAnchors(): Promise<MemoryNode[]> {
-    return this.readAnchors();
+    const anchors = this.readAnchors();
+    return anchors.map(({ embedding: _, ...rest }) => rest);
   }
 
   // ── Thread clusters ──────────────────────────────────────────────────────

@@ -70,6 +70,8 @@ export interface AnalyzeResult {
   confidence: number;
   context_tags: string[];
   model: string;
+  /** Ambiguity clarification question (present when confidence < threshold or LLM flags ambiguity) */
+  clarification_question?: string;
 }
 
 /** POST /transform request body */
@@ -87,12 +89,26 @@ export interface TransformResult {
   persona: Persona;
   confidence: number;
   model: string;
+  /** Extended metadata about the transform execution */
+  meta: {
+    op: TransformOp;
+    model: string;
+    confidence: number;
+    tokens?: number;
+  };
 }
 
 /** POST /threads/cluster request body */
 export interface ClusterRequest {
   message_ids: string[];
   contents: string[];
+}
+
+/** Per-message cluster assignment */
+export interface ClusterAssignment {
+  message_id: string;
+  cluster_id: number;
+  centroid_similarity: number;
 }
 
 /** POST /threads/cluster response */
@@ -103,6 +119,8 @@ export interface ClusterResult {
   }[];
   unclustered: string[];
   model: string;
+  /** Per-message assignment details with similarity scores */
+  assignments: ClusterAssignment[];
 }
 
 /** GET /memory/query response node */

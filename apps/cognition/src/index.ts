@@ -3,7 +3,7 @@
 // Hono server exposing the cognition API.
 // Routes: health, analyze, transform, thread clustering, memory anchors/query.
 //
-// All intelligence is stubbed. LLM wiring is a T3 handoff task.
+// Intelligence wired via LlmClient (DeepSeek/OpenAI/stub).
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -20,10 +20,10 @@ import type {
   AnalyzeResult,
   AnchorRequest,
   AnchorResult,
+  ClusterAssignment,
   ClusterRequest,
   ClusterResult,
   HealthResponse,
-  MemoryQueryParams,
   MemoryNode,
   TransformRequest,
   TransformResult,
@@ -54,6 +54,9 @@ app.use(
 
 const llm = createLlmClient();
 const store = getStore();
+
+// Wire LLM client to store for embedding-based semantic search
+store.setLlmClient(llm);
 
 // ─── GET /healthz ────────────────────────────────────────────────────────────
 
@@ -134,27 +137,176 @@ app.post("/threads/cluster", async (c: Context) => {
     return c.json({
       clusters: [],
       unclustered: [],
-      model: "stub",
+      model: llm.constructor.name.includes("Stub") ? "stub" : "deepseek-chat",
+      assignments: [],
     } satisfies ClusterResult);
   }
 
-  // Stub: single cluster with all messages
-  const result: ClusterResult = {
-    clusters: [
+  // Single message: trivial cluster
+  if (body.message_ids.length === 1) {
+    const label = `cluster-0`;
+    await store.saveThread(label, body.message_ids);
+    const assignments: ClusterAssignment[] = [
       {
-        label: "default-cluster",
-        message_ids: body.message_ids,
+        message_id: body.message_ids[0],
+        cluster_id: 0,
+        centroid_similarity: 1.0,
       },
-    ],
-    unclustered: [],
-    model: "stub",
-  };
+    ];
+    return c.json({
+      clusters: [{ label, message_ids: body.message_ids }],
+      unclustered: [],
+      model: llm.constructor.name.includes("Stub") ? "stub" : "deepseek-chat",
+      assignments,
+    } satisfies ClusterResult);
+  }
 
-  // Persist cluster
-  await store.saveThread("default-cluster", body.message_ids);
+  try {
+    // Generate embeddings for all messages
+    const embeddings: number[][] = [];
+    for (const content of body.contents) {
+      const emb = await llm.embed(content);
+      embeddings.push(emb);
+    }
 
-  return c.json(result);
+    // Check if embeddings are stubs (all zeros)
+    const isStub =
+      embeddings.length === 0 ||
+      embeddings.every(
+        (e) => e.length === 0 || e.every((v) => v === 0),
+      );
+
+    if (isStub) {
+      return fallbackCluster(body);
+    }
+
+    // Cosine similarity matrix
+    const n = body.contents.length;
+    const similarityMatrix: number[][] = Array.from({ length: n }, () =>
+      new Array(n).fill(0),
+    );
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i; j < n; j++) {
+        const sim = cosineSimilarity(embeddings[i], embeddings[j]);
+        similarityMatrix[i][j] = sim;
+        similarityMatrix[j][i] = sim;
+      }
+    }
+
+    // Connected-components clustering with similarity threshold
+    const SIMILARITY_THRESHOLD = 0.6;
+    const visited = new Array(n).fill(false);
+    const clusterGroups: number[][] = [];
+
+    for (let i = 0; i < n; i++) {
+      if (visited[i]) continue;
+      const cluster: number[] = [];
+      const queue = [i];
+      visited[i] = true;
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        cluster.push(current);
+        for (let j = 0; j < n; j++) {
+          if (!visited[j] && similarityMatrix[current][j] >= SIMILARITY_THRESHOLD) {
+            visited[j] = true;
+            queue.push(j);
+          }
+        }
+      }
+      clusterGroups.push(cluster);
+    }
+
+    // Build cluster labels and assignments
+    const clusters: ClusterResult["clusters"] = [];
+    const assignments: ClusterAssignment[] = [];
+    const unclustered: string[] = [];
+
+    for (let ci = 0; ci < clusterGroups.length; ci++) {
+      const group = clusterGroups[ci];
+      const mids = group.map((idx) => body.message_ids[idx]);
+      const label = `cluster-${ci}`;
+
+      if (group.length === 1) {
+        unclustered.push(body.message_ids[group[0]]);
+        assignments.push({
+          message_id: body.message_ids[group[0]],
+          cluster_id: -1,
+          centroid_similarity: 1.0,
+        });
+      } else {
+        clusters.push({ label, message_ids: mids });
+        await store.saveThread(label, mids);
+
+        for (const idx of group) {
+          // Average similarity to all other members in the cluster
+          const others = group.filter((o) => o !== idx);
+          const avgSim =
+            others.length > 0
+              ? others.reduce((sum, o) => sum + similarityMatrix[idx][o], 0) /
+                others.length
+              : 1.0;
+          assignments.push({
+            message_id: body.message_ids[idx],
+            cluster_id: ci,
+            centroid_similarity: Math.round(avgSim * 1000) / 1000,
+          });
+        }
+      }
+    }
+
+    return c.json({
+      clusters,
+      unclustered,
+      model: "deepseek-chat",
+      assignments,
+    } satisfies ClusterResult);
+  } catch (err) {
+    console.warn("[cognition] clustering failed, falling back to stub:", err);
+    return fallbackCluster(body);
+  }
 });
+
+/** Fallback: all messages in one cluster (original stub behavior) */
+async function fallbackCluster(body: ClusterRequest): Promise<Response> {
+  const assignments: ClusterAssignment[] = body.message_ids.map((mid) => ({
+    message_id: mid,
+    cluster_id: 0,
+    centroid_similarity: 1.0,
+  }));
+
+  await getStore().saveThread("default-cluster", body.message_ids);
+
+  return new Response(
+    JSON.stringify({
+      clusters: [{ label: "default-cluster", message_ids: body.message_ids }],
+      unclustered: [],
+      model: "stub",
+      assignments,
+    } satisfies ClusterResult),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+// ─── Cosine similarity helper ───────────────────────────────────────────────
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
 
 // ─── GET /memory/query ───────────────────────────────────────────────────────
 
@@ -167,7 +319,6 @@ app.get("/memory/query", async (c: Context) => {
   const limit = parseInt(c.req.query("limit") ?? "10", 10);
   const nodes: MemoryNode[] = await store.queryAnchors(q, limit);
 
-  // Stub: if no store hits, return an empty result set
   return c.json({ query: q, nodes });
 });
 

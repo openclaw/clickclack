@@ -38,6 +38,8 @@ type Config struct {
 	R2AccessKeyID          string   `json:"r2_access_key_id"`
 	R2SecretAccessKey      string   `json:"r2_secret_access_key"`
 	R2Endpoint             string   `json:"r2_endpoint"`
+	CognitionURL           string   `json:"cognition_url"`
+	CognitionToken         string   `json:"cognition_token"`
 }
 
 func Defaults() Config {
@@ -143,6 +145,15 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_R2_ENDPOINT"); env != "" {
 		cfg.R2Endpoint = env
+	}
+	if env := os.Getenv("CLICKCLACK_COGNITION_URL"); env != "" {
+		cfg.CognitionURL = env
+	}
+	if cfg.CognitionURL == "" {
+		cfg.CognitionURL = "http://127.0.0.1:8787"
+	}
+	if env := os.Getenv("CLICKCLACK_COGNITION_TOKEN"); env != "" {
+		cfg.CognitionToken = env
 	}
 	if cfg.Addr == "" {
 		cfg.Addr = ":8080"

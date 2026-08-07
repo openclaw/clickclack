@@ -159,6 +159,8 @@ func serve(args []string) error {
 		WebPushVAPIDPrivateKey: cfg.WebPushVAPIDPrivateKey,
 		MetricsEnabled:         cfg.MetricsEnabled,
 		Environment:            cfg.Environment,
+		CognitionURL:           cfg.CognitionURL,
+		CognitionToken:         cfg.CognitionToken,
 		Version:                version,
 		Commit:                 commit,
 	})

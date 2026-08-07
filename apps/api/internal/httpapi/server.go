@@ -47,6 +47,8 @@ type Server struct {
 	setupCodeClaimLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
 	callbackClient        *http.Client
+	cognitionURL          string
+	cognitionToken        string
 }
 
 const (
@@ -92,6 +94,8 @@ type Options struct {
 	WebPushSubscriber      string
 	WebPushVAPIDPublicKey  string
 	WebPushVAPIDPrivateKey string
+	CognitionURL           string
+	CognitionToken         string
 	MetricsEnabled         bool
 	Environment            string
 	Version                string
@@ -135,6 +139,8 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
 		callbackClient:        callbackClient,
+		cognitionURL:          strings.TrimSpace(options.CognitionURL),
+		cognitionToken:        strings.TrimSpace(options.CognitionToken),
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,
@@ -1023,6 +1029,9 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		if !store.IsActivityMessageKind(message.Kind) {
 			s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 		}
+	}
+	if err == nil {
+		s.analyzeOnIngest(message)
 	}
 	writeMessageCreateResult(w, message, event, err)
 }

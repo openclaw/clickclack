@@ -1520,6 +1520,9 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 			s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 		}
 	}
+	if err == nil {
+		s.analyzeOnIngest(message)
+	}
 	writeMessageCreateResult(w, message, event, err)
 }
 

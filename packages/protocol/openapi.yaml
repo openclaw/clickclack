@@ -1265,6 +1265,7 @@ paths:
       responses:
         "200":
           description: Soft-deleted message
+  /api/messages/{message_id}/metadata:
     patch:
       operationId: updateMessageMetadata
       parameters:

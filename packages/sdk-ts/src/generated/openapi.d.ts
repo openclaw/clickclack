@@ -4,4685 +4,4758 @@
  */
 
 export interface paths {
-  "/healthz": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Process liveness */
-    get: operations["getHealth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/readyz": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Database readiness */
-    get: operations["getReadiness"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/metrics": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Opt-in metadata-only Prometheus metrics */
-    get: operations["getMetrics"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/magic/request": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["requestMagicLink"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/magic/consume": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["consumeMagicLink"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/github/start": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["startGitHubOAuth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/github/desktop/start": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["startDesktopGitHubOAuth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/github/desktop/consume": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["consumeDesktopGitHubOAuth"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/github/callback": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["finishGitHubOAuth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/me": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getMe"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations["updateMe"];
-    trace?: never;
-  };
-  "/api/event-types": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listEventTypes"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/me/bots": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listMyBots"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listWorkspaces"];
-    put?: never;
-    post: operations["createWorkspace"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/routes/{workspace_route_id}/{target_route_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["resolveRoute"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getWorkspace"];
-    put?: never;
-    post?: never;
-    delete: operations["deleteWorkspace"];
-    options?: never;
-    head?: never;
-    patch: operations["updateWorkspace"];
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/transfer-ownership": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["transferWorkspaceOwnership"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/members": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listWorkspaceMembers"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/moderation/members": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listWorkspaceMembersForModeration"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/moderation/members/{user_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations["updateWorkspaceMemberModeration"];
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/channels": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listChannels"];
-    put?: never;
-    post: operations["createChannel"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/topics": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listTopics"];
-    put?: never;
-    post: operations["createTopic"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/bots": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listBots"];
-    put?: never;
-    post: operations["createBot"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/bot-commands": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List active bot-declared command menus for a workspace */
-    get: operations["listBotCommands"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/membership": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: operations["removeBotFromWorkspace"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listWorkspaceBotTokens"];
-    put?: never;
-    post: operations["createWorkspaceBotToken"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Mint a short-lived single-use setup code that defers bot token creation to claim time */
-    post: operations["createWorkspaceBotSetupCode"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/bot-setup-codes/claim": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Claim a setup code, minting the bot token at claim time */
-    post: operations["claimBotSetupCode"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/bots/{bot_user_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Permanently retire a bot identity and release its handle */
-    delete: operations["deleteBot"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/bots/{bot_user_id}/tokens": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listBotTokens"];
-    put?: never;
-    post: operations["createBotToken"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/bots/self/commands": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    /** Atomically replace the authenticated bot's command menu */
-    put: operations["setBotCommands"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/bot-tokens/{token_id}/revoke": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["revokeBotToken"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/app-installations": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listAppInstallations"];
-    put?: never;
-    post: operations["createAppInstallation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/app-installations/{installation_id}/revoke": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["revokeAppInstallation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/slash-commands": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listSlashCommands"];
-    put?: never;
-    post: operations["createSlashCommand"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/slash-commands/{command_id}/revoke": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["revokeSlashCommand"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/slash-commands/{command_id}/rotate-secret": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["rotateSlashCommandSecret"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/event-subscriptions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listEventSubscriptions"];
-    put?: never;
-    post: operations["createEventSubscription"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/event-subscriptions/{subscription_id}/revoke": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["revokeEventSubscription"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/event-subscriptions/{subscription_id}/rotate-secret": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["rotateEventSubscriptionSecret"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/event-subscriptions/{subscription_id}/deliveries": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listEventDeliveryAttempts"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/audit-log": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listAuditLogEntries"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/workspaces/{workspace_id}/connected-accounts": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listConnectedAccounts"];
-    put?: never;
-    post: operations["createConnectedAccount"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/connected-accounts/{account_id}/revoke": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["revokeConnectedAccount"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations["updateChannel"];
-    trace?: never;
-  };
-  "/api/channels/{channel_id}/messages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listMessages"];
-    put?: never;
-    post: operations["createMessage"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel_id}/notification-settings": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getChannelNotificationSettings"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations["updateChannelNotificationSettings"];
-    trace?: never;
-  };
-  "/api/channels/{channel_id}/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["markChannelRead"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel_id}/pins": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listPinnedMessages"];
-    put?: never;
-    post: operations["pinMessage"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/channels/{channel_id}/pins/{message_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: operations["unpinMessage"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/by-nonce": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getMessageByNonce"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/{message_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getMessage"];
-    put?: never;
-    post?: never;
-    delete: operations["deleteMessage"];
-    options?: never;
-    head?: never;
-    patch: operations["updateMessage"];
-    trace?: never;
-  };
-  "/api/messages/{message_id}/thread": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getThread"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/{message_id}/thread/replies": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["createThreadReply"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/{message_id}/reactions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["addReaction"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/{message_id}/attachments": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["attachUpload"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/messages/{message_id}/reactions/{emoji}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: operations["removeReaction"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/realtime/events": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listEvents"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/realtime/ephemeral": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["publishEphemeral"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/realtime/ws": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["realtimeWebSocket"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/search": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Search messages visible to the authenticated actor */
-    get: operations["search"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/uploads": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["createUpload"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/uploads/by-nonce": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getUploadByNonce"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/uploads/{upload_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getUpload"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dms": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listDirectConversations"];
-    put?: never;
-    post: operations["createDirectConversation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dms/{conversation_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["getDirectConversation"];
-    put?: never;
-    post?: never;
-    delete: operations["hideDirectConversation"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dms/{conversation_id}/open": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["reopenDirectConversation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dms/{conversation_id}/messages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations["listDirectMessages"];
-    put?: never;
-    post: operations["createDirectMessage"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dms/{conversation_id}/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["markDirectRead"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/hooks/mattermost/{channel_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["mattermostIncomingWebhook"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/hooks/slash/{channel_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations["slashCommand"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Process liveness */
+        get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Database readiness */
+        get: operations["getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opt-in metadata-only Prometheus metrics */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/magic/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestMagicLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/magic/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["consumeMagicLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/github/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["startGitHubOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/github/desktop/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["startDesktopGitHubOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/github/desktop/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["consumeDesktopGitHubOAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["finishGitHubOAuth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/api/event-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEventTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/bots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyBots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkspaces"];
+        put?: never;
+        post: operations["createWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/routes/{workspace_route_id}/{target_route_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["resolveRoute"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWorkspace"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteWorkspace"];
+        options?: never;
+        head?: never;
+        patch: operations["updateWorkspace"];
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/transfer-ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["transferWorkspaceOwnership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkspaceMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/moderation/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkspaceMembersForModeration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/moderation/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateWorkspaceMemberModeration"];
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listChannels"];
+        put?: never;
+        post: operations["createChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTopics"];
+        put?: never;
+        post: operations["createTopic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/bots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listBots"];
+        put?: never;
+        post: operations["createBot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/bot-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active bot-declared command menus for a workspace */
+        get: operations["listBotCommands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/bots/{bot_user_id}/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["removeBotFromWorkspace"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkspaceBotTokens"];
+        put?: never;
+        post: operations["createWorkspaceBotToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mint a short-lived single-use setup code that defers bot token creation to claim time */
+        post: operations["createWorkspaceBotSetupCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bot-setup-codes/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim a setup code, minting the bot token at claim time */
+        post: operations["claimBotSetupCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{bot_user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently retire a bot identity and release its handle */
+        delete: operations["deleteBot"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{bot_user_id}/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listBotTokens"];
+        put?: never;
+        post: operations["createBotToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/self/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Atomically replace the authenticated bot's command menu */
+        put: operations["setBotCommands"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bot-tokens/{token_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeBotToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/app-installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAppInstallations"];
+        put?: never;
+        post: operations["createAppInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/app-installations/{installation_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeAppInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/slash-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSlashCommands"];
+        put?: never;
+        post: operations["createSlashCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/slash-commands/{command_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeSlashCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/slash-commands/{command_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateSlashCommandSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/event-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEventSubscriptions"];
+        put?: never;
+        post: operations["createEventSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/event-subscriptions/{subscription_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeEventSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/event-subscriptions/{subscription_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateEventSubscriptionSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/event-subscriptions/{subscription_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEventDeliveryAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAuditLogEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/connected-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listConnectedAccounts"];
+        put?: never;
+        post: operations["createConnectedAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/connected-accounts/{account_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeConnectedAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{channel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateChannel"];
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMessages"];
+        put?: never;
+        post: operations["createMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelNotificationSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateChannelNotificationSettings"];
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markChannelRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPinnedMessages"];
+        put?: never;
+        post: operations["pinMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{channel_id}/pins/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unpinMessage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/by-nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMessageByNonce"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMessage"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteMessage"];
+        options?: never;
+        head?: never;
+        patch: operations["updateMessage"];
+        trace?: never;
+    };
+    "/api/messages/{message_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateMessageMetadata"];
+        trace?: never;
+    };
+    "/api/messages/{message_id}/thread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getThread"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/thread/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createThreadReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addReaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attachUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/reactions/{emoji}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["removeReaction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/realtime/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/realtime/ephemeral": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishEphemeral"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/realtime/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["realtimeWebSocket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search messages visible to the authenticated actor */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/by-nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUploadByNonce"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUpload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDirectConversations"];
+        put?: never;
+        post: operations["createDirectConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dms/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDirectConversation"];
+        put?: never;
+        post?: never;
+        delete: operations["hideDirectConversation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dms/{conversation_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reopenDirectConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dms/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDirectMessages"];
+        put?: never;
+        post: operations["createDirectMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dms/{conversation_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markDirectRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hooks/mattermost/{channel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["mattermostIncomingWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hooks/slash/{channel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["slashCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    CreateWorkspaceRequest: {
-      name: string;
-      slug?: string;
-    };
-    UpdateMemberModerationRequest: {
-      /** @enum {string} */
-      role?: "moderator" | "member" | "guest";
-      /** Format: date-time */
-      timeout_until?: string;
-      timeout_minutes?: number;
-      clear_timeout?: boolean;
-      blocked?: boolean;
-      moderation_note?: string;
-    };
-    RequestMagicLinkRequest: {
-      /** Format: email */
-      email: string;
-      display_name?: string;
-    };
-    ConsumeMagicLinkRequest: {
-      token: string;
-    };
-    ConsumeDesktopGitHubOAuthRequest: {
-      /** @description Opaque one-time grant from a legacy protocol-1 or current protocol-2 desktop callback */
-      code: string;
-      code_verifier: string;
-    };
-    UpdateMeRequest: {
-      display_name?: string;
-      /** @description Unique user handle. Accepts an optional leading @ and stores the normalized value without it. */
-      handle?: string;
-      /** Format: uri */
-      avatar_url?: string;
-      notification_settings?: components["schemas"]["NotificationSettings"];
-      appearance_preferences?: components["schemas"]["AppearancePreferencesPatch"];
-    };
-    User: {
-      id: string;
-      /**
-       * @description Human users sign in directly. Bot users authenticate with bot tokens and may be service-owned or owned by a human.
-       * @enum {string}
-       */
-      kind: "human" | "bot";
-      /** @description Human owner for a user-owned bot. Empty for humans and service bots. */
-      owner_user_id?: string;
-      display_name: string;
-      handle: string;
-      /** @description Last active handle for a deleted bot identity. Present only on historical records. */
-      former_handle?: string;
-      /**
-       * Format: date-time
-       * @description Present only when the immutable bot identity has been retired.
-       */
-      deleted_at?: string;
-      avatar_url: string;
-      /** Format: date-time */
-      created_at: string;
-      notification_settings?: components["schemas"]["NotificationSettings"];
-      appearance_preferences?: components["schemas"]["AppearancePreferences"];
-    };
-    BotToken: {
-      id: string;
-      bot_user_id: string;
-      workspace_id: string;
-      owner_user_id?: string;
-      name: string;
-      scopes: string[];
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      last_used_at?: string;
-      /** Format: date-time */
-      revoked_at?: string;
-      /** @description One-time raw ccb_ token. Present only immediately after creation. */
-      token?: string;
-    };
-    BotWithTokens: {
-      bot: components["schemas"]["User"];
-      tokens: components["schemas"]["BotToken"][];
-    };
-    BotCommandInput: {
-      /** @description Trimmed, accepted with or without a leading slash, then validated and stored in lowercase canonical form. */
-      command: string;
-      description: string;
-      args_hint?: string;
-    };
-    BotCommand: {
-      id: string;
-      workspace_id: string;
-      bot_user_id: string;
-      command: string;
-      description: string;
-      args_hint: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      updated_at: string;
-    };
-    BotCommandBot: {
-      id: string;
-      handle: string;
-      display_name: string;
-      avatar_url: string;
-    };
-    WorkspaceBotCommand: {
-      id: string;
-      command: string;
-      description: string;
-      args_hint: string;
-      bot: components["schemas"]["BotCommandBot"];
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      updated_at: string;
-    };
-    SetBotCommandsRequest: {
-      commands: components["schemas"]["BotCommandInput"][];
-    };
-    BotCommandListResponse: {
-      bot_commands: components["schemas"]["BotCommand"][];
-    };
-    WorkspaceBotCommandListResponse: {
-      bot_commands: components["schemas"]["WorkspaceBotCommand"][];
-    };
-    CreateBotResponse: {
-      bot: components["schemas"]["User"];
-      /** @description Omitted when the request set initial_token=false. */
-      bot_token?: components["schemas"]["BotToken"];
-    };
-    BotTokenResponse: {
-      bot_token: components["schemas"]["BotToken"];
-    };
-    BotTokenListResponse: {
-      bot_tokens: components["schemas"]["BotToken"][];
-    };
-    OwnedBotWorkspace: {
-      id: string;
-      route_id: string;
-      name: string;
-    };
-    OwnedBotEntry: {
-      bot: components["schemas"]["User"];
-      workspace: components["schemas"]["OwnedBotWorkspace"];
-      active_token_count: number;
-    };
-    CreateBotRequest: {
-      owner_user_id?: string;
-      display_name: string;
-      handle?: string;
-      /** Format: uri */
-      avatar_url?: string;
-      token_name?: string;
-      scopes?: string[];
-      /** @description Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token. */
-      setup_nonce?: string;
-      /** @description Optional and true when omitted. Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time. */
-      initial_token?: boolean;
-    };
-    CreateBotTokenRequest: {
-      name?: string;
-      scopes?: string[];
-      /** @description Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token. */
-      setup_nonce?: string;
-    };
-    CreateBotSetupCodeRequest: {
-      /** @description Token name captured at mint time. Defaults to "default". */
-      name?: string;
-      /** @description Scopes captured and validated at mint time. */
-      scopes?: string[];
-      defaults?: components["schemas"]["BotSetupCodeClaimDefaults"];
-    };
-    BotSetupCode: {
-      id: string;
-      bot_user_id: string;
-      workspace_id: string;
-      token_name: string;
-      scopes: string[];
-      defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      expires_at: string;
-      /** @description One-time plaintext setup code (XXXX-XXXX-XXXX). Present only in the mint response; only a hash is stored. */
-      code?: string;
-      /**
-       * @description Present with claim_url and api_base_url when the server has a trusted canonical API base. Version 1 means claim_url is the exact endpoint and must not be extended by consumers.
-       * @enum {integer}
-       */
-      contract_version?: 1;
-      /**
-       * Format: uri
-       * @description Exact server-issued claim endpoint. Derived only from validated administrator configuration, except for trusted loopback development.
-       */
-      claim_url?: string;
-      /**
-       * Format: uri
-       * @description Canonical API base URL, including any configured base path.
-       */
-      api_base_url?: string;
-    };
-    BotSetupCodeResponse: {
-      setup_code: components["schemas"]["BotSetupCode"];
-    };
-    ClaimBotSetupCodeRequest: {
-      /** @description Setup code. Case-insensitive; separators are ignored. */
-      code: string;
-    };
-    BotSetupCodeClaimResponse: {
-      /** @description One-time plaintext bot token minted by this claim. */
-      token: string;
-      bot: components["schemas"]["BotSetupCodeClaimBot"];
-      workspace: components["schemas"]["BotSetupCodeClaimWorkspace"];
-      defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
-      /**
-       * @description Version of the setup-code endpoint contract.
-       * @enum {integer}
-       */
-      contract_version?: 1;
-      /**
-       * Format: uri
-       * @description Canonical API base URL the installer should persist, including any configured base path.
-       */
-      api_base_url?: string;
-    };
-    BotSetupCodeClaimBot: {
-      id: string;
-      handle: string;
-      display_name: string;
-    };
-    BotSetupCodeClaimWorkspace: {
-      id: string;
-      route_id: string;
-      slug: string;
-      name: string;
-    };
-    BotSetupCodeClaimDefaults: {
-      /** @description OpenClaw outbound target captured at mint time, such as channel:general. When omitted, claim falls back to the workspace's active default channel. */
-      defaultTo?: string;
-      /** @description OpenClaw inbound sender allowlist captured at mint time. */
-      allowFrom?: string[];
-      /** @description Whether OpenClaw agent activity streaming should be enabled. True requires the agent_activity:write scope. */
-      agentActivity?: boolean;
-    };
-    AppInstallation: {
-      id: string;
-      workspace_id: string;
-      app_slug: string;
-      display_name: string;
-      bot_user_id: string;
-      config: {
-        [key: string]: unknown;
-      };
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      revoked_at?: string;
-    };
-    CreateAppInstallationRequest: {
-      app_slug: string;
-      display_name?: string;
-      bot_user_id: string;
-      config?: {
-        [key: string]: unknown;
-      };
-      /** @description Retry key that returns the original installation instead of creating a duplicate. */
-      setup_nonce?: string;
-    };
-    DeletedBot: {
-      id: string;
-      display_name: string;
-      former_handle: string;
-      /** Format: date-time */
-      deleted_at: string;
-    };
-    DeleteBotResponse: {
-      deleted_bot: components["schemas"]["DeletedBot"];
-    };
-    AppInstallationResponse: {
-      app_installation: components["schemas"]["AppInstallation"];
-    };
-    AppInstallationListResponse: {
-      app_installations: components["schemas"]["AppInstallation"][];
-    };
-    RevokeAppInstallationRequest: {
-      /**
-       * @description Defaults to true when omitted.
-       * @example true
-       */
-      revoke_slash_commands?: boolean;
-      /**
-       * @description Defaults to true when omitted.
-       * @example true
-       */
-      revoke_event_subscriptions?: boolean;
-      /**
-       * @description Defaults to false when omitted.
-       * @example false
-       */
-      revoke_bot_tokens?: boolean;
-      /**
-       * @description Defaults to false. When true, globally retires the installation bot, revokes all of its resources, preserves historical attribution, and releases its handle.
-       * @example false
-       */
-      delete_bot?: boolean;
-    };
-    AppInstallationRevokedCounts: {
-      slash_commands: number;
-      event_subscriptions: number;
-      bot_tokens: number;
-    };
-    RevokeAppInstallationResponse: {
-      installation: components["schemas"]["AppInstallation"];
-      revoked: components["schemas"]["AppInstallationRevokedCounts"];
-      deleted_bot?: components["schemas"]["DeletedBot"];
-    };
-    SlashCommand: {
-      id: string;
-      workspace_id: string;
-      app_installation_id?: string;
-      /** @description Slash command name, normalized with a leading slash. */
-      command: string;
-      description: string;
-      /** Format: uri */
-      callback_url: string;
-      /** @description One-time callback signing secret. Present only immediately after registration. */
-      signing_secret?: string;
-      bot_user_id: string;
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      revoked_at?: string;
-    };
-    CreateSlashCommandRequest: {
-      app_installation_id?: string;
-      command: string;
-      description?: string;
-      /** Format: uri */
-      callback_url: string;
-      bot_user_id: string;
-    };
-    SlashCommandResponse: {
-      slash_command: components["schemas"]["SlashCommand"];
-    };
-    SlashCommandListResponse: {
-      slash_commands: components["schemas"]["SlashCommand"][];
-    };
-    EventSubscription: {
-      id: string;
-      workspace_id: string;
-      app_installation_id?: string;
-      event_types: string[];
-      /** Format: uri */
-      callback_url: string;
-      /** @description One-time callback signing secret. Present only immediately after creation. */
-      signing_secret?: string;
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      revoked_at?: string;
-    };
-    CreateEventSubscriptionRequest: {
-      app_installation_id?: string;
-      event_types: string[];
-      /** Format: uri */
-      callback_url: string;
-    };
-    EventSubscriptionResponse: {
-      event_subscription: components["schemas"]["EventSubscription"];
-    };
-    EventSubscriptionListResponse: {
-      event_subscriptions: components["schemas"]["EventSubscription"][];
-    };
-    EventDeliveryAttempt: {
-      id: string;
-      subscription_id: string;
-      event_id: string;
-      workspace_id: string;
-      event_type: string;
-      attempt: number;
-      request_json?: string;
-      response_status: number;
-      response_body?: string;
-      error?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      completed_at: string;
-    };
-    EventDeliveryAttemptsResponse: {
-      deliveries: components["schemas"]["EventDeliveryAttempt"][];
-      next_cursor: string | null;
-    };
-    EventTypesResponse: {
-      event_types: string[];
-    };
-    AuditLogEntry: {
-      id: string;
-      workspace_id: string;
-      actor_user_id: string;
-      action: string;
-      target_type: string;
-      target_id: string;
-      metadata: {
-        [key: string]: unknown;
-      };
-      /** Format: date-time */
-      created_at: string;
-    };
-    ConnectedAccount: {
-      id: string;
-      workspace_id: string;
-      user_id: string;
-      provider: string;
-      provider_account_id: string;
-      display_name: string;
-      scopes: string[];
-      metadata: {
-        [key: string]: unknown;
-      };
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      revoked_at?: string;
-    };
-    CreateConnectedAccountRequest: {
-      user_id: string;
-      provider: string;
-      provider_account_id: string;
-      display_name?: string;
-      scopes?: string[];
-      metadata?: {
-        [key: string]: unknown;
-      };
-    };
-    NotificationSettings: {
-      pushover_enabled: boolean;
-      /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
-      pushover_user_key: string;
-    };
-    /** @description Current user's complete appearance preference snapshot. Empty properties use client defaults. */
-    AppearancePreferences: {
-      /** @enum {string} */
-      color_mode?: "" | "light" | "dark";
-      /** @enum {string} */
-      board_theme?: "" | "ember" | "moss" | "iris";
-      /** @enum {string} */
-      message_layout?: "" | "outlined";
-      /** @enum {string} */
-      density?: "" | "compact";
-    };
-    /** @description Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults. */
-    AppearancePreferencesPatch: {
-      /** @enum {string} */
-      color_mode?: "" | "system" | "light" | "dark";
-      /** @enum {string} */
-      board_theme?: "" | "signal" | "ember" | "moss" | "iris";
-      /** @enum {string} */
-      message_layout?: "" | "standard" | "outlined";
-      /** @enum {string} */
-      density?: "" | "comfortable" | "compact";
-    };
-    CreateChannelRequest: {
-      name: string;
-      /** @description Optional presentation-only title. Whitespace-only values clear it; longer values are truncated to 200 Unicode code points. */
-      display_title?: string;
-      /** @default public */
-      kind: string;
-      external_managed?: boolean;
-      /** @description Opaque identity in the external managing system. */
-      external_ref?: string;
-      /**
-       * Format: uri
-       * @description Deep link into the external managing application.
-       */
-      external_url?: string;
-      /** @description Optional client sidebar grouping label. */
-      sidebar_section?: string;
-    };
-    Topic: {
-      id: string;
-      workspace_id: string;
-      channel_id?: string;
-      name: string;
-      created_by?: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      archived_at?: string;
-    };
-    CreateTopicRequest: {
-      channel_id?: string;
-      name: string;
-    };
-    UpdateChannelRequest: {
-      name?: string;
-      /** @description Presentation-only title. Send an empty string to clear it; longer values are truncated to 200 Unicode code points. */
-      display_title?: string;
-      kind?: string;
-      archived?: boolean;
-      external_managed?: boolean;
-      /** @description Opaque external identity. Send an empty string to clear it. */
-      external_ref?: string;
-      /** @description External deep link. Send an empty string to clear it. */
-      external_url?: string;
-      /** @description Sidebar grouping label. Send an empty string to clear it. */
-      sidebar_section?: string;
-    };
-    CreateMessageRequest: {
-      body: string;
-      /**
-       * @default markdown
-       * @enum {string}
-       */
-      body_format: "markdown";
-      /**
-       * @description Optional ID of a message to quote. The quoted message must live in
-       *     the same channel, DM conversation, or thread as the new message;
-       *     cross-context quoting is rejected with 400. The server captures a
-       *     soft snapshot of the quoted body at send time.
-       */
-      quoted_message_id?: string;
-      /**
-       * @description Optional client idempotency key for retry-safe message creation.
-       *     Reusing the same nonce with the same body and quote returns the
-       *     existing message with HTTP 200 instead of creating a duplicate.
-       */
-      nonce?: string;
-      /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
-      topic_id?: string;
-      /**
-       * @description Durable message kind; omitted values default to message. Agent
-       *     activity kinds require bot-token auth
-       *     with the explicit agent_activity:write scope and are supported on
-       *     channel and direct-message create endpoints.
-       * @enum {string}
-       */
-      kind?: "message" | "agent_commentary" | "agent_tool";
-      /**
-       * @description Optional agent-turn correlation ID. Allowed only with
-       *     agent_commentary or agent_tool; ordinary messages reject it.
-       */
-      turn_id?: string;
-    };
-    CreateThreadReplyRequest: {
-      body: string;
-      quoted_message_id?: string;
-      nonce?: string;
-    };
-    UpdateMessageRequest: {
-      body: string;
-    };
-    MarkReadRequest: {
-      /**
-       * Format: int64
-       * @description Last visible channel or DM sequence to mark as read.
-       */
-      seq: number;
-    };
-    ReadReceipt: {
-      scope_id: string;
-      user_id: string;
-      /** Format: int64 */
-      last_read_seq: number;
-      /** Format: date-time */
-      last_read_at: string;
-    };
-    UpdateWorkspaceRequest: {
-      name?: string;
-      slug?: string;
-      icon_url?: string;
-    };
-    TransferWorkspaceOwnershipRequest: {
-      user_id: string;
-    };
-    Workspace: {
-      id: string;
-      /** @description Immutable public route ID used in app URLs. */
-      route_id: string;
-      name: string;
-      slug: string;
-      icon_url: string;
-      /** Format: date-time */
-      created_at: string;
-      /** @enum {string} */
-      role?: "owner" | "moderator" | "member" | "guest" | "bot";
-    };
-    WorkspaceMember: {
-      workspace_id: string;
-      user: components["schemas"]["User"];
-      /** @enum {string} */
-      role: "owner" | "moderator" | "member" | "bot" | "guest";
-      /** Format: date-time */
-      joined_at: string;
-    };
-    WorkspaceMemberPage: {
-      members: components["schemas"]["WorkspaceMember"][];
-      next_cursor?: string;
-      has_more: boolean;
-      /** @description Exact filtered member count, included only on the first page. */
-      total_count?: number;
-      /** @description Exact unfiltered role totals, included only on the unfiltered first page. */
-      total_by_role?: components["schemas"]["WorkspaceMemberRoleCounts"];
-    };
-    WorkspaceMemberRoleCounts: {
-      owner: number;
-      moderator: number;
-      member: number;
-      bot: number;
-      guest: number;
-    };
-    MemberModeration: {
-      workspace_id: string;
-      user: components["schemas"]["User"];
-      /** @enum {string} */
-      role: "owner" | "moderator" | "member" | "guest" | "bot";
-      posts_remaining: number;
-      post_limit: number;
-      /** Format: date-time */
-      timeout_until?: string;
-      /** Format: date-time */
-      blocked_at?: string;
-      moderation_note?: string;
-      moderation_by?: string;
-      /** Format: date-time */
-      moderation_at?: string;
-    };
-    Channel: {
-      id: string;
-      /** @description Immutable public route ID used in app URLs. */
-      route_id: string;
-      workspace_id: string;
-      name: string;
-      /** @description Optional presentation-only title; channel routing and uniqueness continue to use name. */
-      display_title?: string;
-      kind: string;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      archived_at?: string;
-      external_managed: boolean;
-      /** @description Opaque identity in the external managing system. */
-      external_ref?: string;
-      /**
-       * Format: uri
-       * @description Deep link into the external managing application.
-       */
-      external_url?: string;
-      /** @description Optional client sidebar grouping label. */
-      sidebar_section?: string;
-      /** Format: int64 */
-      last_seq?: number;
-      /** Format: int64 */
-      last_read_seq?: number;
-      /** Format: int64 */
-      unread_count?: number;
-    };
-    DirectConversation: {
-      id: string;
-      /** @description Immutable public route ID used in app URLs. */
-      route_id: string;
-      workspace_id: string;
-      /** Format: date-time */
-      created_at: string;
-      members: components["schemas"]["User"][];
-      /** @description Whether the current user can send to at least one active recipient. */
-      can_send: boolean;
-      /** Format: int64 */
-      last_seq?: number;
-      /** Format: int64 */
-      last_read_seq?: number;
-      /** Format: int64 */
-      unread_count?: number;
-    };
-    ThreadState: {
-      root_message_id: string;
-      /** Format: int64 */
-      reply_count: number;
-      /** Format: date-time */
-      last_reply_at?: string;
-      last_reply_author_ids: string[];
-    };
-    ReactionSummary: {
-      emoji: string;
-      /** Format: int64 */
-      count: number;
-      reacted_by_me: boolean;
-    };
-    Event: {
-      id: string;
-      cursor: string;
-      type: string;
-      workspace_id: string;
-      channel_id?: string;
-      /** Format: int64 */
-      seq?: number;
-      /** Format: date-time */
-      created_at: string;
-      payload: {
-        [key: string]: unknown;
-      } | null;
-      /** @description Workspace user IDs explicitly mentioned by a message event. */
-      mentioned_user_ids?: string[];
-    };
-    ChannelNotificationSettings: {
-      /** @enum {string} */
-      preference: "all" | "mentions" | "muted";
-    };
-    UpdateChannelNotificationSettingsRequest: {
-      /** @enum {string} */
-      preference: "all" | "mentions" | "muted";
-    };
-    ReactionMutationResponse: {
-      event: components["schemas"]["Event"];
-      reactions: components["schemas"]["ReactionSummary"][];
-    };
-    PinnedMessage: {
-      id: string;
-      workspace_id: string;
-      channel_id: string;
-      message_id: string;
-      pinned_by: string;
-      /** Format: date-time */
-      created_at: string;
-    };
-    PinMessageRequest: {
-      message_id: string;
-    };
-    PinMessageResponse: {
-      pinned_message: components["schemas"]["PinnedMessage"];
-      event: components["schemas"]["Event"];
-    };
-    Message: {
-      id: string;
-      /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
-      route_id?: string;
-      workspace_id: string;
-      channel_id?: string;
-      direct_conversation_id?: string;
-      author_id: string;
-      parent_message_id?: string;
-      thread_root_id: string;
-      topic_id?: string;
-      /** Format: int64 */
-      channel_seq?: number;
-      /** Format: int64 */
-      thread_seq?: number;
-      body: string;
-      /** @enum {string} */
-      body_format: "markdown";
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      edited_at?: string;
-      /** Format: date-time */
-      deleted_at?: string;
-      /**
-       * @description Defaults to message for ordinary human and bot messages.
-       * @enum {string}
-       */
-      kind?: "message" | "agent_commentary" | "agent_tool";
-      /** @description Correlates durable agent activity rows from one agent turn. */
-      turn_id?: string;
-      author?: components["schemas"]["User"];
-      quoted_message_id?: string;
-      quoted_body_snapshot?: string;
-      quoted_author_id?: string;
-      quoted_author?: components["schemas"]["User"];
-      thread_state?: components["schemas"]["ThreadState"];
-      nonce?: string;
-      reactions?: components["schemas"]["ReactionSummary"][];
-    };
-    MessageResponse: {
-      message: components["schemas"]["Message"];
-    };
-    MessagePage: {
-      messages: components["schemas"]["Message"][];
-      /** Format: int64 */
-      oldest_seq: number;
-      /** Format: int64 */
-      newest_seq: number;
-      has_older: boolean;
-      has_newer: boolean;
-    };
-    SearchHighlight: {
-      /** @description Inclusive Unicode code-point offset into snippet. */
-      start: number;
-      /** @description Exclusive Unicode code-point offset into snippet. */
-      end: number;
-    };
-    SearchResult: {
-      id: string;
-      workspace_id: string;
-      channel_id?: string;
-      channel_name?: string;
-      direct_conversation_id?: string;
-      author: components["schemas"]["User"];
-      parent_message_id?: string;
-      thread_root_id: string;
-      /** Format: int64 */
-      channel_seq?: number;
-      /** Format: int64 */
-      thread_seq?: number;
-      /** Format: date-time */
-      created_at: string;
-      /** Format: date-time */
-      edited_at?: string;
-      reply_count: number;
-      /** Format: date-time */
-      last_reply_at?: string;
-      /** @description Bounded plain-text excerpt containing the matched terms. */
-      snippet: string;
-      highlights: components["schemas"]["SearchHighlight"][];
-    };
-    SearchResponse: {
-      results: components["schemas"]["SearchResult"][];
-      next_cursor: string | null;
-    };
-    Upload: {
-      id: string;
-      workspace_id: string;
-      owner_id: string;
-      nonce?: string;
-      filename: string;
-      content_type: string;
-      /** Format: int64 */
-      byte_size: number;
-      width?: number;
-      height?: number;
-      duration_ms?: number;
-      /** Format: date-time */
-      created_at: string;
-    };
-    UploadResponse: {
-      upload: components["schemas"]["Upload"];
-    };
-    RouteTarget: {
-      workspace_id: string;
-      workspace_route_id: string;
-      /** @enum {string} */
-      target_type: "channel" | "direct" | "thread";
-      target_id: string;
-      target_route_id: string;
-      /** @enum {string} */
-      parent_type?: "channel" | "direct";
-      parent_id?: string;
-      parent_route_id?: string;
-      canonical_path: string;
-    };
-    AddReactionRequest: {
-      emoji: string;
-    };
-    AttachUploadRequest: {
-      upload_id: string;
-    };
-    CreateDirectConversationRequest: {
-      workspace_id: string;
-      member_ids: string[];
-    };
-    EphemeralEventRequest: {
-      workspace_id: string;
-      channel_id?: string;
-      direct_conversation_id?: string;
-      /** @enum {string} */
-      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress";
-      payload?: {
-        [key: string]: unknown;
-      };
-    };
-    MattermostWebhookRequest: {
-      text: string;
-    };
-    SlashCommandRequest: {
-      command?: string;
-      text?: string;
-      user_name?: string;
-    };
-  };
-  responses: never;
-  parameters: {
-    workspace_id: string;
-    channel_id: string;
-    message_id: string;
-    conversation_id: string;
-    workspace_route_id: string;
-    target_route_id: string;
-  };
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    schemas: {
+        CreateWorkspaceRequest: {
+            name: string;
+            slug?: string;
+        };
+        UpdateMemberModerationRequest: {
+            /** @enum {string} */
+            role?: "moderator" | "member" | "guest";
+            /** Format: date-time */
+            timeout_until?: string;
+            timeout_minutes?: number;
+            clear_timeout?: boolean;
+            blocked?: boolean;
+            moderation_note?: string;
+        };
+        RequestMagicLinkRequest: {
+            /** Format: email */
+            email: string;
+            display_name?: string;
+        };
+        ConsumeMagicLinkRequest: {
+            token: string;
+        };
+        ConsumeDesktopGitHubOAuthRequest: {
+            /** @description Opaque one-time grant from a legacy protocol-1 or current protocol-2 desktop callback */
+            code: string;
+            code_verifier: string;
+        };
+        UpdateMeRequest: {
+            display_name?: string;
+            /** @description Unique user handle. Accepts an optional leading @ and stores the normalized value without it. */
+            handle?: string;
+            /** Format: uri */
+            avatar_url?: string;
+            notification_settings?: components["schemas"]["NotificationSettings"];
+            appearance_preferences?: components["schemas"]["AppearancePreferencesPatch"];
+        };
+        User: {
+            id: string;
+            /**
+             * @description Human users sign in directly. Bot users authenticate with bot tokens and may be service-owned or owned by a human.
+             * @enum {string}
+             */
+            kind: "human" | "bot";
+            /** @description Human owner for a user-owned bot. Empty for humans and service bots. */
+            owner_user_id?: string;
+            display_name: string;
+            handle: string;
+            /** @description Last active handle for a deleted bot identity. Present only on historical records. */
+            former_handle?: string;
+            /**
+             * Format: date-time
+             * @description Present only when the immutable bot identity has been retired.
+             */
+            deleted_at?: string;
+            avatar_url: string;
+            /** Format: date-time */
+            created_at: string;
+            notification_settings?: components["schemas"]["NotificationSettings"];
+            appearance_preferences?: components["schemas"]["AppearancePreferences"];
+        };
+        BotToken: {
+            id: string;
+            bot_user_id: string;
+            workspace_id: string;
+            owner_user_id?: string;
+            name: string;
+            scopes: string[];
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at?: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            /** @description One-time raw ccb_ token. Present only immediately after creation. */
+            token?: string;
+        };
+        BotWithTokens: {
+            bot: components["schemas"]["User"];
+            tokens: components["schemas"]["BotToken"][];
+        };
+        BotCommandInput: {
+            /** @description Trimmed, accepted with or without a leading slash, then validated and stored in lowercase canonical form. */
+            command: string;
+            description: string;
+            args_hint?: string;
+        };
+        BotCommand: {
+            id: string;
+            workspace_id: string;
+            bot_user_id: string;
+            command: string;
+            description: string;
+            args_hint: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        BotCommandBot: {
+            id: string;
+            handle: string;
+            display_name: string;
+            avatar_url: string;
+        };
+        WorkspaceBotCommand: {
+            id: string;
+            command: string;
+            description: string;
+            args_hint: string;
+            bot: components["schemas"]["BotCommandBot"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SetBotCommandsRequest: {
+            commands: components["schemas"]["BotCommandInput"][];
+        };
+        BotCommandListResponse: {
+            bot_commands: components["schemas"]["BotCommand"][];
+        };
+        WorkspaceBotCommandListResponse: {
+            bot_commands: components["schemas"]["WorkspaceBotCommand"][];
+        };
+        CreateBotResponse: {
+            bot: components["schemas"]["User"];
+            /** @description Omitted when the request set initial_token=false. */
+            bot_token?: components["schemas"]["BotToken"];
+        };
+        BotTokenResponse: {
+            bot_token: components["schemas"]["BotToken"];
+        };
+        BotTokenListResponse: {
+            bot_tokens: components["schemas"]["BotToken"][];
+        };
+        OwnedBotWorkspace: {
+            id: string;
+            route_id: string;
+            name: string;
+        };
+        OwnedBotEntry: {
+            bot: components["schemas"]["User"];
+            workspace: components["schemas"]["OwnedBotWorkspace"];
+            active_token_count: number;
+        };
+        CreateBotRequest: {
+            owner_user_id?: string;
+            display_name: string;
+            handle?: string;
+            /** Format: uri */
+            avatar_url?: string;
+            token_name?: string;
+            scopes?: string[];
+            /** @description Retry key for integration setup. Replays reuse the same bot identity; when an initial token is requested, they also reuse its token row while returning a fresh raw token. */
+            setup_nonce?: string;
+            /** @description Optional and true when omitted. Set to false to create the bot without minting an initial token, for setup-code installs where the token is minted at claim time. */
+            initial_token?: boolean;
+        };
+        CreateBotTokenRequest: {
+            name?: string;
+            scopes?: string[];
+            /** @description Retry key for integration setup. Replays reuse the same token row while returning a fresh raw token. */
+            setup_nonce?: string;
+        };
+        CreateBotSetupCodeRequest: {
+            /** @description Token name captured at mint time. Defaults to "default". */
+            name?: string;
+            /** @description Scopes captured and validated at mint time. */
+            scopes?: string[];
+            defaults?: components["schemas"]["BotSetupCodeClaimDefaults"];
+        };
+        BotSetupCode: {
+            id: string;
+            bot_user_id: string;
+            workspace_id: string;
+            token_name: string;
+            scopes: string[];
+            defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description One-time plaintext setup code (XXXX-XXXX-XXXX). Present only in the mint response; only a hash is stored. */
+            code?: string;
+            /**
+             * @description Present with claim_url and api_base_url when the server has a trusted canonical API base. Version 1 means claim_url is the exact endpoint and must not be extended by consumers.
+             * @enum {integer}
+             */
+            contract_version?: 1;
+            /**
+             * Format: uri
+             * @description Exact server-issued claim endpoint. Derived only from validated administrator configuration, except for trusted loopback development.
+             */
+            claim_url?: string;
+            /**
+             * Format: uri
+             * @description Canonical API base URL, including any configured base path.
+             */
+            api_base_url?: string;
+        };
+        BotSetupCodeResponse: {
+            setup_code: components["schemas"]["BotSetupCode"];
+        };
+        ClaimBotSetupCodeRequest: {
+            /** @description Setup code. Case-insensitive; separators are ignored. */
+            code: string;
+        };
+        BotSetupCodeClaimResponse: {
+            /** @description One-time plaintext bot token minted by this claim. */
+            token: string;
+            bot: components["schemas"]["BotSetupCodeClaimBot"];
+            workspace: components["schemas"]["BotSetupCodeClaimWorkspace"];
+            defaults: components["schemas"]["BotSetupCodeClaimDefaults"];
+            /**
+             * @description Version of the setup-code endpoint contract.
+             * @enum {integer}
+             */
+            contract_version?: 1;
+            /**
+             * Format: uri
+             * @description Canonical API base URL the installer should persist, including any configured base path.
+             */
+            api_base_url?: string;
+        };
+        BotSetupCodeClaimBot: {
+            id: string;
+            handle: string;
+            display_name: string;
+        };
+        BotSetupCodeClaimWorkspace: {
+            id: string;
+            route_id: string;
+            slug: string;
+            name: string;
+        };
+        BotSetupCodeClaimDefaults: {
+            /** @description OpenClaw outbound target captured at mint time, such as channel:general. When omitted, claim falls back to the workspace's active default channel. */
+            defaultTo?: string;
+            /** @description OpenClaw inbound sender allowlist captured at mint time. */
+            allowFrom?: string[];
+            /** @description Whether OpenClaw agent activity streaming should be enabled. True requires the agent_activity:write scope. */
+            agentActivity?: boolean;
+        };
+        AppInstallation: {
+            id: string;
+            workspace_id: string;
+            app_slug: string;
+            display_name: string;
+            bot_user_id: string;
+            config: {
+                [key: string]: unknown;
+            };
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string;
+        };
+        CreateAppInstallationRequest: {
+            app_slug: string;
+            display_name?: string;
+            bot_user_id: string;
+            config?: {
+                [key: string]: unknown;
+            };
+            /** @description Retry key that returns the original installation instead of creating a duplicate. */
+            setup_nonce?: string;
+        };
+        DeletedBot: {
+            id: string;
+            display_name: string;
+            former_handle: string;
+            /** Format: date-time */
+            deleted_at: string;
+        };
+        DeleteBotResponse: {
+            deleted_bot: components["schemas"]["DeletedBot"];
+        };
+        AppInstallationResponse: {
+            app_installation: components["schemas"]["AppInstallation"];
+        };
+        AppInstallationListResponse: {
+            app_installations: components["schemas"]["AppInstallation"][];
+        };
+        RevokeAppInstallationRequest: {
+            /**
+             * @description Defaults to true when omitted.
+             * @example true
+             */
+            revoke_slash_commands?: boolean;
+            /**
+             * @description Defaults to true when omitted.
+             * @example true
+             */
+            revoke_event_subscriptions?: boolean;
+            /**
+             * @description Defaults to false when omitted.
+             * @example false
+             */
+            revoke_bot_tokens?: boolean;
+            /**
+             * @description Defaults to false. When true, globally retires the installation bot, revokes all of its resources, preserves historical attribution, and releases its handle.
+             * @example false
+             */
+            delete_bot?: boolean;
+        };
+        AppInstallationRevokedCounts: {
+            slash_commands: number;
+            event_subscriptions: number;
+            bot_tokens: number;
+        };
+        RevokeAppInstallationResponse: {
+            installation: components["schemas"]["AppInstallation"];
+            revoked: components["schemas"]["AppInstallationRevokedCounts"];
+            deleted_bot?: components["schemas"]["DeletedBot"];
+        };
+        SlashCommand: {
+            id: string;
+            workspace_id: string;
+            app_installation_id?: string;
+            /** @description Slash command name, normalized with a leading slash. */
+            command: string;
+            description: string;
+            /** Format: uri */
+            callback_url: string;
+            /** @description One-time callback signing secret. Present only immediately after registration. */
+            signing_secret?: string;
+            bot_user_id: string;
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string;
+        };
+        CreateSlashCommandRequest: {
+            app_installation_id?: string;
+            command: string;
+            description?: string;
+            /** Format: uri */
+            callback_url: string;
+            bot_user_id: string;
+        };
+        SlashCommandResponse: {
+            slash_command: components["schemas"]["SlashCommand"];
+        };
+        SlashCommandListResponse: {
+            slash_commands: components["schemas"]["SlashCommand"][];
+        };
+        EventSubscription: {
+            id: string;
+            workspace_id: string;
+            app_installation_id?: string;
+            event_types: string[];
+            /** Format: uri */
+            callback_url: string;
+            /** @description One-time callback signing secret. Present only immediately after creation. */
+            signing_secret?: string;
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string;
+        };
+        CreateEventSubscriptionRequest: {
+            app_installation_id?: string;
+            event_types: string[];
+            /** Format: uri */
+            callback_url: string;
+        };
+        EventSubscriptionResponse: {
+            event_subscription: components["schemas"]["EventSubscription"];
+        };
+        EventSubscriptionListResponse: {
+            event_subscriptions: components["schemas"]["EventSubscription"][];
+        };
+        EventDeliveryAttempt: {
+            id: string;
+            subscription_id: string;
+            event_id: string;
+            workspace_id: string;
+            event_type: string;
+            attempt: number;
+            request_json?: string;
+            response_status: number;
+            response_body?: string;
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string;
+        };
+        EventDeliveryAttemptsResponse: {
+            deliveries: components["schemas"]["EventDeliveryAttempt"][];
+            next_cursor: string | null;
+        };
+        EventTypesResponse: {
+            event_types: string[];
+        };
+        AuditLogEntry: {
+            id: string;
+            workspace_id: string;
+            actor_user_id: string;
+            action: string;
+            target_type: string;
+            target_id: string;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConnectedAccount: {
+            id: string;
+            workspace_id: string;
+            user_id: string;
+            provider: string;
+            provider_account_id: string;
+            display_name: string;
+            scopes: string[];
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            revoked_at?: string;
+        };
+        CreateConnectedAccountRequest: {
+            user_id: string;
+            provider: string;
+            provider_account_id: string;
+            display_name?: string;
+            scopes?: string[];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        NotificationSettings: {
+            pushover_enabled: boolean;
+            /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
+            pushover_user_key: string;
+        };
+        /** @description Current user's complete appearance preference snapshot. Empty properties use client defaults. */
+        AppearancePreferences: {
+            /** @enum {string} */
+            color_mode?: "" | "light" | "dark";
+            /** @enum {string} */
+            board_theme?: "" | "ember" | "moss" | "iris";
+            /** @enum {string} */
+            message_layout?: "" | "outlined";
+            /** @enum {string} */
+            density?: "" | "compact";
+        };
+        /** @description Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults. */
+        AppearancePreferencesPatch: {
+            /** @enum {string} */
+            color_mode?: "" | "system" | "light" | "dark";
+            /** @enum {string} */
+            board_theme?: "" | "signal" | "ember" | "moss" | "iris";
+            /** @enum {string} */
+            message_layout?: "" | "standard" | "outlined";
+            /** @enum {string} */
+            density?: "" | "comfortable" | "compact";
+        };
+        CreateChannelRequest: {
+            name: string;
+            /** @description Optional presentation-only title. Whitespace-only values clear it; longer values are truncated to 200 Unicode code points. */
+            display_title?: string;
+            /** @default public */
+            kind: string;
+            external_managed?: boolean;
+            /** @description Opaque identity in the external managing system. */
+            external_ref?: string;
+            /**
+             * Format: uri
+             * @description Deep link into the external managing application.
+             */
+            external_url?: string;
+            /** @description Optional client sidebar grouping label. */
+            sidebar_section?: string;
+        };
+        Topic: {
+            id: string;
+            workspace_id: string;
+            channel_id?: string;
+            name: string;
+            created_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            archived_at?: string;
+        };
+        CreateTopicRequest: {
+            channel_id?: string;
+            name: string;
+        };
+        UpdateChannelRequest: {
+            name?: string;
+            /** @description Presentation-only title. Send an empty string to clear it; longer values are truncated to 200 Unicode code points. */
+            display_title?: string;
+            kind?: string;
+            archived?: boolean;
+            external_managed?: boolean;
+            /** @description Opaque external identity. Send an empty string to clear it. */
+            external_ref?: string;
+            /** @description External deep link. Send an empty string to clear it. */
+            external_url?: string;
+            /** @description Sidebar grouping label. Send an empty string to clear it. */
+            sidebar_section?: string;
+        };
+        CreateMessageRequest: {
+            body: string;
+            /**
+             * @default markdown
+             * @enum {string}
+             */
+            body_format: "markdown";
+            /**
+             * @description Optional ID of a message to quote. The quoted message must live in
+             *     the same channel, DM conversation, or thread as the new message;
+             *     cross-context quoting is rejected with 400. The server captures a
+             *     soft snapshot of the quoted body at send time.
+             */
+            quoted_message_id?: string;
+            /**
+             * @description Optional client idempotency key for retry-safe message creation.
+             *     Reusing the same nonce with the same body and quote returns the
+             *     existing message with HTTP 200 instead of creating a duplicate.
+             */
+            nonce?: string;
+            /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
+            topic_id?: string;
+            /**
+             * @description Durable message kind; omitted values default to message. Agent
+             *     activity kinds require bot-token auth
+             *     with the explicit agent_activity:write scope and are supported on
+             *     channel and direct-message create endpoints.
+             * @enum {string}
+             */
+            kind?: "message" | "agent_commentary" | "agent_tool";
+            /**
+             * @description Optional agent-turn correlation ID. Allowed only with
+             *     agent_commentary or agent_tool; ordinary messages reject it.
+             */
+            turn_id?: string;
+        };
+        CreateThreadReplyRequest: {
+            body: string;
+            quoted_message_id?: string;
+            nonce?: string;
+        };
+        UpdateMessageRequest: {
+            body: string;
+        };
+        /** @description Partial update of cognitive OS metadata fields. All fields optional. */
+        UpdateMessageMetadataRequest: {
+            /** @description Classified communication intent. */
+            intent?: string;
+            /** @description Active persona filter. */
+            persona?: string;
+            /**
+             * Format: float
+             * @description Output reliability/certainty score.
+             */
+            confidence?: number;
+            /** @description Contextual metadata. */
+            context?: Record<string, never>;
+            /** @description Arbitrary metadata key-value pairs. */
+            metadata?: Record<string, never>;
+            /** @description Inline transform history. */
+            transform_history?: unknown[];
+        };
+        MarkReadRequest: {
+            /**
+             * Format: int64
+             * @description Last visible channel or DM sequence to mark as read.
+             */
+            seq: number;
+        };
+        ReadReceipt: {
+            scope_id: string;
+            user_id: string;
+            /** Format: int64 */
+            last_read_seq: number;
+            /** Format: date-time */
+            last_read_at: string;
+        };
+        UpdateWorkspaceRequest: {
+            name?: string;
+            slug?: string;
+            icon_url?: string;
+        };
+        TransferWorkspaceOwnershipRequest: {
+            user_id: string;
+        };
+        Workspace: {
+            id: string;
+            /** @description Immutable public route ID used in app URLs. */
+            route_id: string;
+            name: string;
+            slug: string;
+            icon_url: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            role?: "owner" | "moderator" | "member" | "guest" | "bot";
+        };
+        WorkspaceMember: {
+            workspace_id: string;
+            user: components["schemas"]["User"];
+            /** @enum {string} */
+            role: "owner" | "moderator" | "member" | "bot" | "guest";
+            /** Format: date-time */
+            joined_at: string;
+        };
+        WorkspaceMemberPage: {
+            members: components["schemas"]["WorkspaceMember"][];
+            next_cursor?: string;
+            has_more: boolean;
+            /** @description Exact filtered member count, included only on the first page. */
+            total_count?: number;
+            /** @description Exact unfiltered role totals, included only on the unfiltered first page. */
+            total_by_role?: components["schemas"]["WorkspaceMemberRoleCounts"];
+        };
+        WorkspaceMemberRoleCounts: {
+            owner: number;
+            moderator: number;
+            member: number;
+            bot: number;
+            guest: number;
+        };
+        MemberModeration: {
+            workspace_id: string;
+            user: components["schemas"]["User"];
+            /** @enum {string} */
+            role: "owner" | "moderator" | "member" | "guest" | "bot";
+            posts_remaining: number;
+            post_limit: number;
+            /** Format: date-time */
+            timeout_until?: string;
+            /** Format: date-time */
+            blocked_at?: string;
+            moderation_note?: string;
+            moderation_by?: string;
+            /** Format: date-time */
+            moderation_at?: string;
+        };
+        Channel: {
+            id: string;
+            /** @description Immutable public route ID used in app URLs. */
+            route_id: string;
+            workspace_id: string;
+            name: string;
+            /** @description Optional presentation-only title; channel routing and uniqueness continue to use name. */
+            display_title?: string;
+            kind: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            archived_at?: string;
+            external_managed: boolean;
+            /** @description Opaque identity in the external managing system. */
+            external_ref?: string;
+            /**
+             * Format: uri
+             * @description Deep link into the external managing application.
+             */
+            external_url?: string;
+            /** @description Optional client sidebar grouping label. */
+            sidebar_section?: string;
+            /** Format: int64 */
+            last_seq?: number;
+            /** Format: int64 */
+            last_read_seq?: number;
+            /** Format: int64 */
+            unread_count?: number;
+        };
+        DirectConversation: {
+            id: string;
+            /** @description Immutable public route ID used in app URLs. */
+            route_id: string;
+            workspace_id: string;
+            /** Format: date-time */
+            created_at: string;
+            members: components["schemas"]["User"][];
+            /** @description Whether the current user can send to at least one active recipient. */
+            can_send: boolean;
+            /** Format: int64 */
+            last_seq?: number;
+            /** Format: int64 */
+            last_read_seq?: number;
+            /** Format: int64 */
+            unread_count?: number;
+        };
+        ThreadState: {
+            root_message_id: string;
+            /** Format: int64 */
+            reply_count: number;
+            /** Format: date-time */
+            last_reply_at?: string;
+            last_reply_author_ids: string[];
+        };
+        ReactionSummary: {
+            emoji: string;
+            /** Format: int64 */
+            count: number;
+            reacted_by_me: boolean;
+        };
+        Event: {
+            id: string;
+            cursor: string;
+            type: string;
+            workspace_id: string;
+            channel_id?: string;
+            /** Format: int64 */
+            seq?: number;
+            /** Format: date-time */
+            created_at: string;
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Workspace user IDs explicitly mentioned by a message event. */
+            mentioned_user_ids?: string[];
+        };
+        ChannelNotificationSettings: {
+            /** @enum {string} */
+            preference: "all" | "mentions" | "muted";
+        };
+        UpdateChannelNotificationSettingsRequest: {
+            /** @enum {string} */
+            preference: "all" | "mentions" | "muted";
+        };
+        ReactionMutationResponse: {
+            event: components["schemas"]["Event"];
+            reactions: components["schemas"]["ReactionSummary"][];
+        };
+        PinnedMessage: {
+            id: string;
+            workspace_id: string;
+            channel_id: string;
+            message_id: string;
+            pinned_by: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PinMessageRequest: {
+            message_id: string;
+        };
+        PinMessageResponse: {
+            pinned_message: components["schemas"]["PinnedMessage"];
+            event: components["schemas"]["Event"];
+        };
+        Message: {
+            id: string;
+            /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
+            route_id?: string;
+            workspace_id: string;
+            channel_id?: string;
+            direct_conversation_id?: string;
+            author_id: string;
+            parent_message_id?: string;
+            thread_root_id: string;
+            topic_id?: string;
+            /** Format: int64 */
+            channel_seq?: number;
+            /** Format: int64 */
+            thread_seq?: number;
+            body: string;
+            /** @enum {string} */
+            body_format: "markdown";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            edited_at?: string;
+            /** Format: date-time */
+            deleted_at?: string;
+            /**
+             * @description Defaults to message for ordinary human and bot messages.
+             * @enum {string}
+             */
+            kind?: "message" | "agent_commentary" | "agent_tool";
+            /** @description Correlates durable agent activity rows from one agent turn. */
+            turn_id?: string;
+            author?: components["schemas"]["User"];
+            quoted_message_id?: string;
+            quoted_body_snapshot?: string;
+            quoted_author_id?: string;
+            quoted_author?: components["schemas"]["User"];
+            thread_state?: components["schemas"]["ThreadState"];
+            nonce?: string;
+            reactions?: components["schemas"]["ReactionSummary"][];
+            /** @description Classified communication intent (ask, command, reflect, draft, clarify, explore). */
+            intent?: string;
+            /** @description Active persona filter applied to the message (operator, analyst, creative, socratic, archivist). */
+            persona?: string;
+            /**
+             * Format: float
+             * @description Output reliability/certainty score.
+             */
+            confidence?: number;
+            /** @description Contextual metadata for the message. */
+            context?: Record<string, never>;
+            /** @description Arbitrary metadata key-value pairs. */
+            metadata?: Record<string, never>;
+            /** @description Non-destructive inline transform operation history. */
+            transform_history?: unknown[];
+        };
+        MessageResponse: {
+            message: components["schemas"]["Message"];
+        };
+        MessagePage: {
+            messages: components["schemas"]["Message"][];
+            /** Format: int64 */
+            oldest_seq: number;
+            /** Format: int64 */
+            newest_seq: number;
+            has_older: boolean;
+            has_newer: boolean;
+        };
+        SearchHighlight: {
+            /** @description Inclusive Unicode code-point offset into snippet. */
+            start: number;
+            /** @description Exclusive Unicode code-point offset into snippet. */
+            end: number;
+        };
+        SearchResult: {
+            id: string;
+            workspace_id: string;
+            channel_id?: string;
+            channel_name?: string;
+            direct_conversation_id?: string;
+            author: components["schemas"]["User"];
+            parent_message_id?: string;
+            thread_root_id: string;
+            /** Format: int64 */
+            channel_seq?: number;
+            /** Format: int64 */
+            thread_seq?: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            edited_at?: string;
+            reply_count: number;
+            /** Format: date-time */
+            last_reply_at?: string;
+            /** @description Bounded plain-text excerpt containing the matched terms. */
+            snippet: string;
+            highlights: components["schemas"]["SearchHighlight"][];
+        };
+        SearchResponse: {
+            results: components["schemas"]["SearchResult"][];
+            next_cursor: string | null;
+        };
+        Upload: {
+            id: string;
+            workspace_id: string;
+            owner_id: string;
+            nonce?: string;
+            filename: string;
+            content_type: string;
+            /** Format: int64 */
+            byte_size: number;
+            width?: number;
+            height?: number;
+            duration_ms?: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        UploadResponse: {
+            upload: components["schemas"]["Upload"];
+        };
+        RouteTarget: {
+            workspace_id: string;
+            workspace_route_id: string;
+            /** @enum {string} */
+            target_type: "channel" | "direct" | "thread";
+            target_id: string;
+            target_route_id: string;
+            /** @enum {string} */
+            parent_type?: "channel" | "direct";
+            parent_id?: string;
+            parent_route_id?: string;
+            canonical_path: string;
+        };
+        AddReactionRequest: {
+            emoji: string;
+        };
+        AttachUploadRequest: {
+            upload_id: string;
+        };
+        CreateDirectConversationRequest: {
+            workspace_id: string;
+            member_ids: string[];
+        };
+        EphemeralEventRequest: {
+            workspace_id: string;
+            channel_id?: string;
+            direct_conversation_id?: string;
+            /** @enum {string} */
+            type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress";
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        MattermostWebhookRequest: {
+            text: string;
+        };
+        SlashCommandRequest: {
+            command?: string;
+            text?: string;
+            user_name?: string;
+        };
+    };
+    responses: never;
+    parameters: {
+        workspace_id: string;
+        channel_id: string;
+        message_id: string;
+        conversation_id: string;
+        workspace_route_id: string;
+        target_route_id: string;
+    };
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  getHealth: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Process is live */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @constant */
-            status: "ok";
-          };
-        };
-      };
-    };
-  };
-  getReadiness: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Database is reachable */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @constant */
-            status: "ready";
-          };
-        };
-      };
-      /** @description Database is unavailable; internal error details are omitted */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @constant */
-            status: "unavailable";
-          };
-        };
-      };
-    };
-  };
-  getMetrics: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Prometheus text exposition when metrics are enabled */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      /** @description Metrics are disabled */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  requestMagicLink: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["RequestMagicLinkRequest"];
-      };
-    };
-    responses: {
-      /** @description Created local magic-link token in dev-bootstrap mode */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Dev-bootstrap token minting requires a loopback client and local request host */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Magic-link delivery is not configured */
-      501: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  consumeMagicLink: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ConsumeMagicLinkRequest"];
-      };
-    };
-    responses: {
-      /** @description Created session */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  startGitHubOAuth: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Redirect to GitHub OAuth authorization */
-      302: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Ambiguous OAuth browser-binding cookies */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Deployment edge rate limit exceeded, when configured */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description GitHub OAuth not configured */
-      501: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  startDesktopGitHubOAuth: {
-    parameters: {
-      query: {
-        code_challenge: string;
-        /** @description Desktop OAuth handoff version. Omitted clients use legacy protocol 1. */
-        desktop_protocol?: 1 | 2;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Redirect the system browser to GitHub OAuth authorization */
-      302: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Invalid desktop code challenge, unsupported protocol, or ambiguous OAuth browser-binding cookies */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Desktop app upgrade required before a namespaced server can begin authentication */
-      426: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Deployment edge rate limit exceeded, when configured */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description GitHub OAuth not configured */
-      501: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  consumeDesktopGitHubOAuth: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ConsumeDesktopGitHubOAuthRequest"];
-      };
-    };
-    responses: {
-      /** @description One-time desktop grant consumed and session cookie created */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Malformed request or invalid, expired, or previously consumed desktop grant */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Cross-site redemption rejected */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description JSON request body exceeds the application limit */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Request content type is not application/json */
-      415: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Deployment edge rate limit exceeded, when configured */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Desktop grant consumption or session persistence failed */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  finishGitHubOAuth: {
-    parameters: {
-      query?: {
-        code?: string;
-        state?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Browser session created and redirected to the web app, or one-time desktop grant created and redirected to the desktop callback */
-      302: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Invalid OAuth callback */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description GitHub account is not allowed */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Identity, workspace, session, or desktop grant generation or persistence failed */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description GitHub provider request failed */
-      502: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Desktop grant capacity exhausted or canonical callback origin unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getMe: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Current user */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            user: components["schemas"]["User"];
-          };
-        };
-      };
-    };
-  };
-  updateMe: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateMeRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated user profile */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            user: components["schemas"]["User"];
-          };
-        };
-      };
-    };
-  };
-  listEventTypes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Durable event types accepted by outgoing event subscriptions */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventTypesResponse"];
-        };
-      };
-    };
-  };
-  listMyBots: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description User-owned bots installed in workspaces */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            bots: components["schemas"]["OwnedBotEntry"][];
-          };
-        };
-      };
-      /** @description Bot tokens cannot list owned bots */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listWorkspaces: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace list */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createWorkspace: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateWorkspaceRequest"];
-      };
-    };
-    responses: {
-      /** @description Created workspace */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  resolveRoute: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_route_id: components["parameters"]["workspace_route_id"];
-        target_route_id: components["parameters"]["target_route_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Resolved route target and canonical public URL path */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            route: components["schemas"]["RouteTarget"];
-          };
-        };
-      };
-      /** @description Route was missing or inaccessible */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getWorkspace: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            workspace: components["schemas"]["Workspace"];
-          };
-        };
-      };
-    };
-  };
-  deleteWorkspace: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace metadata deleted; queued upload-object cleanup may continue asynchronously */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Workspace owner permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  updateWorkspace: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateWorkspaceRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated workspace profile */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            workspace: components["schemas"]["Workspace"];
-            event?: Record<string, never>;
-          };
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  transferWorkspaceOwnership: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TransferWorkspaceOwnershipRequest"];
-      };
-    };
-    responses: {
-      /** @description Workspace ownership transferred */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            workspace: components["schemas"]["Workspace"];
-            event?: Record<string, never>;
-          };
-        };
-      };
-      /** @description Workspace owner permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listWorkspaceMembers: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string;
-        q?: string;
-        role?: "owner" | "moderator" | "member" | "bot" | "guest";
-      };
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Paginated workspace members visible to any workspace member */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WorkspaceMemberPage"];
-        };
-      };
-    };
-  };
-  listWorkspaceMembersForModeration: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace members with moderation state */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            members: components["schemas"]["MemberModeration"][];
-          };
-        };
-      };
-    };
-  };
-  updateWorkspaceMemberModeration: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-        user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateMemberModerationRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated member moderation state */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            member: components["schemas"]["MemberModeration"];
-            event?: Record<string, never>;
-          };
-        };
-      };
-    };
-  };
-  listChannels: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Channel list */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createChannel: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateChannelRequest"];
-      };
-    };
-    responses: {
-      /** @description Created channel */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listTopics: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace topics */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createTopic: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateTopicRequest"];
-      };
-    };
-    responses: {
-      /** @description Created topic */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listBots: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace bot identities and redacted tokens */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            bots: components["schemas"]["BotWithTokens"][];
-          };
-        };
-      };
-    };
-  };
-  createBot: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateBotRequest"];
-      };
-    };
-    responses: {
-      /** @description Created bot and one-time raw bot token */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CreateBotResponse"];
-        };
-      };
-      /** @description Service bots require a workspace manager. User-owned bots must be created by their owner. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listBotCommands: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Bot commands sorted by bot handle and command */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WorkspaceBotCommandListResponse"];
-        };
-      };
-      /** @description Workspace membership required. Bot tokens also require workspaces:read and a matching workspace binding. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  removeBotFromWorkspace: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Bot removed from workspace and workspace-scoped tokens revoked */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Bot membership not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listWorkspaceBotTokens: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Redacted workspace-scoped bot tokens */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            bot_tokens: components["schemas"]["BotToken"][];
-          };
-        };
-      };
-      /** @description Workspace membership required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createWorkspaceBotToken: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateBotTokenRequest"];
-      };
-    };
-    responses: {
-      /** @description Created one-time raw workspace-scoped bot token */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotTokenResponse"];
-        };
-      };
-      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createWorkspaceBotSetupCode: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateBotSetupCodeRequest"];
-      };
-    };
-    responses: {
-      /** @description Pending setup code. The plaintext code is returned once and only its hash is stored. No bot token exists until the code is claimed. Re-minting for the same bot and token name replaces any pending code. */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotSetupCodeResponse"];
-        };
-      };
-      /** @description Service bot setup codes require a workspace manager. User-owned bot setup codes require the bot owner. Bot tokens are rejected. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  claimBotSetupCode: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ClaimBotSetupCodeRequest"];
-      };
-    };
-    responses: {
-      /** @description Setup code claimed. The minted one-time raw token and installer context are returned. Codes are single use. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotSetupCodeClaimResponse"];
-        };
-      };
-      /** @description Unknown, expired, or already claimed code. The response is deliberately uniform. */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Too many claim attempts from this address. */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  deleteBot: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Bot retired, credentials revoked, history preserved, and handle released */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["DeleteBotResponse"];
-        };
-      };
-      /** @description User-owned bots require their owner. Service bots require manager permission in every affected workspace. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Active bot not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listBotTokens: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Redacted bot tokens for bots installed in exactly one workspace */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotTokenListResponse"];
-        };
-      };
-      /** @description Workspace membership required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createBotToken: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        bot_user_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateBotTokenRequest"];
-      };
-    };
-    responses: {
-      /** @description Created one-time raw bot token for bots installed in exactly one workspace */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotTokenResponse"];
-        };
-      };
-      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  setBotCommands: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SetBotCommandsRequest"];
-      };
-    };
-    responses: {
-      /** @description Replaced bot command menu sorted by command */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotCommandListResponse"];
-        };
-      };
-      /** @description Invalid command menu. The previous menu remains unchanged. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Bot token with commands:write required. Human sessions are rejected. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  revokeBotToken: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        token_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Revoked bot token */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BotTokenResponse"];
-        };
-      };
-      /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listAppInstallations: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Active app installations for a workspace */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AppInstallationListResponse"];
-        };
-      };
-    };
-  };
-  createAppInstallation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateAppInstallationRequest"];
-      };
-    };
-    responses: {
-      /** @description Installed app binding */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AppInstallationResponse"];
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  revokeAppInstallation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        installation_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        "application/json": components["schemas"]["RevokeAppInstallationRequest"];
-      };
-    };
-    responses: {
-      /** @description Revoked app installation and requested attached resources */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["RevokeAppInstallationResponse"];
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listSlashCommands: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Active registered slash commands */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SlashCommandListResponse"];
-        };
-      };
-    };
-  };
-  createSlashCommand: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateSlashCommandRequest"];
-      };
-    };
-    responses: {
-      /** @description Registered slash command and one-time signing secret */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SlashCommandResponse"];
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  revokeSlashCommand: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        command_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Revoked slash command */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SlashCommandResponse"];
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  rotateSlashCommandSecret: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        command_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Slash command with its fresh one-time signing secret */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SlashCommandResponse"];
-        };
-      };
-      /** @description Cannot rotate a revoked slash command */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listEventSubscriptions: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Active outgoing event subscriptions */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventSubscriptionListResponse"];
-        };
-      };
-    };
-  };
-  createEventSubscription: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateEventSubscriptionRequest"];
-      };
-    };
-    responses: {
-      /** @description Created event subscription and one-time signing secret */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventSubscriptionResponse"];
-        };
-      };
-      /** @description Invalid or unknown event type */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  revokeEventSubscription: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        subscription_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Revoked event subscription */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventSubscriptionResponse"];
-        };
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  rotateEventSubscriptionSecret: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        subscription_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Event subscription with its fresh one-time signing secret */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventSubscriptionResponse"];
-        };
-      };
-      /** @description Cannot rotate a revoked event subscription */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Workspace manager permission required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listEventDeliveryAttempts: {
-    parameters: {
-      query?: {
-        limit?: number;
-        /** @description Delivery attempt ID; returns attempts strictly older than this cursor. */
-        before?: string;
-      };
-      header?: never;
-      path: {
-        subscription_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Event delivery attempts */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EventDeliveryAttemptsResponse"];
-        };
-      };
-      /** @description Invalid or stale delivery cursor */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listAuditLogEntries: {
-    parameters: {
-      query?: {
-        limit?: number;
-      };
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Workspace audit log entries */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listConnectedAccounts: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Active connected accounts */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createConnectedAccount: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: components["parameters"]["workspace_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateConnectedAccountRequest"];
-      };
-    };
-    responses: {
-      /** @description Created connected account */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  revokeConnectedAccount: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        account_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Revoked connected account */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  updateChannel: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateChannelRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated channel */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listMessages: {
-    parameters: {
-      query?: {
-        after_seq?: number;
-        before_seq?: number;
-        around_seq?: number;
-        /** @description Return only root messages assigned to this active workspace or channel topic. */
-        topic_id?: string;
-        /** @description Explicitly request the latest window. Mutually exclusive with cursor parameters. */
-        mode?: "latest";
-        limit?: number;
-      };
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Root channel messages */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["MessagePage"];
-        };
-      };
-    };
-  };
-  createMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateMessageRequest"];
-      };
-    };
-    responses: {
-      /** @description Existing message returned for an idempotent nonce replay */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Created message */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getChannelNotificationSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Current user's notification preference for the channel */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ChannelNotificationSettings"];
-        };
-      };
-    };
-  };
-  updateChannelNotificationSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateChannelNotificationSettingsRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated notification preference for the channel */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ChannelNotificationSettings"];
-        };
-      };
-    };
-  };
-  markChannelRead: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["MarkReadRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated channel read receipt */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listPinnedMessages: {
-    parameters: {
-      query?: {
-        limit?: number;
-      };
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Messages pinned in the channel, newest pin first */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            messages: components["schemas"]["Message"][];
-          };
-        };
-      };
-    };
-  };
-  pinMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PinMessageRequest"];
-      };
-    };
-    responses: {
-      /** @description Pinned the message */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PinMessageResponse"];
-        };
-      };
-    };
-  };
-  unpinMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Unpinned the message */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            event: components["schemas"]["Event"];
-          };
-        };
-      };
-    };
-  };
-  getMessageByNonce: {
-    parameters: {
-      query: {
-        workspace_id: string;
-        nonce: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Message created by the authenticated owner with this nonce */
-      200: {
-        headers: {
-          /** @description Indicates that durable message nonce lookup is supported. */
-          "X-ClickClack-Message-Nonce"?: "supported";
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["MessageResponse"];
-        };
-      };
-      /** @description No message exists for this owner and nonce */
-      404: {
-        headers: {
-          /** @description Indicates that durable message nonce lookup is supported. */
-          "X-ClickClack-Message-Nonce"?: "supported";
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description The nonce belongs to a message in another workspace */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Message visible to the current user */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  deleteMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Soft-deleted message */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  updateMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated message */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getThread: {
-    parameters: {
-      query?: {
-        /** @description Maximum number of replies to return. */
-        limit?: number;
-        /** @description Return the latest bounded reply window in chronological order instead of the earliest window. */
-        latest?: boolean;
-      };
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Thread root and replies */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createThreadReply: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateThreadReplyRequest"];
-      };
-    };
-    responses: {
-      /** @description Existing thread reply returned for an idempotent nonce replay */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Created thread reply */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  addReaction: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AddReactionRequest"];
-      };
-    };
-    responses: {
-      /** @description Reaction already existed; no event created */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ReactionMutationResponse"];
-        };
-      };
-      /** @description Added reaction */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ReactionMutationResponse"];
-        };
-      };
-    };
-  };
-  attachUpload: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AttachUploadRequest"];
-      };
-    };
-    responses: {
-      /** @description Attached upload to message */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  removeReaction: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        message_id: components["parameters"]["message_id"];
-        emoji: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Removed reaction */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ReactionMutationResponse"];
-        };
-      };
-    };
-  };
-  listEvents: {
-    parameters: {
-      query: {
-        workspace_id: string;
-        after_cursor?: string;
-        limit?: number;
-        /** @description Include the latest durable cursor visible at request start. */
-        include_tail?: boolean;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Durable events after cursor */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  publishEphemeral: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["EphemeralEventRequest"];
-      };
-    };
-    responses: {
-      /** @description Ephemeral event accepted */
-      202: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  realtimeWebSocket: {
-    parameters: {
-      query: {
-        workspace_id: string;
-        after_cursor?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description WebSocket upgrade */
-      101: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  search: {
-    parameters: {
-      query: {
-        workspace_id: string;
-        q: string;
-        /** @description Limit results to one channel. Mutually exclusive with direct_conversation_id. */
-        channel_id?: string;
-        /** @description Limit results to one direct conversation. The actor must be a conversation member. Mutually exclusive with channel_id. */
-        direct_conversation_id?: string;
-        sort?: "relevance" | "newest";
-        limit?: number;
-        /** @description Opaque next_cursor from a previous response with the same search scope, query, and sort. */
-        cursor?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description One page of search results */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SearchResponse"];
-        };
-      };
-      /** @description Invalid search scope, sort, limit, query, or cursor */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createUpload: {
-    parameters: {
-      query?: {
-        /** @description Optional workspace id for multipart clients that cannot send fields before the file part. If omitted, workspace_id must be included as a form field before file. */
-        workspace_id?: string;
-        /** @description Optional idempotency nonce. Requires workspace_id in the query. Replays return the original upload without reading the multipart body. */
-        nonce?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "multipart/form-data": {
-          /** @description Workspace id. Required when the workspace_id query parameter is omitted. */
-          workspace_id?: string;
-          /** Format: binary */
-          file: string;
-          width?: number;
-          height?: number;
-          duration_ms?: number;
-        };
-      };
-    };
-    responses: {
-      /** @description Existing upload replayed by nonce */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UploadResponse"];
-        };
-      };
-      /** @description Created upload */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UploadResponse"];
-        };
-      };
-      /** @description The nonce belongs to an upload in another workspace */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getUploadByNonce: {
-    parameters: {
-      query: {
-        workspace_id: string;
-        nonce: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Upload metadata */
-      200: {
-        headers: {
-          /** @description Indicates that durable upload nonce lookup is supported. */
-          "X-ClickClack-Upload-Nonce"?: "supported";
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UploadResponse"];
-        };
-      };
-      /** @description No upload exists for this nonce */
-      404: {
-        headers: {
-          /** @description Indicates that durable upload nonce lookup is supported. */
-          "X-ClickClack-Upload-Nonce"?: "supported";
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description The nonce belongs to an upload in another workspace */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getUpload: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        upload_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Upload bytes */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listDirectConversations: {
-    parameters: {
-      query: {
-        workspace_id: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description DM list */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createDirectConversation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateDirectConversationRequest"];
-      };
-    };
-    responses: {
-      /** @description Created DM */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getDirectConversation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Direct conversation */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  hideDirectConversation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Closed direct conversation for the current user */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  reopenDirectConversation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Reopened direct conversation for the current user */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  listDirectMessages: {
-    parameters: {
-      query?: {
-        after_seq?: number;
-        limit?: number;
-      };
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Direct messages */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  createDirectMessage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateMessageRequest"];
-      };
-    };
-    responses: {
-      /** @description Existing direct message returned for an idempotent nonce replay */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Created direct message */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  markDirectRead: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: components["parameters"]["conversation_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["MarkReadRequest"];
-      };
-    };
-    responses: {
-      /** @description Updated direct-conversation read receipt */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  mattermostIncomingWebhook: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["MattermostWebhookRequest"];
-      };
-    };
-    responses: {
-      /** @description Created message from incoming webhook */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  slashCommand: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: components["parameters"]["channel_id"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/x-www-form-urlencoded": components["schemas"]["SlashCommandRequest"];
-      };
-    };
-    responses: {
-      /** @description Slash-command callback response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Process is live */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ok";
+                    };
+                };
+            };
+        };
+    };
+    getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Database is reachable */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "ready";
+                    };
+                };
+            };
+            /** @description Database is unavailable; internal error details are omitted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "unavailable";
+                    };
+                };
+            };
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prometheus text exposition when metrics are enabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Metrics are disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    requestMagicLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestMagicLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Created local magic-link token in dev-bootstrap mode */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dev-bootstrap token minting requires a loopback client and local request host */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Magic-link delivery is not configured */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    consumeMagicLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumeMagicLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Created session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    startGitHubOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to GitHub OAuth authorization */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ambiguous OAuth browser-binding cookies */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment edge rate limit exceeded, when configured */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub OAuth not configured */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    startDesktopGitHubOAuth: {
+        parameters: {
+            query: {
+                code_challenge: string;
+                /** @description Desktop OAuth handoff version. Omitted clients use legacy protocol 1. */
+                desktop_protocol?: 1 | 2;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect the system browser to GitHub OAuth authorization */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid desktop code challenge, unsupported protocol, or ambiguous OAuth browser-binding cookies */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Desktop app upgrade required before a namespaced server can begin authentication */
+            426: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment edge rate limit exceeded, when configured */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub OAuth not configured */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    consumeDesktopGitHubOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumeDesktopGitHubOAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description One-time desktop grant consumed and session cookie created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed request or invalid, expired, or previously consumed desktop grant */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Cross-site redemption rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description JSON request body exceeds the application limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request content type is not application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment edge rate limit exceeded, when configured */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Desktop grant consumption or session persistence failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    finishGitHubOAuth: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser session created and redirected to the web app, or one-time desktop grant created and redirected to the desktop callback */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid OAuth callback */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub account is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identity, workspace, session, or desktop grant generation or persistence failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub provider request failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Desktop grant capacity exhausted or canonical callback origin unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["User"];
+                    };
+                };
+            };
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["User"];
+                    };
+                };
+            };
+        };
+    };
+    listEventTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable event types accepted by outgoing event subscriptions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventTypesResponse"];
+                };
+            };
+        };
+    };
+    listMyBots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User-owned bots installed in workspaces */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        bots: components["schemas"]["OwnedBotEntry"][];
+                    };
+                };
+            };
+            /** @description Bot tokens cannot list owned bots */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created workspace */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resolveRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_route_id: components["parameters"]["workspace_route_id"];
+                target_route_id: components["parameters"]["target_route_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resolved route target and canonical public URL path */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        route: components["schemas"]["RouteTarget"];
+                    };
+                };
+            };
+            /** @description Route was missing or inaccessible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workspace: components["schemas"]["Workspace"];
+                    };
+                };
+            };
+        };
+    };
+    deleteWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace metadata deleted; queued upload-object cleanup may continue asynchronously */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Workspace owner permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated workspace profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workspace: components["schemas"]["Workspace"];
+                        event?: Record<string, never>;
+                    };
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    transferWorkspaceOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferWorkspaceOwnershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Workspace ownership transferred */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workspace: components["schemas"]["Workspace"];
+                        event?: Record<string, never>;
+                    };
+                };
+            };
+            /** @description Workspace owner permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWorkspaceMembers: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                q?: string;
+                role?: "owner" | "moderator" | "member" | "bot" | "guest";
+            };
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated workspace members visible to any workspace member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMemberPage"];
+                };
+            };
+        };
+    };
+    listWorkspaceMembersForModeration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace members with moderation state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        members: components["schemas"]["MemberModeration"][];
+                    };
+                };
+            };
+        };
+    };
+    updateWorkspaceMemberModeration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberModerationRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated member moderation state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        member: components["schemas"]["MemberModeration"];
+                        event?: Record<string, never>;
+                    };
+                };
+            };
+        };
+    };
+    listChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channel list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChannelRequest"];
+            };
+        };
+        responses: {
+            /** @description Created channel */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listTopics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace topics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTopicRequest"];
+            };
+        };
+        responses: {
+            /** @description Created topic */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listBots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace bot identities and redacted tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        bots: components["schemas"]["BotWithTokens"][];
+                    };
+                };
+            };
+        };
+    };
+    createBot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotRequest"];
+            };
+        };
+        responses: {
+            /** @description Created bot and one-time raw bot token */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateBotResponse"];
+                };
+            };
+            /** @description Service bots require a workspace manager. User-owned bots must be created by their owner. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listBotCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bot commands sorted by bot handle and command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceBotCommandListResponse"];
+                };
+            };
+            /** @description Workspace membership required. Bot tokens also require workspaces:read and a matching workspace binding. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeBotFromWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bot removed from workspace and workspace-scoped tokens revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bot membership not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWorkspaceBotTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted workspace-scoped bot tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        bot_tokens: components["schemas"]["BotToken"][];
+                    };
+                };
+            };
+            /** @description Workspace membership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createWorkspaceBotToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Created one-time raw workspace-scoped bot token */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenResponse"];
+                };
+            };
+            /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createWorkspaceBotSetupCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotSetupCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Pending setup code. The plaintext code is returned once and only its hash is stored. No bot token exists until the code is claimed. Re-minting for the same bot and token name replaces any pending code. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotSetupCodeResponse"];
+                };
+            };
+            /** @description Service bot setup codes require a workspace manager. User-owned bot setup codes require the bot owner. Bot tokens are rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    claimBotSetupCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimBotSetupCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Setup code claimed. The minted one-time raw token and installer context are returned. Codes are single use. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotSetupCodeClaimResponse"];
+                };
+            };
+            /** @description Unknown, expired, or already claimed code. The response is deliberately uniform. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many claim attempts from this address. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteBot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bot retired, credentials revoked, history preserved, and handle released */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteBotResponse"];
+                };
+            };
+            /** @description User-owned bots require their owner. Service bots require manager permission in every affected workspace. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active bot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listBotTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted bot tokens for bots installed in exactly one workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenListResponse"];
+                };
+            };
+            /** @description Workspace membership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createBotToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Created one-time raw bot token for bots installed in exactly one workspace */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenResponse"];
+                };
+            };
+            /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setBotCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBotCommandsRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced bot command menu sorted by command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotCommandListResponse"];
+                };
+            };
+            /** @description Invalid command menu. The previous menu remains unchanged. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bot token with commands:write required. Human sessions are rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeBotToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked bot token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenResponse"];
+                };
+            };
+            /** @description Service bot tokens require a workspace manager. User-owned bot tokens require the bot owner. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAppInstallations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active app installations for a workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppInstallationListResponse"];
+                };
+            };
+        };
+    };
+    createAppInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAppInstallationRequest"];
+            };
+        };
+        responses: {
+            /** @description Installed app binding */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppInstallationResponse"];
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeAppInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RevokeAppInstallationRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoked app installation and requested attached resources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeAppInstallationResponse"];
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listSlashCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active registered slash commands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlashCommandListResponse"];
+                };
+            };
+        };
+    };
+    createSlashCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSlashCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered slash command and one-time signing secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlashCommandResponse"];
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeSlashCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked slash command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlashCommandResponse"];
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rotateSlashCommandSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Slash command with its fresh one-time signing secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlashCommandResponse"];
+                };
+            };
+            /** @description Cannot rotate a revoked slash command */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listEventSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active outgoing event subscriptions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventSubscriptionListResponse"];
+                };
+            };
+        };
+    };
+    createEventSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEventSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created event subscription and one-time signing secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventSubscriptionResponse"];
+                };
+            };
+            /** @description Invalid or unknown event type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeEventSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked event subscription */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventSubscriptionResponse"];
+                };
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rotateEventSubscriptionSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event subscription with its fresh one-time signing secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventSubscriptionResponse"];
+                };
+            };
+            /** @description Cannot rotate a revoked event subscription */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Workspace manager permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listEventDeliveryAttempts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Delivery attempt ID; returns attempts strictly older than this cursor. */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event delivery attempts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDeliveryAttemptsResponse"];
+                };
+            };
+            /** @description Invalid or stale delivery cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAuditLogEntries: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace audit log entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listConnectedAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active connected accounts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createConnectedAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["parameters"]["workspace_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConnectedAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Created connected account */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revokeConnectedAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked connected account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChannelRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMessages: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                before_seq?: number;
+                around_seq?: number;
+                /** @description Return only root messages assigned to this active workspace or channel topic. */
+                topic_id?: string;
+                /** @description Explicitly request the latest window. Mutually exclusive with cursor parameters. */
+                mode?: "latest";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Root channel messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagePage"];
+                };
+            };
+        };
+    };
+    createMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing message returned for an idempotent nonce replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created message */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getChannelNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user's notification preference for the channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelNotificationSettings"];
+                };
+            };
+        };
+    };
+    updateChannelNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChannelNotificationSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated notification preference for the channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelNotificationSettings"];
+                };
+            };
+        };
+    };
+    markChannelRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated channel read receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listPinnedMessages: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Messages pinned in the channel, newest pin first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        messages: components["schemas"]["Message"][];
+                    };
+                };
+            };
+        };
+    };
+    pinMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Pinned the message */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinMessageResponse"];
+                };
+            };
+        };
+    };
+    unpinMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unpinned the message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        event: components["schemas"]["Event"];
+                    };
+                };
+            };
+        };
+    };
+    getMessageByNonce: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                nonce: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message created by the authenticated owner with this nonce */
+            200: {
+                headers: {
+                    /** @description Indicates that durable message nonce lookup is supported. */
+                    "X-ClickClack-Message-Nonce"?: "supported";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description No message exists for this owner and nonce */
+            404: {
+                headers: {
+                    /** @description Indicates that durable message nonce lookup is supported. */
+                    "X-ClickClack-Message-Nonce"?: "supported";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The nonce belongs to a message in another workspace */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message visible to the current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Soft-deleted message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateMessageMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMessageMetadataRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated message metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getThread: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of replies to return. */
+                limit?: number;
+                /** @description Return the latest bounded reply window in chronological order instead of the earliest window. */
+                latest?: boolean;
+            };
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Thread root and replies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createThreadReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateThreadReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing thread reply returned for an idempotent nonce replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created thread reply */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    addReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Reaction already existed; no event created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReactionMutationResponse"];
+                };
+            };
+            /** @description Added reaction */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReactionMutationResponse"];
+                };
+            };
+        };
+    };
+    attachUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Attached upload to message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: components["parameters"]["message_id"];
+                emoji: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed reaction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReactionMutationResponse"];
+                };
+            };
+        };
+    };
+    listEvents: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                after_cursor?: string;
+                limit?: number;
+                /** @description Include the latest durable cursor visible at request start. */
+                include_tail?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable events after cursor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    publishEphemeral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EphemeralEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Ephemeral event accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    realtimeWebSocket: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                after_cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebSocket upgrade */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                q: string;
+                /** @description Limit results to one channel. Mutually exclusive with direct_conversation_id. */
+                channel_id?: string;
+                /** @description Limit results to one direct conversation. The actor must be a conversation member. Mutually exclusive with channel_id. */
+                direct_conversation_id?: string;
+                sort?: "relevance" | "newest";
+                limit?: number;
+                /** @description Opaque next_cursor from a previous response with the same search scope, query, and sort. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of search results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Invalid search scope, sort, limit, query, or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createUpload: {
+        parameters: {
+            query?: {
+                /** @description Optional workspace id for multipart clients that cannot send fields before the file part. If omitted, workspace_id must be included as a form field before file. */
+                workspace_id?: string;
+                /** @description Optional idempotency nonce. Requires workspace_id in the query. Replays return the original upload without reading the multipart body. */
+                nonce?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description Workspace id. Required when the workspace_id query parameter is omitted. */
+                    workspace_id?: string;
+                    /** Format: binary */
+                    file: string;
+                    width?: number;
+                    height?: number;
+                    duration_ms?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing upload replayed by nonce */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description Created upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description The nonce belongs to an upload in another workspace */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getUploadByNonce: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                nonce: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload metadata */
+            200: {
+                headers: {
+                    /** @description Indicates that durable upload nonce lookup is supported. */
+                    "X-ClickClack-Upload-Nonce"?: "supported";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description No upload exists for this nonce */
+            404: {
+                headers: {
+                    /** @description Indicates that durable upload nonce lookup is supported. */
+                    "X-ClickClack-Upload-Nonce"?: "supported";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The nonce belongs to an upload in another workspace */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listDirectConversations: {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description DM list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createDirectConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDirectConversationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created DM */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getDirectConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Direct conversation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    hideDirectConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Closed direct conversation for the current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reopenDirectConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reopened direct conversation for the current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listDirectMessages: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Direct messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createDirectMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing direct message returned for an idempotent nonce replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created direct message */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markDirectRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: components["parameters"]["conversation_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated direct-conversation read receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mattermostIncomingWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MattermostWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Created message from incoming webhook */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    slashCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: components["parameters"]["channel_id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["SlashCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Slash-command callback response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
 }

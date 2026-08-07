@@ -11,7 +11,7 @@ const config = {
       fallback: '200.html',
       strict: false,
     }),
-    paths: { base: '/logos' },
+    paths: { base: '' },
   },
 };
 export default config;

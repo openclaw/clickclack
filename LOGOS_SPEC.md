@@ -321,3 +321,90 @@ overlay windows, or page transitions:
 | 6.2 Message Object Schema | Data layer | T2 (API) |
 | 4 / 7 UI + Environment | SPA rendering | T1 (reskin) → T4 → T5 |
 | 5 Operational behavior | Adaptive Response Generator | T3 → T4 |
+
+---
+
+## 8. UPGRADED APP — AESTHETIC INFRASTRUCTURE & VISUAL LANGUAGE (2026-08-07)
+
+The app is NOT a reskinned chat log. It is a re-architected multi-pane
+operator console. This section is the authoritative chassis spec.
+
+### 8.1 Monochromatic Precision Palette
+- Pure black background `#000000`; off-white typography `#F4F4F0`; structural
+  charcoal borders `#1A1A1A`.
+- Accent color is STRICTLY functional, restricted to 2px semantic indicators:
+  Phosphor Green (verified commands), High-Contrast Amber (intent bounds),
+  Cobalt Cyan (thread routing).
+- Zero decorative artifacts: no gradients, drop shadows, glassmorphism,
+  background blurs, or ambient glow. Every element maps to computational state.
+
+### 8.2 Structural Geometry & Typography
+- Hard geometry: 0px border radius everywhere; panels tile along a rigid grid,
+  no floating overlaps.
+- Dual-font system:
+  - Body/dialogue: dense high-legibility neutral sans (Inter / Neue Haas Grotesk)
+  - Telemetry/system data: fixed-width mono (JetBrains Mono / SF Mono) for
+    metadata, intent tags, confidence scores, code blocks.
+
+### 8.3 Interactive Spatial Mechanics & Layout
+- Fixed tiled grid: the screen is a multi-pane matrix — message streams,
+  thread managers, telemetry blades sit flush against one another (not a
+  scrolling web document).
+- Vertical semantic margin: dedicated left-hand utility margin along the
+  conversation block holding static 1px alignment grid marks, line counters,
+  and intent indicators.
+- Contextual split-blades: no modal overlays/pop-ups — the chassis physically
+  shifts, sliding adjacent panels laterally on a single rendering plane to
+  expose sub-surface telemetry.
+
+### 8.4 Message Object Anatomy & Visual States
+Layout per message:
+```
++------------------------------------------------------------------+
+| [ASK] [ANALYST] [CONF: 0.96] [THREAD: #ARCH-01] [EXEC: COMPLETED / 12ms] |
++------------------------------------------------------------------+
+| Core message content in dense off-white typography, 1px grid boundaries. |
+| Hover/focus reveals inline transformation controls beneath.       |
++------------------------------------------------------------------+
+| > [TRANSFORM] [CONDENSE] [EXPAND] [THREAD-LINK] [MEMORY-LINK] [SWITCH-PERSONA] |
++------------------------------------------------------------------+
+```
+- Intent edge band: sharp 2px vertical bar at far-left margin of each message.
+  Colors: Ask = Neutral Light Gray #D1D1D1; Command = High-Contrast Amber
+  #FFB000; Reflect = Deep Slate #4A5568; Draft = Phosphor Green #00FF66;
+  Clarify = Signal Magenta #FF0055; Explore = Cobalt Blue #0088FF.
+- Monospaced metadata header above every message body:
+  `[INTENT: COMMAND] [PERSONA: OPERATOR] [CONFIDENCE: 98.4%] [THREAD_ID: #SYS-LOG-042] [LATENCY: 14ms]`
+- Non-modal inline action rail: flush to bottom edge of message frame on
+  hover/select. Text-trigger monospace blocks ([XFORM] [CONDENSE] [EXPAND]
+  [MEM-NODE] [REWRITE]). Clicking triggers in-place transformation animation —
+  the original block morphs/expands without changing screen focal point.
+
+### 8.5 Deep-Inspection Mechanics (the "underneath")
+Environment exposes the intelligence layer through tactile interaction, not
+conversational prompts:
+- Inline inspector blade slides out on hover/click of telemetry tags:
+  token latency, total tokens, intent vector score, memory citations
+  (#NODE-881, #NODE-304), token logprobs ("Deploy" 0.99, ...).
+- Modifier-key inspection mode (Alt/Option): viewport switches to Diagnostic
+  Telemetry View — text opacity drops to 60%, 1px dashed vector association
+  lines draw across the canvas connecting related messages to parent threads
+  and memory nodes, token generation probabilities render as tiny percentages
+  above key terms.
+- In-canvas split-blade: clicking any `[CONF: 0.XX]` tag opens a side-by-side
+  inspection panel inside the grid: memory citations, raw JSON payload dump of
+  the Message Data Object, execution stack (intent parser + persona engine
+  steps).
+
+### 8.6 Motion Dynamics & Tactile Ergonomics
+- Micro-transitions: zero easing/bounciness; ultra-fast linear or step-function
+  timing (100-150ms); rigid mechanical precision.
+- Layout shifts: panels expand/split-blades open with adjacent blocks instantly
+  adjusting width along grid lines — physical chassis hardware sliding into
+  locked positions.
+- Keyboard-first:
+  - Cmd+K or `/` opens inline monospaced command bar spanning the active input
+    frame width.
+  - Vim/terminal-style navigation: navigate message objects, initiate
+    transformations, switch personas (`:persona operator`), drill into
+    telemetry blades (`:inspect`) — full hotkey operation, no mouse required.

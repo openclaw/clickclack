@@ -63,7 +63,7 @@ The complete documentation is at **[docs.clickclack.chat](https://docs.clickclac
 
 ## Development
 
-Source builds require Go 1.26.5, Node.js 24 or newer, and pnpm 11.19.0.
+Source builds require Go 1.26.5, Node.js 24 or newer, and pnpm 11.20.0.
 
 ```sh
 pnpm install --frozen-lockfile

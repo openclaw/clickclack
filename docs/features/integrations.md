@@ -125,6 +125,8 @@ Behavior:
   `<timestamp>.<raw-json-body>`.
 - Invocation requires the caller's current write authority for the exact
   channel, including guest-channel, timeout, block, and guest-budget checks.
+- Registered invocation attempts consume the guest write budget once persisted,
+  including invocations whose callback later fails.
 - Callback delivery connects directly to public IP addresses only. It rejects
   private, loopback, link-local, reserved, or mixed public/private DNS answers,
   does not use environment-configured proxies, and does not follow redirects.

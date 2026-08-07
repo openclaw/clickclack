@@ -138,7 +138,9 @@ func TestRegisteredSlashCommandHonorsCallerModeration(t *testing.T) {
 		t.Fatalf("blocked member invocation reached callback %d times", got)
 	}
 
-	for i := 0; i < store.GuestPostLimit; i++ {
+	// The successful registered invocation above consumes one slot from the
+	// same rolling guest write budget as waiting-room messages.
+	for i := 1; i < store.GuestPostLimit; i++ {
 		if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: guestChannelID, AuthorID: guest.ID, Body: "budget"}); err != nil {
 			t.Fatal(err)
 		}
@@ -157,6 +159,7 @@ func TestCallbackAddressPolicy(t *testing.T) {
 		"127.0.0.1":            false,
 		"10.0.0.1":             false,
 		"169.254.169.254":      false,
+		"168.63.129.16":        false,
 		"100.64.0.1":           false,
 		"198.18.0.1":           false,
 		"192.0.2.1":            false,
@@ -181,6 +184,27 @@ func TestCallbackAddressPolicy(t *testing.T) {
 		if got := isPublicCallbackAddr(address); got != want {
 			t.Errorf("isPublicCallbackAddr(%s) = %v, want %v", address, got, want)
 		}
+	}
+}
+
+func TestCallbackDialerRejectsAzurePlatformVIPBeforeDial(t *testing.T) {
+	t.Parallel()
+	var dialed atomic.Bool
+	dialer := &callbackDialer{
+		lookupNetIP: func(context.Context, string, string) ([]netip.Addr, error) {
+			t.Fatal("literal callback address unexpectedly triggered DNS resolution")
+			return nil, nil
+		},
+		dialContext: func(context.Context, string, string) (net.Conn, error) {
+			dialed.Store(true)
+			return nil, errors.New("unexpected dial")
+		},
+	}
+	if _, err := dialer.DialContext(context.Background(), "tcp", "168.63.129.16:80"); err == nil {
+		t.Fatal("expected Azure platform virtual IP to be rejected")
+	}
+	if dialed.Load() {
+		t.Fatal("callback dialer connected to the Azure platform virtual IP")
 	}
 }
 
@@ -266,6 +290,37 @@ func TestCallbackDeliveryBlocksLoopbackForBothCallbackTypes(t *testing.T) {
 	}
 	if got := requests.Load(); got != 0 {
 		t.Fatalf("loopback callback server received %d requests", got)
+	}
+}
+
+func TestCallbackDeliveryBlocksAzurePlatformVIPForBothCallbackTypes(t *testing.T) {
+	t.Parallel()
+	var dialed atomic.Bool
+	policyDialer := &callbackDialer{
+		lookupNetIP: net.DefaultResolver.LookupNetIP,
+		dialContext: func(context.Context, string, string) (net.Conn, error) {
+			dialed.Store(true)
+			return nil, errors.New("unexpected dial")
+		},
+	}
+	server := &Server{callbackClient: &http.Client{
+		Transport: &http.Transport{DialContext: policyDialer.DialContext},
+		Timeout:   callbackTimeout,
+	}}
+	if _, _, err := server.postSlashCallback(context.Background(), store.SlashCommand{
+		CallbackURL:   "http://168.63.129.16/slash",
+		SigningSecret: "slash-secret",
+	}, []byte(`{"command":"/probe"}`)); err == nil {
+		t.Fatal("slash callback accepted the Azure platform virtual IP")
+	}
+	if _, _, err := server.postEventCallback(context.Background(), store.EventSubscription{
+		CallbackURL:   "http://168.63.129.16/event",
+		SigningSecret: "event-secret",
+	}, store.Event{ID: "evt_probe"}, []byte(`{"event":"probe"}`)); err == nil {
+		t.Fatal("event callback accepted the Azure platform virtual IP")
+	}
+	if dialed.Load() {
+		t.Fatal("callback delivery connected to the Azure platform virtual IP")
 	}
 }
 

@@ -17,6 +17,9 @@ const callbackTimeout = 3 * time.Second
 var blockedCallbackPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
+	// Azure reserves this public-looking virtual IP for platform services
+	// inside every virtual network, including health and DHCP endpoints.
+	netip.MustParsePrefix("168.63.129.16/32"),
 	netip.MustParsePrefix("192.0.0.0/24"),
 	netip.MustParsePrefix("192.0.2.0/24"),
 	netip.MustParsePrefix("192.31.196.0/24"),

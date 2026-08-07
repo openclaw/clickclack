@@ -4,6 +4,7 @@
 // Routes: health, analyze, transform, thread clustering, memory anchors/query.
 //
 // Intelligence wired via LlmClient (DeepSeek/OpenAI/stub).
+// Embeddings via EmbedProvider (local transformers.js / OpenAI / stub).
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -25,12 +26,14 @@ import type {
   ClusterResult,
   HealthResponse,
   MemoryNode,
+  Telemetry,
   TransformRequest,
   TransformResult,
 } from "./types.js";
 
 import { createLlmClient } from "./lib/llm.js";
-import { getStore } from "./lib/store.js";
+import { createEmbedProvider } from "./lib/embed.js";
+import { getStore, cosineSimilarity } from "./lib/store.js";
 
 // ─── Version (bumped on release) ─────────────────────────────────────────────
 
@@ -73,10 +76,18 @@ app.use(
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 const llm = createLlmClient();
+const embedProvider = createEmbedProvider();
 const store = getStore();
 
-// Wire LLM client to store for embedding-based semantic search
-store.setLlmClient(llm);
+// Wire embed provider to store (replaces old setLlmClient)
+store.setEmbedProvider(embedProvider);
+
+// Warmup: kick off model download in background so first real request isn't slow
+embedProvider.warmup().then(() => {
+  console.log("[cognition] embed warmup complete");
+}).catch((err) => {
+  console.warn("[cognition] embed warmup failed:", err);
+});
 
 // ─── GET /healthz ────────────────────────────────────────────────────────────
 
@@ -102,6 +113,29 @@ app.post("/analyze", async (c: Context) => {
   }
 
   const result: AnalyzeResult = await llm.analyze(body);
+
+  // Enrich telemetry with memory citations (when embeddings are real)
+  if (embedProvider.isReal && result.telemetry) {
+    try {
+      const nodes = await store.queryAnchors(body.content, 3);
+      const citationIds = nodes
+        .filter((n) => (n.score ?? 0) > 0.4)
+        .map((n) => n.id);
+      if (citationIds.length > 0) {
+        result.telemetry = {
+          ...result.telemetry,
+          memory_citations: citationIds,
+          execution_stack: [
+            ...result.telemetry.execution_stack,
+            "embed_query()",
+          ],
+        };
+      }
+    } catch (err) {
+      console.warn("[cognition] memory citation enrichment failed:", err);
+    }
+  }
+
   return c.json(result);
 });
 
@@ -157,7 +191,7 @@ app.post("/threads/cluster", async (c: Context) => {
     return c.json({
       clusters: [],
       unclustered: [],
-      model: llm.constructor.name.includes("Stub") ? "stub" : "deepseek-chat",
+      model: embedProvider.isReal ? embedProvider.provider : "stub",
       assignments: [],
     } satisfies ClusterResult);
   }
@@ -176,16 +210,16 @@ app.post("/threads/cluster", async (c: Context) => {
     return c.json({
       clusters: [{ label, message_ids: body.message_ids }],
       unclustered: [],
-      model: llm.constructor.name.includes("Stub") ? "stub" : "deepseek-chat",
+      model: embedProvider.isReal ? embedProvider.provider : "stub",
       assignments,
     } satisfies ClusterResult);
   }
 
   try {
-    // Generate embeddings for all messages
+    // Generate embeddings for all messages using embedProvider
     const embeddings: number[][] = [];
     for (const content of body.contents) {
-      const emb = await llm.embed(content);
+      const emb = await embedProvider.embed(content);
       embeddings.push(emb);
     }
 
@@ -215,7 +249,7 @@ app.post("/threads/cluster", async (c: Context) => {
     }
 
     // Connected-components clustering with similarity threshold
-    const SIMILARITY_THRESHOLD = 0.6;
+    const SIMILARITY_THRESHOLD = 0.55;
     const visited = new Array(n).fill(false);
     const clusterGroups: number[][] = [];
 
@@ -279,7 +313,7 @@ app.post("/threads/cluster", async (c: Context) => {
     return c.json({
       clusters,
       unclustered,
-      model: "deepseek-chat",
+      model: embedProvider.provider,
       assignments,
     } satisfies ClusterResult);
   } catch (err) {
@@ -310,22 +344,6 @@ async function fallbackCluster(body: ClusterRequest): Promise<Response> {
       headers: { "Content-Type": "application/json" },
     },
   );
-}
-
-// ─── Cosine similarity helper ───────────────────────────────────────────────
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
 }
 
 // ─── GET /memory/query ───────────────────────────────────────────────────────

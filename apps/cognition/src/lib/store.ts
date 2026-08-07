@@ -13,7 +13,7 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import type { AnchorRequest, AnchorResult, MemoryNode } from "../types.js";
-import type { LlmClient } from "./llm.js";
+import type { EmbedProvider } from "./embed.js";
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
@@ -42,8 +42,8 @@ export interface MemoryStore {
   /** Query anchors by semantic similarity (embedding-based) or fallback to text match */
   queryAnchors(q: string, limit?: number): Promise<MemoryNode[]>;
   listAnchors(): Promise<MemoryNode[]>;
-  /** Set the LLM client for embedding generation */
-  setLlmClient(client: LlmClient): void;
+  /** Set the embed provider for semantic search */
+  setEmbedProvider(provider: EmbedProvider): void;
 }
 
 export interface ThreadStore {
@@ -55,7 +55,7 @@ export interface ThreadStore {
 
 // ─── Cosine similarity ──────────────────────────────────────────────────────
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
   let dot = 0;
   let magA = 0;
@@ -75,7 +75,7 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
   private dataDir: string;
   private anchorsFile: string;
   private threadsFile: string;
-  private llmClient: LlmClient | null = null;
+  private embedProvider: EmbedProvider | null = null;
 
   constructor(dataDir?: string) {
     this.dataDir = dataDir ?? process.env.DATA_DIR ?? "./data";
@@ -84,8 +84,13 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
     this.ensureDataDir();
   }
 
-  setLlmClient(client: LlmClient): void {
-    this.llmClient = client;
+  setEmbedProvider(provider: EmbedProvider): void {
+    this.embedProvider = provider;
+  }
+
+  /** Expose embed provider for use by clustering and memory citations */
+  getEmbedProvider(): EmbedProvider | null {
+    return this.embedProvider;
   }
 
   // ── Memory anchors ───────────────────────────────────────────────────────
@@ -94,11 +99,17 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
     const anchors = this.readAnchors();
     const now = new Date().toISOString();
 
-    // Generate embedding if LLM client available
+    // Generate embedding if embed provider available and real
     let embedding: number[] | undefined;
-    if (this.llmClient) {
+    if (this.embedProvider) {
       try {
-        embedding = await this.llmClient.embed(req.content);
+        embedding = await this.embedProvider.embed(req.content);
+        // Only store non-stub embeddings
+        const isStub = embedding.every((v) => v === 0);
+        if (isStub) {
+          embedding = undefined;
+          console.log("[cognition:store] embed returned stub, storing anchor without vector");
+        }
       } catch (err) {
         console.warn("[cognition:store] embed failed for anchor, storing without:", err);
       }
@@ -122,26 +133,28 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
   async queryAnchors(q: string, limit = 10): Promise<MemoryNode[]> {
     const anchors = this.readAnchors();
 
-    // Try semantic search if we have an LLM client
-    if (this.llmClient) {
+    // Try semantic search if we have a real embed provider
+    if (this.embedProvider && this.embedProvider.isReal) {
       try {
-        const queryEmbedding = await this.llmClient.embed(q);
+        const queryEmbedding = await this.embedProvider.embed(q);
 
-        // Check if embedding is a stub (all zeros)
-        const isStubEmbedding = queryEmbedding.length === 0 ||
-          queryEmbedding.every((v) => v === 0);
+        // Check if embedding is real (non-stub)
+        const isStub = queryEmbedding.every((v) => v === 0);
 
-        if (!isStubEmbedding) {
+        if (!isStub) {
           // Semantic search: cosine similarity over stored embeddings
           const scored = anchors
             .map((a) => {
               if (!a.embedding || a.embedding.length === 0) {
                 return { ...a, score: 0 };
               }
+              if (a.embedding.length !== queryEmbedding.length) {
+                // Dimension mismatch (e.g., old OpenAI 1536-dim anchors with new 384-dim model)
+                return { ...a, score: 0 };
+              }
               const score = cosineSimilarity(queryEmbedding, a.embedding);
               return { ...a, score };
             })
-            .filter((a) => a.score > 0)
             .sort((a, b) => b.score - a.score)
             .slice(0, limit);
 
@@ -153,6 +166,7 @@ export class JsonFileStore implements MemoryStore, ThreadStore {
     }
 
     // Fallback: substring search (original behavior)
+    console.log("[cognition:store] using substring fallback for query:", q.slice(0, 60));
     const lower = q.toLowerCase();
     const scored = anchors
       .map((a) => {

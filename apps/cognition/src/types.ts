@@ -72,6 +72,8 @@ export interface AnalyzeResult {
   model: string;
   /** Ambiguity clarification question (present when confidence < threshold or LLM flags ambiguity) */
   clarification_question?: string;
+  /** Deep-inspection telemetry (latency, tokens, execution stack, memory citations) */
+  telemetry: Telemetry;
 }
 
 /** POST /transform request body */
@@ -96,6 +98,8 @@ export interface TransformResult {
     confidence: number;
     tokens?: number;
   };
+  /** Deep-inspection telemetry (latency, tokens, execution stack) */
+  telemetry: Telemetry;
 }
 
 /** POST /threads/cluster request body */
@@ -153,6 +157,25 @@ export interface AnchorResult {
   source_message_id?: string;
   created_at: string;
   tags: string[];
+}
+
+// ─── Telemetry (LOGOS_SPEC §8.5 deep-inspection) ────────────────────────────
+
+export interface Telemetry {
+  /** Wall-clock latency of the LLM call in milliseconds */
+  latency_ms: number;
+  /** Total tokens consumed (from API usage metadata, or estimated chars/4) */
+  total_tokens?: number;
+  /** Model identifier used for this request */
+  model: string;
+  /** Derived confidence score 0-1 (from analyze confidence, or heuristics) */
+  intent_vector_score?: number;
+  /** Top-k memory node IDs relevant to the input (when embeddings available) */
+  memory_citations?: string[];
+  /** Steps actually executed during processing */
+  execution_stack: string[];
+  /** Per-token log probabilities (only when API returns them; DeepSeek does not) */
+  logprobs?: { token: string; prob: number }[];
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────

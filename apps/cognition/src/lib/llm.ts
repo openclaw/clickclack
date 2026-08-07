@@ -6,13 +6,15 @@
 //
 // Real providers:
 //   DeepSeekLlmClient — OpenAI-compatible chat completions for analyze/transform
-//   Embeddings via OpenAI (text-embedding-3-small) when OPENAI_API_KEY is set
+//
+// Embeddings are SEPARATE (see embed.ts). DeepSeek has no embeddings API.
 
 import type {
   AnalyzeRequest,
   AnalyzeResult,
   Intent,
   Persona,
+  Telemetry,
   TransformOp,
   TransformRequest,
   TransformResult,
@@ -29,9 +31,6 @@ export interface LlmClient {
 
   /** Apply a transform op to content, optionally filtered through a persona. */
   transform(req: TransformRequest): Promise<TransformResult>;
-
-  /** Generate an embedding vector for the given text. */
-  embed(text: string): Promise<number[]>;
 }
 
 // ─── Provider resolution ─────────────────────────────────────────────────────
@@ -52,10 +51,8 @@ export function createLlmClient(): LlmClient {
         return new StubLlmClient();
       }
       const model = process.env.LLM_MODEL ?? "deepseek-chat";
-      const openaiKey = process.env.OPENAI_API_KEY;
-      const embedModel = process.env.EMBED_MODEL ?? "text-embedding-3-small";
       console.log(`[cognition] LLM provider: deepseek (model: ${model})`);
-      return new DeepSeekLlmClient(apiKey, model, openaiKey, embedModel);
+      return new DeepSeekLlmClient(apiKey, model);
     }
     default:
       console.warn(
@@ -82,6 +79,13 @@ async function fetchWithTimeout(
   }
 }
 
+// ─── Chat result (includes token usage) ─────────────────────────────────────
+
+interface ChatResult {
+  content: string;
+  total_tokens?: number;
+}
+
 // ─── Stub implementation ─────────────────────────────────────────────────────
 
 export class StubLlmClient implements LlmClient {
@@ -89,6 +93,7 @@ export class StubLlmClient implements LlmClient {
 
   async analyze(req: AnalyzeRequest): Promise<AnalyzeResult> {
     this.callCount++;
+    const t0 = Date.now();
     console.log("[cognition:stub] analyze()", {
       contentLen: req.content.length,
       contextLen: req.context?.length ?? 0,
@@ -111,6 +116,15 @@ export class StubLlmClient implements LlmClient {
       intent = "explore";
 
     const persona: Persona = PERSONAS[this.callCount % PERSONAS.length];
+    const execution_stack = ["intent_parser()", "persona_engine()", "classify_local()"];
+
+    const telemetry: Telemetry = {
+      latency_ms: Date.now() - t0,
+      total_tokens: Math.ceil(req.content.length / 4),
+      model: "stub",
+      intent_vector_score: 0.78,
+      execution_stack,
+    };
 
     return {
       intent,
@@ -118,11 +132,13 @@ export class StubLlmClient implements LlmClient {
       confidence: 0.78,
       context_tags: ["stub", "placeholder"],
       model: "stub",
+      telemetry,
     };
   }
 
   async transform(req: TransformRequest): Promise<TransformResult> {
     this.callCount++;
+    const t0 = Date.now();
     console.log("[cognition:stub] transform()", {
       contentLen: req.content.length,
       op: req.op,
@@ -133,6 +149,17 @@ export class StubLlmClient implements LlmClient {
     const note = `[stub transform: ${req.op}]`;
     const transformed = `${note}\n\n${req.content}`;
     const persona = req.persona ?? "operator";
+    const execution_stack = [
+      "transform_engine()",
+      `persona_filter(${persona})`,
+    ];
+
+    const telemetry: Telemetry = {
+      latency_ms: Date.now() - t0,
+      total_tokens: Math.ceil((req.content.length + transformed.length) / 4),
+      model: "stub",
+      execution_stack,
+    };
 
     return {
       original_content: req.content,
@@ -146,16 +173,8 @@ export class StubLlmClient implements LlmClient {
         model: "stub",
         confidence: 0.72,
       },
+      telemetry,
     };
-  }
-
-  async embed(_text: string): Promise<number[]> {
-    this.callCount++;
-    console.log("[cognition:stub] embed()", {
-      textLen: _text.length,
-      call: this.callCount,
-    });
-    return new Array(1536).fill(0);
   }
 }
 
@@ -166,29 +185,20 @@ const DEEPSEEK_BASE = "https://api.deepseek.com";
 export class DeepSeekLlmClient implements LlmClient {
   private apiKey: string;
   private model: string;
-  private openaiKey?: string;
-  private embedModel: string;
   private callCount = 0;
 
-  constructor(
-    apiKey: string,
-    model = "deepseek-chat",
-    openaiKey?: string,
-    embedModel = "text-embedding-3-small",
-  ) {
+  constructor(apiKey: string, model = "deepseek-chat") {
     this.apiKey = apiKey;
     this.model = model;
-    this.openaiKey = openaiKey;
-    this.embedModel = embedModel;
   }
 
-  // ── Chat completion helper ──────────────────────────────────────────────
+  // ── Chat completion helper (returns content + token usage) ──────────────
 
   private async chat(
     systemPrompt: string,
     userPrompt: string,
     opts?: { temperature?: number; maxTokens?: number },
-  ): Promise<string> {
+  ): Promise<ChatResult> {
     const res = await fetchWithTimeout(`${DEEPSEEK_BASE}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -213,18 +223,25 @@ export class DeepSeekLlmClient implements LlmClient {
 
     const data = (await res.json()) as {
       choices: { message: { content: string } }[];
+      usage?: { total_tokens: number };
     };
-    return data.choices[0]?.message?.content ?? "";
+    return {
+      content: data.choices[0]?.message?.content ?? "",
+      total_tokens: data.usage?.total_tokens,
+    };
   }
 
   // ── analyze ─────────────────────────────────────────────────────────────
 
   async analyze(req: AnalyzeRequest): Promise<AnalyzeResult> {
     this.callCount++;
+    const t0 = Date.now();
     console.log("[cognition:deepseek] analyze()", {
       contentLen: req.content.length,
       call: this.callCount,
     });
+
+    const execution_stack: string[] = ["intent_parser()", "persona_engine()"];
 
     try {
       const systemPrompt = `You are an intent classification engine for a cognitive messaging system.
@@ -259,8 +276,17 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
   "clarification_question": "<question or null>"
 }`;
 
-      const result = await this.chat(systemPrompt, req.content);
-      const parsed = this.parseAnalyzeJson(result, req.content);
+      execution_stack.push("llm_chat()");
+      const chatResult = await this.chat(systemPrompt, req.content);
+      const parsed = this.parseAnalyzeJson(chatResult.content, req.content);
+
+      const telemetry: Telemetry = {
+        latency_ms: Date.now() - t0,
+        total_tokens: chatResult.total_tokens ?? Math.ceil(req.content.length / 4),
+        model: this.model,
+        intent_vector_score: parsed.confidence,
+        execution_stack,
+      };
 
       return {
         intent: parsed.intent,
@@ -271,6 +297,7 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
         ...(parsed.clarification_question
           ? { clarification_question: parsed.clarification_question }
           : {}),
+        telemetry,
       };
     } catch (err) {
       console.warn(
@@ -337,6 +364,7 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
 
   async transform(req: TransformRequest): Promise<TransformResult> {
     this.callCount++;
+    const t0 = Date.now();
     console.log("[cognition:deepseek] transform()", {
       contentLen: req.content.length,
       op: req.op,
@@ -344,19 +372,34 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
       call: this.callCount,
     });
 
+    const personaId = req.persona ?? "operator";
+    const execution_stack: string[] = [
+      "transform_engine()",
+      `persona_filter(${personaId})`,
+    ];
+
     try {
-      const personaId = req.persona ?? "operator";
       const opPrompt = buildTransformPrompt(req.op, personaId);
 
-      const result = await this.chat(
+      execution_stack.push("llm_chat()");
+      const chatResult = await this.chat(
         opPrompt.system,
         `${opPrompt.user}\n\n---CONTENT---\n${req.content}`,
         { temperature: opPrompt.temperature ?? 0.5, maxTokens: opPrompt.maxTokens ?? 2048 },
       );
 
+      const telemetry: Telemetry = {
+        latency_ms: Date.now() - t0,
+        total_tokens: chatResult.total_tokens ?? Math.ceil(
+          (req.content.length + chatResult.content.length) / 4,
+        ),
+        model: this.model,
+        execution_stack,
+      };
+
       return {
         original_content: req.content,
-        transformed_content: result.trim(),
+        transformed_content: chatResult.content.trim(),
         op: req.op,
         persona: personaId,
         confidence: 0.85,
@@ -366,6 +409,7 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
           model: this.model,
           confidence: 0.85,
         },
+        telemetry,
       };
     } catch (err) {
       console.warn(
@@ -374,56 +418,6 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation:
       );
       return new StubLlmClient().transform(req);
     }
-  }
-
-  // ── embed (via OpenAI) ──────────────────────────────────────────────────
-
-  async embed(text: string): Promise<number[]> {
-    this.callCount++;
-    console.log("[cognition:deepseek] embed()", {
-      textLen: text.length,
-      call: this.callCount,
-    });
-
-    // Use OpenAI for embeddings when key is available
-    if (this.openaiKey) {
-      try {
-        const res = await fetchWithTimeout(
-          "https://api.openai.com/v1/embeddings",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${this.openaiKey}`,
-            },
-            body: JSON.stringify({
-              model: this.embedModel,
-              input: text.slice(0, 8191), // OpenAI token limit
-            }),
-          },
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`OpenAI embeddings error ${res.status}: ${errText}`);
-        }
-
-        const data = (await res.json()) as {
-          data: { embedding: number[] }[];
-        };
-        return data.data[0]?.embedding ?? new Array(1536).fill(0);
-      } catch (err) {
-        console.warn(
-          "[cognition:deepseek] OpenAI embeddings failed, falling back to stub:",
-          err,
-        );
-        return new StubLlmClient().embed(text);
-      }
-    }
-
-    // No OpenAI key — fall back to stub
-    console.log("[cognition:deepseek] no OPENAI_API_KEY, embeddings use stub");
-    return new StubLlmClient().embed(text);
   }
 }
 

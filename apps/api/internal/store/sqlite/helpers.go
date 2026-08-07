@@ -55,7 +55,8 @@ func messageSelect() string {
 		       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
 		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.created_at,
 		       quoted_tombstone.former_handle, quoted_tombstone.deleted_at,
-		       m.client_nonce, m.kind, COALESCE(m.turn_id, '')
+		       m.client_nonce, m.kind, COALESCE(m.turn_id, ''),
+		       COALESCE(m.intent, ''), COALESCE(m.persona, ''), m.confidence, m.context_json, m.metadata_json, m.transform_history_json
 		FROM messages m
 		JOIN users u ON u.id = m.author_id
 		LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
@@ -73,6 +74,9 @@ func scanMessage(row scanner) (store.Message, error) {
 	var quAuthorID, quKind, quOwnerID, quDisplayName, quHandle, quAvatarURL, quCreatedAt sql.NullString
 	var authorFormerHandle, authorDeletedAt, quFormerHandle, quDeletedAt sql.NullString
 	var nonce string
+	var intent, persona string
+	var confidence sql.NullFloat64
+	var contextJSON, metadataJSON, transformHistoryJSON sql.NullString
 	err := row.Scan(
 		&m.ID, &m.RouteID, &m.WorkspaceID, &m.ChannelID, &m.DirectConversationID, &m.AuthorID, &parent, &m.ThreadRootID, &m.TopicID, &channelSeq, &threadSeq,
 		&m.Body, &m.BodyFormat, &m.CreatedAt, &edited, &deleted,
@@ -82,12 +86,27 @@ func scanMessage(row scanner) (store.Message, error) {
 		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quCreatedAt,
 		&quFormerHandle, &quDeletedAt,
 		&nonce, &m.Kind, &m.TurnID,
+		&intent, &persona, &confidence, &contextJSON, &metadataJSON, &transformHistoryJSON,
 	)
 	if err != nil {
 		return store.Message{}, err
 	}
 	if parent.Valid {
 		m.ParentMessageID = &parent.String
+	}
+	m.Intent = intent
+	m.Persona = persona
+	if confidence.Valid {
+		m.Confidence = &confidence.Float64
+	}
+	if contextJSON.Valid {
+		m.ContextJSON = &contextJSON.String
+	}
+	if metadataJSON.Valid {
+		m.MetadataJSON = &metadataJSON.String
+	}
+	if transformHistoryJSON.Valid {
+		m.TransformHistoryJSON = &transformHistoryJSON.String
 	}
 	if channelSeq.Valid {
 		m.ChannelSeq = &channelSeq.Int64

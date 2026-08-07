@@ -321,6 +321,13 @@ func TestSearchWorkspaceFTSMigrationPreservesAndScopesRows(t *testing.T) {
 	if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, "0039_mentions_and_notifications.sql", now()); err != nil {
 		t.Fatal(err)
 	}
+	// Message read-back includes the T2 cognitive columns; apply that
+	// independent schema addition early while leaving the FTS migration
+	// under test unapplied, and record it so Migrate does not run it twice.
+	applySQLiteMigrations(t, ctx, st, "0041_cognitive_os_message_fields.sql")
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, "0041_cognitive_os_message_fields.sql", now()); err != nil {
+		t.Fatal(err)
+	}
 
 	owner, err := st.EnsureBootstrap(ctx, "Migration Owner", "search-migration@example.com")
 	if err != nil {

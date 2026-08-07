@@ -286,6 +286,99 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{"workspace_id":"missing","type":"typing.started"}`)), http.StatusForbidden)
 }
 
+func TestUpdateMessageMetadataRoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	// Create a message.
+	created := postJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "deploy the cognition service"})
+	if created.Message.ID == "" {
+		t.Fatal("expected created message id")
+	}
+
+	// PATCH cognitive metadata (additive, partial).
+	confidence := 0.93
+	contextJSON := `{"workspace":"logos","track":"T3"}`
+	metadataJSON := `{"telemetry":{"latency_ms":412,"model":"deepseek-chat"}}`
+	transformHistoryJSON := `[{"op":"condense","ts":"2026-08-07T00:00:00Z"}]`
+	updated := patchJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/messages/"+created.Message.ID+"/metadata", map[string]any{
+		"intent":            "command",
+		"persona":           "operator",
+		"confidence":        confidence,
+		"context":           contextJSON,
+		"metadata":          metadataJSON,
+		"transform_history": transformHistoryJSON,
+	})
+	m := updated.Message
+	if m.Intent != "command" || m.Persona != "operator" {
+		t.Fatalf("intent/persona did not round-trip: %#v", m)
+	}
+	if m.Confidence == nil || *m.Confidence != confidence {
+		t.Fatalf("confidence did not round-trip: %#v", m.Confidence)
+	}
+	if m.ContextJSON == nil || *m.ContextJSON != contextJSON {
+		t.Fatalf("context did not round-trip: %#v", m.ContextJSON)
+	}
+	if m.MetadataJSON == nil || *m.MetadataJSON != metadataJSON {
+		t.Fatalf("metadata did not round-trip: %#v", m.MetadataJSON)
+	}
+	if m.TransformHistoryJSON == nil || *m.TransformHistoryJSON != transformHistoryJSON {
+		t.Fatalf("transform_history did not round-trip: %#v", m.TransformHistoryJSON)
+	}
+
+	// Verify persistence via GET.
+	fetched := getJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/messages/"+created.Message.ID)
+	fm := fetched.Message
+	if fm.Intent != "command" || fm.Persona != "operator" || fm.Confidence == nil || *fm.Confidence != confidence {
+		t.Fatalf("GET did not reflect PATCH: %#v", fm)
+	}
+	if fm.MetadataJSON == nil || *fm.MetadataJSON != metadataJSON {
+		t.Fatalf("GET metadata mismatch: %#v", fm.MetadataJSON)
+	}
+
+	// Partial update preserves untouched fields.
+	partial := patchJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/messages/"+created.Message.ID+"/metadata", map[string]any{
+		"intent": "reflect",
+	})
+	if partial.Message.Intent != "reflect" {
+		t.Fatalf("intent update failed: %#v", partial.Message)
+	}
+	if partial.Message.Persona != "operator" {
+		t.Fatalf("partial update clobbered persona: %#v", partial.Message)
+	}
+}
+
 func TestDeletePinnedMessagePublishesPinRemovalBeforeDeletion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

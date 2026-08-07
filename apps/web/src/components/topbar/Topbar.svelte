@@ -19,6 +19,8 @@
     onToggleThread: () => void;
     onPinnedItems: () => void;
     onToggleChannelNotifications?: () => void;
+    semanticPaneOpen?: boolean;
+    onToggleSemanticPane?: () => void;
   };
 
   function notifTitle(pref: ChannelNotificationPreference): string {
@@ -43,6 +45,8 @@
     onToggleThread,
     onPinnedItems,
     onToggleChannelNotifications = () => {},
+    semanticPaneOpen = false,
+    onToggleSemanticPane = () => {},
   }: Props = $props();
 
   const externalHref = $derived(selectedDirect ? undefined : safeExternalChannelURL(selectedChannel?.external_url));
@@ -118,6 +122,17 @@
     >
       <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      title={semanticPaneOpen ? "Close cognition pane" : "Cognition"}
+      aria-label={semanticPaneOpen ? "Close cognition pane" : "Cognition"}
+      class:active={semanticPaneOpen}
+      onclick={onToggleSemanticPane}
+    >
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h16"/>
       </svg>
     </button>
     {#if selectedChannel}

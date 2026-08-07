@@ -17,6 +17,7 @@
    */
 
   import type { Message } from "../../lib/types";
+  import { getClusterId, getClusterLabel } from "../../lib/semanticThreads";
 
   interface Props {
     message: Message;
@@ -33,20 +34,26 @@
 
   // ── Derived inspection data ──
 
-  let activeTab = $state<"telemetry" | "memory" | "logprobs" | "payload" | "stack">("telemetry");
+  let activeTab = $state<"telemetry" | "memory" | "logprobs" | "payload" | "stack" | "thread">("telemetry");
 
   // Extract metadata
   const meta = $derived(message.metadata_json ?? {});
+  const telemetry = $derived((meta as any)?.telemetry as Record<string, unknown> | undefined);
   const transformHistory = $derived(message.transform_history_json ?? []);
 
-  // Telemetry
-  const tokenTotal = $derived((meta as any)?.total_tokens as number | undefined);
-  const tokenLatency = $derived((meta as any)?.token_latency_ms as number | undefined);
-  const modelName = $derived((meta as any)?.model as string | undefined);
+  // Telemetry (from metadata_json.telemetry, patched by analyzeAndPersist)
+  const tokenTotal = $derived(telemetry?.total_tokens as number | undefined);
+  const tokenLatency = $derived(telemetry?.latency_ms as number | undefined);
+  const modelName = $derived(telemetry?.model as string | undefined);
+  const execStackMeta = $derived(telemetry?.execution_stack as string[] | undefined);
   const intentScore = $derived(message.confidence ?? null);
 
-  // Memory citations (from analyze context_tags or metadata)
+  // Memory citations (from telemetry.memory_citations or context_tags)
   const memoryNodes = $derived.by(() => {
+    // Check telemetry memory_citations first
+    const citations = telemetry?.memory_citations as string[] | undefined;
+    if (citations?.length) return citations.map((t: string) => ({ id: t, label: t }));
+    // Fallback: context_tags
     const tags = (meta as any)?.context_tags as string[] | undefined;
     if (tags?.length) return tags.map((t: string) => ({ id: t, label: t }));
     // Check for memory nodes from metadata
@@ -61,27 +68,37 @@
   // Execution stack
   const execStack = $derived.by(() => {
     const steps: Array<{ label: string; detail?: string }> = [];
-    if (message.intent) {
-      steps.push({ label: "intent_parser", detail: `classified as ${message.intent}` });
+    if (execStackMeta?.length) {
+      for (const step of execStackMeta) {
+        steps.push({ label: step });
+      }
     } else {
-      steps.push({ label: "intent_parser", detail: "not classified" });
-    }
-    if (message.persona) {
-      steps.push({ label: "persona_engine", detail: `active: ${message.persona}` });
-    }
-    for (const entry of transformHistory) {
-      steps.push({
-        label: `transform.${entry.op}`,
-        detail: entry.timestamp
-          ? new Date(entry.timestamp).toISOString()
-          : undefined,
-      });
-    }
-    if (message.execution_status) {
-      steps.push({ label: "execution", detail: message.execution_status });
+      if (message.intent) {
+        steps.push({ label: "intent_parser", detail: `classified as ${message.intent}` });
+      } else {
+        steps.push({ label: "intent_parser", detail: "not classified" });
+      }
+      if (message.persona) {
+        steps.push({ label: "persona_engine", detail: `active: ${message.persona}` });
+      }
+      for (const entry of transformHistory) {
+        steps.push({
+          label: `transform.${entry.op}`,
+          detail: entry.timestamp
+            ? new Date(entry.timestamp).toISOString()
+            : undefined,
+        });
+      }
+      if (message.execution_status) {
+        steps.push({ label: "execution", detail: message.execution_status });
+      }
     }
     return steps;
   });
+
+  // Semantic thread info for THREAD tab
+  const clusterId = $derived(getClusterId(message.id));
+  const clusterLabel = $derived(clusterId ? getClusterLabel(message.id) : null);
 
   // Raw payload for dump
   const rawPayload = $derived(JSON.stringify({
@@ -114,6 +131,7 @@
     { id: "logprobs", label: "LOGPROBS" },
     { id: "payload", label: "PAYLOAD" },
     { id: "stack", label: "STACK" },
+    { id: "thread", label: "THREAD" },
   ];
 </script>
 
@@ -218,6 +236,28 @@
               {/if}
             </div>
           {/each}
+        </div>
+      </div>
+
+    {:else if activeTab === "thread"}
+      <div class="inspector-section">
+        <div class="inspector-grid">
+          <div class="inspector-row">
+            <span class="inspector-label">SEMANTIC THREAD</span>
+            <span class="inspector-value mono">{message.semantic_thread_id ? `th:${message.semantic_thread_id.slice(0, 8)}` : "--"}</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">CLUSTER</span>
+            <span class="inspector-value mono">{clusterLabel ?? "--"}</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">THREAD ROOT</span>
+            <span class="inspector-value mono">{message.thread_root_id ? `#${message.thread_root_id.slice(0, 12)}` : "--"}</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">TOPIC</span>
+            <span class="inspector-value mono">{message.topic_id ? `${message.topic_id.slice(0, 12)}` : "--"}</span>
+          </div>
         </div>
       </div>
     {/if}

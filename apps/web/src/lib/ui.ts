@@ -28,6 +28,13 @@ export const currentPersona = writable<Persona>('operator');
 /** Telemetry blade rail open state (thin right column). */
 export const telemetryOpen = writable(false);
 
+/** Semantic thread / memory graph pane open state (reuses col 4 grid slot). */
+export const semanticPaneOpen = writable(false);
+
+/** Active tab in semantic pane: "threads" | "memory". */
+export type SemanticPaneTab = "threads" | "memory";
+export const semanticPaneTab = writable<SemanticPaneTab>("threads");
+
 /** Derived: any chassis-level overlay is open. */
 export const chassisOverlayOpen = derived(
   [commandPaletteOpen, telemetryOpen],

@@ -85,10 +85,12 @@
 }
 
 .shell.thread-open { grid-template-columns: 72px 260px minmax(0, 1fr) minmax(340px, 28vw) 0; }
+.shell.semantic-open { grid-template-columns: 72px 260px minmax(0, 1fr) minmax(340px, 28vw) 0; }
 .shell.search-open { grid-template-columns: 72px 260px minmax(0, 1fr) minmax(340px, 28vw) 0; }
 .shell.artifact-open { grid-template-columns: 72px 260px minmax(0, 1fr) minmax(460px, 42vw) 0; }
 .shell.sidebar-collapsed { grid-template-columns: 72px 0 minmax(0, 1fr) 0 0; }
 .shell.sidebar-collapsed.thread-open { grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw) 0; }
+.shell.sidebar-collapsed.semantic-open { grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw) 0; }
 .shell.sidebar-collapsed.search-open { grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw) 0; }
 .shell.sidebar-collapsed.artifact-open { grid-template-columns: 72px 0 minmax(0, 1fr) minmax(460px, 42vw) 0; }
 /* Telemetry rail (far-right thin blade) */
@@ -99,7 +101,8 @@
 /* Panels tile edge-to-edge: grid-column placements */
 .shell > .thread,
 .shell > .search-results,
-.shell > .artifact-viewer {
+.shell > .artifact-viewer,
+.shell > .semantic-pane {
   grid-column: 4; grid-row: 1;
 }
 

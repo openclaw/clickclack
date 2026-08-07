@@ -52,11 +52,13 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import SemanticMargin from "./components/SemanticMargin.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
+  import SemanticThreadPane from "./components/cognition/SemanticThreadPane.svelte";
   import {
     activeMessageId,
     commandPaletteOpen,
     currentPersona,
     inspectMode,
+    semanticPaneOpen,
     telemetryOpen,
     type Persona,
   } from "./lib/ui";
@@ -4129,7 +4131,8 @@
   class:desktop-shell={integratedTitleBar}
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
-  class:thread-open={sidePanelOpen && !searchPaneVisible}
+  class:thread-open={sidePanelOpen && !searchPaneVisible && !$semanticPaneOpen}
+  class:semantic-open={$semanticPaneOpen}
   class:search-open={searchPaneVisible}
   class:artifact-open={selectedArtifact !== null}
   class:telemetry-open={$telemetryOpen}
@@ -4246,6 +4249,8 @@
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
+        semanticPaneOpen={$semanticPaneOpen}
+        onToggleSemanticPane={() => semanticPaneOpen.update(v => !v)}
         onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
         onPinnedItems={togglePinnedPanel}
       />
@@ -4305,6 +4310,11 @@
       onRetry={retryFailedMessage}
       onDiscard={discardFailedMessage}
       onDeleteMessage={requestMessageDelete}
+      onSendMessage={(content) => {
+        // Send clarification as a channel/DM message
+        appendToComposer(content);
+        void sendMessage();
+      }}
       {editController}
       editScope={activeConversationKey}
       onMessageEdited={applyEditedMessage}
@@ -4399,7 +4409,7 @@
     </div>
   </main>
 
-  {#if selectedArtifact}
+  {#if selectedArtifact && !$semanticPaneOpen}
     <aside
       bind:this={artifactViewerElement}
       class="artifact-viewer open"
@@ -4412,7 +4422,17 @@
       <ArtifactViewer upload={selectedArtifact} onClose={closeArtifactViewer} />
     </aside>
   {/if}
-  {#if searchPaneVisible && searchSession}
+  {#if $semanticPaneOpen}
+    <SemanticThreadPane
+      messages={visibleMessages}
+      onClose={() => semanticPaneOpen.set(false)}
+      onScrollToMessage={(messageId) => {
+        messageList?.scrollToMessage(messageId);
+      }}
+    />
+  {/if}
+
+  {#if searchPaneVisible && searchSession && !$semanticPaneOpen}
     <SearchResults
       session={searchSession}
       covered={selectedArtifact !== null}
@@ -4425,10 +4445,10 @@
   {:else}
   <aside
     class="thread"
-    class:open={sidePanelOpen}
-    class:covered={selectedArtifact !== null}
-    inert={mobileNavOpen || selectedArtifact !== null}
-    aria-hidden={selectedArtifact ? "true" : undefined}
+    class:open={sidePanelOpen && !$semanticPaneOpen}
+    class:covered={selectedArtifact !== null || $semanticPaneOpen}
+    inert={mobileNavOpen || selectedArtifact !== null || $semanticPaneOpen}
+    aria-hidden={selectedArtifact || $semanticPaneOpen ? "true" : undefined}
     aria-label={pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
   >
     {#if pinnedPanelOpen}

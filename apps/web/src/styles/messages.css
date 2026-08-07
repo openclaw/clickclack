@@ -1793,6 +1793,29 @@
    PROJECT LOGOS — Message Frame Anatomy (Track B, spec §8.4-8.5)
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Cluster chip (CL-XX) next to semantic-thread chip ── */
+.cluster-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  margin: 2px 0;
+  border: 0;
+  border-left: 2px solid var(--accent-thread);
+  background: var(--panel-2);
+  color: var(--accent-thread);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.cluster-chip-accent {
+  display: none;
+}
+
 /* ── Frame: 1px grid boundary + 2px intent edge band ── */
 
 .message-row .message-content {

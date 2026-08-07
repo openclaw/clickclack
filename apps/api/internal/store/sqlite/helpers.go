@@ -138,6 +138,34 @@ func scanMessage(row scanner) (store.Message, error) {
 	return m, nil
 }
 
+func hydrateCognitiveFields(ctx context.Context, db interface{ QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row }, msg *store.Message) error {
+	row := db.QueryRowContext(ctx, `SELECT intent, persona, confidence, context_json, metadata_json, transform_history_json FROM messages WHERE id = ?`, msg.ID)
+	var intent, persona string
+	var confidence sql.NullFloat64
+	var contextJSON, metadataJSON, transformHistoryJSON sql.NullString
+	if err := row.Scan(&intent, &persona, &confidence, &contextJSON, &metadataJSON, &transformHistoryJSON); err != nil {
+		if strings.Contains(err.Error(), "no such column") {
+			return nil // migration not yet applied, use zero values
+		}
+		return err
+	}
+	msg.Intent = intent
+	msg.Persona = persona
+	if confidence.Valid {
+		msg.Confidence = &confidence.Float64
+	}
+	if contextJSON.Valid {
+		msg.ContextJSON = &contextJSON.String
+	}
+	if metadataJSON.Valid {
+		msg.MetadataJSON = &metadataJSON.String
+	}
+	if transformHistoryJSON.Valid {
+		msg.TransformHistoryJSON = &transformHistoryJSON.String
+	}
+	return nil
+}
+
 func normalizeClientNonce(value string) (string, error) {
 	nonce := strings.TrimSpace(value)
 	if !utf8.ValidString(nonce) {

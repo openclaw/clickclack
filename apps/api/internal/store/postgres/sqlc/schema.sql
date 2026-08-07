@@ -148,7 +148,13 @@ CREATE TABLE messages (
   client_nonce TEXT NOT NULL DEFAULT '',
   route_id TEXT,
   kind TEXT NOT NULL DEFAULT 'message',
-  turn_id TEXT
+  turn_id TEXT,
+  intent TEXT NOT NULL DEFAULT '',
+  persona TEXT NOT NULL DEFAULT '',
+  confidence REAL,
+  context_json TEXT,
+  metadata_json TEXT,
+  transform_history_json TEXT
 );
 
 CREATE INDEX idx_messages_channel_seq ON messages(channel_id, channel_seq);

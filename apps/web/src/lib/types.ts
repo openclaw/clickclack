@@ -19,7 +19,7 @@ export type NotificationSettings = {
 
 export type AppearancePreferences = {
   color_mode?: "" | "light" | "dark";
-  board_theme?: "" | "ember" | "moss" | "iris";
+  board_theme?: "" | "agora" | "signal" | "ember" | "moss" | "iris";
   message_layout?: "" | "outlined";
   density?: "" | "compact";
 };
@@ -144,6 +144,19 @@ export type Message = {
   reactions?: ReactionSummary[];
   // Client-only status. Absent for sent messages.
   status?: "pending" | "failed";
+  // COGNITIVE OS — Message Object Schema fields (T2 API migration).
+  // All optional; markers render as absent states when missing.
+  intent?: "ask" | "command" | "reflect" | "draft" | "clarify" | "explore";
+  persona?: "operator" | "analyst" | "creative" | "socratic" | "archivist";
+  confidence?: number;
+  // Semantic thread id (cognition service); distinct from thread_root_id (API thread).
+  semantic_thread_id?: string;
+  // Execution status for command/directive messages.
+  execution_status?: "pending" | "executing" | "complete" | "failed";
+  // Raw metadata object for forward-compatible extensibility.
+  metadata_json?: Record<string, unknown>;
+  // Transform history log.
+  transform_history_json?: Array<{ op: string; timestamp: string; result?: string }>;
 };
 
 export type MessagePage = {

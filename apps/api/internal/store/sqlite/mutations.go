@@ -347,6 +347,66 @@ func (s *Store) UpdateMessage(ctx context.Context, input store.UpdateMessageInpu
 	return msg, event, tx.Commit()
 }
 
+func (s *Store) UpdateMessageMetadata(ctx context.Context, input store.UpdateMessageMetadataInput) (store.Message, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Message{}, err
+	}
+	defer tx.Rollback()
+	msg, err := getMessageTx(ctx, tx, input.MessageID)
+	if err != nil {
+		return store.Message{}, err
+	}
+	if err := requireMessageAccessTx(ctx, tx, msg, input.UserID); err != nil {
+		return store.Message{}, err
+	}
+	if err := requireNoModerationBlockTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
+		return store.Message{}, err
+	}
+
+	// Build dynamic UPDATE based on non-nil fields.
+	sets := make([]string, 0, 6)
+	args := make([]any, 0, 7)
+	add := func(col string, val any) {
+		sets = append(sets, col+" = ?")
+		args = append(args, val)
+	}
+	if input.Intent != nil {
+		add("intent", *input.Intent)
+	}
+	if input.Persona != nil {
+		add("persona", *input.Persona)
+	}
+	if input.Confidence != nil {
+		add("confidence", *input.Confidence)
+	}
+	if input.ContextJSON != nil {
+		add("context_json", *input.ContextJSON)
+	}
+	if input.MetadataJSON != nil {
+		add("metadata_json", *input.MetadataJSON)
+	}
+	if input.TransformHistoryJSON != nil {
+		add("transform_history_json", *input.TransformHistoryJSON)
+	}
+
+	if len(sets) == 0 {
+		return msg, nil
+	}
+
+	args = append(args, input.MessageID)
+	query := "UPDATE messages SET " + strings.Join(sets, ", ") + " WHERE id = ?"
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return store.Message{}, err
+	}
+
+	msg, err = getMessageTx(ctx, tx, input.MessageID)
+	if err != nil {
+		return store.Message{}, err
+	}
+	return msg, tx.Commit()
+}
+
 func (s *Store) DeleteMessage(ctx context.Context, input store.DeleteMessageInput) (store.Message, []store.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

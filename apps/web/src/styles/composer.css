@@ -1,14 +1,9 @@
-/* ---------- COMPOSER ---------- */
+/* COGNITIVE OS — Composer (operator-grade, monochrome) */
 
 .composer {
-  /* Keep this in sync with the actual padding-top below: the slash/mention
-     suggestion overlay anchors off it. */
   --composer-card-top: 8px;
   --composer-overlay-gap: 8px;
   --composer-overlay-inset-x: 18px;
-
-  /* Trimmed the transparent top/bottom buffer so the composer card sits low,
-     close to the viewport edge, instead of floating inside a dead zone. */
   padding: 8px 18px 6px;
   background: var(--bg);
   display: grid;
@@ -21,20 +16,12 @@
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
   overflow: hidden;
-  /* The composer is the board's home row: it sits proud on a hard edge. */
-  box-shadow: var(--key-edge);
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms ease;
 }
 
 .composer:focus-within .composer-card {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
-  box-shadow:
-    var(--key-edge),
-    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--text-strong);
 }
 
 .composer-suggestions {
@@ -48,9 +35,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 97%, transparent);
-  box-shadow: var(--shadow);
+  background: var(--panel);
 }
 
 .composer-suggestions button {
@@ -63,122 +48,58 @@
   padding: 8px 10px;
   border: 0;
   border-bottom: 1px solid var(--line);
-  border-radius: 0;
   background: transparent;
   color: var(--text);
   text-align: left;
 }
 
-.composer-suggestions button:last-child {
-  border-bottom: 0;
-}
-
+.composer-suggestions button:last-child { border-bottom: 0; }
 .composer-suggestions button:hover,
-.composer-suggestions button.active {
-  background: var(--hover-strong);
-}
+.composer-suggestions button.active { background: var(--hover-strong); }
 
 .suggestion-mark {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.suggestion-copy {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.suggestion-copy strong,
-.suggestion-copy span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.suggestion-copy strong {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: 13px; font-weight: 800;
 }
 
-.suggestion-copy span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.suggestion-kind {
-  color: var(--muted-2);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.suggestion-hint {
-  color: var(--muted);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 500;
-}
+.suggestion-copy { min-width: 0; display: grid; gap: 2px; }
+.suggestion-copy strong,
+.suggestion-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-copy strong { color: var(--text-strong); font-size: 13px; }
+.suggestion-copy span { color: var(--muted); font-size: 12px; }
+.suggestion-kind { color: var(--muted-2); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.suggestion-hint { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 500; }
 
 .composer-notice {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+  display: flex; align-items: baseline; gap: 8px;
   margin: 0 var(--composer-overlay-inset-x, 0) 6px;
   padding: 7px 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  background: var(--panel);
   font-size: 13px;
 }
 
-.composer-notice__label {
-  flex: none;
-  color: var(--muted-2);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.composer-notice--error .composer-notice__label {
-  color: var(--danger);
-}
-
-.composer-notice__text {
-  min-width: 0;
-  flex: 1;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
+.composer-notice__label { flex: none; color: var(--muted-2); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.composer-notice--error .composer-notice__label { color: var(--status-danger); }
+.composer-notice__text { min-width: 0; flex: 1; color: var(--text); overflow-wrap: anywhere; }
 .composer-notice__dismiss {
-  flex: none;
-  align-self: center;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
+  flex: none; align-self: center;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
   border: 0;
-  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 15px;
-  line-height: 1;
+  font-size: 15px; line-height: 1;
   cursor: pointer;
 }
 
-.composer-notice__dismiss:hover {
-  background: var(--hover-strong);
-  color: var(--text-strong);
-}
+.composer-notice__dismiss:hover { background: var(--hover-strong); color: var(--text-strong); }
 
+/* ---------- TOOLBAR ---------- */
 
 .composer-toolbar {
   display: inline-flex;
@@ -190,37 +111,24 @@
   margin: 0;
   border: 0;
   border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--panel-2) 35%, transparent);
-  box-shadow: none;
+  background: var(--panel-2);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
 
-.composer-toolbar::-webkit-scrollbar {
-  display: none;
-}
+.composer-toolbar::-webkit-scrollbar { display: none; }
 
 .composer-toolbar button {
   flex: 0 0 auto;
-  min-width: 28px;
-  height: 26px;
-  display: grid;
-  place-items: center;
+  min-width: 28px; height: 26px;
+  display: grid; place-items: center;
   border: 0;
-  border-radius: 6px;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   opacity: 0.78;
-  font-size: 11.5px;
-  font-weight: 700;
-  transition:
-    background 100ms ease,
-    color 100ms ease,
-    opacity 100ms ease,
-    transform 80ms ease;
+  font-size: 11.5px; font-weight: 700;
+  transition: background 100ms ease, color 100ms ease, opacity 100ms ease;
 }
 
 .composer-toolbar button:hover {
@@ -230,25 +138,25 @@
 }
 
 .composer-toolbar button.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--panel-3);
+  color: var(--text-strong);
   opacity: 1;
 }
 
-.composer-toolbar button:active {
-  transform: translateY(1px);
-}
+/* ---------- GIF PICKER ---------- */
 
 .gif-picker {
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin-top: 8px; margin-bottom: 8px;
   width: min(520px, calc(100vw - 40px));
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
-  box-shadow: var(--shadow);
+  background: var(--panel);
   padding: 10px;
-  animation: picker-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: picker-in 160ms ease;
+}
+
+@keyframes picker-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .gif-picker-head {
@@ -259,17 +167,11 @@
   padding: 2px 2px 10px;
 }
 
-.gif-picker-head strong {
-  color: var(--text-strong);
-  font-size: 13px;
-}
-
+.gif-picker-head strong { color: var(--text-strong); font-size: 13px; }
 .gif-picker-head input {
-  min-width: 0;
-  height: 32px;
+  min-width: 0; height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   background: var(--panel-2);
 }
 
@@ -282,90 +184,47 @@
 }
 
 .gif-grid button {
-  position: relative;
-  overflow: hidden;
+  position: relative; overflow: hidden;
   aspect-ratio: 4 / 3;
-  border: 0;
-  border-radius: 12px;
+  border: 1px solid var(--line);
   background: var(--panel-2);
-  color: white;
+  color: var(--cog-white);
   padding: 0;
-  box-shadow: inset 0 0 0 1px var(--line);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms ease, opacity 120ms ease;
 }
 
 .gif-grid button:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    0 14px 30px -22px rgba(0, 0, 0, 0.8);
+  border-color: var(--line-strong);
+  opacity: 0.9;
 }
 
-.gif-grid img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
+.gif-grid img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .gif-grid span {
   position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.56);
+  left: 6px; right: 6px; bottom: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.7);
   padding: 4px 7px;
-  font-size: 10.5px;
-  font-weight: 700;
-  backdrop-filter: blur(8px);
+  font-size: 10.5px; font-weight: 700;
 }
 
-@keyframes picker-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
+/* ---------- COMPOSER ROW ---------- */
 
 .composer-row {
   --composer-control-size: 36px;
   --composer-line-height: 22px;
   --composer-text-padding-block: 7px;
-
   display: grid;
-  /* Columns must match the rendered children: the upload icon is optional
-     (thread reply composers omit it), and a phantom icon column would shove
-     the textarea left and strand the send button mid-row. */
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 4px;
   padding: 8px 8px 4px 10px;
   background: transparent;
   border: 0;
-  border-radius: 0;
 }
 
 .composer-row:has(.composer-icon) {
   grid-template-columns: auto minmax(0, 1fr) auto;
-}
-
-.composer:focus-within .composer-toolbar,
-.composer-row:focus-within {
-  border-color: transparent;
-}
-
-.composer-row:focus-within {
-  box-shadow: none;
 }
 
 .composer-icon {
@@ -373,35 +232,23 @@
   width: var(--composer-control-size);
   height: var(--composer-control-size);
   margin-top: calc(var(--composer-text-padding-block) + (var(--composer-line-height) - var(--composer-control-size)) / 2);
-  display: grid;
-  place-items: center;
+  display: grid; place-items: center;
   color: var(--muted);
-  border-radius: 10px;
   cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-.composer-icon:hover {
-  background: var(--hover-strong);
-  color: var(--text-strong);
-}
-
+.composer-icon:hover { background: var(--hover-strong); color: var(--text-strong); }
 .composer-icon input[type="file"] {
   position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  opacity: 0;
-  pointer-events: none;
+  inline-size: 1px; block-size: 1px;
+  opacity: 0; pointer-events: none;
 }
 
 .composer textarea,
 .reply-composer textarea {
-  width: 100%;
-  height: auto;
-  min-height: 44px;
-  max-height: 50vh;
+  width: 100%; height: auto;
+  min-height: 44px; max-height: 50vh;
   padding: var(--composer-text-padding-block) 4px;
   resize: none;
   color: var(--text);
@@ -413,139 +260,84 @@
 }
 
 .composer textarea::placeholder,
-.reply-composer textarea::placeholder {
-  color: var(--muted);
-}
+.reply-composer textarea::placeholder { color: var(--muted); }
 
-/* Send is the signature keycap of the app: hard edge, raised on hover,
-   pressed flat on click — the "clack". */
+/* Send button: monochrome keycap */
 .send {
   align-self: start;
   width: var(--composer-control-size);
   height: var(--composer-control-size);
   margin-top: calc(var(--composer-text-padding-block) + (var(--composer-line-height) - var(--composer-control-size)) / 2);
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--text-strong));
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  box-shadow: var(--key-edge);
-  transition:
-    background 120ms ease,
-    transform 80ms ease,
-    box-shadow 80ms ease,
-    opacity 120ms ease;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  background: var(--text-strong);
+  color: var(--bg);
+  transition: background 120ms ease, opacity 120ms ease;
 }
 
-/* Hover deepens the signal instead of flipping hue, so the primary action
-   keeps one color through its states. */
-.send:hover:not(:disabled) {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-
-.send:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: var(--key-edge-pressed);
-}
-
+.send:hover:not(:disabled) { opacity: 0.9; }
 .send:disabled {
   background: var(--panel-3);
-  border-color: var(--line-strong);
+  border-color: var(--line);
   color: var(--muted-2);
   cursor: not-allowed;
-  box-shadow: none;
 }
 
+/* ---------- ATTACHMENT ---------- */
+
 .composer-attachment {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  margin-top: 8px; margin-bottom: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 10px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   color: var(--text);
   font-size: 13px;
   width: fit-content;
 }
 
 .attachment-icon {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  display: grid; place-items: center;
+  width: 20px; height: 20px;
+  background: var(--panel-2);
+  color: var(--text-strong);
 }
 
 .pending-image {
-  width: 42px;
-  height: 32px;
+  width: 42px; height: 32px;
   object-fit: cover;
-  border-radius: 7px;
   border: 1px solid var(--line);
   background: var(--panel-2);
 }
 
-.attachment-name {
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.attachment-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-remove {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  background: transparent;
+  width: 18px; height: 18px;
+  border: 0; background: transparent;
   color: var(--muted);
-  border-radius: 50%;
-  font-size: 14px;
-  line-height: 1;
+  font-size: 14px; line-height: 1;
 }
 
-.attachment-remove:hover {
-  background: var(--danger);
-  color: white;
-}
+.attachment-remove:hover { color: var(--status-danger); }
 
-.composer-hint {
-  color: var(--muted-2);
-  font-size: 11px;
-  padding: 7px 4px 0;
-}
+/* ---------- COMPOSER HINT ---------- */
 
+.composer-hint { color: var(--muted-2); font-size: 11px; padding: 7px 4px 0; }
 .composer-hint kbd {
   display: inline-block;
   background: var(--panel-2);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
   padding: 0 5px;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text);
-  /* Tiny keycap: the kbd chip carries the same hard edge as real keys. */
-  box-shadow: 0 1px 0 var(--line-strong);
 }
 
 @media (max-width: 820px) {
   .composer {
-    padding: 8px calc(14px + var(--safe-area-right)) calc(6px + var(--safe-area-bottom))
-      calc(14px + var(--safe-area-left));
+    padding: 8px calc(14px + var(--safe-area-right)) calc(6px + var(--safe-area-bottom)) calc(14px + var(--safe-area-left));
   }
-
   .composer textarea,
-  .reply-composer textarea {
-    font-size: 16px;
-  }
-
-  .composer-suggestions {
-    max-height: min(320px, 42dvh);
-  }
+  .reply-composer textarea { font-size: 16px; }
+  .composer-suggestions { max-height: min(320px, 42dvh); }
 }

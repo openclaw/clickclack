@@ -320,6 +320,13 @@ type Message struct {
 	// response.
 	Nonce     string            `json:"nonce,omitempty"`
 	Reactions []ReactionSummary `json:"reactions,omitempty"`
+	// Cognitive OS fields (T2 — message object schema)
+	Intent              string  `json:"intent,omitempty"`
+	Persona             string  `json:"persona,omitempty"`
+	Confidence          *float64 `json:"confidence,omitempty"`
+	ContextJSON         *string  `json:"context,omitempty"`
+	MetadataJSON        *string  `json:"metadata,omitempty"`
+	TransformHistoryJSON *string  `json:"transform_history,omitempty"`
 }
 
 type MessagePageRequest struct {
@@ -879,6 +886,17 @@ type UpdateMessageInput struct {
 	Body      string
 }
 
+type UpdateMessageMetadataInput struct {
+	MessageID           string
+	UserID              string
+	Intent              *string
+	Persona             *string
+	Confidence          *float64
+	ContextJSON         *string
+	MetadataJSON        *string
+	TransformHistoryJSON *string
+}
+
 type DeleteMessageInput struct {
 	MessageID string
 	UserID    string
@@ -1242,6 +1260,7 @@ type Store interface {
 	EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
+	UpdateMessageMetadata(ctx context.Context, input UpdateMessageMetadataInput) (Message, error)
 	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
 	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)

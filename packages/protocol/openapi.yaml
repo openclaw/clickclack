@@ -1265,6 +1265,19 @@ paths:
       responses:
         "200":
           description: Soft-deleted message
+    patch:
+      operationId: updateMessageMetadata
+      parameters:
+        - $ref: "#/components/parameters/message_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMessageMetadataRequest"
+      responses:
+        "200":
+          description: Updated message metadata
   /api/messages/{message_id}/thread:
     get:
       operationId: getThread
@@ -2751,6 +2764,29 @@ components:
       properties:
         body:
           type: string
+    UpdateMessageMetadataRequest:
+      type: object
+      description: Partial update of cognitive OS metadata fields. All fields optional.
+      properties:
+        intent:
+          type: string
+          description: Classified communication intent.
+        persona:
+          type: string
+          description: Active persona filter.
+        confidence:
+          type: number
+          format: float
+          description: Output reliability/certainty score.
+        context:
+          type: object
+          description: Contextual metadata.
+        metadata:
+          type: object
+          description: Arbitrary metadata key-value pairs.
+        transform_history:
+          type: array
+          description: Inline transform history.
     MarkReadRequest:
       type: object
       required: [seq]
@@ -3146,6 +3182,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReactionSummary"
+        # Cognitive OS T2 fields (message object schema)
+        intent:
+          type: string
+          description: Classified communication intent (ask, command, reflect, draft, clarify, explore).
+        persona:
+          type: string
+          description: Active persona filter applied to the message (operator, analyst, creative, socratic, archivist).
+        confidence:
+          type: number
+          format: float
+          description: Output reliability/certainty score.
+        context:
+          type: object
+          description: Contextual metadata for the message.
+        metadata:
+          type: object
+          description: Arbitrary metadata key-value pairs.
+        transform_history:
+          type: array
+          description: Non-destructive inline transform operation history.
     MessageResponse:
       type: object
       required: [message]

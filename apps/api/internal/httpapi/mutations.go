@@ -82,6 +82,44 @@ func (s *Server) updateMessage(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"message": message, "event": event}, err)
 }
 
+func (s *Server) updateMessageMetadata(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if err := act.requireScope("messages:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	var body struct {
+		Intent              *string  `json:"intent,omitempty"`
+		Persona             *string  `json:"persona,omitempty"`
+		Confidence          *float64 `json:"confidence,omitempty"`
+		Context             *string  `json:"context,omitempty"`
+		Metadata            *string  `json:"metadata,omitempty"`
+		TransformHistory    *string  `json:"transform_history,omitempty"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
+		return
+	}
+	message, err := s.store.UpdateMessageMetadata(r.Context(), store.UpdateMessageMetadataInput{
+		MessageID:           chi.URLParam(r, "message_id"),
+		UserID:              act.user.ID,
+		Intent:              body.Intent,
+		Persona:             body.Persona,
+		Confidence:          body.Confidence,
+		ContextJSON:         body.Context,
+		MetadataJSON:        body.Metadata,
+		TransformHistoryJSON: body.TransformHistory,
+	})
+	writeResult(w, map[string]any{"message": message}, err)
+}
+
 func (s *Server) deleteMessage(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {

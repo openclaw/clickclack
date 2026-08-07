@@ -18,6 +18,8 @@
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
   import TopicBadge from "./TopicBadge.svelte";
+  import CognitiveMarkers from "./CognitiveMarkers.svelte";
+  import MessageUtilities from "./MessageUtilities.svelte";
 
   type Props = {
     message: Message;
@@ -148,6 +150,13 @@
     !preambleBlock && !isPending && !isFailed && (!isDeleted || hasThreadReplies || isThreadOpen),
   );
   let topic = $derived(topics.find((candidate) => candidate.id === message.topic_id));
+
+  // COGNITIVE OS — Derive metadata from message fields (absent = graceful null)
+  let cogIntent = $derived(message.intent ?? null);
+  let cogPersona = $derived(message.persona ?? null);
+  let cogConfidence = $derived(message.confidence ?? null);
+  let cogThreadAffil = $derived(message.semantic_thread_id ?? null);
+  let cogExecStatus = $derived(message.execution_status ?? null);
 
   function openThreadFromRow(event: MouseEvent) {
     if (suppressRowClick || showActionSheet) {
@@ -601,6 +610,13 @@
         />
       {/if}
     {:else}
+    <CognitiveMarkers
+      intent={cogIntent}
+      persona={cogPersona}
+      confidence={cogConfidence}
+      threadAffiliation={cogThreadAffil}
+      executionStatus={cogExecStatus}
+    />
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div
@@ -667,7 +683,13 @@
     </button>
     {/if}
   </div>
-  {#if !preambleBlock && !isDeleted}
+  {#if !preambleBlock && !isDeleted && !editing}
+  <!-- COGNITIVE OS — Inline utility bar (non-modal, hover/tap reveal) -->
+  <MessageUtilities
+    messageId={message.id}
+    visible={rowActive}
+    flip={actionsFlipped}
+  />
   <div class="message-actions" aria-label="Message actions">
     {#if copyStatus}
       <span

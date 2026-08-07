@@ -1,3 +1,6 @@
+/* COGNITIVE OS — Messages (flat text rows, no bubbles)
+   Rendered on top of tokens.css (0px radius, monochrome, no shadows). */
+
 /* ---------- MESSAGES ---------- */
 
 .messages {
@@ -10,7 +13,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* Browser scroll anchoring would fight virtua's own. Disable per official chat example. */
   overflow-anchor: none;
   display: flex;
   flex-direction: column;
@@ -29,14 +31,11 @@
   transition: opacity 0ms;
 }
 
-/* Spacer above the Virtualizer so a short list aligns to the bottom. It must
-   collapse to 0 when history overflows: virtua's startMargin only accounts for
-   the history loader, so any residual height here skews scroll-to-bottom.
-   Toolbar headroom at the top of history comes from the day divider that
-   always precedes the first group (18px margin + pointer-events: none). */
 .messages-spacer {
   flex-grow: 1;
 }
+
+/* ---------- HISTORY LOADER ---------- */
 
 .history-loader {
   display: grid;
@@ -53,12 +52,8 @@
 }
 
 @keyframes history-loader-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .history-loader__row {
@@ -72,21 +67,12 @@
 .history-loader__line,
 .history-loader__block {
   display: block;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--muted-2) 16%, transparent),
-    color-mix(in srgb, var(--muted-2) 36%, transparent),
-    color-mix(in srgb, var(--muted-2) 16%, transparent)
-  );
-  background-size: 220% 100%;
-  animation: history-loading 1.4s ease-in-out infinite;
-  animation-delay: calc(var(--history-row, 0) * 80ms);
+  background: var(--panel-2);
 }
 
 .history-loader__avatar {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
 }
 
 .history-loader__body {
@@ -100,12 +86,10 @@
 .history-loader__meta {
   width: min(180px, 38%);
   height: 11px;
-  border-radius: 999px;
 }
 
 .history-loader__line {
   height: 10px;
-  border-radius: 999px;
 }
 
 .history-loader__line--wide {
@@ -116,27 +100,13 @@
   width: min(360px, 48%);
 }
 
-@keyframes history-loading {
-  from {
-    background-position: 120% 0;
-  }
-  to {
-    background-position: -120% 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .history-loader {
     animation: none;
   }
-  .history-loader__avatar,
-  .history-loader__meta,
-  .history-loader__line,
-  .history-loader__block {
-    animation: none;
-    background: color-mix(in srgb, var(--muted-2) 22%, transparent);
-  }
 }
+
+/* ---------- UNREAD BAR ---------- */
 
 .unread-bar {
   position: absolute;
@@ -150,23 +120,14 @@
   height: 30px;
   padding: 0 5px 0 14px;
   max-width: calc(100% - 32px);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border: 1px solid var(--line);
+  background: var(--panel);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.005em;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent),
-    0 10px 24px -14px rgba(0, 0, 0, 0.55),
-    0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
   opacity: 1;
-  transition:
-    opacity 160ms ease-out,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 160ms ease-out, transform 180ms ease;
 }
 
 .unread-bar.is-clearing {
@@ -185,9 +146,6 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-  transition:
-    background-color 120ms ease-out,
-    color 120ms ease-out;
 }
 
 .unread-bar__jump {
@@ -195,7 +153,7 @@
   min-width: 0;
   padding: 0 6px 0 0;
   text-align: left;
-  color: color-mix(in srgb, var(--accent) 92%, var(--text));
+  color: var(--text-strong);
 }
 
 .unread-bar__jump::before {
@@ -203,56 +161,38 @@
   flex-shrink: 0;
   width: 7px;
   height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--text-strong);
   animation: unread-bar-pulse 1.8s ease-out infinite;
 }
 
 @keyframes unread-bar-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
-  }
+  0% { opacity: 0.55; }
+  70% { opacity: 0; }
+  100% { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unread-bar__jump::before {
-    animation: none;
-  }
+  .unread-bar__jump::before { animation: none; }
 }
 
 .unread-bar__mark {
   flex-shrink: 0;
   height: 22px;
   padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: color-mix(in srgb, var(--accent) 90%, var(--text));
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .unread-bar__jump:hover {
-  color: var(--accent);
+  color: var(--text-strong);
 }
 
 .unread-bar__mark:hover {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
-  color: var(--accent);
-}
-
-.unread-bar__jump:focus-visible,
-.unread-bar__mark:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: 2px;
-  border-radius: 999px;
+  background: var(--hover-strong);
 }
 
 .unread-bar__label {
@@ -260,6 +200,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---------- TYPING ---------- */
 
 .typing-indicator {
   display: flex;
@@ -269,15 +211,11 @@
   padding: 0 22px;
   margin-top: 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--muted);
   opacity: 0;
   transform: translateY(2px);
   overflow: hidden;
-  transition:
-    height 120ms ease-out,
-    margin-top 120ms ease-out,
-    opacity 120ms ease-out,
-    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: height 120ms ease-out, margin-top 120ms ease-out, opacity 120ms ease-out, transform 160ms ease;
   pointer-events: none;
 }
 
@@ -288,83 +226,14 @@
   transform: translateY(0);
 }
 
-/* The live "agent is responding" indicator floats over the composer inside a
-   permanently reserved band, so showing/hiding it never reflows the
-   transcript or shifts the composer. The space is always there; only opacity
-   toggles. */
 .composer-dock {
   position: relative;
   padding-top: 20px;
 }
 
-.topic-filter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.topic-filter strong {
-  color: var(--text);
-}
-
-.topic-filter button,
-.message-topic {
-  border: 0;
-  color: var(--accent);
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-}
-
-.topic-filter button:hover,
-.message-topic:hover {
-  text-decoration: underline;
-}
-
-.message-topic {
-  display: inline-flex;
-  margin: 0 0 4px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.topic-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 14px -1px;
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-bottom: 0;
-  border-radius: 10px 10px 0 0;
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.topic-picker select {
-  min-width: 0;
-  max-width: min(280px, 65vw);
-  border: 0;
-  color: var(--text);
-  background: transparent;
-  font: inherit;
-}
-
 .composer-dock .agent-responding {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 20px;
   margin: 0;
   padding: 0 22px;
@@ -393,48 +262,88 @@
 .typing-indicator__dots i {
   width: 4px;
   height: 4px;
-  border-radius: 50%;
   background: currentColor;
   opacity: 0.55;
   animation: typing-dot 1.1s ease-in-out infinite;
 }
 
-.typing-indicator__dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.typing-indicator__dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
+.typing-indicator__dots i:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator__dots i:nth-child(3) { animation-delay: 0.3s; }
 
 @keyframes typing-dot {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.35;
-  }
-  30% {
-    transform: translateY(-3px);
-    opacity: 1;
-  }
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 1; }
 }
 
-.message-row.is-pending {
-  opacity: 0.55;
-}
+/* ---------- TOPIC ---------- */
 
-.message-row.is-pending .message-content,
-.message-row.is-pending .markdown {
-  pointer-events: none;
-}
-
-.message-row.is-failed {
-  opacity: 1;
-}
-
-.message-row.is-deleted {
+.topic-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
   color: var(--muted);
+  font-size: 13px;
 }
+
+.topic-filter strong { color: var(--text); }
+
+.topic-filter button,
+.message-topic {
+  border: 0;
+  color: var(--text-strong);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.topic-filter button:hover,
+.message-topic:hover {
+  text-decoration: underline;
+}
+
+.message-topic {
+  display: inline-flex;
+  margin: 0 0 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.topic-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px -1px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topic-picker select {
+  min-width: 0;
+  max-width: min(280px, 65vw);
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+}
+
+/* ---------- MESSAGE ROW (flat, no bubbles) ---------- */
+
+.message-row.is-pending { opacity: 0.55; }
+.message-row.is-pending .message-content,
+.message-row.is-pending .markdown { pointer-events: none; }
+.message-row.is-failed { opacity: 1; }
+.message-row.is-deleted { color: var(--muted); }
 
 .message-failed {
   display: inline-flex;
@@ -442,15 +351,13 @@
   gap: 10px;
   margin-top: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--danger, #d04848) 14%, transparent);
-  color: var(--danger, #d04848);
+  border: 1px solid var(--status-danger);
+  background: rgba(204, 51, 51, 0.1);
+  color: var(--status-danger);
   font-size: 12px;
 }
 
-.message-failed__label {
-  font-weight: 500;
-}
+.message-failed__label { font-weight: 500; }
 
 .message-failed__action {
   background: transparent;
@@ -458,32 +365,19 @@
   color: inherit;
   font: inherit;
   padding: 2px 8px;
-  border-radius: 999px;
   cursor: pointer;
   line-height: 1;
 }
 
 .message-failed__action:hover {
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  background: rgba(204, 51, 51, 0.15);
 }
 
 .message-failed__action--ghost {
-  border-color: color-mix(in srgb, currentColor 50%, transparent);
+  border-color: rgba(204, 51, 51, 0.5);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .typing-indicator {
-    transition: opacity 80ms ease-out;
-    transform: none;
-  }
-  .typing-indicator.visible {
-    transform: none;
-  }
-  .typing-indicator__dots i {
-    animation: none;
-    opacity: 0.7;
-  }
-}
+/* ---------- EMPTY STATE ---------- */
 
 .empty {
   display: grid;
@@ -495,28 +389,22 @@
   padding: 48px 24px;
 }
 
-/* The empty-state mark is a giant keycap: hard edge, brand gradient top. */
 .empty-icon {
   width: 64px;
   height: 64px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-  border: 1px solid color-mix(in srgb, var(--brand-b) 55%, var(--line-strong));
-  color: var(--brand-contrast);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text-strong);
   display: grid;
   place-items: center;
   font-size: 26px;
   font-weight: 800;
-  box-shadow:
-    var(--key-edge),
-    0 18px 40px -16px color-mix(in srgb, var(--brand-b) 60%, transparent);
 }
 
 .empty strong {
   color: var(--text-strong);
   font-size: 19px;
   letter-spacing: -0.01em;
-  font-family: var(--font-display);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -526,6 +414,8 @@
   max-width: 380px;
   line-height: 1.5;
 }
+
+/* ---------- DAY DIVIDER ---------- */
 
 .day-divider {
   display: flex;
@@ -546,7 +436,6 @@
 .day-divider span {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 999px;
   padding: 4px 12px;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -555,6 +444,8 @@
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
+
+/* ---------- NEW MESSAGES DIVIDER ---------- */
 
 .new-messages-divider {
   display: flex;
@@ -566,9 +457,7 @@
   position: relative;
   opacity: 1;
   transform: translateY(0);
-  transition:
-    opacity 160ms ease-out,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 160ms ease-out, transform 180ms ease;
 }
 
 .new-messages-divider.is-clearing {
@@ -580,7 +469,7 @@
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--danger, #ed4245);
+  background: var(--status-danger);
   opacity: 0.9;
 }
 
@@ -590,14 +479,15 @@
   height: 14px;
   padding: 0 5px;
   margin-left: 8px;
-  background: var(--danger, #ed4245);
-  color: #fff;
+  background: var(--status-danger);
+  color: var(--cog-white);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-radius: 3px;
 }
+
+/* ---------- MESSAGE GROUP ---------- */
 
 .message-group {
   display: grid;
@@ -606,21 +496,17 @@
   position: relative;
 }
 
+/* ---------- AVATAR ---------- */
+
 .avatar {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
   display: grid;
   place-items: center;
-  color: white;
+  color: var(--cog-white);
   font-weight: 700;
   font-size: 14px;
-  background: linear-gradient(
-    135deg,
-    hsl(var(--hue, 220deg) 70% 55%),
-    hsl(calc(var(--hue, 220deg) + 40deg) 70% 45%)
-  );
-  box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.6);
+  background: var(--cog-fog);
   margin-top: 2px;
   overflow: hidden;
 }
@@ -631,32 +517,27 @@
   border: 0;
   padding: 0;
   cursor: pointer;
-  transition:
-    transform 100ms ease,
-    box-shadow 120ms ease,
-    filter 120ms ease;
+  transition: opacity 100ms ease;
 }
 
 .avatar-button:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.8);
+  opacity: 0.85;
 }
 
 .avatar.small {
   width: 30px;
   height: 30px;
   font-size: 12px;
-  border-radius: 10px;
 }
 
 .avatar.large {
   width: 56px;
   height: 56px;
-  border-radius: 16px;
   font-size: 18px;
   margin: 0;
 }
+
+/* ---------- GROUP BODY ---------- */
 
 .group-body {
   min-width: 0;
@@ -669,9 +550,6 @@
   margin-bottom: 2px;
 }
 
-/* In the channel timeline the header bleeds into the avatar gutter and right
-   padding so the hover highlight reads as one continuous band with the first
-   message row. Thread-panel headers reuse .group-body but keep normal flow. */
 .message-group .group-body > header {
   margin: 0 -18px 0 -56px;
   padding: 0 18px 2px 56px;
@@ -689,14 +567,13 @@
   background: transparent;
   color: var(--text-strong);
   padding: 0;
-  border-radius: 4px;
   font-size: 14.5px;
   letter-spacing: 0;
   font-weight: 700;
 }
 
 .author-name:hover {
-  color: var(--accent);
+  color: var(--text-strong);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -706,7 +583,6 @@
   text-decoration: none;
 }
 
-/* Timestamps as machine metadata: mono, tabular. */
 .group-body > header time {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -719,14 +595,15 @@
   font-size: 12px;
 }
 
+/* ---------- BOT CHIP ---------- */
+
 .bot-chip {
   display: inline-flex;
   align-items: center;
   height: 18px;
   padding: 0 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius: 4px;
-  color: var(--accent);
+  border: 1px solid var(--line);
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
@@ -740,12 +617,13 @@
   color: var(--muted);
 }
 
+/* ---------- MESSAGE ROW ---------- */
+
 .message-row {
   margin-left: -56px;
   margin-right: -18px;
   padding: 1px 18px 1px 56px;
   position: relative;
-  border-radius: 0;
   transition: background 80ms ease;
 }
 
@@ -753,19 +631,12 @@
   margin-top: 1px;
 }
 
-/* Row-level hover (Slack model): only the hovered message highlights, not the
-   whole group. Hovering the group header joins it with its first row so the
-   two read as one message. */
+/* Flat row hover: solid ink band, not bubble */
 .message-row:hover,
 .message-group .group-body > header:hover,
 .message-group .group-body > header:hover + .message-row,
 .message-group .group-body > header:has(+ .message-row:hover) {
   background: var(--hover);
-}
-
-.message-group .group-body > header:hover + .message-row .message-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .message-row.selected {
@@ -787,40 +658,39 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Coalesced agent preamble block: one block per agent turn, interleaving
-   commentary prose with individually collapsed tool-call rows in arrival
-   order. The block opens while the turn is live and collapses to a single
-   line once the final answer lands. Theme-tied to --activity-accent (amber on
-   both themes); the wash is deliberately faint so the block reads as
-   secondary to the final answer, which renders as a clearly separate ordinary
-   message below it.
+.message-row:hover .row-stamp {
+  opacity: 1;
+}
 
-   Bubble language: tinted keycaps. Each bubble is a full hairline border in
-   its accent mix plus a hard tinted under-edge (the keycap shadow) — no
-   gutter rails; the wash + under-edge carry the semantics. */
+/* ---------- MESSAGE CONTENT (flat text, no bubbles) ---------- */
+
+.message-content {
+  display: flow-root;
+  min-width: 0;
+}
+
+.message-deleted {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ---------- PREAMBLE (agent activity, monochrome flat) ---------- */
+
 .message-row.is-preamble {
-  /* Streaming/growing phase: the row itself stays transparent; the yellow wash
-     lives on the inline content bubble below so it reads like a message,
-     constrained to the content column instead of bleeding edge to edge across
-     the avatar gutter and full row width. */
   background: transparent;
-  /* Breathing room before the separate final-answer message below. */
   margin-bottom: 6px;
   padding-top: 4px;
   padding-bottom: 4px;
 }
 
-/* Standalone / still-live preamble (no final answer attached yet): render the
-   yellow working log as an inline bubble within the content column, mirroring
-   the boxed pre-final treatment, so the streaming/growing phase is inline and
-   not full-bleed. Scoped to NOT .before-final-message so the boxed pair keeps
-   its own top-of-card styling. */
 .message-row.is-preamble:not(.before-final-message) .message-content {
   padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--activity-accent-soft);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--activity-accent) 14%, transparent);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
 }
 
 .message-row.is-preamble-collapsed .message-content {
@@ -828,12 +698,6 @@
   padding-bottom: 6px;
 }
 
-/* Boxed preamble<->answer cohesion: when an agent preamble is immediately
-   followed by its final answer (same group/author), the two rows merge into a
-   single bordered card with a flat internal seam so the activity log and the
-   answer read as one cohesive unit (mirrors the ClawCanvas inline model). Scoped
-   to the paired rows only; a standalone or still-live preamble keeps its
-   full-bleed wash + gutter accent above. */
 .message-row.is-preamble.before-final-message {
   background: transparent;
   margin-bottom: 0;
@@ -847,182 +711,35 @@
   padding-bottom: 2px;
 }
 
-/* The gutter accent bar belongs to the standalone preamble; the boxed pair
-   carries its accent on the card's wash and border instead, so suppress it. */
 .message-row.is-preamble.before-final-message::before {
   display: none;
 }
 
-/* Preamble = the amber working-log header (top of the card). */
 .message-row.is-preamble.before-final-message .message-content {
   padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--activity-accent) 20%, transparent);
-  background: var(--activity-accent-soft);
-}
-
-/* Preamble = top of the card: round the top, drop the bottom edge so the seam
-   is flat and the answer below continues the same box. */
-.message-row.is-preamble.before-final-message .message-content {
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  border: 1px solid var(--line);
   border-bottom: 0;
+  background: var(--panel-2);
 }
 
-/* Answer = the delivered indigo message (bottom of the card). This is the
-   hero: the indigo wash + the card's keycap under-edge read it as the primary
-   delivery, with the amber preamble as its secondary header. Flat top meets
-   the seam; rounded bottom closes the card. */
 .message-row.after-preamble .message-content {
   padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--delivery-accent) 20%, transparent);
+  border: 1px solid var(--line);
   border-top: 0;
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
-  background: var(--delivery-accent-soft);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--delivery-accent) 14%, transparent);
+  background: var(--panel-2);
 }
 
-/* Collapsed preamble inside the boxed pair: keep the compact one-line height
-   without re-adding the standalone vertical padding, and render a distinct
-   yellow bar capping the blue final block below it. */
 .message-row.is-preamble.before-final-message.is-preamble-collapsed .message-content {
   padding-top: 7px;
   padding-bottom: 7px;
-  background: color-mix(in srgb, var(--activity-accent) 10%, var(--panel));
-  border-bottom: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
+  background: var(--panel-3);
+  border-bottom: 1px solid var(--line);
 }
 
-/* The current user and every other participant have independent alignment
-   preferences. "Other" includes both human teammates and agents. */
-:root[data-user-align="right"] .message-group.is-self,
-:root[data-other-align="right"] .message-group:not(.is-self) {
-  grid-template-columns: minmax(0, 1fr) 56px;
-}
-
-:root[data-user-align="right"] .message-group.is-self > .avatar,
-:root[data-other-align="right"] .message-group:not(.is-self) > .avatar {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
-}
-
-:root[data-user-align="right"] .message-group.is-self > .group-body,
-:root[data-other-align="right"] .message-group:not(.is-self) > .group-body {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-}
-
-:root[data-user-align="right"] .message-group.is-self .group-body > header,
-:root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
-  justify-content: flex-end;
-  margin: 0 -56px 0 -18px;
-  padding: 0 56px 2px 18px;
-}
-
-:root[data-user-align="right"] .message-group.is-self .message-row,
-:root[data-other-align="right"] .message-group:not(.is-self) .message-row {
-  margin-left: -18px;
-  margin-right: -56px;
-  padding-left: 18px;
-  padding-right: 56px;
-}
-
-:root[data-user-align="right"] .message-group.is-self .message-content,
-:root[data-other-align="right"] .message-group:not(.is-self) .message-content {
-  margin-left: auto;
-  text-align: right;
-}
-
-:root[data-user-align="right"] .message-group.is-self .markdown,
-:root[data-other-align="right"] .message-group:not(.is-self) .markdown {
-  text-align: right;
-}
-
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  ul,
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  ol,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  ul,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  ol {
-  padding-left: 0;
-  padding-right: 0;
-  list-style-position: inside;
-}
-
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  li
-  > ul,
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  li
-  > ol,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  li
-  > ul,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  li
-  > ol {
-  padding-left: 0;
-  padding-right: 22px;
-}
-
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  li
-  > p:first-child,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  li
-  > p:first-child {
-  display: inline;
-}
-
-:root:not([data-message-layout="outlined"])[data-user-align="right"]
-  .message-group.is-self
-  .markdown
-  blockquote,
-:root:not([data-message-layout="outlined"])[data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown
-  blockquote {
-  padding-left: 0;
-  padding-right: 12px;
-  border-left: 0;
-  border-right: 3px solid var(--accent);
-}
-
-:root[data-user-align="right"] .message-group.is-self .attachment-grid,
-:root[data-other-align="right"] .message-group:not(.is-self) .attachment-grid {
-  margin-left: auto;
-}
-
+/* Preamble sub-components */
 .preamble-contract {
   display: grid;
   gap: 7px;
-  /* Grid/flex items default to min-width:auto and refuse to shrink below their
-     content's intrinsic size; a long unbroken token (path, command, id) would
-     then force the column wider than the bubble and overflow. min-width:0 down
-     the chain lets the wrap rules take over. */
   min-width: 0;
 }
 
@@ -1036,35 +753,30 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--activity-accent);
+  color: var(--muted);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .preamble-chevron {
-  color: var(--activity-accent);
+  color: var(--muted);
   font-size: 10px;
   transition: transform 120ms ease;
 }
 
-.preamble-chevron.open {
-  transform: rotate(90deg);
-}
+.preamble-chevron.open { transform: rotate(90deg); }
 
 .preamble-state,
-.preamble-action {
-  line-height: 1;
-}
+.preamble-action { line-height: 1; }
 
 .preamble-state {
   display: inline-flex;
   align-items: center;
   height: 17px;
   padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--activity-accent) 30%, transparent);
-  border-radius: 999px;
-  color: var(--activity-accent);
+  border: 1px solid var(--line);
+  color: var(--muted);
   font-size: 9.5px;
   font-weight: 750;
   text-transform: uppercase;
@@ -1072,24 +784,17 @@
 }
 
 .preamble-state.is-live {
-  border-color: color-mix(in srgb, var(--activity-accent) 55%, transparent);
+  border-color: var(--line-strong);
   animation: preamble-live-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes preamble-live-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .preamble-state.is-live {
-    animation: none;
-  }
+  .preamble-state.is-live { animation: none; }
 }
 
 .preamble-action {
@@ -1109,8 +814,6 @@
   word-break: break-word;
 }
 
-/* Interleaved preamble flow: commentary prose and tool-call rows in arrival
-   order (commentary, tool, commentary, tool), indented under the header. */
 .preamble-flow {
   display: grid;
   gap: 7px;
@@ -1118,13 +821,8 @@
   min-width: 0;
 }
 
-/* One tool call: a collapsed one-line summary (chevron + glyph + action +
-   name + truncated detail) on a light blue wash, expanding on click to the
-   full stored body. */
 .preamble-tool {
-  --tool-accent: var(--activity-accent);
   min-width: 0;
-  border-radius: 7px;
   background: var(--tool-call-bg);
   overflow: hidden;
 }
@@ -1159,23 +857,15 @@
   word-break: break-word;
 }
 
-/* The step-chain head, rendered as plain text (not markdown: chains contain
-   *, /, | that would break emphasis parsing). */
 .preamble-tool-full-head {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  color: color-mix(in srgb, var(--tool-accent) 45%, var(--muted));
+  color: var(--muted);
 }
 
-.preamble-tool-full-body {
-  min-width: 0;
-}
-
-.preamble-tool-full pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+.preamble-tool-full-body { min-width: 0; }
+.preamble-tool-full pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .tool-line-chevron {
   flex-shrink: 0;
@@ -1184,21 +874,13 @@
   transition: transform 120ms ease;
 }
 
-.tool-line-chevron.open {
-  transform: rotate(90deg);
-}
-
-.tool-line-glyph {
-  flex-shrink: 0;
-  font-size: 11px;
-  filter: saturate(0.85);
-}
-
+.tool-line-chevron.open { transform: rotate(90deg); }
+.tool-line-glyph { flex-shrink: 0; font-size: 11px; opacity: 0.7; }
 .tool-line-action {
   flex-shrink: 0;
   font-size: 11.5px;
   font-weight: 600;
-  color: color-mix(in srgb, var(--tool-accent) 38%, var(--text));
+  color: var(--text);
 }
 
 .tool-line-name {
@@ -1209,7 +891,7 @@
   white-space: nowrap;
   font-size: 11px;
   font-weight: 500;
-  color: color-mix(in srgb, var(--tool-accent) 55%, var(--muted));
+  color: var(--muted);
   font-family: var(--font-mono);
 }
 
@@ -1226,18 +908,8 @@
   opacity: 0.85;
 }
 
-.message-row:hover .row-stamp {
-  opacity: 1;
-}
+/* ---------- THREAD HINT ---------- */
 
-.message-content {
-  display: flow-root;
-  min-width: 0;
-}
-
-/* Thread summary as a quiet link row (Slack model): plain text at rest —
-   accent reply count + muted last-activity time — gaining a soft border only
-   on hover. */
 .thread-hint {
   display: inline-flex;
   align-items: center;
@@ -1245,9 +917,8 @@
   min-height: 22px;
   margin-top: 4px;
   padding: 3px 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
   color: var(--muted-2);
   font-size: 12px;
   font-weight: 700;
@@ -1259,9 +930,7 @@
   display: none;
 }
 
-.thread-hint svg {
-  flex: 0 0 auto;
-}
+.thread-hint svg { flex: 0 0 auto; }
 
 .thread-hint time {
   color: var(--muted);
@@ -1272,12 +941,13 @@
 
 .thread-hint.has-replies,
 .thread-hint.is-open {
-  color: var(--accent);
+  color: var(--text-strong);
+  border-color: var(--line-strong);
 }
 
 .thread-hint.is-open {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  border-color: var(--line-strong);
+  background: var(--panel-3);
 }
 
 .thread-hint:hover {
@@ -1290,32 +960,24 @@
   opacity: 0.45;
 }
 
+/* ---------- MESSAGE ACTIONS TOOLBAR ---------- */
+
 .message-actions {
   display: flex;
   align-items: flex-start;
   gap: 4px;
   opacity: 0;
-  /* Pure overlay straddling the row's top edge (Slack model): never reserves
-     layout space, never reflows text, and while hidden it must not intercept
-     the pointer, so hovering/clicking the row above keeps working. Most of
-     the toolbar hangs above the row — only its lower third dips into the
-     row, so it never covers more than the tail of the first line. */
   pointer-events: none;
   position: absolute;
   right: 8px;
   top: -24px;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
   padding: 2px;
-  box-shadow: var(--shadow);
   transition: opacity 100ms ease;
 }
 
 .message-row:hover .message-actions,
-/* Keyboard focus only: a mouse click leaves the clicked button focused, and
-   plain :focus-within would pin that row's toolbar open forever (two toolbars
-   at once when the next row is hovered). */
 .message-row:has(:focus-visible) .message-actions,
 .message-row.selected .message-actions,
 .message-row.menu-open .message-actions {
@@ -1323,111 +985,54 @@
   pointer-events: auto;
 }
 
-/* A row flush with the scrollport's top edge has no headroom for the upward
-   straddle (overflow would clip it), so mirror the toolbar to straddle the
-   row's bottom edge instead. MessageRow measures this on hover/focus. */
 .message-row.actions-flip .message-actions {
   top: auto;
   bottom: -24px;
 }
 
-/* Lift the row with an open ⋮ menu above later siblings so the menu is not
-   covered by their (transparent) hover toolbars. */
-.message-row.menu-open {
-  z-index: 6;
-}
-
-/* A revealed toolbar straddles a neighboring row (above normally, below when
-   flipped at the scrollport top). Lift the active row above its in-group
-   siblings so the toolbar paints and hit-tests above them. */
+.message-row.menu-open { z-index: 6; }
 .message-row:hover,
 .message-row:has(:focus-visible),
-.message-row.selected {
-  z-index: 5;
-}
+.message-row.selected { z-index: 5; }
 
-/* While a row has an open popover (⋮ menu or reaction picker), hovering other
-   rows must not reveal a second toolbar — one popover means one active row. */
 .messages:has(.message-row.menu-open) .message-row:hover:not(.menu-open) .message-actions,
-.messages:has(.message-row.menu-open)
-  .message-group
-  .group-body
-  > header:hover
-  + .message-row:not(.menu-open)
-  .message-actions {
+.messages:has(.message-row.menu-open) .message-group .group-body > header:hover + .message-row:not(.menu-open) .message-actions {
   opacity: 0;
   pointer-events: none;
 }
 
+/* Touch devices: hidden toolbar anchor */
 @media (hover: none), (pointer: coarse) {
-  /* Touch devices use the long-press action sheet instead of the hover toolbar. */
   .message-actions {
-    width: 1px;
-    height: 1px;
-    top: 1px;
-    bottom: auto;
-    padding: 0;
-    border: 0;
+    width: 1px; height: 1px;
+    top: 1px; bottom: auto;
+    padding: 0; border: 0;
     background: transparent;
-    box-shadow: none;
     opacity: 1;
     pointer-events: auto;
     overflow: visible;
     transform: none;
   }
-
-  .message-actions > :not(.message-more) {
-    display: none;
-  }
-
-  /* The desktop flip must not move the collapsed 1px touch anchor. */
-  .message-row.actions-flip .message-actions {
-    top: 1px;
-    bottom: auto;
-  }
-
-  .message-actions .message-more {
-    position: static;
-  }
-
+  .message-actions > :not(.message-more) { display: none; }
+  .message-row.actions-flip .message-actions { top: 1px; bottom: auto; }
+  .message-actions .message-more { position: static; }
   .message-actions .message-actions-trigger {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
     overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
+    clip: rect(0 0 0 0); clip-path: inset(50%);
     white-space: nowrap;
   }
-
-  .message-actions .message-actions-trigger:focus-visible {
-    right: 0;
-    top: 0;
-    width: 36px;
-    height: 36px;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
-    clip-path: none;
-    border: 1px solid var(--line-strong);
-    background: var(--panel);
-    box-shadow: var(--shadow);
-  }
-
   .message-row:has(.message-actions-trigger:focus-visible) .message-content {
     padding-right: 44px;
   }
 }
 
 .message-actions button {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
   border: 0;
-  border-radius: 6px;
   background: transparent;
   color: var(--muted);
 }
@@ -1437,9 +1042,7 @@
   color: var(--text-strong);
 }
 
-.message-actions button:disabled {
-  opacity: 0.45;
-}
+.message-actions button:disabled { opacity: 0.45; }
 
 .message-copy-status {
   display: inline-flex;
@@ -1447,20 +1050,69 @@
   align-self: center;
   height: 24px;
   padding: 0 6px;
-  border-radius: 5px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-strong);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .message-copy-status.is-error {
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
+  border-color: var(--status-danger);
+  color: var(--status-danger);
 }
 
-/* Long-press bottom action sheet (touch devices). Portaled to <body>. */
+/* ---------- MESSAGE MENU ---------- */
+
+.message-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  font-size: 13px;
+}
+
+.message-menu.above {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.message-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: auto;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-menu button:hover {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.message-menu button svg { flex: 0 0 auto; color: var(--muted); }
+.message-menu .menu-sep { margin: 5px 4px; border-top: 1px solid var(--line); }
+.message-menu .menu-danger,
+.message-menu .menu-danger svg { color: var(--status-danger); }
+.message-menu .menu-danger:hover {
+  background: rgba(204, 51, 51, 0.1);
+}
+
+/* ---------- MESSAGE ACTION SHEET (touch) ---------- */
+
 .message-sheet-scrim {
   position: fixed;
   inset: 0;
@@ -1468,7 +1120,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  background: rgba(5, 8, 15, 0.4);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .message-sheet-backdrop {
@@ -1485,7 +1137,6 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-bottom: 0;
-  border-radius: 16px 16px 0 0;
   max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px));
   padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
@@ -1494,27 +1145,13 @@
 }
 
 @keyframes sheet-rise {
-  from {
-    transform: translateY(24px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .message-action-sheet {
-    animation: none;
-  }
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .message-action-sheet .sheet-grabber {
-  width: 36px;
-  height: 4px;
+  width: 36px; height: 4px;
   margin: 0 auto 8px;
-  border-radius: 999px;
   background: var(--line-strong);
 }
 
@@ -1527,12 +1164,9 @@
 }
 
 .message-action-sheet .sheet-emoji-row button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
   border: 0;
-  border-radius: 10px;
   background: transparent;
   font-size: 22px;
   line-height: 1;
@@ -1555,7 +1189,6 @@
   width: 100%;
   padding: 12px 8px;
   border: 0;
-  border-radius: 8px;
   background: transparent;
   color: var(--text-strong);
   font-size: 15px;
@@ -1566,135 +1199,25 @@
   background: var(--hover-strong);
 }
 
-.message-action-sheet .sheet-actions button:disabled {
-  opacity: 0.45;
-}
-
-.message-action-sheet .sheet-actions svg {
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-
+.message-action-sheet .sheet-actions button:disabled { opacity: 0.45; }
+.message-action-sheet .sheet-actions svg { flex: 0 0 auto; color: var(--muted); }
 .message-action-sheet .sheet-danger,
-.message-action-sheet .sheet-danger svg {
-  color: var(--danger);
-}
+.message-action-sheet .sheet-danger svg { color: var(--status-danger); }
 
-.message-action-sheet .sheet-copy-status {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 5px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
+/* ---------- MESSAGE ACTIONS SEPARATOR ---------- */
 
-.message-action-sheet .sheet-copy-status.is-error {
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-}
-
-.message-action-sheet .sheet-action-error {
-  margin: -4px 12px 4px;
-  color: var(--danger);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.message-actions .message-action-react {
-  font-size: 15px;
-  line-height: 1;
-}
-
+.message-actions .message-action-react { font-size: 15px; line-height: 1; }
 .message-actions .action-sep {
   flex: 0 0 auto;
-  width: 1px;
-  height: 18px;
+  width: 1px; height: 18px;
   margin: 0 3px;
   align-self: center;
   background: var(--line);
 }
 
-.message-actions .picker-wrapper,
-.message-actions .message-more {
-  position: relative;
-}
+/* ---------- EDITING ---------- */
 
-/* ⋮ overflow menu: copy/edit up top, delete isolated behind a divider. */
-.message-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 30;
-  min-width: 190px;
-  padding: 5px;
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  font-size: 13px;
-}
-
-.message-menu.above {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
-
-.message-menu button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  height: auto;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.message-menu button:hover {
-  background: var(--hover-strong);
-  color: var(--text-strong);
-}
-
-.message-menu button svg {
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-
-.message-menu .menu-sep {
-  margin: 5px 4px;
-  border-top: 1px solid var(--line);
-}
-
-.message-menu .menu-danger,
-.message-menu .menu-danger svg {
-  color: var(--danger);
-}
-
-.message-menu .menu-danger:hover {
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-}
-
-/* ---------- MESSAGE EDITING ---------- */
-
-.message-edit {
-  display: grid;
-  gap: 7px;
-  width: min(100%, 760px);
-  padding: 5px 0 3px;
-}
+.message-edit { display: grid; gap: 7px; width: min(100%, 760px); padding: 5px 0 3px; }
 
 .message-edit__textarea {
   width: 100%;
@@ -1702,38 +1225,24 @@
   max-height: 240px;
   padding: 9px 11px;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--panel) 94%, var(--text) 6%);
+  background: var(--panel-2);
   color: var(--text);
   font: inherit;
   font-size: 14.5px;
   line-height: 1.5;
   resize: vertical;
   box-sizing: border-box;
-  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 5%, transparent);
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.message-edit__textarea:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--line-strong) 62%, var(--text) 38%);
-}
-
+.message-edit__textarea:hover:not(:disabled) { border-color: var(--line-strong); }
 .message-edit__textarea:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--text-strong);
   background: var(--panel);
-  box-shadow:
-    inset 0 1px 1px color-mix(in srgb, var(--text) 4%, transparent),
-    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.message-edit__textarea:disabled {
-  cursor: progress;
-  opacity: 0.78;
-}
+.message-edit__textarea:disabled { cursor: progress; opacity: 0.78; }
 
 .message-edit__footer {
   display: flex;
@@ -1752,28 +1261,14 @@
   min-height: 30px;
   padding: 5px 12px;
   border: 0;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--text-strong);
+  color: var(--bg);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
 }
 
-.message-edit__footer .message-edit__save:hover {
-  filter: brightness(1.1);
-}
-
-.message-edit__footer .message-edit__save:focus-visible,
-.message-edit__footer .message-edit__cancel:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.message-edit__footer .message-edit__save:disabled {
-  opacity: 0.5;
-  cursor: progress;
-}
+.message-edit__footer .message-edit__save:hover { opacity: 0.9; }
 
 .message-edit__footer .message-edit__cancel {
   display: inline-flex;
@@ -1781,8 +1276,7 @@
   justify-content: center;
   min-height: 30px;
   padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
@@ -1790,7 +1284,7 @@
 }
 
 .message-edit__footer .message-edit__cancel:hover {
-  border-color: var(--line);
+  border-color: var(--line-strong);
   background: var(--hover-strong);
   color: var(--text-strong);
 }
@@ -1799,10 +1293,9 @@
   width: fit-content;
   max-width: 100%;
   padding: 5px 8px;
-  border-left: 2px solid var(--danger);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  color: var(--danger);
+  border-left: 2px solid var(--status-danger);
+  background: rgba(204, 51, 51, 0.08);
+  color: var(--status-danger);
   font-size: 12.5px;
   line-height: 1.35;
   margin: 0;
@@ -1817,25 +1310,9 @@
   font-size: 11px;
 }
 
-.message-row.editing .message-actions {
-  display: none;
-}
+.message-row.editing .message-actions { display: none; }
 
-@media (max-width: 520px) {
-  .message-edit__footer .message-edit__save,
-  .message-edit__footer .message-edit__cancel {
-    flex: 1 1 0;
-  }
-}
-
-.message-deleted {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  color: var(--muted);
-  font-size: 13px;
-  font-style: italic;
-}
+/* ---------- MARKDOWN (typography density) ---------- */
 
 .markdown {
   line-height: 1.5;
@@ -1845,93 +1322,62 @@
   word-break: break-word;
 }
 
-.markdown > :first-child {
-  margin-top: 0;
-}
-
-.markdown > :last-child {
-  margin-bottom: 0;
-}
-
-.markdown p {
-  margin: 0;
-}
-
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: 0; }
 .markdown p + p,
 .markdown ul,
 .markdown ol,
 .markdown blockquote,
-.markdown pre {
-  margin-top: 6px;
-}
-
-.markdown a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.markdown a:hover {
-  text-decoration: underline;
-}
+.markdown pre { margin-top: 6px; }
+.markdown a { color: var(--text-strong); text-decoration: underline; }
+.markdown a:hover { opacity: 0.8; }
 
 .message-mention {
   margin: 0 1px;
   padding: 0 3px;
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
   color: inherit;
   font-weight: 600;
 }
 
 .message-mention.is-current-user {
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
+  border-color: var(--line-strong);
+  background: var(--panel-3);
+  color: var(--text-strong);
   font-weight: 700;
 }
 
 .markdown code {
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 4px;
   padding: 1px 5px;
-  font-family:
-    "Geist Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-    monospace;
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
   font-size: 0.9em;
 }
 
 .markdown pre {
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   padding: 12px 14px;
   overflow-x: auto;
 }
 
-.markdown pre code {
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
+.markdown pre code { background: transparent; border: 0; padding: 0; }
 
 .markdown blockquote {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--line-strong);
   margin: 0;
   padding: 4px 0 4px 12px;
   color: var(--muted);
 }
 
 .markdown ul,
-.markdown ol {
-  padding-left: 22px;
-}
+.markdown ol { padding-left: 22px; }
 
 .markdown img {
-  max-width: 100%;
-  max-height: 360px;
-  border-radius: var(--radius);
+  max-width: 100%; max-height: 360px;
   margin-top: 6px;
   border: 1px solid var(--line);
   object-fit: contain;
@@ -1939,7 +1385,6 @@
   cursor: zoom-in;
 }
 
-/* Keep the native table box inside a dedicated horizontal scroller. */
 .markdown-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1948,27 +1393,15 @@
   margin-top: 6px;
 }
 
-.markdown-table-scroll[data-overflowing]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.markdown-table-scroll:first-child {
-  margin-top: 0;
-}
-
+.markdown-table-scroll:first-child { margin-top: 0; }
 .markdown-table-scroll > table {
-  width: max-content;
-  min-width: 100%;
+  width: max-content; min-width: 100%;
   border-collapse: collapse;
   border-spacing: 0;
   font-size: 0.9em;
 }
 
-.markdown thead {
-  background: var(--muted-2);
-}
-
+.markdown thead { background: var(--panel-3); }
 .markdown th,
 .markdown td {
   padding: 8px 12px;
@@ -1976,94 +1409,52 @@
   border: 1px solid var(--line);
 }
 
-.markdown thead th {
-  font-weight: 700;
-  color: var(--text-strong);
-}
+.markdown thead th { font-weight: 700; color: var(--text-strong); }
+.markdown tbody tr:nth-child(even) { background: var(--panel-2); }
+.markdown tbody tr:hover { background: var(--hover-strong); }
 
-.markdown tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--muted-2) 18%, transparent);
-}
+/* ---------- GIF ---------- */
 
-.markdown tbody tr:hover {
-  background: color-mix(in srgb, var(--muted-2) 26%, transparent);
-}
-
-.gif-player {
-  position: relative;
-  display: inline-block;
-  max-width: 100%;
-  vertical-align: top;
-}
-
-.gif-player img {
-  display: block;
-}
+.gif-player { position: relative; display: inline-block; max-width: 100%; vertical-align: top; }
+.gif-player img { display: block; }
 
 .gif-badge,
 .gif-replay {
-  position: absolute;
-  z-index: 1;
-  border: 0;
-  color: white;
-  backdrop-filter: blur(10px);
+  position: absolute; z-index: 1;
+  border: 0; color: var(--cog-white);
 }
 
 .gif-badge {
-  left: 9px;
-  bottom: 9px;
+  left: 9px; bottom: 9px;
   padding: 4px 7px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.54);
-  font-size: 10px;
-  font-weight: 800;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 10px; font-weight: 800;
   letter-spacing: 0.04em;
   pointer-events: none;
 }
 
 .gif-replay {
-  right: 9px;
-  bottom: 9px;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(10, 12, 18, 0.72);
-  font-size: 16px;
-  line-height: 1;
+  right: 9px; bottom: 9px;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 16px; line-height: 1;
   opacity: 0;
   transform: scale(0.88);
   pointer-events: none;
-  transition:
-    opacity 130ms ease,
-    transform 130ms ease,
-    background 120ms ease;
+  transition: opacity 130ms ease, transform 130ms ease;
 }
 
-.gif-replay:hover {
-  background: var(--accent);
-}
-
-.gif-player.paused .gif-replay {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-.gif-player.playing .gif-badge {
-  animation: gif-breathe 900ms ease-in-out infinite;
-}
+.gif-replay:hover { background: var(--cog-steel); }
+.gif-player.paused .gif-replay { opacity: 1; transform: scale(1); pointer-events: auto; }
+.gif-player.playing .gif-badge { animation: gif-breathe 900ms ease-in-out infinite; }
 
 @keyframes gif-breathe {
-  0%,
-  100% {
-    opacity: 0.85;
-  }
-  50% {
-    opacity: 0.45;
-  }
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.45; }
 }
+
+/* ---------- ATTACHMENTS ---------- */
 
 .attachment-grid {
   display: grid;
@@ -2082,62 +1473,34 @@
   position: relative;
   display: block;
   width: 100%;
-  margin: 0;
-  padding: 0;
+  margin: 0; padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: #0a0c12;
+  background: var(--cog-black);
   overflow: hidden;
   isolation: isolate;
   text-align: left;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+  transition: border-color 140ms ease;
 }
 
-.media-tile:hover {
-  border-color: var(--line-strong);
-  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.9);
-}
-
-.media-tile:focus-visible {
-  outline: none;
-  border-color: var(--line-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.media-tile--image {
-  cursor: zoom-in;
-}
+.media-tile:hover { border-color: var(--line-strong); }
+.media-tile--image { cursor: zoom-in; }
 
 .media-tile__open {
   display: block;
   width: 100%;
-  margin: 0;
-  padding: 0;
+  margin: 0; padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: zoom-in;
 }
 
-.media-tile__open:focus {
-  outline: 0;
-}
+.media-tile__open:focus { outline: 0; }
 
-.media-tile__open:focus-visible + .media-tile__caption .media-tile__name {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.media-tile--video {
-  cursor: default;
-}
+.media-tile--video { cursor: default; }
 
 .media-tile img,
 .media-tile video {
@@ -2145,12 +1508,10 @@
   width: 100%;
   max-height: 360px;
   object-fit: contain;
-  background: #05070d;
+  background: var(--cog-black);
 }
 
-.media-tile--image img {
-  max-height: 320px;
-}
+.media-tile--image img { max-height: 320px; }
 
 .media-tile__caption {
   position: absolute;
@@ -2160,155 +1521,76 @@
   align-items: center;
   gap: 8px;
   padding: 22px 10px 8px;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.78) 0%,
-    rgba(0, 0, 0, 0.5) 40%,
-    rgba(0, 0, 0, 0) 100%
-  );
+  background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
 }
 
-.media-tile__caption > * {
-  pointer-events: auto;
-}
-
+.media-tile__caption > * { pointer-events: auto; }
 .media-tile:hover .media-tile__caption,
-.media-tile:focus-within .media-tile__caption {
-  opacity: 1;
-}
-
-.media-tile--video.is-started .media-tile__caption {
-  display: none;
-}
+.media-tile:focus-within .media-tile__caption { opacity: 1; }
+.media-tile--video.is-started .media-tile__caption { display: none; }
 
 .media-tile__name {
-  flex: 1;
-  min-width: 0;
-  color: white;
-  font-size: 12px;
-  font-weight: 500;
+  flex: 1; min-width: 0;
+  color: var(--cog-white);
+  font-size: 12px; font-weight: 500;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 
 .media-tile__chip {
-  position: relative;
-  z-index: 4;
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
+  position: relative; z-index: 4;
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px;
   flex: none;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(10px);
+  background: rgba(0,0,0,0.5);
+  color: var(--cog-white);
+  border: 1px solid rgba(255,255,255,0.18);
   text-decoration: none;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .media-tile__chip:hover {
-  background: rgba(0, 0, 0, 0.7);
-  border-color: rgba(255, 255, 255, 0.32);
-  transform: translateY(-1px);
+  background: rgba(0,0,0,0.7);
+  border-color: rgba(255,255,255,0.32);
 }
 
 .media-tile__play {
   position: absolute;
   inset: 0 0 48px 0;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: auto;
-  border: 0;
-  margin: 0;
-  padding: 0;
+  display: grid; place-items: center;
+  width: 100%; height: auto;
+  border: 0; margin: 0; padding: 0;
   background: transparent;
   cursor: pointer;
   z-index: 1;
 }
 
-.media-tile__play::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.05) 45%,
-    rgba(0, 0, 0, 0) 70%
-  );
-  opacity: 0.7;
-  transition: opacity 160ms ease;
-  pointer-events: none;
-}
-
-.media-tile__play:hover::before {
-  opacity: 0.9;
-}
-
 .media-tile__play-icon {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.55);
-  padding-left: 3px; /* optical centering of the play glyph */
-  transition:
-    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background 180ms ease,
-    box-shadow 200ms ease;
-}
-
-.media-tile__play-icon svg {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  display: grid; place-items: center;
+  width: 46px; height: 46px;
+  background: rgba(0,0,0,0.55);
+  color: var(--cog-white);
+  padding-left: 3px;
+  transition: transform 200ms ease, background 180ms ease;
 }
 
 .media-tile__play:hover .media-tile__play-icon {
   transform: scale(1.06);
-  background: rgba(0, 0, 0, 0.7);
-  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.65);
-}
-
-.media-tile__play:active .media-tile__play-icon {
-  transform: scale(0.97);
-  transition-duration: 80ms;
-}
-
-.media-tile__play:focus-visible {
-  outline: none;
-}
-
-.media-tile__play:focus-visible .media-tile__play-icon {
-  box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.6),
-    0 10px 28px -10px rgba(0, 0, 0, 0.65);
+  background: rgba(0,0,0,0.7);
 }
 
 .media-tile__duration {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
+  left: 8px; bottom: 8px;
   z-index: 2;
   padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.72);
-  color: white;
+  background: rgba(0,0,0,0.72);
+  color: var(--cog-white);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -2323,7 +1605,6 @@
   max-width: 360px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   background: var(--panel);
 }
 
@@ -2333,57 +1614,29 @@
 }
 
 .file-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  background: var(--panel-2);
+  color: var(--text-strong);
   font-weight: 800;
 }
 
 .file-attachment strong,
-.file-attachment small {
-  display: block;
-}
-
-.file-attachment strong {
-  color: var(--text-strong);
-  font-size: 13px;
-}
-
-.file-attachment small {
-  color: var(--muted);
-  font-size: 11px;
-}
+.file-attachment small { display: block; }
+.file-attachment strong { color: var(--text-strong); font-size: 13px; }
+.file-attachment small { color: var(--muted); font-size: 11px; }
 
 .audio-attachment,
 .document-attachment {
   width: min(100%, 420px);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   background: var(--panel);
   overflow: hidden;
 }
 
-.audio-attachment {
-  display: grid;
-  gap: 10px;
-  padding: 10px;
-}
-
-.audio-attachment__meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.audio-attachment audio {
-  width: 100%;
-  height: 36px;
-}
+.audio-attachment { display: grid; gap: 10px; padding: 10px; }
+.audio-attachment__meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.audio-attachment audio { width: 100%; height: 36px; }
 
 .document-attachment {
   display: grid;
@@ -2395,89 +1648,41 @@
 
 .document-attachment__thumbnail {
   position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 64px;
-  height: 82px;
+  display: inline-grid; place-items: center;
+  width: 64px; height: 82px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, transparent 0 76%, var(--panel-3) 76% 100%),
-    linear-gradient(180deg, #fff 0%, #f0f2f7 100%);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0;
+  background: var(--ash);
+  color: var(--cog-black);
+  font-size: 13px; font-weight: 800;
   text-decoration: none;
   cursor: pointer;
   overflow: hidden;
-  box-shadow: 0 8px 18px -16px rgba(0, 0, 0, 0.6);
 }
 
-.document-attachment__thumbnail::before,
-.document-attachment__thumbnail::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  height: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 36%, transparent);
-}
-
-.document-attachment__thumbnail::before {
-  top: 48px;
-}
-
-.document-attachment__thumbnail::after {
-  top: 56px;
-}
-
-.document-attachment__meta {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
+.document-attachment__meta { display: grid; gap: 5px; min-width: 0; }
 
 .document-attachment__title {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  width: 100%; padding: 0;
+  border: 0; background: transparent;
   min-width: 0;
   color: var(--text-strong);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 13px; font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: hidden; text-overflow: ellipsis;
   text-align: left;
   cursor: pointer;
 }
 
-.document-attachment__title:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.document-attachment__meta small {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
+.document-attachment__title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.document-attachment__meta small { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
 .document-attachment__download {
-  display: inline-grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  display: inline-grid; place-items: center;
+  width: 30px; height: 30px;
   color: var(--muted);
   text-decoration: none;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .document-attachment__download:hover {
@@ -2485,296 +1690,101 @@
   color: var(--text-strong);
 }
 
-@media (max-width: 520px) {
-  .message-group {
-    grid-template-columns: 44px minmax(0, 1fr);
-    padding: 7px 12px;
-  }
+/* ---------- DENSITY & ALIGNMENT (preserved from original) ---------- */
 
-  /* Keep the right-adjusted self layout aligned to the same 44px avatar gutter
-     the rest of the mobile list uses, instead of the desktop 56px column. */
-  :root[data-user-align="right"] .message-group.is-self,
-  :root[data-other-align="right"] .message-group:not(.is-self) {
-    grid-template-columns: minmax(0, 1fr) 44px;
-  }
-
-  .message-row {
-    margin-left: -44px;
-    margin-right: -12px;
-    padding-left: 44px;
-    padding-right: 12px;
-  }
-
-  :root[data-user-align="right"] .message-group.is-self .message-row,
-  :root[data-other-align="right"] .message-group:not(.is-self) .message-row {
-    margin-left: -12px;
-    margin-right: -44px;
-    padding-left: 12px;
-    padding-right: 44px;
-  }
-
-  .message-group .group-body > header {
-    margin-left: -44px;
-    margin-right: -12px;
-    padding-left: 44px;
-    padding-right: 12px;
-  }
-
-  :root[data-user-align="right"] .message-group.is-self .group-body > header,
-  :root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
-    margin-left: -12px;
-    margin-right: -44px;
-    padding-left: 12px;
-    padding-right: 44px;
-  }
-
-  .row-stamp {
-    display: none;
-  }
-
-  .attachment-grid,
-  .attachment-grid.compact {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 100%;
-  }
+:root[data-user-align="right"] .message-group.is-self,
+:root[data-other-align="right"] .message-group:not(.is-self) {
+  grid-template-columns: minmax(0, 1fr) 56px;
+}
+:root[data-user-align="right"] .message-group.is-self > .avatar,
+:root[data-other-align="right"] .message-group:not(.is-self) > .avatar {
+  grid-column: 2; grid-row: 1; justify-self: end;
+}
+:root[data-user-align="right"] .message-group.is-self > .group-body,
+:root[data-other-align="right"] .message-group:not(.is-self) > .group-body {
+  grid-column: 1; grid-row: 1; min-width: 0;
+}
+:root[data-user-align="right"] .message-group.is-self .group-body > header,
+:root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
+  justify-content: flex-end;
+  margin: 0 -56px 0 -18px;
+  padding: 0 56px 2px 18px;
+}
+:root[data-user-align="right"] .message-group.is-self .message-row,
+:root[data-other-align="right"] .message-group:not(.is-self) .message-row {
+  margin-left: -18px; margin-right: -56px;
+  padding-left: 18px; padding-right: 56px;
+}
+:root[data-user-align="right"] .message-group.is-self .message-content,
+:root[data-other-align="right"] .message-group:not(.is-self) .message-content {
+  margin-left: auto; text-align: right;
+}
+:root[data-user-align="right"] .message-group.is-self .markdown,
+:root[data-other-align="right"] .message-group:not(.is-self) .markdown {
+  text-align: right;
 }
 
-/* Optional outlined-chain layout. The standard layout above remains the
-   default; this device-local appearance mode gives every participant a clear
-   message boundary and lets one agent turn read as a single two-part chain.
-   Final-only agent messages use the same delivery width as chained answers,
-   so a turn does not shrink merely because it emitted activity first. */
-:root[data-message-layout="outlined"] .message-group .group-body {
-  width: 100%;
-}
-
+/* Outlined layout (preserved) */
+:root[data-message-layout="outlined"] .message-group .group-body { width: 100%; }
 :root[data-message-layout="outlined"] .message-group .message-row {
-  margin-left: 0;
-  margin-right: 0;
-  padding: 0;
+  margin-left: 0; margin-right: 0; padding: 0;
 }
-
-/* Outlined rows carry their own borders; the header stays inside the content
-   column with them. */
 :root[data-message-layout="outlined"] .message-group .group-body > header {
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0;
-  padding-right: 0;
+  margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0;
 }
-
-:root[data-message-layout="outlined"][data-user-align="right"]
-  .message-group.is-self
-  .message-content,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .message-content,
-:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .markdown,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .markdown {
-  text-align: start;
-}
-
-:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .thread-hint,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .thread-hint {
-  display: flex;
-  width: fit-content;
-  margin-left: auto;
-}
-
-/* The standard row extends into the avatar gutter, where its hover timestamp
-   naturally lives. Outlined rows no longer extend, so keep the timestamp in
-   that same gutter explicitly instead of letting it overlap the boundary. */
-:root[data-message-layout="outlined"] .message-group .row-stamp {
-  left: -48px;
-}
-
-:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .row-stamp,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .row-stamp {
-  right: -48px;
-  left: auto;
-}
-
-:root[data-message-layout="outlined"] .message-group .message-row:not(:first-child) {
-  margin-top: 4px;
-}
-
 :root[data-message-layout="outlined"] .message-group .message-content {
   position: relative;
   width: fit-content;
   max-width: min(96%, 1100px);
   margin-top: 2px;
   padding: 10px 14px;
-  border-radius: var(--radius-lg);
 }
-
-/* Outlined mode adds a theme-native boundary to ordinary messages without
-   replacing any role or board surface. Agent activity and delivered-answer
-   bubbles keep the fills, accents, and shadows defined by the active theme. */
-:root[data-message-layout="outlined"]
-  .message-group
-  .message-row:not(.is-preamble):not(.after-preamble)
-  .message-content {
-  border: 1px solid var(--line-strong);
+:root[data-message-layout="outlined"] .message-group .message-row:not(.is-preamble):not(.after-preamble) .message-content {
+  border: 1px solid var(--line);
 }
+:root[data-message-layout="outlined"] .message-group.is-agent .message-content { width: 96%; max-width: 1100px; }
+:root[data-message-layout="outlined"] .message-group .message-row.before-final-message + .message-row.after-preamble { margin-top: -1px; }
 
-:root[data-message-layout="outlined"] .message-group.is-agent .message-content {
-  width: 96%;
-  max-width: 1100px;
-}
-
-/* The completed amber preamble and its adjacent final answer share an outline.
-   The negative seam overlaps the two hairlines without hiding either state. */
-:root[data-message-layout="outlined"]
-  .message-group
-  .message-row.before-final-message
-  + .message-row.after-preamble {
-  margin-top: -1px;
-}
-
-:root[data-message-layout="outlined"]
-  .message-group.is-agent
-  .message-row.before-final-message
-  .message-content {
-  border-bottom-right-radius: 0;
-  border-bottom-left-radius: 0;
-}
-
-:root[data-message-layout="outlined"]
-  .message-group.is-agent
-  .message-row.after-preamble
-  .message-content {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-
-/* ---------- Density: compact ---------- */
-
-/* Compact tightens the message list: a narrower avatar gutter, tighter row
-   padding, and slightly smaller type fit roughly a third more messages on
-   screen. Comfortable is the default and sets no data attribute. The
-   .message-row indent mirrors the .message-group gutter, so the two must
-   change together. */
+/* Compact density */
 :root[data-density="compact"] .message-group {
   grid-template-columns: 42px minmax(0, 1fr);
   padding: 2px 18px;
 }
-
 :root[data-density="compact"][data-user-align="right"] .message-group.is-self,
 :root[data-density="compact"][data-other-align="right"] .message-group:not(.is-self) {
   grid-template-columns: minmax(0, 1fr) 42px;
 }
-
 :root[data-density="compact"] .message-group > .avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 26px; height: 26px;
   font-size: 11px;
 }
-
-:root[data-density="compact"] .group-body > header {
-  gap: 6px;
-  margin-bottom: 0;
-}
-
+:root[data-density="compact"] .group-body > header { gap: 6px; margin-bottom: 0; }
 :root[data-density="compact"] .message-group .group-body > header {
-  margin-left: -42px;
-  padding-left: 42px;
+  margin-left: -42px; padding-left: 42px;
 }
-
-:root[data-density="compact"][data-user-align="right"] .message-group.is-self .group-body > header,
-:root[data-density="compact"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .group-body
-  > header {
-  margin-left: -18px;
-  margin-right: -42px;
-  padding-left: 18px;
-  padding-right: 42px;
-}
-
 :root[data-density="compact"] .group-body > header strong,
-:root[data-density="compact"] .author-name {
-  font-size: 13px;
-}
+:root[data-density="compact"] .author-name { font-size: 13px; }
+:root[data-density="compact"] .group-body > header time { font-size: 10px; }
+:root[data-density="compact"] .message-row { margin-left: -42px; padding-left: 42px; }
+:root[data-density="compact"] .markdown { font-size: 13.5px; line-height: 1.42; }
 
-:root[data-density="compact"] .group-body > header time {
-  font-size: 10px;
-}
-
-:root[data-density="compact"] .message-row {
-  margin-left: -42px;
-  padding-left: 42px;
-}
-
-:root[data-density="compact"][data-user-align="right"] .message-group.is-self .message-row,
-:root[data-density="compact"][data-other-align="right"] .message-group:not(.is-self) .message-row {
-  margin-left: -18px;
-  margin-right: -42px;
-  padding-left: 18px;
-  padding-right: 42px;
-}
-
-:root[data-density="compact"] .markdown {
-  font-size: 13.5px;
-  line-height: 1.42;
-}
-
-:root[data-density="compact"] .reactions-bar {
-  margin-top: 2px;
-}
-
-/* Outlined rows live entirely inside the content column. Keep that invariant
-   when compact density is also active instead of restoring the standard
-   avatar-gutter indent through the generic compact rule above. */
-:root[data-density="compact"][data-message-layout="outlined"] .message-group .message-row {
-  margin-left: 0;
-  padding-left: 0;
-}
-
-:root[data-density="compact"][data-message-layout="outlined"] .message-group .row-stamp {
-  left: -34px;
-}
-
-:root[data-density="compact"][data-message-layout="outlined"][data-user-align="right"]
-  .message-group.is-self
-  .row-stamp,
-:root[data-density="compact"][data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .row-stamp {
-  right: -34px;
-  left: auto;
-}
+/* ---------- RESPONSIVE ---------- */
 
 @media (max-width: 520px) {
-  :root[data-density="compact"] .message-group {
-    padding-right: 12px;
-    padding-left: 12px;
+  .message-group {
+    grid-template-columns: 44px minmax(0, 1fr);
+    padding: 7px 12px;
   }
-}
-
-/* Outlined rows and headers never bleed into the gutters, in any alignment or
-   density combination. Kept last so it outranks the standard and compact
-   right-aligned bleed rules above. */
-:root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .message-row,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .message-row,
-:root[data-message-layout="outlined"][data-user-align="right"]
-  .message-group.is-self
-  .group-body
-  > header,
-:root[data-message-layout="outlined"][data-other-align="right"]
-  .message-group:not(.is-self)
-  .group-body
-  > header {
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0;
-  padding-right: 0;
+  :root[data-user-align="right"] .message-group.is-self,
+  :root[data-other-align="right"] .message-group:not(.is-self) {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .message-row { margin-left: -44px; margin-right: -12px; padding-left: 44px; padding-right: 12px; }
+  .message-group .group-body > header {
+    margin-left: -44px; margin-right: -12px;
+    padding-left: 44px; padding-right: 12px;
+  }
+  .row-stamp { display: none; }
+  .attachment-grid,
+  .attachment-grid.compact { grid-template-columns: minmax(0, 1fr); max-width: 100%; }
 }

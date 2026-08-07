@@ -228,6 +228,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/messages/by-nonce", s.getMessageByNonce)
 		r.Get("/messages/{message_id}", s.getMessage)
 		r.Patch("/messages/{message_id}", s.updateMessage)
+		r.Patch("/messages/{message_id}/metadata", s.updateMessageMetadata)
 		r.Delete("/messages/{message_id}", s.deleteMessage)
 		r.Get("/messages/{message_id}/thread", s.getThread)
 		r.Post("/messages/{message_id}/thread/replies", s.createThreadReply)

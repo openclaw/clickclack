@@ -65,11 +65,11 @@
           onclick={onToggleChannelNotifications}
         >
           {#if channelNotifPreference === "muted"}
-            <span aria-hidden="true">🔕</span>
+            <span aria-hidden="true">M</span>
           {:else if channelNotifPreference === "mentions"}
             <span aria-hidden="true">@</span>
           {:else}
-            <span aria-hidden="true">🔔</span>
+            <span aria-hidden="true">A</span>
           {/if}
         </button>
       {/if}

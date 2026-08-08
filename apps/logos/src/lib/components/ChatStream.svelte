@@ -61,6 +61,13 @@
     model: string | null;
     loading: boolean;
     clarificationQuestion: string | null;
+    followups: string[];
+    memoryPreview: Array<{
+      id: string;
+      content: string;
+      score?: number;
+      tags?: string[];
+    }>;
   } | null>(null);
   let notice = $state<string | null>(null);
 
@@ -406,6 +413,18 @@
       }));
   }
 
+  function buildMemoryHintIds(): string[] | undefined {
+    const anchors = snapshot.messages
+      .slice(-10)
+      .flatMap((message) => {
+        const meta = messageMeta(message as Record<string, unknown>);
+        return Array.isArray(meta.memory_citations) ? meta.memory_citations : [];
+      })
+      .filter((value, index, all) => typeof value === "string" && all.indexOf(value) === index)
+      .slice(-3);
+    return anchors.length > 0 ? anchors : undefined;
+  }
+
   async function handleSuggestReply() {
     const text = composerText.trim();
     if (!text) return;
@@ -415,12 +434,15 @@
       model: null,
       loading: true,
       clarificationQuestion: null,
+      followups: [],
+      memoryPreview: [],
     };
 
     const result = await respond({
       content: text,
       persona,
       context_messages: buildContextMessages(),
+      memory_hint_ids: buildMemoryHintIds(),
     });
 
     if (!result) {
@@ -429,6 +451,8 @@
         model: null,
         loading: false,
         clarificationQuestion: null,
+        followups: [],
+        memoryPreview: [],
       };
       return;
     }
@@ -438,6 +462,13 @@
       model: result.meta?.model ?? null,
       loading: false,
       clarificationQuestion: result.clarification_question ?? null,
+      followups: result.suggested_followups ?? [],
+      memoryPreview: result.meta?.memory_previews?.map((preview) => ({
+        id: preview.id,
+        content: preview.content,
+        ...(typeof preview.score === "number" ? { score: preview.score } : {}),
+        ...(preview.tags?.length ? { tags: preview.tags } : {}),
+      })) ?? [],
     };
   }
 
@@ -730,6 +761,39 @@
             }}
           />
         {/if}
+        {#if companionSuggestion.memoryPreview.length > 0}
+          <div class="cs-companion-memory">
+            <div class="cs-companion-section-label logos-mono">MEMORY CONTEXT</div>
+            {#each companionSuggestion.memoryPreview as preview (preview.id)}
+              <div class="cs-companion-memory-card">
+                <div class="cs-companion-memory-meta logos-mono">
+                  #NODE-{preview.id.slice(0, 8)}{#if preview.score !== undefined} · {(preview.score * 100).toFixed(0)}%{/if}
+                  {#if preview.tags?.length} · {preview.tags.join(" · ")}{/if}
+                </div>
+                <div class="cs-companion-memory-body">{preview.content}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+        {#if companionSuggestion.followups.length > 0}
+          <div class="cs-companion-followups">
+            <div class="cs-companion-section-label logos-mono">FOLLOW-UPS</div>
+            <div class="cs-companion-chip-row">
+              {#each companionSuggestion.followups as followup (followup)}
+                <button
+                  type="button"
+                  class="cs-companion-chip"
+                  onclick={() => {
+                    composerText = followup;
+                    composerRef?.focus();
+                  }}
+                >
+                  {followup}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
         <div class="cs-companion-footer logos-mono">
           <span>
             COMPANION REPLY{companionSuggestion.model ? ` · MODEL: ${companionSuggestion.model}` : ""}
@@ -964,6 +1028,63 @@
     white-space: pre-wrap;
     color: var(--text);
     border-left: 2px solid var(--accent-thread);
+  }
+
+  .cs-companion-memory,
+  .cs-companion-followups {
+    padding: 0 14px 12px;
+  }
+
+  .cs-companion-section-label {
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.05em;
+  }
+
+  .cs-companion-memory-card {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-3) 74%, transparent);
+  }
+
+  .cs-companion-memory-meta {
+    margin-bottom: 6px;
+    color: var(--accent-thread);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+
+  .cs-companion-memory-body {
+    color: var(--text-soft);
+    line-height: 1.55;
+  }
+
+  .cs-companion-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cs-companion-chip {
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-raised) 86%, transparent);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    line-height: 1.2;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cs-companion-chip:hover {
+    background: color-mix(in srgb, var(--accent-thread) 12%, var(--panel-raised));
+    color: var(--text-strong);
   }
 
   .cs-companion-footer {

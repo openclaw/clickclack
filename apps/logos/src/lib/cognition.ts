@@ -63,11 +63,13 @@ export interface RespondRequest {
   persona?: string;
   intent?: string;
   context_messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  memory_hint_ids?: string[];
 }
 
 export interface RespondResult {
   content: string;
   clarification_question?: string;
+  suggested_followups?: string[];
   meta: {
     intent: string;
     persona: string;
@@ -75,6 +77,13 @@ export interface RespondResult {
     model: string;
     latency_ms: number;
     memory_citations?: string[];
+    memory_previews?: Array<{
+      id: string;
+      content: string;
+      score?: number;
+      source_message_id?: string;
+      tags?: string[];
+    }>;
     execution_stack: string[];
   };
 }

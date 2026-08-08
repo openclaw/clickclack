@@ -189,6 +189,8 @@ export interface RespondRequest {
   intent?: Intent;
   /** Recent conversation context for the LLM */
   context_messages?: { role: "user" | "assistant"; content: string }[];
+  /** Related memory anchor ids the caller wants weighted in the reply. */
+  memory_hint_ids?: string[];
 }
 
 /** POST /respond response */
@@ -197,6 +199,8 @@ export interface RespondResult {
   content: string;
   /** Clarifying question surfaced when the input is ambiguous. */
   clarification_question?: string;
+  /** Short operational follow-ups the UI can surface beside the reply. */
+  suggested_followups?: string[];
   meta: {
     intent: Intent;
     persona: Persona;
@@ -205,6 +209,14 @@ export interface RespondResult {
     latency_ms: number;
     /** Top-k memory node IDs relevant to the input (ask/command intents only) */
     memory_citations?: string[];
+    /** Preview snippets from the memory nodes actually pulled into context. */
+    memory_previews?: Array<{
+      id: string;
+      content: string;
+      score?: number;
+      source_message_id?: string;
+      tags?: string[];
+    }>;
     /** Steps actually executed in order */
     execution_stack: string[];
   };

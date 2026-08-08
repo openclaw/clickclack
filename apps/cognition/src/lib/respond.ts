@@ -17,7 +17,6 @@ import type {
   Persona,
   RespondRequest,
   RespondResult,
-  Telemetry,
 } from "../types.js";
 import { INTENTS, PERSONAS } from "../types.js";
 import { getPersonaDef } from "./personas.js";
@@ -235,6 +234,56 @@ function buildStyleInstruction(style: StyleResult): string {
     style.instruction;
 }
 
+function buildIntentInstruction(intent: Intent): string {
+  switch (intent) {
+    case "ask":
+      return "INTENT MODE: Answer directly first. Add only the most decision-relevant nuance, constraint, or next move.";
+    case "command":
+      return "INTENT MODE: Convert the request into execution. Lead with the action or deliverable, then sequence the essentials.";
+    case "draft":
+      return "INTENT MODE: Produce usable language, not commentary about language. Deliver polished draft output by default.";
+    case "clarify":
+      return "INTENT MODE: Reduce ambiguity. State the likely interpretation, isolate uncertainty, and ask the highest-value clarifying question only if needed.";
+    case "explore":
+      return "INTENT MODE: Generate multiple viable directions, compare trade-offs, and converge toward the strongest option.";
+    case "reflect":
+    default:
+      return "INTENT MODE: Help the user think clearly. Synthesize signal, expose tensions, and move toward a crisp insight.";
+  }
+}
+
+function buildContextBlock(title: string, items: string[]): string {
+  if (items.length === 0) return "";
+  return `\n\n${title}:\n${items.map((item, index) => `${index + 1}. ${item}`).join("\n")}`;
+}
+
+function deriveFollowups(intent: Intent, content: string): string[] {
+  const compact = content.replace(/\s+/g, " ").trim();
+  if (!compact) return ["Summarize the core point in one sentence"];
+
+  const segments = compact
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 12)
+    .slice(0, 3);
+
+  const followups = new Set<string>();
+  for (const segment of segments) {
+    const cleaned = segment.replace(/^[-*]\s*/, "").replace(/[.?!]+$/, "");
+    if (intent === "draft") {
+      followups.add(`Rewrite this with a sharper tone: ${cleaned}`);
+    } else if (intent === "explore") {
+      followups.add(`Push this direction further: ${cleaned}`);
+    } else if (intent === "command") {
+      followups.add(`Turn this into a checklist: ${cleaned}`);
+    } else {
+      followups.add(`Pressure-test this point: ${cleaned}`);
+    }
+  }
+
+  return Array.from(followups).slice(0, 3);
+}
+
 // ─── Respond handler ─────────────────────────────────────────────────────────
 
 export async function handleRespond(
@@ -264,19 +313,40 @@ export async function handleRespond(
   const personaDef = getPersonaDef(persona);
   executionStack.push("persona_engine()");
 
-  // 4. Memory retrieval (ask/command only)
+  // 4. Memory retrieval (weighted for ask/command, but available when hinted)
   let memoryCitations: string[] | undefined;
+  let memoryPreviews: RespondResult["meta"]["memory_previews"];
+  let memoryContextLines: string[] = [];
   if (
-    (intent === "ask" || intent === "command") &&
-    store
+    store &&
+    (intent === "ask" || intent === "command" || (req.memory_hint_ids?.length ?? 0) > 0)
   ) {
     try {
-      const nodes = await store.queryAnchors(req.content, 3);
-      const citations = nodes
-        .filter((n) => (n.score ?? 0) > 0.4)
-        .map((n) => n.id);
-      if (citations.length > 0) {
-        memoryCitations = citations;
+      const hintIds = new Set(req.memory_hint_ids ?? []);
+      const nodes = await store.queryAnchors(req.content, 5);
+      const selected = nodes
+        .filter((node) => hintIds.has(node.id) || (node.score ?? 0) > 0.32)
+        .sort((a, b) => {
+          const aHint = hintIds.has(a.id) ? 1 : 0;
+          const bHint = hintIds.has(b.id) ? 1 : 0;
+          if (aHint !== bHint) return bHint - aHint;
+          return (b.score ?? 0) - (a.score ?? 0);
+        })
+        .slice(0, 3);
+      if (selected.length > 0) {
+        memoryCitations = selected.map((node) => node.id);
+        memoryPreviews = selected.map((node) => ({
+          id: node.id,
+          content: node.content.slice(0, 220),
+          ...(typeof node.score === "number" ? { score: node.score } : {}),
+          ...(node.source_message_id ? { source_message_id: node.source_message_id } : {}),
+          ...(node.tags?.length ? { tags: node.tags } : {}),
+        }));
+        memoryContextLines = selected.map((node) => {
+          const score = typeof node.score === "number" ? ` score=${node.score.toFixed(3)}` : "";
+          const tags = node.tags?.length ? ` tags=${node.tags.join(",")}` : "";
+          return `#NODE-${node.id.slice(0, 8)}${score}${tags} :: ${node.content.slice(0, 180)}`;
+        });
       }
       executionStack.push("memory_retrieval()");
     } catch (err) {
@@ -284,10 +354,19 @@ export async function handleRespond(
     }
   }
 
-  // 5. Build system prompt: persona + mirror instruction + context
+  // 5. Build system prompt: persona + mirror instruction + intent + context
   const styleInstruction = buildStyleInstruction(style);
+  const intentInstruction = buildIntentInstruction(intent);
+  const memoryBlock = buildContextBlock("RELEVANT MEMORY", memoryContextLines);
+  const conversationBlock = buildContextBlock(
+    "RECENT CONVERSATION",
+    (req.context_messages ?? [])
+      .slice(-6)
+      .map((message) => `${message.role.toUpperCase()}: ${message.content.slice(0, 220)}`),
+  );
   const systemPrompt = personaDef.systemPrompt + "\n\n---\n\n" + styleInstruction +
-    "\n\nPROTOCOL: Respond naturally as the companion. Do NOT wrap your answer in JSON. Do NOT mention the style mirroring or persona unless directly relevant to the question. Just respond in the requested style.";
+    "\n\n" + intentInstruction + memoryBlock + conversationBlock +
+    "\n\nPROTOCOL: Respond naturally as the companion. Lead with the answer or action. Use memory context only when it genuinely sharpens the reply. Do NOT fabricate prior context. Do NOT wrap your answer in JSON. Do NOT mention the style mirroring or persona unless directly relevant to the question.";
 
   // 6. LLM chat — generate the actual reply
   let content: string;
@@ -315,6 +394,7 @@ export async function handleRespond(
   return {
     content,
     ...(clarificationQuestion ? { clarification_question: clarificationQuestion } : {}),
+    suggested_followups: deriveFollowups(intent, content),
     meta: {
       intent,
       persona,
@@ -322,6 +402,7 @@ export async function handleRespond(
       model,
       latency_ms: latencyMs,
       memory_citations: memoryCitations,
+      memory_previews: memoryPreviews,
       execution_stack: executionStack,
     },
   };

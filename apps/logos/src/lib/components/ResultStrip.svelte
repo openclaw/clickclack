@@ -36,6 +36,12 @@
       memnode: "MEM-NODE",
       rewrite: "REWRITE",
       memory: "MEMORY QUERY",
+      checklist: "CHECKLIST",
+      plan: "PLAN",
+      extract: "EXTRACT",
+      diagnose: "DIAGNOSE",
+      counterargument: "COUNTERARGUMENT",
+      invert: "INVERT",
     };
     return map[op] ?? op.toUpperCase();
   });

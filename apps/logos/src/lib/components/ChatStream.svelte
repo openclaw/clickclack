@@ -235,7 +235,17 @@
   // ── Action rail wiring: transforms + memory ────────────────────
 
   interface TransformEventDetail {
-    op: "summarize" | "condense" | "expand" | "rewrite";
+    op:
+      | "summarize"
+      | "condense"
+      | "expand"
+      | "rewrite"
+      | "checklist"
+      | "plan"
+      | "extract"
+      | "diagnose"
+      | "counterargument"
+      | "invert";
     messageId: string;
   }
 

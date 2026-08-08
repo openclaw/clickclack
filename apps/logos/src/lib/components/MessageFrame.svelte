@@ -99,7 +99,19 @@
     onInspect?.(message);
   }
 
-  function handleTransform(op: "summarize" | "condense" | "expand" | "rewrite") {
+  function handleTransform(
+    op:
+      | "summarize"
+      | "condense"
+      | "expand"
+      | "rewrite"
+      | "checklist"
+      | "plan"
+      | "extract"
+      | "diagnose"
+      | "counterargument"
+      | "invert",
+  ) {
     dispatch("onTransform", { op, messageId: message.id });
   }
 
@@ -176,6 +188,24 @@
       </button>
       <button type="button" class="msg-action-btn" onclick={handleAnchor}>
         ANCHOR
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("checklist")}>
+        CHECKLIST
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("plan")}>
+        PLAN
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("extract")}>
+        EXTRACT
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("diagnose")}>
+        DIAGNOSE
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("counterargument")}>
+        COUNTER
+      </button>
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("invert")}>
+        INVERT
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("rewrite")}>
         REWRITE

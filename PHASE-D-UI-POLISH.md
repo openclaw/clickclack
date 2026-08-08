@@ -2,7 +2,7 @@
 
 **Prepared by:** RINCON — 2026-08-07 20:36 MDT
 **For:** GitHub Copilot CLI / VS Code CLI
-**Repo:** `CatabolicSolutions/clickclack`, branch `cognitive-os` (canonical commit **`c1c9539`**)
+**Repo:** `CatabolicSolutions/clickclack`, branch `cognitive-os` (canonical commit **`ac777ee`**)
 **Auth:** Copilot CLI (device flow) or VS Code CLI — no codex, ever.
 **Cost:** deepseek-v4-pro subagents default; frontier only for design review.
 
@@ -10,11 +10,11 @@
 
 ## 0. CURRENT STATE / HOW WE GOT HERE (read first — do not skip)
 
-- `git fetch origin` first. Canonical state = commit **`c1c9539`**; BOTH
+- `git fetch origin` first. Canonical state = commit **`ac777ee`**; BOTH
   `cognitive-os` and `catabolicsolutions-logos-phase-bc` point there and are
   identical. Your local worktree may be behind and may contain pre-existing
   uncommitted churn (line-ending noise) — do NOT commit or build from that
-  dirty state; hard-reset/checkout the fetched `c1c9539` before starting.
+  dirty state; hard-reset/checkout the fetched `ac777ee` before starting.
 - **What's live right now:** `https://app.catabolicsolutions.com/logos` serves
   the LOGOS SPA (droplet :8788, `logos-app.service`) + cognition service
   (droplet :8787, `logos-cognition.service`), routed by the Cloudflare worker
@@ -25,7 +25,7 @@
   **blank-page fix**: `paths.base='/logos'` in `apps/logos/svelte.config.js`
   (root-relative `base:''` made browsers fetch `/_app/...` which the worker
   doesn't route → all assets 404 → blank page; fixed + deployed + verified
-  assets 200 under `/logos/_app/...`) → `c1c9539` this directive.
+  assets 200 under `/logos/_app/...`) → `ac777ee` this directive.
 - **Do NOT regress:** the `/logos` base fix is committed AND live. If a build
   reverts `base:''`, the app goes blank again. The metadata PATCH contract
   (PATCH /api/messages/{id}, intent/persona/confidence/transform_history) is

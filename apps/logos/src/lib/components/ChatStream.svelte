@@ -30,8 +30,8 @@
   import InspectorBlade from "$lib/components/InspectorBlade.svelte";
   import ResultStrip from "$lib/components/ResultStrip.svelte";
   import ClarificationPrompt from "$lib/components/ClarificationPrompt.svelte";
-  import { activeMessageId, currentPersona } from "$lib/ui";
-  import { transform, memoryQuery, respond } from "$lib/cognition";
+  import { activeMessageId, currentPersona, operatorNotice } from "$lib/ui";
+  import { transform, memoryAnchor, memoryQuery, respond } from "$lib/cognition";
 
   // ── Local state ──────────────────────────────────────────────
 
@@ -62,6 +62,7 @@
     loading: boolean;
     clarificationQuestion: string | null;
   } | null>(null);
+  let notice = $state<string | null>(null);
 
   // ── Derived from chatState ───────────────────────────────────
 
@@ -78,6 +79,16 @@
     });
     return unsub;
   });
+  $effect(() => {
+    const unsub = operatorNotice.subscribe((value) => {
+      notice = value;
+      if (!value) return;
+      window.setTimeout(() => {
+        operatorNotice.update((current) => (current === value ? null : current));
+      }, 2000);
+    });
+    return unsub;
+  });
 
   let persona = $state("operator");
   $effect(() => {
@@ -90,6 +101,40 @@
   function messageMeta(msg: Record<string, unknown>): MessageMetadata {
     return readMessageMetadata(msg);
   }
+
+  const activeWorkspaceName = $derived(
+    snapshot.workspaces.find((workspace) => workspace.id === snapshot.activeWorkspaceId)?.name ?? null,
+  );
+  const activeChannelName = $derived(
+    snapshot.channels.find((channel) => channel.id === snapshot.activeChannelId)?.name ?? null,
+  );
+  const connectionLabel = $derived(
+    snapshot.status === "booting"
+      ? "CONNECTING"
+      : snapshot.status === "error"
+        ? "DEGRADED"
+        : snapshot.realtime === "ws"
+          ? "LIVE WS"
+          : "LIVE POLL",
+  );
+  const readyHint = $derived.by(() => {
+    if (snapshot.status === "booting") {
+      return "Resolving ClickClack session, workspace, and channel context…";
+    }
+    if (snapshot.status === "error") {
+      return "Check auth/session state or switch workspace/channel context.";
+    }
+    if (!snapshot.activeWorkspaceId) {
+      return "No workspace selected yet. Pick a workspace to activate LOGOS.";
+    }
+    if (!snapshot.activeChannelId) {
+      return "Workspace loaded. Pick a channel to begin the cognitive stream.";
+    }
+    if (snapshot.messages.length === 0) {
+      return "Channel ready. Send a first message to trigger analysis, transforms, and memory surfaces.";
+    }
+    return null;
+  });
 
   function metaLine(msg: { body?: string } & Record<string, unknown>): string {
     const m = messageMeta(msg);
@@ -299,6 +344,21 @@
     activeTransforms = new Map(activeTransforms);
   }
 
+  async function handleAnchorEvent(detail: { messageId: string }) {
+    const msg = snapshot.messages.find((m) => m.id === detail.messageId);
+    if (!msg) return;
+    const body = (msg as Record<string, unknown>).body;
+    if (typeof body !== "string" || !body.trim()) return;
+
+    operatorNotice.set("Anchoring message into semantic memory…");
+    const result = await memoryAnchor(body, detail.messageId);
+    if (result?.id) {
+      operatorNotice.set(`Memory anchor created: #NODE-${result.id.slice(0, 8)}`);
+      return;
+    }
+    operatorNotice.set("Memory anchor failed.");
+  }
+
   function dismissTransform(messageId: string) {
     activeTransforms.delete(messageId);
     activeTransforms = new Map(activeTransforms);
@@ -308,6 +368,11 @@
     appliedOverrides.set(messageId, content);
     appliedOverrides = new Map(appliedOverrides);
     dismissTransform(messageId);
+  }
+
+  function useTransformAsDraft(content: string) {
+    composerText = content;
+    composerRef?.focus();
   }
 
   // ── Clarification handling ─────────────────────────────────────
@@ -461,6 +526,13 @@
     }
   }
 
+  function handleBubbledAnchor(e: Event) {
+    const ce = e as CustomEvent<{ messageId: string }>;
+    if (ce.detail?.messageId) {
+      void handleAnchorEvent(ce.detail);
+    }
+  }
+
   onMount(() => {
     boot();
 
@@ -469,6 +541,7 @@
     if (listEl) {
       listEl.addEventListener("onTransform", handleBubbledTransform);
       listEl.addEventListener("onMemory", handleBubbledMemory);
+      listEl.addEventListener("onAnchor", handleBubbledAnchor);
     }
 
     // Focus the message list for keyboard nav
@@ -478,6 +551,7 @@
   onDestroy(() => {
     messageListRef?.removeEventListener("onTransform", handleBubbledTransform);
     messageListRef?.removeEventListener("onMemory", handleBubbledMemory);
+    messageListRef?.removeEventListener("onAnchor", handleBubbledAnchor);
   });
 </script>
 
@@ -509,14 +583,22 @@
       {/each}
     </div>
     <span class="cs-spacer"></span>
+    {#if activeWorkspaceName}
+      <span class="cs-context" title={activeChannelName ? `${activeWorkspaceName} / ${activeChannelName}` : activeWorkspaceName}>
+        {activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}
+      </span>
+    {/if}
     {#if snapshot.status === "booting"}
       <span class="cs-status-booting">CONNECTING…</span>
     {:else if snapshot.status === "error"}
       <span class="cs-status-error" title={snapshot.error ?? ""}>ERR</span>
     {:else if snapshot.activeChannelId}
-      <span class="cs-status-ready accent-verified">LIVE</span>
+      <span class="cs-status-ready accent-verified">{connectionLabel}</span>
     {/if}
   </div>
+  {#if notice}
+    <div class="cs-notice logos-mono">{notice}</div>
+  {/if}
 
   <!-- ═══ MESSAGE LIST ═══ -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -529,16 +611,29 @@
     onkeydown={handleListKeydown}
   >
     {#if snapshot.status === "booting"}
-      <div class="cs-state logos-mono">SUBSTRATE BOOTING — awaiting workspace connection…</div>
+      <div class="cs-state logos-mono">
+        <div>SUBSTRATE BOOTING — awaiting workspace connection…</div>
+        {#if readyHint}
+          <div class="cs-state-hint">{readyHint}</div>
+        {/if}
+      </div>
     {:else if snapshot.status === "error"}
       <div class="cs-state cs-error logos-mono">
         <span class="accent-intent">[ERR]</span> {snapshot.error ?? "Unknown error"}
+        {#if readyHint}
+          <div class="cs-state-hint">{readyHint}</div>
+        {/if}
       </div>
     {:else if snapshot.messages.length === 0}
       <div class="cs-state logos-mono">
-        {snapshot.activeChannelId
-          ? "No messages in this channel."
-          : "Select a channel to begin."}
+        <div>
+          {snapshot.activeChannelId
+            ? "No messages in this channel."
+            : "Select a channel to begin."}
+        </div>
+        {#if readyHint}
+          <div class="cs-state-hint">{readyHint}</div>
+        {/if}
       </div>
     {:else}
       {#each snapshot.messages as msg (msg.id)}
@@ -574,6 +669,7 @@
                 model={tform.model}
                 messageId={msgId}
                 onApply={applyTransform}
+                onUseAsDraft={useTransformAsDraft}
                 onDismiss={dismissTransform}
               />
             {/if}
@@ -653,9 +749,17 @@
 <style>
   .chatstream {
     display: grid;
-    grid-template-rows: 32px minmax(0, 1fr) auto;
+    grid-template-rows: 32px auto minmax(0, 1fr) auto;
     height: 100%;
     background: var(--bg);
+  }
+  .cs-notice {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--accent-thread);
+    font-size: 10px;
+    letter-spacing: 0.04em;
   }
 
   /* ── Top bar ──────────────────────────────── */
@@ -708,6 +812,14 @@
     background: var(--panel-2);
   }
   .cs-spacer { flex: 1; }
+  .cs-context {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted-2);
+    font-size: 10px;
+  }
   .cs-status-booting {
     color: var(--muted-2);
     animation: cs-pulse 1.5s steps(2, jump-none) infinite;
@@ -735,6 +847,11 @@
     color: var(--muted);
     text-align: center;
     line-height: 1.7;
+  }
+  .cs-state-hint {
+    margin-top: 8px;
+    color: var(--muted-2);
+    font-size: 11px;
   }
   .cs-error {
     color: var(--intent-clarify);

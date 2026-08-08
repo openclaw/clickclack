@@ -21,10 +21,12 @@
     model?: string | null;
     messageId: string;
     onApply: (messageId: string, content: string) => void;
+    onUseAsDraft?: (content: string) => void;
     onDismiss: (messageId: string) => void;
   }
 
-  let { result, op, model = null, messageId, onApply, onDismiss }: Props = $props();
+  let { result, op, model = null, messageId, onApply, onUseAsDraft, onDismiss }: Props = $props();
+  let copyState = $state<"" | "COPIED" | "FAILED">("");
 
   const opLabel = $derived.by(() => {
     const map: Record<string, string> = {
@@ -39,13 +41,36 @@
   });
 
   const metaText = $derived(model ? `${opLabel} · MODEL: ${model}` : opLabel);
+
+  async function handleCopy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(result);
+      copyState = "COPIED";
+    } catch {
+      copyState = "FAILED";
+    }
+    window.setTimeout(() => {
+      copyState = "";
+    }, 1500);
+  }
 </script>
 
 <div class="result-strip">
   <div class="result-body">{result}</div>
   <div class="result-footer">
     <span class="result-meta">{metaText}</span>
+    {#if copyState}
+      <span class="result-copy-state">{copyState}</span>
+    {/if}
     <span class="result-spacer"></span>
+    {#if onUseAsDraft}
+      <button type="button" class="result-btn" onclick={() => onUseAsDraft(result)}>
+        DRAFT
+      </button>
+    {/if}
+    <button type="button" class="result-btn" onclick={handleCopy}>
+      COPY
+    </button>
     <button type="button" class="result-btn result-apply" onclick={() => onApply(messageId, result)}>
       APPLY
     </button>
@@ -93,6 +118,11 @@
 
   .result-spacer {
     flex: 1;
+  }
+
+  .result-copy-state {
+    color: var(--muted);
+    font-size: 9px;
   }
 
   .result-btn {

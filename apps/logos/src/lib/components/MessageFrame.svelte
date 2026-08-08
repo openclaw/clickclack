@@ -106,6 +106,10 @@
   function handleMemory() {
     dispatch("onMemory", { messageId: message.id });
   }
+
+  function handleAnchor() {
+    dispatch("onAnchor", { messageId: message.id });
+  }
 </script>
 
 <div
@@ -169,6 +173,9 @@
       </button>
       <button type="button" class="msg-action-btn" onclick={handleMemory}>
         MEM-NODE
+      </button>
+      <button type="button" class="msg-action-btn" onclick={handleAnchor}>
+        ANCHOR
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("rewrite")}>
         REWRITE

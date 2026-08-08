@@ -20,6 +20,9 @@ export const telemetryOpen = writable(false);
 /** Semantic threads pane open. */
 export const semanticPaneOpen = writable(false);
 
+/** Operator notifications / inline feedback. */
+export const operatorNotice = writable<string | null>(null);
+
 /** Any chassis overlay open. */
 export const chassisOverlayOpen = derived(
   [commandPaletteOpen, telemetryOpen],

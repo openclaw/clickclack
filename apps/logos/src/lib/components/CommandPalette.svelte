@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commandPaletteOpen, currentPersona, inspectMode, telemetryOpen, semanticPaneOpen, type Persona } from "$lib/ui";
+  import { commandPaletteOpen, currentPersona, inspectMode, telemetryOpen, semanticPaneOpen, operatorNotice, type Persona } from "$lib/ui";
 
   let isOpen = $state(false);
   let input = $state("");
@@ -53,8 +53,18 @@
     } else if (cmd === ":threads") {
       semanticPaneOpen.set(!$semanticPaneOpen);
       feedback = `semantic threads ${$semanticPaneOpen ? "on" : "off"}`;
+    } else if (cmd === ":focus") {
+      operatorNotice.set("Focus returned to the active stream.");
+      feedback = "focus → stream";
+    } else if (cmd === ":memory") {
+      semanticPaneOpen.set(true);
+      feedback = "semantic pane → memory workflow";
+    } else if (cmd === ":help") {
+      feedback =
+        "commands: :persona <name> | :inspect | :telemetry | :threads | :memory | :focus";
     } else {
-      feedback = `unknown: ${cmd} — try :persona analyst | :inspect | :telemetry | :threads`;
+      feedback =
+        `unknown: ${cmd} — try :persona analyst | :inspect | :telemetry | :threads | :memory | :help`;
     }
     input = "";
   }

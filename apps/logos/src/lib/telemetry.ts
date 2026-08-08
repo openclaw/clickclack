@@ -13,6 +13,7 @@
 
 import { derived } from "svelte/store";
 import { chatState } from "$lib/clickclack/chat";
+import { readMessageMetadata } from "$lib/clickclack/types";
 
 export interface TelemetrySnapshot {
   /** Distinct intent labels seen across all messages. */
@@ -44,18 +45,15 @@ export const telemetrySnapshot = derived<typeof chatState, TelemetrySnapshot>(
     const personas = new Set<string>();
 
     for (const msg of msgs) {
-      const meta = (msg as Record<string, unknown>).metadata;
-      if (meta && typeof meta === "object") {
-        const m = meta as Record<string, unknown>;
-        if (typeof m.intent === "string" && m.intent) intents.add(m.intent);
-        if (typeof m.persona === "string" && m.persona) personas.add(m.persona);
-      }
+      const m = readMessageMetadata(msg as Record<string, unknown>);
+      if (typeof m.intent === "string" && m.intent) intents.add(m.intent);
+      if (typeof m.persona === "string" && m.persona) personas.add(m.persona);
     }
 
     return {
       intents: intents.size,
       personas: personas.size,
-      pipeline: "poll", // chat.ts currently uses 10s polling
+      pipeline: $chat.realtime,
       tokens: msgs.length,
     };
   },
@@ -72,12 +70,9 @@ export const marginSnapshot = derived<typeof chatState, MarginSnapshot>(
     const intents: string[] = [];
 
     for (const msg of msgs) {
-      const meta = (msg as Record<string, unknown>).metadata;
-      if (meta && typeof meta === "object") {
-        const m = meta as Record<string, unknown>;
-        if (typeof m.intent === "string" && m.intent) {
-          intents.push(m.intent);
-        }
+      const m = readMessageMetadata(msg as Record<string, unknown>);
+      if (typeof m.intent === "string" && m.intent) {
+        intents.push(m.intent);
       }
     }
 

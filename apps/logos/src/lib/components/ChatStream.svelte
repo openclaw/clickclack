@@ -10,15 +10,28 @@
   // Graceful states: booting (spinner text), error (mono error line), empty channel.
 
   import { onMount, onDestroy } from "svelte";
-  import { chatState, boot, selectChannel, selectWorkspace, sendMessage } from "$lib/clickclack/chat";
+  import {
+    chatState,
+    boot,
+    selectChannel,
+    selectWorkspace,
+    sendMessage,
+    applyMessageUpdate,
+  } from "$lib/clickclack/chat";
+  import { updateMessageMetadata } from "$lib/clickclack/api";
   import type { Channel } from "$lib/clickclack/types";
-  import type { MessageMetadata } from "$lib/clickclack/types";
+  import {
+    readMessageMetadata,
+    type CognitiveMessage,
+    type MessageMetadata,
+    type TransformHistoryEntry,
+  } from "$lib/clickclack/types";
   import MessageFrame, { type LogosMessage } from "$lib/components/MessageFrame.svelte";
   import InspectorBlade from "$lib/components/InspectorBlade.svelte";
   import ResultStrip from "$lib/components/ResultStrip.svelte";
   import ClarificationPrompt from "$lib/components/ClarificationPrompt.svelte";
   import { activeMessageId, currentPersona } from "$lib/ui";
-  import { transform, memoryQuery } from "$lib/cognition";
+  import { transform, memoryQuery, respond } from "$lib/cognition";
 
   // ── Local state ──────────────────────────────────────────────
 
@@ -42,6 +55,13 @@
 
   /** Non-persistent body overrides from applied transforms: messageId → newBody */
   let appliedOverrides = $state<Map<string, string>>(new Map());
+
+  let companionSuggestion = $state<{
+    content: string;
+    model: string | null;
+    loading: boolean;
+    clarificationQuestion: string | null;
+  } | null>(null);
 
   // ── Derived from chatState ───────────────────────────────────
 
@@ -68,9 +88,7 @@
   // ── Metadata extraction (spec §8.4) ──────────────────────────
 
   function messageMeta(msg: Record<string, unknown>): MessageMetadata {
-    const raw = msg.metadata;
-    if (raw && typeof raw === "object") return raw as MessageMetadata;
-    return {};
+    return readMessageMetadata(msg);
   }
 
   function metaLine(msg: { body?: string } & Record<string, unknown>): string {
@@ -128,7 +146,7 @@
 
   // ── Message → LogosMessage adapter ─────────────────────────────
 
-  function messageToLogos(msg: { body?: string } & Record<string, unknown>): LogosMessage {
+  function messageToLogos(msg: CognitiveMessage): LogosMessage {
     const m = messageMeta(msg);
     const id = String(msg.id ?? "");
     return {
@@ -140,6 +158,7 @@
       thread_id: m.thread_id ?? null,
       execution_status: m.execution_status ?? null,
       metadata_json: (m as Record<string, unknown>) ?? null,
+      transform_history: m.transform_history ?? [],
       created_at: msg.created_at ? String(msg.created_at) : null,
     };
   }
@@ -171,12 +190,52 @@
   // ── Action rail wiring: transforms + memory ────────────────────
 
   interface TransformEventDetail {
-    op: string;
+    op: "summarize" | "condense" | "expand" | "rewrite";
     messageId: string;
   }
 
+  function buildTransformHistoryEntry(
+    op: string,
+    content: string,
+    model: string | null,
+  ): TransformHistoryEntry {
+    return {
+      op,
+      at: new Date().toISOString(),
+      preview: content.slice(0, 120),
+      ...(persona ? { persona } : {}),
+      ...(model ? { model } : {}),
+    };
+  }
+
+  async function persistTransformHistory(
+    message: CognitiveMessage,
+    op: string,
+    content: string,
+    model: string | null,
+  ): Promise<void> {
+    const metadata = messageMeta(message);
+    const nextHistory = [
+      ...(metadata.transform_history ?? []),
+      buildTransformHistoryEntry(op, content, model),
+    ];
+
+    try {
+      const updated = await updateMessageMetadata(message.id, {
+        transform_history: nextHistory,
+      });
+      applyMessageUpdate(updated);
+    } catch (err) {
+      console.warn("[logos/chatstream] transform history patch failed:", err);
+      applyMessageUpdate({
+        ...message,
+        transform_history: nextHistory,
+      } as CognitiveMessage);
+    }
+  }
+
   async function handleTransformEvent(detail: TransformEventDetail) {
-    const msg = snapshot.messages.find((m) => m.id === detail.messageId);
+    const msg = snapshot.messages.find((m) => m.id === detail.messageId) as CognitiveMessage | undefined;
     if (!msg) return;
     const body = (msg as Record<string, unknown>).body;
     if (typeof body !== "string" || !body.trim()) return;
@@ -190,6 +249,7 @@
       const model = (result.meta && typeof result.meta === "object"
         ? (result.meta as Record<string, unknown>).model as string | undefined
         : undefined) ?? null;
+      await persistTransformHistory(msg, detail.op, result.transformed_content, model);
       activeTransforms.set(detail.messageId, {
         content: result.transformed_content,
         op: detail.op,
@@ -254,9 +314,67 @@
 
   function getClarificationQuestion(msg: Record<string, unknown>): string | null {
     const m = messageMeta(msg);
-    const cq = (m as Record<string, unknown>).clarification_question;
+    const cq = m.clarification_question;
     if (typeof cq === "string" && cq.trim()) return cq.trim();
     return null;
+  }
+
+  function buildContextMessages(): Array<{ role: "user" | "assistant"; content: string }> | undefined {
+    const userId = snapshot.user?.id;
+    if (!userId) return undefined;
+    return snapshot.messages
+      .slice(-8)
+      .filter((message) => typeof message.body === "string" && message.body.trim().length > 0)
+      .map((message) => ({
+        role: message.author_id === userId ? "user" : "assistant",
+        content: message.body,
+      }));
+  }
+
+  async function handleSuggestReply() {
+    const text = composerText.trim();
+    if (!text) return;
+
+    companionSuggestion = {
+      content: "",
+      model: null,
+      loading: true,
+      clarificationQuestion: null,
+    };
+
+    const result = await respond({
+      content: text,
+      persona,
+      context_messages: buildContextMessages(),
+    });
+
+    if (!result) {
+      companionSuggestion = {
+        content: "[ERR] Cognition service returned no companion reply.",
+        model: null,
+        loading: false,
+        clarificationQuestion: null,
+      };
+      return;
+    }
+
+    companionSuggestion = {
+      content: result.content,
+      model: result.meta?.model ?? null,
+      loading: false,
+      clarificationQuestion: result.clarification_question ?? null,
+    };
+  }
+
+  function applyCompanionSuggestion() {
+    if (!companionSuggestion || companionSuggestion.loading) return;
+    composerText = companionSuggestion.content;
+    companionSuggestion = null;
+    composerRef?.focus();
+  }
+
+  function dismissCompanionSuggestion() {
+    companionSuggestion = null;
   }
 
   function handleClarifyAsk(messageId: string, question: string) {
@@ -425,7 +543,7 @@
     {:else}
       {#each snapshot.messages as msg (msg.id)}
         {@const msgId = String(msg.id)}
-        {@const logosMsg = messageToLogos(msg)}
+        {@const logosMsg = messageToLogos(msg as CognitiveMessage)}
         {@const rawMsg = msg as Record<string, unknown>}
         {@const clarifyQ = getClarificationQuestion(rawMsg)}
         {@const showClarify = clarifyQ != null && !dismissedClarifications.has(msgId)}
@@ -476,10 +594,59 @@
         rows={2}
         onkeydown={onKeyDown}
       ></textarea>
+      <button
+        class="cs-send-btn cs-suggest-btn logos-mono"
+        onclick={handleSuggestReply}
+        disabled={!composerText.trim()}
+      >
+        SUGGEST
+      </button>
       <button class="cs-send-btn logos-mono" onclick={onSubmit} disabled={!composerText.trim()}>
         SEND
       </button>
     </div>
+    {#if companionSuggestion}
+      <div class="cs-companion">
+        <div class="cs-companion-body">
+          {companionSuggestion.loading ? "…" : companionSuggestion.content}
+        </div>
+        {#if companionSuggestion.clarificationQuestion}
+          <ClarificationPrompt
+            question={companionSuggestion.clarificationQuestion}
+            onAsk={(question) => {
+              composerText = question;
+              composerRef?.focus();
+            }}
+            onDismiss={() => {
+              if (companionSuggestion) {
+                companionSuggestion = { ...companionSuggestion, clarificationQuestion: null };
+              }
+            }}
+          />
+        {/if}
+        <div class="cs-companion-footer logos-mono">
+          <span>
+            COMPANION REPLY{companionSuggestion.model ? ` · MODEL: ${companionSuggestion.model}` : ""}
+          </span>
+          <span class="cs-spacer"></span>
+          <button
+            type="button"
+            class="cs-companion-btn"
+            onclick={applyCompanionSuggestion}
+            disabled={companionSuggestion.loading}
+          >
+            APPLY
+          </button>
+          <button
+            type="button"
+            class="cs-companion-btn"
+            onclick={dismissCompanionSuggestion}
+          >
+            DISMISS
+          </button>
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -587,5 +754,77 @@
   .cs-row.cs-active > .cs-row-inner > :global(.msg-frame) {
     border-color: var(--line-strong);
     background: var(--panel);
+  }
+
+  .cs-composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  .cs-input {
+    min-height: 56px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    background: var(--panel-2);
+    color: var(--text);
+    resize: vertical;
+  }
+
+  .cs-send-btn {
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .cs-send-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .cs-suggest-btn {
+    color: var(--accent-thread);
+    border-color: var(--accent-thread);
+  }
+
+  .cs-companion {
+    border-top: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+
+  .cs-companion-body {
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    color: var(--text);
+    border-left: 2px solid var(--accent-thread);
+  }
+
+  .cs-companion-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 10px;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+
+  .cs-companion-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    cursor: pointer;
+  }
+
+  .cs-companion-btn:hover:not(:disabled) {
+    background: var(--hover-strong);
   }
 </style>

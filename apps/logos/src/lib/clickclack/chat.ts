@@ -17,9 +17,18 @@
 //           channel_id?, seq?, created_at, payload }
 
 import { writable, get } from "svelte/store";
-import { api, APIError, ensureSession, apiURL } from "./api";
+import {
+  api,
+  APIError,
+  ensureSession,
+  apiURL,
+  getSession,
+  updateMessageMetadata,
+} from "./api";
+import { analyze } from "../cognition";
 import type { Workspace, Channel, Message, MessagePage, RealtimeEvent } from "./types";
-import type { ChatStateSnapshot, ChatStatus } from "./types";
+import type { ChatStateSnapshot, CognitiveMessage } from "./types";
+import { readMessageMetadata } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -32,6 +41,8 @@ const POLL_INTERVAL_MS = 10_000;
 const WS_RECONNECT_DELAYS = [1000, 2000, 5000, 15000];
 const WS_MAX_FAILURES_BEFORE_POLL = 3;
 const WS_RETRY_FROM_POLL_MS = 60_000;
+const LS_WORKSPACE_KEY = "logos_active_workspace_id";
+const LS_CHANNEL_KEY = "logos_active_channel_id";
 
 // ---------------------------------------------------------------------------
 // Store
@@ -59,6 +70,147 @@ function update(partial: Partial<ChatStateSnapshot>) {
   chatState.update((s) => ({ ...s, ...partial }));
 }
 
+function sortMessages(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => {
+    if (typeof a.channel_seq === "number" && typeof b.channel_seq === "number") {
+      return a.channel_seq - b.channel_seq;
+    }
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
+
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const next = [...existing];
+  const indexes = new Map(next.map((message, index) => [message.id, index]));
+  for (const message of incoming) {
+    const index = indexes.get(message.id);
+    if (index === undefined) {
+      indexes.set(message.id, next.length);
+      next.push(message);
+      continue;
+    }
+    next[index] = { ...next[index], ...message };
+  }
+  return sortMessages(next).slice(-200);
+}
+
+export function applyMessageUpdate(message: Message): void {
+  chatState.update((state) => ({
+    ...state,
+    messages: mergeMessages(state.messages, [message]),
+  }));
+}
+
+function readPreferredWorkspaceId(): string | null {
+  const configured = window.__CLICKCLACK_CONFIG__?.defaultWorkspaceId?.trim();
+  if (configured) return configured;
+  try {
+    return localStorage.getItem(LS_WORKSPACE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readPreferredChannelId(): string | null {
+  const configured = window.__CLICKCLACK_CONFIG__?.defaultChannelId?.trim();
+  if (configured) return configured;
+  try {
+    return localStorage.getItem(LS_CHANNEL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberWorkspace(workspaceId: string): void {
+  try {
+    localStorage.setItem(LS_WORKSPACE_KEY, workspaceId);
+  } catch {
+    // noop
+  }
+}
+
+function rememberChannel(channelId: string): void {
+  try {
+    localStorage.setItem(LS_CHANNEL_KEY, channelId);
+  } catch {
+    // noop
+  }
+}
+
+function selectPreferredWorkspace(workspaces: Workspace[]): Workspace {
+  const preferredId = readPreferredWorkspaceId();
+  return workspaces.find((workspace) => workspace.id === preferredId) ?? workspaces[0];
+}
+
+function selectPreferredChannel(channels: Channel[]): Channel | null {
+  const preferredId = readPreferredChannelId();
+  return channels.find((channel) => channel.id === preferredId) ?? channels[0] ?? null;
+}
+
+function shouldAnalyzeMessage(message: CognitiveMessage): boolean {
+  if (message.kind && message.kind !== "message") return false;
+  if (!message.body.trim()) return false;
+
+  const metadata = readMessageMetadata(message as unknown as Record<string, unknown>);
+  const hasCoreFields = Boolean(metadata.intent) && Boolean(metadata.persona) &&
+    typeof metadata.confidence === "number";
+  const hasTelemetry = Boolean(metadata.telemetry) &&
+    Object.keys(metadata.telemetry ?? {}).length > 0;
+  return !(hasCoreFields && hasTelemetry);
+}
+
+function queueAnalyzeMessages(messages: Message[]): void {
+  void hydrateCognitionForMessages(messages as CognitiveMessage[]);
+}
+
+async function hydrateCognitionForMessages(messages: CognitiveMessage[]): Promise<void> {
+  for (const message of messages) {
+    if (inFlightAnalyses.has(message.id) || !shouldAnalyzeMessage(message)) {
+      continue;
+    }
+
+    inFlightAnalyses.add(message.id);
+    try {
+      const result = await analyze(message.body);
+      if (!result) continue;
+
+      const existing = readMessageMetadata(message as unknown as Record<string, unknown>);
+      const nextMetadata: Record<string, unknown> = {
+        ...existing,
+        intent: result.intent,
+        persona: result.persona,
+        confidence: result.confidence,
+        telemetry: result.telemetry ?? existing.telemetry,
+        context_tags: result.context_tags ?? existing.context_tags,
+      };
+      if (result.clarification_question) {
+        nextMetadata.clarification_question = result.clarification_question;
+      }
+
+      try {
+        const updated = await updateMessageMetadata(message.id, {
+          intent: result.intent,
+          persona: result.persona,
+          confidence: result.confidence,
+          metadata: nextMetadata,
+        });
+        applyMessageUpdate(updated);
+      } catch (err) {
+        console.warn("[logos/chat] metadata patch failed:", err);
+        applyMessageUpdate({
+          ...message,
+          intent: result.intent,
+          persona: result.persona,
+          confidence: result.confidence,
+          metadata: nextMetadata,
+        } as Message);
+      }
+    } finally {
+      inFlightAnalyses.delete(message.id);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Realtime state (module-private — not in the Svelte store)
 // ---------------------------------------------------------------------------
@@ -71,6 +223,7 @@ let wsGeneration = 0;
 let wsWorkspaceId: string | null = null;
 let wsChannelId: string | null = null;
 let wsPollRetryTimer: ReturnType<typeof setTimeout> | null = null;
+const inFlightAnalyses = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -90,22 +243,35 @@ export async function boot(): Promise<void> {
   if (!ok) return; // browser is navigating away for OAuth
 
   try {
+    const session = await getSession();
     const data = await api<{ workspaces: Workspace[] }>("/api/workspaces");
     const workspaces = data.workspaces;
     if (!workspaces.length) {
-      update({ status: "ready", workspaces: [], channels: [], messages: [] });
+      update({
+        status: "ready",
+        workspaces: [],
+        channels: [],
+        messages: [],
+        user: session?.user,
+      });
       return;
     }
 
-    const firstWs = workspaces[0];
-    update({ workspaces, activeWorkspaceId: firstWs.id });
+    const workspace = selectPreferredWorkspace(workspaces);
+    rememberWorkspace(workspace.id);
+    update({
+      workspaces,
+      activeWorkspaceId: workspace.id,
+      user: session?.user,
+    });
 
-    const channels = await loadChannels(firstWs.id);
-    if (channels.length > 0) {
-      const firstCh = channels[0];
-      update({ activeChannelId: firstCh.id });
-      await loadMessages(firstCh.id);
-      connectRealtime(firstWs.id, firstCh.id);
+    const channels = await loadChannels(workspace.id);
+    const channel = selectPreferredChannel(channels);
+    if (channel) {
+      rememberChannel(channel.id);
+      update({ activeChannelId: channel.id });
+      await loadMessages(channel.id);
+      connectRealtime(workspace.id, channel.id);
     }
 
     update({ status: "ready" });
@@ -155,6 +321,7 @@ export async function loadMessages(
   opts?: { before?: number; limit?: number },
 ): Promise<Message[]> {
   update({ activeChannelId: channelId, error: undefined });
+  rememberChannel(channelId);
 
   const params = new URLSearchParams();
   params.set("mode", "latest");
@@ -166,6 +333,7 @@ export async function loadMessages(
       `/api/channels/${channelId}/messages?${params.toString()}`,
     );
     update({ messages: page.messages });
+    queueAnalyzeMessages(page.messages);
     return page.messages;
   } catch (err) {
     setError("loadMessages", err);
@@ -185,11 +353,8 @@ export async function sendMessage(
       method: "POST",
       body: JSON.stringify({ body }),
     });
-    // Prepend the new message to the live window
-    chatState.update((s) => ({
-      ...s,
-      messages: [...s.messages, data.message].slice(-200), // keep window bounded
-    }));
+    applyMessageUpdate(data.message);
+    queueAnalyzeMessages([data.message]);
     return data.message;
   } catch (err) {
     setError("sendMessage", err);
@@ -203,6 +368,7 @@ export async function sendMessage(
 export async function selectChannel(channelId: string): Promise<void> {
   disconnectRealtime();
   update({ activeChannelId: channelId, messages: [], error: undefined });
+  rememberChannel(channelId);
 
   const s = get(chatState);
   await loadMessages(channelId);
@@ -217,6 +383,7 @@ export async function selectChannel(channelId: string): Promise<void> {
  */
 export async function selectWorkspace(workspaceId: string): Promise<void> {
   disconnectRealtime();
+  rememberWorkspace(workspaceId);
   update({
     activeWorkspaceId: workspaceId,
     activeChannelId: null,
@@ -225,8 +392,9 @@ export async function selectWorkspace(workspaceId: string): Promise<void> {
   });
 
   const channels = await loadChannels(workspaceId);
-  if (channels.length > 0) {
-    await selectChannel(channels[0].id);
+  const channel = selectPreferredChannel(channels);
+  if (channel) {
+    await selectChannel(channel.id);
   }
 }
 
@@ -435,14 +603,12 @@ async function fetchNewMessages(channelId: string): Promise<void> {
     if (page.messages.length > 0) {
       chatState.update((prev) => {
         if (prev.activeChannelId !== channelId) return prev;
-        const existing = new Set(prev.messages.map((m) => m.id));
-        const fresh = page.messages.filter((m) => !existing.has(m.id));
-        if (fresh.length === 0) return prev;
         return {
           ...prev,
-          messages: [...prev.messages, ...fresh].slice(-200),
+          messages: mergeMessages(prev.messages, page.messages),
         };
       });
+      queueAnalyzeMessages(page.messages);
     }
   } catch {
     // Silently ignore — a subsequent WS event will re-trigger
@@ -478,15 +644,12 @@ function startPolling(channelId: string): void {
 
       if (page.messages.length > 0) {
         chatState.update((prev) => {
-          // Deduplicate: only add messages newer than what we already have
-          const existing = new Set(prev.messages.map((m) => m.id));
-          const fresh = page.messages.filter((m) => !existing.has(m.id));
-          if (fresh.length === 0) return prev;
           return {
             ...prev,
-            messages: [...prev.messages, ...fresh].slice(-200),
+            messages: mergeMessages(prev.messages, page.messages),
           };
         });
+        queueAnalyzeMessages(page.messages);
       }
     } catch {
       // Poll failures are silent — next tick will retry

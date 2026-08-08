@@ -28,7 +28,7 @@
 
   const opLabel = $derived.by(() => {
     const map: Record<string, string> = {
-      xform: "TRANSFORM",
+      summarize: "SUMMARIZE",
       condense: "CONDENSE",
       expand: "EXPAND",
       memnode: "MEM-NODE",

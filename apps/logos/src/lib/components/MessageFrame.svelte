@@ -24,6 +24,13 @@
     thread_id?: string | null;
     execution_status?: string | null;
     metadata_json?: Record<string, unknown> | null;
+    transform_history?: Array<{
+      op: string;
+      at: string;
+      preview: string;
+      persona?: string;
+      model?: string;
+    }> | null;
     created_at?: string | null;
   }
 
@@ -53,7 +60,19 @@
   const personaLabel = $derived(message.persona ? message.persona.toUpperCase() : "--");
   const confLabel = $derived(message.confidence != null ? (message.confidence).toFixed(2) : "--");
   const threadLabel = $derived(message.thread_id ? `#${message.thread_id.slice(0, 12)}` : "--");
-  const latencyLabel = $derived("n/a");
+  const latencyLabel = $derived.by(() => {
+    const telemetry = (message.metadata_json?.telemetry as Record<string, unknown> | undefined) ?? {};
+    const latency = typeof telemetry.latency_ms === "number"
+      ? telemetry.latency_ms
+      : typeof message.metadata_json?.latency_ms === "number"
+        ? message.metadata_json.latency_ms
+        : null;
+    return latency != null ? `${Math.round(latency)}ms` : "n/a";
+  });
+  const confidenceWidth = $derived(
+    message.confidence != null ? `${Math.max(0, Math.min(100, message.confidence * 100))}%` : "0%",
+  );
+  const transformCount = $derived(message.transform_history?.length ?? 0);
 
   // ── Markdown rendering ──
   const renderedHtml = $derived.by(() => {
@@ -80,7 +99,7 @@
     onInspect?.(message);
   }
 
-  function handleTransform(op: "xform" | "condense" | "expand" | "memnode" | "rewrite") {
+  function handleTransform(op: "summarize" | "condense" | "expand" | "rewrite") {
     dispatch("onTransform", { op, messageId: message.id });
   }
 
@@ -123,6 +142,12 @@
       </span>
       <span class="meta-tag">THREAD: {threadLabel}</span>
       <span class="meta-tag meta-latency">LATENCY: {latencyLabel}</span>
+      {#if transformCount > 0}
+        <span class="meta-tag">XFORM: {transformCount}</span>
+      {/if}
+    </div>
+    <div class="msg-confidence-track" aria-hidden="true">
+      <div class="msg-confidence-bar" style={`width: ${confidenceWidth}; background: ${intentColorVar};`}></div>
     </div>
 
     <!-- Dense off-white body -->
@@ -133,8 +158,8 @@
     <!-- Inline action rail (hover reveal) -->
     <div class="msg-actions">
       <span class="msg-action-prompt">&gt;</span>
-      <button type="button" class="msg-action-btn" onclick={() => handleTransform("xform")}>
-        XFORM
+      <button type="button" class="msg-action-btn" onclick={() => handleTransform("summarize")}>
+        SUMMARIZE
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("condense")}>
         CONDENSE
@@ -142,7 +167,7 @@
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("expand")}>
         EXPAND
       </button>
-      <button type="button" class="msg-action-btn" onclick={() => handleTransform("memnode")}>
+      <button type="button" class="msg-action-btn" onclick={handleMemory}>
         MEM-NODE
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("rewrite")}>
@@ -227,6 +252,17 @@
   .meta-latency {
     color: var(--muted-2);
     font-weight: 400;
+  }
+
+  .msg-confidence-track {
+    height: 4px;
+    margin: 0 0 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  .msg-confidence-bar {
+    height: 100%;
   }
 
   /* ── Body ── */

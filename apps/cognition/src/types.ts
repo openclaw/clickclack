@@ -195,6 +195,8 @@ export interface RespondRequest {
 export interface RespondResult {
   /** The generated companion reply */
   content: string;
+  /** Clarifying question surfaced when the input is ambiguous. */
+  clarification_question?: string;
   meta: {
     intent: Intent;
     persona: Persona;

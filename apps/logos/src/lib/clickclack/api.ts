@@ -12,7 +12,11 @@
 // api<T>(path, init) is the one typed fetch helper: JSON request/response, error handling,
 // CSRF header on mutating verbs, and optional Bearer token for token-based lanes.
 
-import type { Session } from "./types";
+import type {
+  Session,
+  TransformHistoryEntry,
+} from "./types";
+import type { Message } from "@clickclack/sdk-ts";
 
 // ---------------------------------------------------------------------------
 // URL helpers
@@ -20,7 +24,11 @@ import type { Session } from "./types";
 
 declare global {
   interface Window {
-    __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string };
+    __CLICKCLACK_CONFIG__?: {
+      apiBaseUrl?: string;
+      defaultWorkspaceId?: string;
+      defaultChannelId?: string;
+    };
   }
 }
 
@@ -197,4 +205,34 @@ export function clearAuth(): void {
   } catch {
     // noop
   }
+}
+
+export interface UpdateMessageMetadataRequest {
+  intent?: string;
+  persona?: string;
+  confidence?: number;
+  context?: unknown;
+  metadata?: Record<string, unknown>;
+  transform_history?: TransformHistoryEntry[];
+}
+
+export async function updateMessageMetadata(
+  messageId: string,
+  input: UpdateMessageMetadataRequest,
+): Promise<Message> {
+  const body: Record<string, unknown> = {};
+  if (input.intent !== undefined) body.intent = input.intent;
+  if (input.persona !== undefined) body.persona = input.persona;
+  if (input.confidence !== undefined) body.confidence = input.confidence;
+  if (input.context !== undefined) body.context = JSON.stringify(input.context);
+  if (input.metadata !== undefined) body.metadata = JSON.stringify(input.metadata);
+  if (input.transform_history !== undefined) {
+    body.transform_history = JSON.stringify(input.transform_history);
+  }
+
+  const data = await api<{ message: Message }>(`/api/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return data.message;
 }

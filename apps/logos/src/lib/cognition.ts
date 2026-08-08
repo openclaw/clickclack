@@ -19,6 +19,7 @@ export interface AnalysisResult {
   intent?: string;
   persona?: string;
   confidence?: number;
+  context_tags?: string[];
   /** Telemetry metadata from the cognition service. */
   telemetry?: Record<string, unknown>;
   /** Optional clarification question when confidence is below threshold. */
@@ -29,6 +30,7 @@ export interface AnalysisResult {
 export interface TransformResult {
   transformed_content: string;
   meta?: Record<string, unknown>;
+  telemetry?: Record<string, unknown>;
 }
 
 /** A single cluster from /threads/cluster. */
@@ -54,6 +56,27 @@ export interface MemoryNode {
 /** POST /memory/anchors response. */
 export interface AnchorResult {
   id: string;
+}
+
+export interface RespondRequest {
+  content: string;
+  persona?: string;
+  intent?: string;
+  context_messages?: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
+export interface RespondResult {
+  content: string;
+  clarification_question?: string;
+  meta: {
+    intent: string;
+    persona: string;
+    confidence: number;
+    model: string;
+    latency_ms: number;
+    memory_citations?: string[];
+    execution_stack: string[];
+  };
 }
 
 // ── API Calls ──
@@ -102,6 +125,26 @@ export async function transform(
     return (await res.json()) as TransformResult;
   } catch (err) {
     console.error("[logos:cognition] transform failed:", err);
+    return null;
+  }
+}
+
+export async function respond(
+  payload: RespondRequest,
+): Promise<RespondResult | null> {
+  try {
+    const res = await fetch(`${BASE}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.warn("[logos:cognition] respond returned", res.status);
+      return null;
+    }
+    return (await res.json()) as RespondResult;
+  } catch (err) {
+    console.error("[logos:cognition] respond failed:", err);
     return null;
   }
 }

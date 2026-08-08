@@ -9,6 +9,9 @@ import (
 )
 
 func TestWriteClientConfigFileCreatesPrivateFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "config.json")
 	want := []byte("{\"server\":\"https://example.test\"}\n")
 	if err := writeClientConfigFile(path, want); err != nil {
@@ -31,6 +34,9 @@ func TestWriteClientConfigFileCreatesPrivateFile(t *testing.T) {
 }
 
 func TestWriteClientConfigFilePreservesWritableMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)

@@ -180,7 +180,12 @@ async function resolveIntent(
   req: RespondRequest,
   llm: LlmClient,
   executionStack: string[],
-): Promise<{ intent: Intent; confidence: number; model: string }> {
+): Promise<{
+  intent: Intent;
+  confidence: number;
+  model: string;
+  clarificationQuestion?: string;
+}> {
   // If caller supplied intent, validate and use it
   if (req.intent && (INTENTS as readonly string[]).includes(req.intent)) {
     return { intent: req.intent, confidence: 1.0, model: "caller" };
@@ -194,6 +199,7 @@ async function resolveIntent(
       intent: analysis.intent,
       confidence: analysis.confidence,
       model: analysis.model,
+      clarificationQuestion: analysis.clarification_question,
     };
   } catch (err) {
     console.warn("[cognition:respond] intent classification failed:", err);
@@ -240,7 +246,11 @@ export async function handleRespond(
   const executionStack: string[] = [];
 
   // 1. Resolve intent (classify if not provided)
-  const { intent, confidence } = await resolveIntent(req, llm, executionStack);
+  const { intent, confidence, clarificationQuestion } = await resolveIntent(
+    req,
+    llm,
+    executionStack,
+  );
 
   // 2. Style detection (cognitive mirroring)
   const style = detectStyle(req.content);
@@ -304,6 +314,7 @@ export async function handleRespond(
 
   return {
     content,
+    ...(clarificationQuestion ? { clarification_question: clarificationQuestion } : {}),
     meta: {
       intent,
       persona,

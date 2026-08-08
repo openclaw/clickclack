@@ -197,7 +197,8 @@ func TestOpenUploadStorageValidation(t *testing.T) {
 	if _, err := openUploadStorage(config.Config{Data: t.TempDir(), Uploads: "r2://bucket/prod"}); err == nil {
 		t.Fatal("expected missing r2 credentials error")
 	}
-	if _, err := openUploadStorage(config.Config{Data: t.TempDir(), Uploads: "file://" + t.TempDir()}); err != nil {
+	uploadsPath := filepath.ToSlash(t.TempDir())
+	if _, err := openUploadStorage(config.Config{Data: t.TempDir(), Uploads: "file:///" + uploadsPath}); err != nil {
 		t.Fatalf("file upload storage: %v", err)
 	}
 	if _, err := openUploadStorage(config.Config{Data: t.TempDir(), Uploads: t.TempDir()}); err != nil {

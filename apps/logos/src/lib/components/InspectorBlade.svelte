@@ -28,6 +28,7 @@
 
   const meta = $derived((message.metadata_json ?? {}) as Record<string, unknown>);
   const telemetry = $derived((meta.telemetry as Record<string, unknown>) ?? {});
+  const transformHistory = $derived(message.transform_history ?? []);
 
   // TELEMETRY tab fields
   const latencyMs = $derived(telemetry.latency_ms as number | undefined);
@@ -60,6 +61,7 @@
         (message.body?.slice(0, 500) ?? "") + (message.body && message.body.length > 500 ? "…" : ""),
       created_at: message.created_at ?? null,
       metadata_json: meta,
+      transform_history: transformHistory,
     };
     return JSON.stringify(obj, null, 2);
   });

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -573,7 +574,16 @@ func openUploadStorage(cfg config.Config) (uploadstore.Store, error) {
 		if err != nil {
 			return nil, err
 		}
-		return uploadstore.NewLocal(u.Path), nil
+		path := u.Path
+		if runtime.GOOS == "windows" {
+			switch {
+			case u.Host != "":
+				path = u.Host + u.Path
+			case len(path) >= 3 && path[0] == '/' && path[2] == ':':
+				path = path[1:]
+			}
+		}
+		return uploadstore.NewLocal(filepath.FromSlash(path)), nil
 	}
 	return uploadstore.NewLocal(uploads), nil
 }

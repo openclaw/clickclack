@@ -33,14 +33,14 @@
     <div class="topbar-copy">
       <span class="brand">LOGOS</span>
       <div class="brand-stack">
-        <div class="brand-title">Conversation companion</div>
-        <div class="brand-subtitle">Type first. Everything else stays out of the way until you need it.</div>
+        <div class="brand-title">Messaging that stays out of the way</div>
+        <div class="brand-subtitle">Write first. Review context only when you ask for it.</div>
       </div>
     </div>
     <span class="spacer"></span>
     <span class="persona-tag logos-mono accent-intent">{persona.toUpperCase()}</span>
-    <button class="ghost" class:active={$semanticPaneOpen} onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>History</button>
-    <button class="ghost" class:active={$telemetryOpen} onclick={() => telemetryOpen.set(!$telemetryOpen)}>Signals</button>
+    <button class="ghost" class:active={$semanticPaneOpen} onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>Open history</button>
+    <button class="ghost" class:active={$telemetryOpen} onclick={() => telemetryOpen.set(!$telemetryOpen)}>Open signals</button>
   </header>
 
   <div class="console-body" class:semantic-open={$semanticPaneOpen}>
@@ -60,8 +60,8 @@
   </div>
 
   <footer class="console-statusbar">
-    <span class="logos-mono">⌘K palette</span><span>·</span><span>History + memory on demand</span><span>·</span>
-    <span>Signals stay optional</span>
+    <span class="logos-mono">⌘K palette</span><span>·</span><span>History is collapsed by default</span><span>·</span>
+    <span>Signals are optional</span>
   </footer>
 </div>
 
@@ -75,10 +75,10 @@
   .console-topbar {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-4);
     padding: 0 var(--space-5);
     border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 96%, transparent), color-mix(in srgb, var(--panel) 90%, transparent));
     backdrop-filter: blur(12px);
   }
   .topbar-copy {
@@ -101,13 +101,13 @@
   }
   .brand-title {
     color: var(--text-strong);
-    font-size: 15px;
-    font-weight: 650;
+    font-size: 18px;
+    font-weight: 700;
     line-height: 1.2;
   }
   .brand-subtitle {
     color: var(--muted);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
@@ -127,14 +127,14 @@
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   }
   .ghost {
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 38px;
+    padding: 0 14px;
     border-radius: var(--radius-pill);
     border: 1px solid var(--line);
     background: color-mix(in srgb, var(--panel-2) 78%, transparent);
     color: var(--muted);
     font-family: var(--font-ui);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.02em;
     cursor: pointer;

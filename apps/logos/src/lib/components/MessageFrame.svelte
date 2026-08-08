@@ -91,6 +91,11 @@
       day: "numeric",
     }).format(date);
   });
+  const primaryLine = $derived.by(() => {
+    const text = message.body.replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > 420 ? `${text.slice(0, 417).trimEnd()}...` : text;
+  });
 
   // ── Markdown rendering ──
   const renderedHtml = $derived.by(() => {
@@ -157,34 +162,26 @@
 
   <!-- Message content area -->
   <div class="msg-content">
-    <!-- Mono metadata header -->
-    <div class="msg-meta">
-      <span class="meta-tag">INTENT: {intentLabel}</span>
-      <span class="meta-tag">PERSONA: {personaLabel}</span>
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <span
-        class="meta-tag meta-conf"
-        class:meta-clickable={onInspect != null}
-        onclick={handleConfClick}
-        onkeydown={(e: KeyboardEvent) => e.key === "Enter" && handleConfClick()}
-        role={onInspect ? "button" : undefined}
-        tabindex={onInspect ? 0 : undefined}
-        title={onInspect ? "Click to inspect" : undefined}
-      >
-        CONF: {confLabel}
-      </span>
-      <span class="meta-tag">THREAD: {threadLabel}</span>
-      <span class="meta-tag meta-latency">LATENCY: {latencyLabel}</span>
-      {#if transformCount > 0}
-        <span class="meta-tag">XFORM: {transformCount}</span>
-      {/if}
-      {#if timestampLabel}
-        <span class="meta-tag meta-time">{timestampLabel}</span>
-      {/if}
-    </div>
-    <div class="msg-confidence-track" aria-hidden="true">
-      <div class="msg-confidence-bar" style={`width: ${confidenceWidth}; background: ${intentColorVar};`}></div>
+    <div class="msg-header">
+      <div class="msg-header-main">
+        <span class="msg-persona">{personaLabel === "--" ? "COMPANION" : personaLabel}</span>
+        {#if timestampLabel}
+          <span class="msg-time">{timestampLabel}</span>
+        {/if}
+      </div>
+      <div class="msg-header-meta">
+        <span class="msg-intent-pill" style={`--intent-color: ${intentColorVar}`}>{intentLabel}</span>
+        {#if message.confidence != null}
+          <button
+            type="button"
+            class="msg-confidence-pill"
+            onclick={handleConfClick}
+            title={onInspect ? "Open details" : undefined}
+          >
+            {Math.round(message.confidence * 100)}%
+          </button>
+        {/if}
+      </div>
     </div>
 
     {#if compact}
@@ -202,44 +199,54 @@
       </div>
     {/if}
 
+    {#if !compact}
+      <div class="msg-footer">
+        <div class="msg-footer-summary">{primaryLine}</div>
+        <div class="msg-footer-meta">
+          {#if transformCount > 0}<span>{transformCount} transforms</span>{/if}
+          {#if latencyLabel !== "n/a"}<span>{latencyLabel}</span>{/if}
+          {#if threadLabel !== "--"}<span>{threadLabel}</span>{/if}
+        </div>
+      </div>
+    {/if}
+
     <!-- Inline action rail (hover reveal) -->
     <div class="msg-actions">
-      <span class="msg-action-prompt">&gt;</span>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("summarize")}>
-        SUMMARIZE
+        Summarize
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("condense")}>
-        CONDENSE
+        Shorten
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("expand")}>
-        EXPAND
+        Expand
       </button>
       <button type="button" class="msg-action-btn" onclick={handleMemory}>
-        MEM-NODE
+        Related
       </button>
       <button type="button" class="msg-action-btn" onclick={handleAnchor}>
-        ANCHOR
+        Save
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("checklist")}>
-        CHECKLIST
+        Checklist
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("plan")}>
-        PLAN
+        Plan
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("extract")}>
-        EXTRACT
+        Extract
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("diagnose")}>
-        DIAGNOSE
+        Diagnose
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("counterargument")}>
-        COUNTER
+        Counter
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("invert")}>
-        INVERT
+        Invert
       </button>
       <button type="button" class="msg-action-btn" onclick={() => handleTransform("rewrite")}>
-        REWRITE
+        Rewrite
       </button>
     </div>
   </div>
@@ -284,83 +291,63 @@
     min-width: 0;
   }
 
-  /* ── Mono metadata header ── */
-  .msg-meta {
+  .msg-header {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: var(--space-3);
-    font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-    line-height: 1.5;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
   }
 
-  .meta-tag {
-    display: inline-flex;
+  .msg-header-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .msg-persona {
+    color: var(--text-strong);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+
+  .msg-time {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .msg-header-meta {
+    display: flex;
     align-items: center;
     gap: 6px;
-    min-height: 22px;
-    padding: 0 8px;
+  }
+
+  .msg-intent-pill,
+  .msg-confidence-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
     border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
     border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--panel-3) 72%, transparent);
+    background: color-mix(in srgb, var(--panel-3) 78%, transparent);
     white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
   }
 
-  .meta-tag::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--muted-2) 72%, transparent);
-    flex-shrink: 0;
+  .msg-intent-pill {
+    color: color-mix(in srgb, var(--intent-color) 82%, white);
+    border-color: color-mix(in srgb, var(--intent-color) 32%, var(--line));
+    background: color-mix(in srgb, var(--intent-color) 12%, var(--panel-3));
   }
 
-  .meta-conf {
+  .msg-confidence-pill {
     color: var(--text-strong);
-    font-weight: 700;
-    border-color: color-mix(in srgb, var(--accent-thread) 22%, var(--line));
-  }
-
-  .meta-clickable {
     cursor: pointer;
-    transition: background var(--motion-fast);
-  }
-
-  .meta-clickable:hover {
-    background: var(--hover-strong);
-    border-color: color-mix(in srgb, var(--accent-thread) 40%, var(--line-strong));
-    box-shadow: var(--accent-glow);
-  }
-
-  .meta-clickable:focus-visible {
-    outline-offset: 1px;
-  }
-
-  .meta-latency {
-    color: var(--muted-2);
-    font-weight: 400;
-  }
-
-  .meta-time {
-    color: var(--muted-2);
-  }
-
-  .msg-confidence-track {
-    height: 6px;
-    margin: 0 0 var(--space-3);
-    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--panel) 65%, transparent);
-    overflow: hidden;
-  }
-
-  .msg-confidence-bar {
-    height: 100%;
-    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.08);
   }
 
   /* ── Body ── */
@@ -469,6 +456,27 @@
     cursor: pointer;
   }
 
+  .msg-footer {
+    margin-top: 12px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .msg-footer-summary {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+    display: none;
+  }
+
+  .msg-footer-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
   /* ── Inspect mode: body 60% opacity ── */
   .msg-frame.msg-inspect .msg-body {
     opacity: 0.6;
@@ -490,7 +498,7 @@
       transform var(--motion-fast);
     font-family: var(--font-ui);
     font-size: 10px;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.01em;
   }
 
   .msg-frame:hover .msg-actions,
@@ -498,12 +506,6 @@
   .msg-frame.msg-active .msg-actions {
     opacity: 1;
     transform: translateY(0);
-  }
-
-  .msg-action-prompt {
-    color: var(--muted-2);
-    margin-right: 2px;
-    flex-shrink: 0;
   }
 
   .msg-action-btn {
@@ -531,14 +533,21 @@
     outline-offset: 2px;
   }
 
+  @media (max-width: 640px) {
+    .msg-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .msg-header-meta {
+      flex-wrap: wrap;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .msg-actions {
       transition: none;
     }
     .msg-body {
-      transition: none;
-    }
-    .meta-clickable {
       transition: none;
     }
   }

@@ -119,6 +119,13 @@
   const recentMessages = $derived(snapshot.messages.slice(-12));
   const olderMessages = $derived(snapshot.messages.slice(0, -12));
   const collapsedHiddenCount = $derived(Math.max(0, olderMessages.length));
+  const latestMessage = $derived(snapshot.messages.at(-1) as CognitiveMessage | undefined);
+  const latestPreview = $derived.by(() => {
+    if (!latestMessage?.body) return "Start a conversation.";
+    const compact = latestMessage.body.replace(/\s+/g, " ").trim();
+    if (!compact) return "Start a conversation.";
+    return compact.length > 120 ? `${compact.slice(0, 117).trimEnd()}...` : compact;
+  });
   const connectionLabel = $derived(
     snapshot.status === "booting"
       ? "CONNECTING"
@@ -608,7 +615,7 @@
   <!-- ═══ TOP BAR: workspace + channel picker ═══ -->
   <div class="cs-topbar">
     <div class="cs-thread-head">
-      <div class="cs-thread-title">Type a message</div>
+      <div class="cs-thread-title">Message</div>
       <div class="cs-thread-subtitle">
         {#if activeWorkspaceName}
           {activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}
@@ -616,6 +623,10 @@
           Pick a workspace and channel to begin.
         {/if}
       </div>
+    </div>
+    <div class="cs-thread-preview">
+      <div class="cs-thread-preview-label">Latest</div>
+      <div class="cs-thread-preview-text">{latestPreview}</div>
     </div>
     <span class="cs-spacer"></span>
     {#if snapshot.status === "booting"}
@@ -670,9 +681,9 @@
         <div class="cs-history-toggle-wrap">
           <button type="button" class="cs-history-toggle" onclick={toggleHistoryCollapsed}>
             {#if historyCollapsed}
-              Show earlier history ({collapsedHiddenCount} messages)
+              Show earlier messages ({collapsedHiddenCount})
             {:else}
-              Hide earlier history
+              Hide earlier messages
             {/if}
           </button>
         </div>
@@ -764,7 +775,7 @@
           bind:this={composerRef}
           bind:value={composerText}
           class="cs-input"
-          placeholder="Write a message…"
+          placeholder="Type your message here..."
           rows={3}
           onkeydown={onKeyDown}
         ></textarea>
@@ -774,10 +785,10 @@
             onclick={handleSuggestReply}
             disabled={!composerText.trim()}
           >
-            Suggest reply
+            Suggest
           </button>
           <button class="cs-send-btn cs-send-primary" onclick={onSubmit} disabled={!composerText.trim()}>
-            Send message
+            Send
           </button>
         </div>
       </div>
@@ -863,7 +874,7 @@
 <style>
   .chatstream {
     display: grid;
-    grid-template-rows: 72px auto minmax(0, 1fr) auto;
+    grid-template-rows: 96px auto minmax(0, 1fr) auto;
     height: 100%;
     background: transparent;
   }
@@ -886,7 +897,8 @@
     gap: var(--space-3);
     padding: 0 var(--space-5);
     border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 96%, transparent), color-mix(in srgb, var(--panel) 92%, transparent));
     overflow: hidden;
   }
   .cs-thread-head {
@@ -897,14 +909,39 @@
   }
   .cs-thread-title {
     color: var(--text-strong);
-    font-size: 18px;
-    font-weight: 650;
+    font-size: 24px;
+    font-weight: 700;
     line-height: 1.2;
   }
   .cs-thread-subtitle {
     color: var(--muted);
     font-size: 12px;
     line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cs-thread-preview {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    max-width: 320px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
+  }
+  .cs-thread-preview-label {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .cs-thread-preview-text {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.45;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -970,7 +1007,7 @@
   /* ── Message list ─────────────────────────── */
   .cs-messages {
     overflow-y: auto;
-    padding: var(--space-5);
+    padding: var(--space-5) var(--space-5) var(--space-3);
     min-height: 0;
     outline: none;
     display: grid;
@@ -1004,6 +1041,9 @@
   .cs-row {
     animation: cs-row-enter var(--motion-med);
   }
+  .cs-row + .cs-row {
+    margin-top: 2px;
+  }
   .cs-row-compact :global(.msg-actions) {
     display: none;
   }
@@ -1019,11 +1059,11 @@
   .cs-composer-shell {
     display: grid;
     gap: 12px;
-    padding: var(--space-4);
+    padding: var(--space-4) var(--space-5) var(--space-5);
     border-top: 1px solid var(--line);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--panel) 78%, transparent), color-mix(in srgb, var(--panel-raised) 92%, transparent));
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+      linear-gradient(180deg, rgba(14, 15, 18, 0.72), color-mix(in srgb, var(--panel-raised) 98%, transparent));
+    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.28);
   }
 
   .cs-context-row {
@@ -1037,24 +1077,25 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
-    padding: 14px;
-    border: 1px solid color-mix(in srgb, var(--line-strong) 82%, transparent);
-    border-radius: var(--radius-xl, 16px);
-    background: color-mix(in srgb, var(--panel-2) 94%, transparent);
-    box-shadow: var(--shadow-md);
+    align-items: stretch;
+    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--accent-thread) 22%, var(--line-strong));
+    border-radius: var(--radius-xl);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 98%, transparent), color-mix(in srgb, var(--panel-2) 96%, transparent));
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
   }
 
   .cs-input {
-    min-height: 96px;
-    padding: 16px 18px;
+    min-height: 120px;
+    padding: 18px 20px;
     border: 1px solid color-mix(in srgb, var(--line-strong) 84%, transparent);
     border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--panel) 96%, transparent);
     color: var(--text-strong);
     resize: none;
-    line-height: 1.6;
+    line-height: 1.7;
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: 17px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
   .cs-input::placeholder {
@@ -1066,10 +1107,11 @@
     flex-direction: column;
     gap: 10px;
     justify-content: flex-end;
+    width: 140px;
   }
 
   .cs-send-btn {
-    min-height: 48px;
+    min-height: 52px;
     padding: 0 16px;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
@@ -1079,7 +1121,7 @@
     font-weight: 600;
     box-shadow: var(--shadow-sm);
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .cs-send-btn:hover:not(:disabled) {
@@ -1250,6 +1292,10 @@
       max-width: none;
       white-space: normal;
     }
+    .cs-thread-preview {
+      width: 100%;
+      max-width: none;
+    }
     .cs-context-row,
     .cs-composer {
       grid-template-columns: 1fr;
@@ -1257,6 +1303,7 @@
     }
     .cs-composer-actions {
       flex-direction: row;
+      width: 100%;
     }
     .cs-send-btn,
     .cs-select,

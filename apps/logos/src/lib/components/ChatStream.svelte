@@ -610,81 +610,36 @@
     messageListRef?.removeEventListener("onAnchor", handleBubbledAnchor);
   });
 </script>
-
-<div class="chatstream">
-  <!-- ═══ TOP BAR: workspace + channel picker ═══ -->
-  <div class="cs-topbar">
-    <div class="cs-thread-head">
-      <div class="cs-thread-title">Message</div>
-      <div class="cs-thread-subtitle">
-        {#if activeWorkspaceName}
-          {activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}
-        {:else}
-          Pick a workspace and channel to begin.
-        {/if}
-      </div>
+<!-- ═══ LOGOS CHAT ═══ -->
+<div class="chat">
+  <header class="chat-top">
+    <div class="chat-title">
+      <strong>LOGOS</strong>
+      <span class="chat-sub">
+        {#if activeWorkspaceName}{activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}{:else}Pick a channel to begin{/if}
+      </span>
     </div>
-    <div class="cs-thread-preview">
-      <div class="cs-thread-preview-label">Latest</div>
-      <div class="cs-thread-preview-text">{latestPreview}</div>
+    <div class="chat-right">
+      {#if snapshot.status === "booting"}<span class="pill pill-boot">Connecting…</span>
+      {:else if snapshot.status === "error"}<span class="pill pill-err" title={snapshot.error ?? ""}>Error</span>
+      {:else if snapshot.activeChannelId}<span class="pill pill-ok">{connectionLabel}</span>{/if}
     </div>
-    <span class="cs-spacer"></span>
-    {#if snapshot.status === "booting"}
-      <span class="cs-status-booting logos-mono">CONNECTING…</span>
-    {:else if snapshot.status === "error"}
-      <span class="cs-status-error logos-mono" title={snapshot.error ?? ""}>ERR</span>
-    {:else if snapshot.activeChannelId}
-      <span class="cs-status-ready logos-mono accent-verified">{connectionLabel}</span>
-    {/if}
-  </div>
-  {#if notice}
-    <div class="cs-notice logos-mono">{notice}</div>
-  {/if}
+  </header>
 
-  <!-- ═══ MESSAGE LIST ═══ -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="cs-messages"
-    bind:this={messageListRef}
-    tabindex="0"
-    role="list"
-    aria-label="Message stream"
-    onkeydown={handleListKeydown}
-  >
+  {#if notice}<div class="chat-notice">{notice}</div>{/if}
+
+  <div class="chat-scroll" bind:this={messageListRef} tabindex="0" role="list" aria-label="Messages" onkeydown={handleListKeydown}>
     {#if snapshot.status === "booting"}
-      <div class="cs-state logos-mono">
-        <div>SUBSTRATE BOOTING — awaiting workspace connection…</div>
-        {#if readyHint}
-          <div class="cs-state-hint">{readyHint}</div>
-        {/if}
-      </div>
+      <div class="chat-state">{#if readyHint}{readyHint}{:else}Connecting to your workspace…{/if}</div>
     {:else if snapshot.status === "error"}
-      <div class="cs-state cs-error logos-mono">
-        <span class="accent-intent">[ERR]</span> {snapshot.error ?? "Unknown error"}
-        {#if readyHint}
-          <div class="cs-state-hint">{readyHint}</div>
-        {/if}
-      </div>
+      <div class="chat-state chat-state-err">{snapshot.error ?? "Connection error"}{#if readyHint}<div class="chat-hint">{readyHint}</div>{/if}</div>
     {:else if snapshot.messages.length === 0}
-      <div class="cs-state logos-mono">
-        <div>
-          {snapshot.activeChannelId
-            ? "No messages in this channel."
-            : "Select a channel to begin."}
-        </div>
-        {#if readyHint}
-          <div class="cs-state-hint">{readyHint}</div>
-        {/if}
-      </div>
+      <div class="chat-state">{snapshot.activeChannelId ? "No messages yet — say hello." : "Select a channel to begin."}{#if readyHint}<div class="chat-hint">{readyHint}</div>{/if}</div>
     {:else}
       {#if olderMessages.length > 0}
-        <div class="cs-history-toggle-wrap">
-          <button type="button" class="cs-history-toggle" onclick={toggleHistoryCollapsed}>
-            {#if historyCollapsed}
-              Show earlier messages ({collapsedHiddenCount})
-            {:else}
-              Hide earlier messages
-            {/if}
+        <div class="history-row">
+          <button type="button" class="history-btn" onclick={toggleHistoryCollapsed}>
+            {#if historyCollapsed}Show earlier messages ({collapsedHiddenCount}){:else}Hide earlier messages{/if}
           </button>
         </div>
       {/if}
@@ -692,10 +647,8 @@
         {#each olderMessages as msg (msg.id)}
           {@const msgId = String(msg.id)}
           {@const logosMsg = messageToLogos(msg as CognitiveMessage)}
-          <div class="cs-row cs-row-compact" data-msg-id={msgId} onmouseenter={() => onRowFocus(msg)}>
-            <div class="cs-row-inner">
-              <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} compact={true} />
-            </div>
+          <div class="msg msg-old" data-msg-id={msgId} onmouseenter={() => onRowFocus(msg)}>
+            <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} compact={true} />
           </div>
         {/each}
       {/if}
@@ -707,609 +660,111 @@
         {@const showClarify = clarifyQ != null && !dismissedClarifications.has(msgId)}
         {@const hasTransform = activeTransforms.has(msgId)}
         {@const tform = activeTransforms.get(msgId)}
-        <div
-          class="cs-row"
-          data-msg-id={msgId}
-          class:cs-active={$activeMessageId === msgId}
-          onmouseenter={() => onRowFocus(msg)}
-        >
-          <div class="cs-row-inner">
-            <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} />
-            {#if inspecting?.id === msgId}
-              <InspectorBlade message={inspecting} open={true} onClose={closeInspector} />
-            {/if}
-            {#if showClarify && clarifyQ}
-              <ClarificationPrompt
-                question={clarifyQ}
-                onAsk={(q) => handleClarifyAsk(msgId, q)}
-                onDismiss={() => dismissClarification(msgId)}
-              />
-            {/if}
-            {#if hasTransform && tform}
-              <ResultStrip
-                result={tform.loading ? "…" : tform.content}
-                op={tform.op}
-                model={tform.model}
-                messageId={msgId}
-                onApply={applyTransform}
-                onUseAsDraft={useTransformAsDraft}
-                onDismiss={dismissTransform}
-              />
-            {/if}
-          </div>
+        <div class="msg" class:msg-active={$activeMessageId === msgId} data-msg-id={msgId} onmouseenter={() => onRowFocus(msg)}>
+          <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} />
+          {#if inspecting?.id === msgId}
+            <InspectorBlade message={inspecting} open={true} onClose={closeInspector} />
+          {/if}
+          {#if showClarify && clarifyQ}
+            <ClarificationPrompt question={clarifyQ} onAsk={(q) => handleClarifyAsk(msgId, q)} onDismiss={() => dismissClarification(msgId)} />
+          {/if}
+          {#if hasTransform && tform}
+            <ResultStrip result={tform.loading ? "…" : tform.content} op={tform.op} model={tform.model} messageId={msgId} onApply={applyTransform} onUseAsDraft={useTransformAsDraft} onDismiss={dismissTransform} />
+          {/if}
         </div>
       {/each}
     {/if}
   </div>
 
-  <!-- ═══ COMPOSER ═══ -->
+  {#if companionSuggestion}
+    <div class="suggest-box">
+      <div class="suggest-label">Companion suggestion</div>
+      <div class="suggest-text">{companionSuggestion.content}</div>
+      <div class="suggest-actions">
+        <button class="btn btn-ghost" onclick={dismissCompanionSuggestion}>Dismiss</button>
+        <button class="btn btn-primary" onclick={applyCompanionSuggestion}>Use</button>
+      </div>
+    </div>
+  {/if}
+
   {#if snapshot.status === "ready" && snapshot.activeChannelId}
-    <div class="cs-composer-shell">
-      <div class="cs-context-row">
+    <div class="composer-dock">
+      <div class="composer-context">
         {#if snapshot.workspaces.length > 0}
-          <select
-            class="cs-select"
-            value={snapshot.activeWorkspaceId ?? ""}
-            onchange={onWsChange}
-            aria-label="Workspace"
-          >
-            {#each snapshot.workspaces as ws (ws.id)}
-              <option value={ws.id}>{ws.name}</option>
-            {/each}
+          <select class="select" value={snapshot.activeWorkspaceId ?? ""} onchange={onWsChange} aria-label="Workspace">
+            {#each snapshot.workspaces as ws (ws.id)}<option value={ws.id}>{ws.name}</option>{/each}
           </select>
         {/if}
-        <div class="cs-channels">
+        <div class="channels">
           {#each snapshot.channels as ch (ch.id)}
-            <button
-              class="cs-channel-btn"
-              class:active={ch.id === snapshot.activeChannelId}
-              onclick={() => onChannelClick(ch)}
-            >
-              # {ch.name}
-            </button>
+            <button class="chip" class:chip-active={ch.id === snapshot.activeChannelId} onclick={() => onChannelClick(ch)}># {ch.name}</button>
           {/each}
         </div>
       </div>
-      <div class="cs-composer">
-        <textarea
-          bind:this={composerRef}
-          bind:value={composerText}
-          class="cs-input"
-          placeholder="Type your message here..."
-          rows={3}
-          onkeydown={onKeyDown}
-        ></textarea>
-        <div class="cs-composer-actions">
-          <button
-            class="cs-send-btn cs-suggest-btn"
-            onclick={handleSuggestReply}
-            disabled={!composerText.trim()}
-          >
-            Suggest
-          </button>
-          <button class="cs-send-btn cs-send-primary" onclick={onSubmit} disabled={!composerText.trim()}>
-            Send
-          </button>
+      <div class="composer">
+        <textarea bind:this={composerRef} bind:value={composerText} class="composer-input" placeholder="Type a message…" rows={2} onkeydown={onKeyDown}></textarea>
+        <div class="composer-actions">
+          <button class="btn btn-ghost" onclick={handleSuggestReply} disabled={!composerText.trim()}>Suggest</button>
+          <button class="btn btn-primary btn-send" onclick={onSubmit} disabled={!composerText.trim()}>Send</button>
         </div>
       </div>
     </div>
-    {#if companionSuggestion}
-      <div class="cs-companion">
-        <div class="cs-companion-body">
-          {companionSuggestion.loading ? "…" : companionSuggestion.content}
-        </div>
-        {#if companionSuggestion.clarificationQuestion}
-          <ClarificationPrompt
-            question={companionSuggestion.clarificationQuestion}
-            onAsk={(question) => {
-              composerText = question;
-              composerRef?.focus();
-            }}
-            onDismiss={() => {
-              if (companionSuggestion) {
-                companionSuggestion = { ...companionSuggestion, clarificationQuestion: null };
-              }
-            }}
-          />
-        {/if}
-        {#if companionSuggestion.memoryPreview.length > 0}
-          <div class="cs-companion-memory">
-            <div class="cs-companion-section-label logos-mono">MEMORY CONTEXT</div>
-            {#each companionSuggestion.memoryPreview as preview (preview.id)}
-              <div class="cs-companion-memory-card">
-                <div class="cs-companion-memory-meta logos-mono">
-                  #NODE-{preview.id.slice(0, 8)}{#if preview.score !== undefined} · {(preview.score * 100).toFixed(0)}%{/if}
-                  {#if preview.tags?.length} · {preview.tags.join(" · ")}{/if}
-                </div>
-                <div class="cs-companion-memory-body">{preview.content}</div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        {#if companionSuggestion.followups.length > 0}
-          <div class="cs-companion-followups">
-            <div class="cs-companion-section-label logos-mono">FOLLOW-UPS</div>
-            <div class="cs-companion-chip-row">
-              {#each companionSuggestion.followups as followup (followup)}
-                <button
-                  type="button"
-                  class="cs-companion-chip"
-                  onclick={() => {
-                    composerText = followup;
-                    composerRef?.focus();
-                  }}
-                >
-                  {followup}
-                </button>
-              {/each}
-            </div>
-          </div>
-        {/if}
-        <div class="cs-companion-footer logos-mono">
-          <span>
-            COMPANION REPLY{companionSuggestion.model ? ` · MODEL: ${companionSuggestion.model}` : ""}
-          </span>
-          <span class="cs-spacer"></span>
-          <button
-            type="button"
-            class="cs-companion-btn"
-            onclick={applyCompanionSuggestion}
-            disabled={companionSuggestion.loading}
-          >
-            APPLY
-          </button>
-          <button
-            type="button"
-            class="cs-companion-btn"
-            onclick={dismissCompanionSuggestion}
-          >
-            DISMISS
-          </button>
-        </div>
-      </div>
-    {/if}
   {/if}
 </div>
 
+<svelte:window on:logos-transform={handleBubbledTransform} on:logos-memory={handleBubbledMemory} />
+
 <style>
-  .chatstream {
-    display: grid;
-    grid-template-rows: 96px auto minmax(0, 1fr) auto;
-    height: 100%;
-    background: transparent;
-  }
-  .cs-notice {
-    margin: 0 var(--space-4);
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--panel-raised) 88%, transparent);
-    color: var(--accent-thread);
-    font-size: 11px;
-    letter-spacing: 0.03em;
-    box-shadow: var(--shadow-sm);
-  }
-
-  /* ── Top bar ──────────────────────────────── */
-  .cs-topbar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: 0 var(--space-5);
-    border-bottom: 1px solid var(--line);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 96%, transparent), color-mix(in srgb, var(--panel) 92%, transparent));
-    overflow: hidden;
-  }
-  .cs-thread-head {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-  }
-  .cs-thread-title {
-    color: var(--text-strong);
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-  .cs-thread-subtitle {
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .cs-thread-preview {
-    display: grid;
-    gap: 4px;
-    min-width: 0;
-    max-width: 320px;
-    padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
-  }
-  .cs-thread-preview-label {
-    color: var(--muted);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-  .cs-thread-preview-text {
-    color: var(--text);
-    font-size: 13px;
-    line-height: 1.45;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .cs-select {
-    min-height: 38px;
-    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
-    color: var(--text);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    padding: 0 10px;
-    max-width: 160px;
-    cursor: pointer;
-  }
-  .cs-channels {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-block: 2px;
-  }
-  .cs-channel-btn {
-    min-height: 32px;
-    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    color: var(--muted);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 0 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition:
-      color var(--motion-fast),
-      border-color var(--motion-fast),
-      background var(--motion-fast),
-      box-shadow var(--motion-fast);
-  }
-  .cs-channel-btn:hover,
-  .cs-channel-btn.active {
-    color: var(--text-strong);
-    border-color: var(--line-strong);
-    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
-  }
-  .cs-channel-btn.active {
-    border-color: color-mix(in srgb, var(--accent-thread) 38%, var(--line-strong));
-    box-shadow: var(--accent-glow);
-  }
-  .cs-spacer { flex: 1; }
-  .cs-status-booting {
-    color: var(--muted-2);
-    animation: cs-pulse 1.6s ease-in-out infinite;
-  }
-  .cs-status-error { color: var(--accent-intent); }
-  .cs-status-ready { font-weight: 700; }
-  @keyframes cs-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  /* ── Message list ─────────────────────────── */
-  .cs-messages {
-    overflow-y: auto;
-    padding: var(--space-5) var(--space-5) var(--space-3);
-    min-height: 0;
-    outline: none;
-    display: grid;
-    gap: var(--space-4);
-    align-content: start;
-    scroll-behavior: smooth;
-  }
-  .cs-messages:focus-visible {
-    outline-offset: -4px;
-  }
-  .cs-state {
-    padding: var(--space-6) var(--space-5);
-    color: var(--muted);
-    text-align: center;
-    line-height: 1.7;
-    border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
-    box-shadow: var(--shadow-sm);
-  }
-  .cs-state-hint {
-    margin-top: var(--space-2);
-    color: var(--muted-2);
-    font-size: 12px;
-  }
-  .cs-error {
-    color: var(--intent-clarify);
-  }
-
-  /* ── Message row ──────────────────────────── */
-  .cs-row {
-    animation: cs-row-enter var(--motion-med);
-  }
-  .cs-row + .cs-row {
-    margin-top: 2px;
-  }
-  .cs-row-compact :global(.msg-actions) {
-    display: none;
-  }
-  .cs-row-inner {
-    display: flex;
-    flex-direction: column;
-  }
-  .cs-row.cs-active > .cs-row-inner > :global(.msg-frame) {
-    border-color: var(--line-strong);
-    background: var(--panel);
-  }
-
-  .cs-composer-shell {
-    display: grid;
-    gap: 12px;
-    padding: var(--space-4) var(--space-5) var(--space-5);
-    border-top: 1px solid var(--line);
-    background:
-      linear-gradient(180deg, rgba(14, 15, 18, 0.72), color-mix(in srgb, var(--panel-raised) 98%, transparent));
-    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.28);
-  }
-
-  .cs-context-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-
-  .cs-composer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: stretch;
-    padding: 16px;
-    border: 1px solid color-mix(in srgb, var(--accent-thread) 22%, var(--line-strong));
-    border-radius: var(--radius-xl);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 98%, transparent), color-mix(in srgb, var(--panel-2) 96%, transparent));
-    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
-  }
-
-  .cs-input {
-    min-height: 120px;
-    padding: 18px 20px;
-    border: 1px solid color-mix(in srgb, var(--line-strong) 84%, transparent);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--panel) 96%, transparent);
-    color: var(--text-strong);
-    resize: none;
-    line-height: 1.7;
-    font-family: var(--font-body);
-    font-size: 17px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-  }
-  .cs-input::placeholder {
-    color: var(--muted);
-  }
-
-  .cs-composer-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: flex-end;
-    width: 140px;
-  }
-
-  .cs-send-btn {
-    min-height: 52px;
-    padding: 0 16px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
-    color: var(--text);
-    cursor: pointer;
-    font-weight: 600;
-    box-shadow: var(--shadow-sm);
-    font-family: var(--font-ui);
-    font-size: 13px;
-  }
-
-  .cs-send-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
-    color: var(--text-strong);
-  }
-
-  .cs-send-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .cs-suggest-btn {
-    color: var(--accent-thread);
-    border-color: var(--accent-thread);
-  }
-  .cs-send-primary {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--accent-thread) 26%, var(--panel-raised)), color-mix(in srgb, var(--accent-thread) 14%, var(--panel)));
-    color: var(--text-strong);
-    border-color: color-mix(in srgb, var(--accent-thread) 54%, var(--line-strong));
-  }
-
-  .cs-history-toggle-wrap {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 4px;
-  }
-
-  .cs-history-toggle {
-    min-height: 34px;
-    padding: 0 14px;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--panel-2) 88%, transparent);
-    color: var(--muted);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    cursor: pointer;
-  }
-
-  .cs-history-toggle:hover {
-    color: var(--text);
-    border-color: var(--line-strong);
-  }
-
-  .cs-companion {
-    margin: 0 var(--space-4) var(--space-4);
-    border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .cs-companion-body {
-    padding: 12px 14px;
-    white-space: pre-wrap;
-    color: var(--text);
-    border-left: 2px solid var(--accent-thread);
-  }
-
-  .cs-companion-memory,
-  .cs-companion-followups {
-    padding: 0 14px 12px;
-  }
-
-  .cs-companion-section-label {
-    margin-bottom: 8px;
-    color: var(--muted);
-    font-size: 9px;
-    letter-spacing: 0.05em;
-  }
-
-  .cs-companion-memory-card {
-    margin-top: 8px;
-    padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--panel-3) 74%, transparent);
-  }
-
-  .cs-companion-memory-meta {
-    margin-bottom: 6px;
-    color: var(--accent-thread);
-    font-size: 9px;
-    letter-spacing: 0.04em;
-  }
-
-  .cs-companion-memory-body {
-    color: var(--text-soft);
-    line-height: 1.55;
-  }
-
-  .cs-companion-chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .cs-companion-chip {
-    min-height: 32px;
-    padding: 0 12px;
-    border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--panel-raised) 86%, transparent);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    line-height: 1.2;
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .cs-companion-chip:hover {
-    background: color-mix(in srgb, var(--accent-thread) 12%, var(--panel-raised));
-    color: var(--text-strong);
-  }
-
-  .cs-companion-footer {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px 12px;
-    color: var(--muted);
-    font-size: 9px;
-    letter-spacing: 0.04em;
-    background: color-mix(in srgb, var(--panel-3) 78%, transparent);
-  }
-
-  .cs-companion-btn {
-    min-height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 10px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .cs-companion-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
-  }
-
-  @keyframes cs-row-enter {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
+  .chat { display: flex; flex-direction: column; height: 100%; min-width: 0; background: var(--bg); }
+  .chat-top { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .chat-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .chat-title strong { font-size: 15px; letter-spacing: 0.02em; color: var(--text-strong); }
+  .chat-sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-right { margin-left: auto; }
+  .pill { font-size: 11px; padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); color: var(--muted); }
+  .pill-ok { color: var(--accent-verified); border-color: color-mix(in srgb, var(--accent-verified) 40%, var(--line-strong)); }
+  .pill-err { color: var(--accent-intent); border-color: color-mix(in srgb, var(--accent-intent) 40%, var(--line-strong)); }
+  .chat-notice { padding: 8px 18px; font-size: 12px; color: var(--accent-intent); background: color-mix(in srgb, var(--accent-intent) 8%, transparent); border-bottom: 1px solid var(--line); }
+  .chat-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px 8px; display: flex; flex-direction: column; gap: 6px; outline: none; }
+  .chat-state { padding: 32px 12px; text-align: center; color: var(--muted); font-size: 14px; }
+  .chat-state-err { color: var(--accent-intent); }
+  .chat-hint { margin-top: 8px; font-size: 12px; color: var(--muted-2); }
+  .history-row { display: flex; justify-content: center; padding: 4px 0 10px; }
+  .history-btn { font-size: 12px; padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: var(--panel); color: var(--text); cursor: pointer; }
+  .history-btn:hover { background: var(--hover-strong); }
+  .msg { border-radius: var(--radius-lg); transition: background var(--motion-fast); }
+  .msg:hover { background: var(--hover); }
+  .msg-active { background: var(--hover-strong); }
+  .msg-old { opacity: 0.72; }
+  .suggest-box { margin: 0 18px 8px; padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--accent-thread) 30%, var(--line-strong)); background: var(--panel-2); }
+  .suggest-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-thread); margin-bottom: 6px; }
+  .suggest-text { font-size: 13px; color: var(--text); margin-bottom: 10px; }
+  .suggest-actions { display: flex; gap: 8px; }
+  .composer-dock { padding: 12px 18px 16px; border-top: 1px solid var(--line); background: var(--bg); }
+  .composer-context { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .select { background: var(--panel); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 7px 10px; font-size: 13px; }
+  .channels { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 5px 10px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: transparent; color: var(--muted); cursor: pointer; }
+  .chip:hover { color: var(--text); }
+  .chip-active { background: color-mix(in srgb, var(--accent-thread) 18%, var(--panel)); color: var(--text-strong); border-color: color-mix(in srgb, var(--accent-thread) 45%, var(--line-strong)); }
+  .composer { display: flex; gap: 10px; align-items: flex-end; }
+  .composer-input { flex: 1; min-height: 52px; max-height: 160px; resize: vertical; padding: 14px 16px; border-radius: var(--radius-lg); border: 1px solid var(--line-strong); background: var(--panel); color: var(--text-strong); font-size: 15px; line-height: 1.5; }
+  .composer-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent-thread) 60%, var(--line-strong)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-thread) 18%, transparent); }
+  .composer-input::placeholder { color: var(--muted-2); }
+  .composer-actions { display: flex; gap: 8px; }
+  .btn { font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: var(--radius); border: 1px solid var(--line-strong); cursor: pointer; transition: all var(--motion-fast); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--text); }
+  .btn-ghost:hover:not(:disabled) { background: var(--hover); }
+  .btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-thread) 30%, var(--panel-raised)), color-mix(in srgb, var(--accent-thread) 16%, var(--panel))); color: var(--text-strong); border-color: color-mix(in srgb, var(--accent-thread) 55%, var(--line-strong)); }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
+  .btn-send { min-width: 88px; }
   @media (max-width: 640px) {
-    .chatstream {
-      grid-template-rows: auto auto minmax(0, 1fr) auto;
-    }
-    .cs-topbar {
-      flex-wrap: wrap;
-      padding-block: var(--space-2);
-    }
-    .cs-thread-subtitle {
-      width: 100%;
-      max-width: none;
-      white-space: normal;
-    }
-    .cs-thread-preview {
-      width: 100%;
-      max-width: none;
-    }
-    .cs-context-row,
-    .cs-composer {
-      grid-template-columns: 1fr;
-      display: grid;
-    }
-    .cs-composer-actions {
-      flex-direction: row;
-      width: 100%;
-    }
-    .cs-send-btn,
-    .cs-select,
-    .cs-channel-btn,
-    .cs-companion-btn {
-      min-height: 40px;
-    }
+    .chat-top { padding: 12px 14px; }
+    .chat-scroll { padding: 12px 12px 6px; }
+    .composer-dock { padding: 10px 12px 14px; }
+    .composer { flex-direction: column; }
+    .composer-actions { width: 100%; }
+    .composer-actions .btn { flex: 1; }
   }
 </style>

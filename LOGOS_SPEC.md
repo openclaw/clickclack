@@ -326,6 +326,14 @@ overlay windows, or page transitions:
 
 ## 8. UPGRADED APP — AESTHETIC INFRASTRUCTURE & VISUAL LANGUAGE (2026-08-07)
 
+> **UPDATE 2026-08-08 (Jarvis theme):** §8.1's pure-black monochrome palette is
+> **superseded** by the Jarvis operator-console skin — deep navy `#0a0e1a→#0d1117`
+> ground, cyan `#00d4ff` primary, electric blue `#0066ff` secondary, emerald
+> `#00ff88` success, amber `#ffaa00` warning. Implemented as a single swappable
+> layer `apps/logos/src/styles/theme.css` (approved by Conor; shipped live).
+> Keep the 2px functional accent discipline and glassmorphism on floating
+> surfaces only (palette + inspector), not the message stream.
+
 The app is NOT a reskinned chat log. It is a re-architected multi-pane
 operator console. This section is the authoritative chassis spec.
 

@@ -56,6 +56,8 @@ this explicitly more than once:
 `apps/logos/src/styles/tokens.css` + `chassis.css`:
 - Monochromatic palette (#000000 / #F4F4F0 / #1A1A1A), 2px functional accents
   (Phosphor Green #00FF66, Amber #FFB000, Cobalt #0088FF)
+- **SUPERSEDED 2026-08-08:** Jarvis theme (`apps/logos/src/styles/theme.css`)
+  replaces monochrome with deep navy + cyan/blue/emerald/amber — see spec §8 note.
 - 0px border radius, rigid tiled grid, dual fonts (Inter + JetBrains Mono)
 - 100-150ms linear motion; keyboard-first tokens
 

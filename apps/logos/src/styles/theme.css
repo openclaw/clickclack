@@ -1,0 +1,233 @@
+/* PROJECT LOGOS — Jarvis Theme (theme.css)
+   Swappable theme layer: deep-navy operator console with cyan primary /
+   electric-blue secondary / emerald success / amber warning. Overrides the
+   Phase D monochrome tokens via :root, then layers the visual upgrades
+   (glassmorphism on floating surfaces only, cyan glow, animated gradient
+   border on the active thread, subtle scanline). No component logic is
+   touched — swap this file in/out to re-skin the whole app.
+
+   Palette (approved 2026-08-08):
+     bg gradient   #0a0e1a -> #0d1117 (no pure black)
+     primary       #00d4ff (cyan — glow, borders, active states)
+     secondary     #0066ff (electric blue — buttons, links)
+     text          #ffffff / #b0b8c4
+     success       #00ff88 (emerald — status indicators)
+     warning       #ffaa00 (amber — alerts)
+*/
+
+:root {
+  /* ---------- Ground: deep navy, no pure black ---------- */
+  --cog-bg: #0d1117;
+  --cog-void: #0a0e1a;
+  --cog-steel: #111622;
+  --cog-plate: #151c2a;
+  --cog-deck: #1a2334;
+  --cog-line: #1b2332;
+  --cog-rule: #26324a;
+  --cog-fog: #6b7686;
+  --cog-slate: #8b95a5;
+  --cog-cloud: #b0b8c4;
+  --cog-mist: #c8cfd9;
+  --cog-chalk: #dfe5ec;
+  --cog-ash: #f2f5f9;
+  --cog-fg: #ffffff;
+
+  /* ---------- Intent edge bands (2px functional discipline) ---------- */
+  --intent-ask: #c9d2dd;
+  --intent-command: #ffaa00;   /* amber — commands */
+  --intent-reflect: #8aa0b8;
+  --intent-draft: #00ff88;     /* emerald — drafts */
+  --intent-clarify: #ff5e7a;
+  --intent-explore: #00d4ff;   /* cyan — exploration */
+  --intent-default: var(--cog-fog);
+
+  /* ---------- Functional accents ---------- */
+  --accent-verified: #00ff88;  /* emerald — status / verified */
+  --accent-intent: #ffaa00;    /* amber — intent bounds / warnings */
+  --accent-thread: #00d4ff;    /* cyan — thread routing / primary */
+  --accent-exec: #ffffff;
+  --accent-2: #0066ff;         /* electric blue — secondary / links */
+
+  /* ---------- Semantic aliases ---------- */
+  --rail: var(--cog-void);
+  --bg: var(--cog-bg);
+  --panel: var(--cog-steel);
+  --panel-2: var(--cog-plate);
+  --panel-3: var(--cog-deck);
+  --panel-raised: #1e2840;
+  --surface: var(--panel-2);
+  --hover: rgba(0, 212, 255, 0.07);
+  --hover-strong: rgba(0, 212, 255, 0.12);
+  --line: var(--cog-line);
+  --line-strong: var(--cog-rule);
+  --text: var(--cog-cloud);
+  --text-strong: var(--cog-fg);
+  --muted: var(--cog-fog);
+  --muted-2: var(--cog-slate);
+  --focus-ring: rgba(0, 212, 255, 0.7);
+
+  /* ---------- Glow ---------- */
+  --accent-glow: 0 0 12px rgba(0, 212, 255, 0.3);
+  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 42px rgba(0, 0, 0, 0.55);
+  --shadow: var(--shadow-sm);
+
+  --scrollbar: rgba(0, 212, 255, 0.22);
+  --scrollbar-hover: rgba(0, 212, 255, 0.4);
+
+  color-scheme: dark;
+}
+
+/* ---------- Ground gradient (navy, no pure black) ---------- */
+html,
+body {
+  background: linear-gradient(180deg, #0a0e1a 0%, #0d1117 100%);
+}
+
+.logos-shell {
+  background:
+    radial-gradient(circle at top, rgba(0, 212, 255, 0.10), transparent 32%),
+    linear-gradient(180deg, #0a0e1a 0%, #0d1117 100%);
+}
+
+.logos-main {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border-color: color-mix(in srgb, var(--accent-thread) 22%, var(--line-strong));
+}
+
+/* ---------- Scanline overlay (subtle, ~2% opacity) ---------- */
+.logos-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(255, 255, 255, 0.02) 3px,
+    rgba(255, 255, 255, 0.02) 4px
+  );
+}
+
+/* ---------- Intent band: 2px functional discipline ---------- */
+.msg-intent-band {
+  width: 2px !important;
+}
+
+/* ---------- Cyan glow on focus / primary hover ---------- */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--accent-glow);
+}
+
+.btn-primary,
+.msg-action-btn:hover,
+.inspector-tab:hover,
+.history-btn:hover,
+.palette-bar input:focus {
+  box-shadow: var(--accent-glow);
+}
+
+/* Secondary electric blue — buttons, links */
+.btn-primary {
+  background: linear-gradient(180deg, #0066ff 0%, #0052cc 100%) !important;
+  border-color: color-mix(in srgb, var(--accent-thread) 55%, var(--line-strong)) !important;
+  color: #ffffff !important;
+}
+
+a {
+  color: var(--accent-thread);
+}
+
+a:hover {
+  color: #4adeff;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+}
+
+/* ---------- Glassmorphism — floating surfaces ONLY ----------
+   (command palette + inspector blade; NOT the message stream) */
+.palette-overlay {
+  background: rgba(10, 14, 26, 0.45) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.palette-bar {
+  background: rgba(21, 28, 42, 0.55) !important;
+  backdrop-filter: blur(12px) !important;
+  border-color: rgba(0, 212, 255, 0.28) !important;
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(0, 212, 255, 0.15) !important;
+}
+
+.palette-feedback {
+  background: rgba(21, 28, 42, 0.55) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.inspector-blade {
+  background: rgba(17, 22, 34, 0.62) !important;
+  backdrop-filter: blur(12px) !important;
+  border-color: color-mix(in srgb, var(--accent-thread) 30%, var(--line-strong)) !important;
+}
+
+.inspector-tabs {
+  background: rgba(26, 35, 52, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+/* ---------- Animated gradient border — active thread ---------- */
+.msg-frame.msg-active {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(#141b2a, #141b2a) padding-box,
+    linear-gradient(90deg, #00d4ff, #0066ff, #00d4ff, #0066ff) border-box !important;
+  background-size: 100% 100%, 200% 100% !important;
+  animation: logos-thread-flow 4s linear infinite;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.5),
+    0 0 14px rgba(0, 212, 255, 0.2);
+}
+
+@keyframes logos-thread-flow {
+  0% {
+    background-position: 0 0, 0% 0;
+  }
+  100% {
+    background-position: 0 0, 200% 0;
+  }
+}
+
+/* Chat-stream active row: cyan left band + soft glow */
+.msg.msg-active {
+  border-left: 2px solid var(--accent-thread) !important;
+  background: rgba(0, 212, 255, 0.10) !important;
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.12);
+}
+
+/* ---------- Status / success / warning semantic colors ---------- */
+.pill-ok {
+  color: var(--accent-verified) !important;
+  border-color: color-mix(in srgb, var(--accent-verified) 45%, transparent) !important;
+}
+
+.pill-err {
+  color: var(--accent-intent) !important;
+  border-color: color-mix(in srgb, var(--accent-intent) 45%, transparent) !important;
+}
+
+.suggest-label,
+.msg-action-btn:hover {
+  color: var(--accent-thread) !important;
+}
+
+/* Mono system text stays mono (timestamps/logs — JetBrains Mono) */
+.logos-mono,
+.logos-meta,
+.logos-palette {
+  font-family: var(--font-mono) !important;
+}

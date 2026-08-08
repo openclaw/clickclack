@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../styles/tokens.css";
   import "../styles/chassis.css";
+  import "../styles/theme.css"; // Jarvis theme (2026-08-08) — swappable skin layer
   import SemanticMargin from "$lib/components/SemanticMargin.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import TelemetryRail from "$lib/components/TelemetryRail.svelte";

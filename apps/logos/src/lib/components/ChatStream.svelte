@@ -70,6 +70,7 @@
     }>;
   } | null>(null);
   let notice = $state<string | null>(null);
+  let historyCollapsed = $state(true);
 
   // ── Derived from chatState ───────────────────────────────────
 
@@ -115,6 +116,9 @@
   const activeChannelName = $derived(
     snapshot.channels.find((channel) => channel.id === snapshot.activeChannelId)?.name ?? null,
   );
+  const recentMessages = $derived(snapshot.messages.slice(-12));
+  const olderMessages = $derived(snapshot.messages.slice(0, -12));
+  const collapsedHiddenCount = $derived(Math.max(0, olderMessages.length));
   const connectionLabel = $derived(
     snapshot.status === "booting"
       ? "CONNECTING"
@@ -483,6 +487,10 @@
     companionSuggestion = null;
   }
 
+  function toggleHistoryCollapsed() {
+    historyCollapsed = !historyCollapsed;
+  }
+
   function handleClarifyAsk(messageId: string, question: string) {
     const chId = snapshot.activeChannelId;
     if (!chId) return;
@@ -598,43 +606,24 @@
 
 <div class="chatstream">
   <!-- ═══ TOP BAR: workspace + channel picker ═══ -->
-  <div class="cs-topbar logos-mono">
-    {#if snapshot.workspaces.length > 0}
-      <select
-        class="cs-select"
-        value={snapshot.activeWorkspaceId ?? ""}
-        onchange={onWsChange}
-        aria-label="Workspace"
-      >
-        {#each snapshot.workspaces as ws (ws.id)}
-          <option value={ws.id}>{ws.name}</option>
-        {/each}
-      </select>
-      <span class="cs-sep">/</span>
-    {/if}
-    <div class="cs-channels">
-      {#each snapshot.channels as ch (ch.id)}
-        <button
-          class="cs-channel-btn"
-          class:active={ch.id === snapshot.activeChannelId}
-          onclick={() => onChannelClick(ch)}
-        >
-          # {ch.name}
-        </button>
-      {/each}
+  <div class="cs-topbar">
+    <div class="cs-thread-head">
+      <div class="cs-thread-title">Type a message</div>
+      <div class="cs-thread-subtitle">
+        {#if activeWorkspaceName}
+          {activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}
+        {:else}
+          Pick a workspace and channel to begin.
+        {/if}
+      </div>
     </div>
     <span class="cs-spacer"></span>
-    {#if activeWorkspaceName}
-      <span class="cs-context" title={activeChannelName ? `${activeWorkspaceName} / ${activeChannelName}` : activeWorkspaceName}>
-        {activeWorkspaceName}{activeChannelName ? ` / #${activeChannelName}` : ""}
-      </span>
-    {/if}
     {#if snapshot.status === "booting"}
-      <span class="cs-status-booting">CONNECTING…</span>
+      <span class="cs-status-booting logos-mono">CONNECTING…</span>
     {:else if snapshot.status === "error"}
-      <span class="cs-status-error" title={snapshot.error ?? ""}>ERR</span>
+      <span class="cs-status-error logos-mono" title={snapshot.error ?? ""}>ERR</span>
     {:else if snapshot.activeChannelId}
-      <span class="cs-status-ready accent-verified">{connectionLabel}</span>
+      <span class="cs-status-ready logos-mono accent-verified">{connectionLabel}</span>
     {/if}
   </div>
   {#if notice}
@@ -677,7 +666,29 @@
         {/if}
       </div>
     {:else}
-      {#each snapshot.messages as msg (msg.id)}
+      {#if olderMessages.length > 0}
+        <div class="cs-history-toggle-wrap">
+          <button type="button" class="cs-history-toggle" onclick={toggleHistoryCollapsed}>
+            {#if historyCollapsed}
+              Show earlier history ({collapsedHiddenCount} messages)
+            {:else}
+              Hide earlier history
+            {/if}
+          </button>
+        </div>
+      {/if}
+      {#if !historyCollapsed}
+        {#each olderMessages as msg (msg.id)}
+          {@const msgId = String(msg.id)}
+          {@const logosMsg = messageToLogos(msg as CognitiveMessage)}
+          <div class="cs-row cs-row-compact" data-msg-id={msgId} onmouseenter={() => onRowFocus(msg)}>
+            <div class="cs-row-inner">
+              <MessageFrame message={logosMsg} onInspect={onInspect} active={$activeMessageId === msgId} compact={true} />
+            </div>
+          </div>
+        {/each}
+      {/if}
+      {#each recentMessages as msg (msg.id)}
         {@const msgId = String(msg.id)}
         {@const logosMsg = messageToLogos(msg as CognitiveMessage)}
         {@const rawMsg = msg as Record<string, unknown>}
@@ -722,25 +733,54 @@
 
   <!-- ═══ COMPOSER ═══ -->
   {#if snapshot.status === "ready" && snapshot.activeChannelId}
-    <div class="cs-composer">
-      <textarea
-        bind:this={composerRef}
-        bind:value={composerText}
-        class="cs-input logos-mono"
-        placeholder="Message…"
-        rows={2}
-        onkeydown={onKeyDown}
-      ></textarea>
-      <button
-        class="cs-send-btn cs-suggest-btn logos-mono"
-        onclick={handleSuggestReply}
-        disabled={!composerText.trim()}
-      >
-        SUGGEST
-      </button>
-      <button class="cs-send-btn logos-mono" onclick={onSubmit} disabled={!composerText.trim()}>
-        SEND
-      </button>
+    <div class="cs-composer-shell">
+      <div class="cs-context-row">
+        {#if snapshot.workspaces.length > 0}
+          <select
+            class="cs-select"
+            value={snapshot.activeWorkspaceId ?? ""}
+            onchange={onWsChange}
+            aria-label="Workspace"
+          >
+            {#each snapshot.workspaces as ws (ws.id)}
+              <option value={ws.id}>{ws.name}</option>
+            {/each}
+          </select>
+        {/if}
+        <div class="cs-channels">
+          {#each snapshot.channels as ch (ch.id)}
+            <button
+              class="cs-channel-btn"
+              class:active={ch.id === snapshot.activeChannelId}
+              onclick={() => onChannelClick(ch)}
+            >
+              # {ch.name}
+            </button>
+          {/each}
+        </div>
+      </div>
+      <div class="cs-composer">
+        <textarea
+          bind:this={composerRef}
+          bind:value={composerText}
+          class="cs-input"
+          placeholder="Write a message…"
+          rows={3}
+          onkeydown={onKeyDown}
+        ></textarea>
+        <div class="cs-composer-actions">
+          <button
+            class="cs-send-btn cs-suggest-btn"
+            onclick={handleSuggestReply}
+            disabled={!composerText.trim()}
+          >
+            Suggest reply
+          </button>
+          <button class="cs-send-btn cs-send-primary" onclick={onSubmit} disabled={!composerText.trim()}>
+            Send message
+          </button>
+        </div>
+      </div>
     </div>
     {#if companionSuggestion}
       <div class="cs-companion">
@@ -823,7 +863,7 @@
 <style>
   .chatstream {
     display: grid;
-    grid-template-rows: 48px auto minmax(0, 1fr) auto;
+    grid-template-rows: 72px auto minmax(0, 1fr) auto;
     height: 100%;
     background: transparent;
   }
@@ -843,14 +883,34 @@
   .cs-topbar {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    padding: 0 var(--space-4);
+    gap: var(--space-3);
+    padding: 0 var(--space-5);
     border-bottom: 1px solid var(--line);
     background: color-mix(in srgb, var(--panel) 82%, transparent);
     overflow: hidden;
   }
+  .cs-thread-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .cs-thread-title {
+    color: var(--text-strong);
+    font-size: 18px;
+    font-weight: 650;
+    line-height: 1.2;
+  }
+  .cs-thread-subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .cs-select {
-    min-height: 34px;
+    min-height: 38px;
     background: color-mix(in srgb, var(--panel-2) 90%, transparent);
     color: var(--text);
     border: 1px solid var(--line-strong);
@@ -861,16 +921,11 @@
     max-width: 160px;
     cursor: pointer;
   }
-  .cs-sep {
-    color: var(--muted-2);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
   .cs-channels {
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    padding-block: 6px;
+    padding-block: 2px;
   }
   .cs-channel-btn {
     min-height: 32px;
@@ -901,14 +956,6 @@
     box-shadow: var(--accent-glow);
   }
   .cs-spacer { flex: 1; }
-  .cs-context {
-    max-width: 280px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--muted-2);
-    font-size: 11px;
-  }
   .cs-status-booting {
     color: var(--muted-2);
     animation: cs-pulse 1.6s ease-in-out infinite;
@@ -923,11 +970,11 @@
   /* ── Message list ─────────────────────────── */
   .cs-messages {
     overflow-y: auto;
-    padding: var(--space-4);
+    padding: var(--space-5);
     min-height: 0;
     outline: none;
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-4);
     align-content: start;
     scroll-behavior: smooth;
   }
@@ -957,6 +1004,9 @@
   .cs-row {
     animation: cs-row-enter var(--motion-med);
   }
+  .cs-row-compact :global(.msg-actions) {
+    display: none;
+  }
   .cs-row-inner {
     display: flex;
     flex-direction: column;
@@ -966,30 +1016,61 @@
     background: var(--panel);
   }
 
-  .cs-composer {
+  .cs-composer-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: var(--space-2);
+    gap: 12px;
     padding: var(--space-4);
     border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel) 86%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--panel) 78%, transparent), color-mix(in srgb, var(--panel-raised) 92%, transparent));
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+  }
+
+  .cs-context-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .cs-composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 82%, transparent);
+    border-radius: var(--radius-xl, 16px);
+    background: color-mix(in srgb, var(--panel-2) 94%, transparent);
+    box-shadow: var(--shadow-md);
   }
 
   .cs-input {
-    min-height: 64px;
-    padding: 12px 14px;
-    border: 1px solid var(--line-strong);
+    min-height: 96px;
+    padding: 16px 18px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 84%, transparent);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
     color: var(--text-strong);
-    resize: vertical;
+    resize: none;
     line-height: 1.6;
+    font-family: var(--font-body);
+    font-size: 15px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+  .cs-input::placeholder {
+    color: var(--muted);
+  }
+
+  .cs-composer-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: flex-end;
   }
 
   .cs-send-btn {
-    min-height: 44px;
-    padding: 0 14px;
+    min-height: 48px;
+    padding: 0 16px;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
     background: color-mix(in srgb, var(--panel-2) 92%, transparent);
@@ -997,6 +1078,8 @@
     cursor: pointer;
     font-weight: 600;
     box-shadow: var(--shadow-sm);
+    font-family: var(--font-ui);
+    font-size: 12px;
   }
 
   .cs-send-btn:hover:not(:disabled) {
@@ -1012,6 +1095,34 @@
   .cs-suggest-btn {
     color: var(--accent-thread);
     border-color: var(--accent-thread);
+  }
+  .cs-send-primary {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent-thread) 26%, var(--panel-raised)), color-mix(in srgb, var(--accent-thread) 14%, var(--panel)));
+    color: var(--text-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 54%, var(--line-strong));
+  }
+
+  .cs-history-toggle-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+
+  .cs-history-toggle {
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+    color: var(--muted);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .cs-history-toggle:hover {
+    color: var(--text);
+    border-color: var(--line-strong);
   }
 
   .cs-companion {
@@ -1134,13 +1245,18 @@
       flex-wrap: wrap;
       padding-block: var(--space-2);
     }
-    .cs-context {
+    .cs-thread-subtitle {
       width: 100%;
       max-width: none;
-      order: 4;
+      white-space: normal;
     }
+    .cs-context-row,
     .cs-composer {
       grid-template-columns: 1fr;
+      display: grid;
+    }
+    .cs-composer-actions {
+      flex-direction: row;
     }
     .cs-send-btn,
     .cs-select,

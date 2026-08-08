@@ -29,17 +29,22 @@
 </script>
 
 <div class="console">
-  <header class="console-topbar logos-mono">
-    <span class="brand">LOGOS</span>
+  <header class="console-topbar">
+    <div class="topbar-copy">
+      <span class="brand">LOGOS</span>
+      <div class="brand-stack">
+        <div class="brand-title">Conversation companion</div>
+        <div class="brand-subtitle">Type first. Everything else stays out of the way until you need it.</div>
+      </div>
+    </div>
     <span class="spacer"></span>
-    <span class="persona-tag accent-intent">PERSONA: {persona.toUpperCase()}</span>
-    <button class="ghost" class:active={$semanticPaneOpen} onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>THREADS</button>
-    <button class="ghost" class:active={$telemetryOpen} onclick={() => telemetryOpen.set(!$telemetryOpen)}>TELEMETRY</button>
+    <span class="persona-tag logos-mono accent-intent">{persona.toUpperCase()}</span>
+    <button class="ghost" class:active={$semanticPaneOpen} onclick={() => semanticPaneOpen.set(!$semanticPaneOpen)}>History</button>
+    <button class="ghost" class:active={$telemetryOpen} onclick={() => telemetryOpen.set(!$telemetryOpen)}>Signals</button>
   </header>
 
   <div class="console-body" class:semantic-open={$semanticPaneOpen}>
     <section class="pane chat-pane">
-      <div class="pane-head logos-mono">CHAT STREAM <span class="accent-thread">· substrate: clickclack API</span></div>
       <div class="pane-body chat-body">
         <ChatStream />
       </div>
@@ -54,10 +59,9 @@
     </aside>
   </div>
 
-  <footer class="console-statusbar logos-mono">
-    <span>⌘K palette</span><span>·</span><span>Alt inspect</span><span>·</span>
-    <span>j/k navigate</span><span>·</span><span>Enter inspect</span><span>·</span>
-    <span>Esc close</span><span>·</span><span class="accent-thread">:{persona} switch</span>
+  <footer class="console-statusbar">
+    <span class="logos-mono">⌘K palette</span><span>·</span><span>History + memory on demand</span><span>·</span>
+    <span>Signals stay optional</span>
   </footer>
 </div>
 
@@ -72,16 +76,42 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: 0 var(--space-4);
+    padding: 0 var(--space-5);
     border-bottom: 1px solid var(--line);
     background: color-mix(in srgb, var(--panel) 82%, transparent);
     backdrop-filter: blur(12px);
+  }
+  .topbar-copy {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
   }
   .brand {
     font-weight: 700;
     color: var(--text-strong);
     letter-spacing: 0.14em;
     font-size: 12px;
+  }
+  .brand-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .brand-title {
+    color: var(--text-strong);
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.2;
+  }
+  .brand-subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .spacer { flex: 1; }
   .persona-tag {
@@ -132,23 +162,13 @@
   }
   .pane {
     display: grid;
-    grid-template-rows: 42px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     min-height: 0;
     border: 1px solid color-mix(in srgb, var(--line-strong) 75%, transparent);
     border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--panel) 90%, transparent);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
-  }
-  .pane-head {
-    display: flex;
-    align-items: center;
-    padding: 0 var(--space-4);
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
-    color: var(--muted-2);
-    font-size: 11px;
-    letter-spacing: 0.04em;
   }
   .chat-body {
     min-height: 0;
@@ -173,7 +193,7 @@
     border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--panel) 82%, transparent);
     color: var(--muted-2);
-    font-size: 11px;
+    font-size: 12px;
     overflow-x: auto;
     white-space: nowrap;
   }
@@ -183,6 +203,9 @@
       flex-wrap: wrap;
       min-height: 52px;
       padding-block: var(--space-2);
+    }
+    .topbar-copy {
+      width: 100%;
     }
     .console-body.semantic-open {
       grid-template-columns: minmax(0, 1fr);
@@ -200,11 +223,14 @@
       grid-template-rows: auto minmax(0, 1fr) 40px;
     }
     .brand {
-      width: 100%;
+      width: auto;
     }
     .persona-tag,
     .ghost {
       min-height: 40px;
+    }
+    .brand-subtitle {
+      white-space: normal;
     }
   }
 </style>

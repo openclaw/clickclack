@@ -38,9 +38,10 @@
     message: LogosMessage;
     onInspect?: (msg: LogosMessage) => void;
     active?: boolean;
+    compact?: boolean;
   }
 
-  let { message, onInspect, active = false }: Props = $props();
+  let { message, onInspect, active = false, compact = false }: Props = $props();
 
   // ── Derived state ──
 
@@ -73,6 +74,23 @@
     message.confidence != null ? `${Math.max(0, Math.min(100, message.confidence * 100))}%` : "0%",
   );
   const transformCount = $derived(message.transform_history?.length ?? 0);
+  const summaryText = $derived.by(() => {
+    const text = message.body.replace(/\s+/g, " ").trim();
+    if (text.length <= 220) return text;
+    return `${text.slice(0, 217).trimEnd()}...`;
+  });
+  const hasLongBody = $derived(message.body.replace(/\s+/g, " ").trim().length > 220);
+  const timestampLabel = $derived.by(() => {
+    if (!message.created_at) return null;
+    const date = new Date(message.created_at);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  });
 
   // ── Markdown rendering ──
   const renderedHtml = $derived.by(() => {
@@ -161,15 +179,28 @@
       {#if transformCount > 0}
         <span class="meta-tag">XFORM: {transformCount}</span>
       {/if}
+      {#if timestampLabel}
+        <span class="meta-tag meta-time">{timestampLabel}</span>
+      {/if}
     </div>
     <div class="msg-confidence-track" aria-hidden="true">
       <div class="msg-confidence-bar" style={`width: ${confidenceWidth}; background: ${intentColorVar};`}></div>
     </div>
 
-    <!-- Dense off-white body -->
-    <div class="msg-body">
-      {@html renderedHtml}
-    </div>
+    {#if compact}
+      <div class="msg-summary-wrap">
+        <div class="msg-summary">{summaryText}</div>
+        {#if hasLongBody}
+          <button type="button" class="msg-summary-expand" onclick={handleConfClick}>
+            OPEN THREAD
+          </button>
+        {/if}
+      </div>
+    {:else}
+      <div class="msg-body">
+        {@html renderedHtml}
+      </div>
+    {/if}
 
     <!-- Inline action rail (hover reveal) -->
     <div class="msg-actions">
@@ -314,6 +345,10 @@
     font-weight: 400;
   }
 
+  .meta-time {
+    color: var(--muted-2);
+  }
+
   .msg-confidence-track {
     height: 6px;
     margin: 0 0 var(--space-3);
@@ -401,6 +436,37 @@
 
   .msg-body :global(strong) {
     color: var(--text-strong);
+  }
+
+  .msg-summary-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .msg-summary {
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.65;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .msg-summary-expand {
+    align-self: flex-start;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid color-mix(in srgb, var(--accent-thread) 30%, var(--line));
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--accent-thread) 10%, transparent);
+    color: var(--text-strong);
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   /* ── Inspect mode: body 60% opacity ── */

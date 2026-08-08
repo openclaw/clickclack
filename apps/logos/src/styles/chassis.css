@@ -1,5 +1,6 @@
-/* PROJECT LOGOS — Chassis (spec §8.3): fixed tiled grid operator console.
-   Panes tile flush on 1px lines, 0px radius, rigid motion. */
+/* PROJECT LOGOS — Chassis
+   Phase D keeps the operator shell and dense layout, but softens the frame,
+   adds layering, and restores breathing room between surfaces. */
 
 html,
 body {
@@ -14,15 +15,17 @@ body {
 
 * {
   box-sizing: border-box;
-  border-radius: 0 !important;
 }
 
 .logos-shell {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) 0px;
   grid-template-rows: 100vh;
-  background: var(--bg);
-  border-left: 1px solid var(--line);
+  background:
+    radial-gradient(circle at top, rgba(74, 168, 255, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 18%),
+    var(--bg);
+  padding: var(--space-3);
   transition: grid-template-columns var(--motion-med);
 }
 
@@ -40,9 +43,13 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  border-left: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
+  position: relative;
+  min-width: 0;
 }
 
 /* Mono system text */
@@ -61,12 +68,13 @@ body {
 
 /* Inspect mode: text 60% opacity, dashed association lines */
 .logos-shell.inspect .logos-main {
-  opacity: 0.6;
+  opacity: 0.7;
 }
 .logos-shell.inspect .logos-main::before {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   pointer-events: none;
   background-image: repeating-linear-gradient(
     0deg,
@@ -75,4 +83,56 @@ body {
     rgba(0, 136, 255, 0.10) 7px,
     rgba(0, 136, 255, 0.10) 8px
   );
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+
+button,
+input,
+select,
+textarea,
+[role="button"] {
+  transition:
+    background var(--motion-fast),
+    color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    transform var(--motion-fast),
+    opacity var(--motion-fast);
+}
+
+button:active,
+[role="button"]:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  background-clip: padding-box;
 }

@@ -295,9 +295,8 @@
     grid-template-rows: auto minmax(0, 1fr);
     min-width: 0;
     overflow: hidden;
-    border-left: 1px solid var(--line-strong);
-    background: var(--panel);
-    font-family: var(--font-mono);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    font-family: var(--font-body);
     font-size: 10px;
     line-height: 1.45;
   }
@@ -306,18 +305,21 @@
   .logos-pane-tabs {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 6px;
     border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
+    background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+    padding: 10px 12px;
+    flex-wrap: wrap;
   }
 
   .logos-pane-tab {
-    padding: 6px 12px;
-    border: 0;
-    border-right: 1px solid var(--line);
-    background: transparent;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-3) 84%, transparent);
     color: var(--muted-2);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.05em;
@@ -332,18 +334,20 @@
   }
 
   .logos-pane-tab.active {
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
     color: var(--text-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 36%, var(--line-strong));
   }
 
   .logos-pane-close {
     margin-left: auto;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 0;
-    background: transparent;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-3) 84%, transparent);
     color: var(--muted);
     cursor: pointer;
   }
@@ -355,10 +359,10 @@
 
   /* ── Body ── */
   .logos-pane-body {
-    padding: 8px 10px;
+    padding: 12px;
     overflow-y: auto;
     display: grid;
-    gap: 8px;
+    gap: 12px;
     align-content: start;
   }
 
@@ -366,11 +370,13 @@
   .logos-pane-btn {
     display: block;
     width: 100%;
-    padding: 6px 10px;
+    min-height: 40px;
+    padding: 0 12px;
     border: 1px solid var(--line-strong);
-    background: var(--panel-2);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
     color: var(--text);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -380,9 +386,9 @@
   }
 
   .logos-pane-btn:hover:not(:disabled) {
-    background: var(--accent-thread);
-    color: var(--bg);
-    border-color: var(--accent-thread);
+    background: color-mix(in srgb, var(--accent-thread) 20%, transparent);
+    color: var(--text-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 44%, var(--line-strong));
   }
 
   .logos-pane-btn:disabled {
@@ -398,13 +404,14 @@
   .logos-pane-input {
     flex: 1;
     min-width: 0;
-    height: 28px;
-    padding: 0 8px;
+    height: 38px;
+    padding: 0 12px;
     border: 1px solid var(--line);
-    background: var(--panel-2);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 10px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+    color: var(--text-strong);
+    font-family: var(--font-body);
+    font-size: 11px;
     outline: none;
   }
 
@@ -424,7 +431,7 @@
   }
 
   .logos-pane-section-title {
-    padding: 4px 0;
+    padding: 4px 2px;
     color: var(--muted);
     font-size: 9px;
     font-weight: 700;
@@ -439,12 +446,12 @@
     align-items: baseline;
     gap: 6px;
     width: 100%;
-    padding: 5px 8px;
-    border: 0;
-    border-left: 2px solid var(--accent-thread);
-    background: var(--panel-2);
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--accent-thread) 20%, var(--line));
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
     color: var(--text);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 10px;
     cursor: pointer;
     text-align: left;
@@ -452,8 +459,9 @@
   }
 
   .logos-pane-cluster:hover {
-    background: var(--hover-strong);
-    border-left-color: var(--text-strong);
+    background: color-mix(in srgb, var(--panel-raised) 94%, transparent);
+    border-color: color-mix(in srgb, var(--accent-thread) 42%, var(--line-strong));
+    box-shadow: var(--shadow-sm);
   }
 
   .cluster-label {
@@ -471,14 +479,14 @@
   .logos-pane-node {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: 6px;
     width: 100%;
-    padding: 4px 6px;
-    border: 0;
-    border-left: 2px solid var(--line);
-    background: var(--panel-2);
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 88%, transparent);
     color: var(--text);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 10px;
     cursor: pointer;
     text-align: left;
@@ -486,8 +494,8 @@
   }
 
   .logos-pane-node:hover {
-    background: var(--hover-strong);
-    border-left-color: var(--accent-thread);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+    border-color: color-mix(in srgb, var(--accent-thread) 30%, var(--line-strong));
   }
 
   .node-marker {
@@ -512,11 +520,14 @@
 
   /* ── Empty/status states ── */
   .logos-pane-empty {
-    padding: 16px 8px;
+    padding: 24px 12px;
     color: var(--muted);
     text-align: center;
-    font-size: 10px;
-    line-height: 1.5;
+    font-size: 11px;
+    line-height: 1.6;
+    border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 72%, transparent);
   }
 
   .logos-pane-empty.is-error {

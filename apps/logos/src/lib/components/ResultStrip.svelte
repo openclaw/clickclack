@@ -84,14 +84,17 @@
   .result-strip {
     border: 1px solid var(--line-strong);
     border-top: none;
-    background: var(--panel);
-    font-family: var(--font-mono);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    font-family: var(--font-body);
     font-size: 11px;
-    line-height: 1.5;
+    line-height: 1.6;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
   }
 
   .result-body {
-    padding: 8px 12px;
+    padding: 12px 14px;
     color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
@@ -103,10 +106,11 @@
   .result-footer {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
-    padding: 4px 12px;
+    padding: 8px 12px 10px;
     border-top: 1px solid var(--line);
-    background: var(--panel-2);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
     font-size: 9px;
     letter-spacing: 0.04em;
   }
@@ -126,14 +130,16 @@
   }
 
   .result-btn {
-    padding: 2px 8px;
+    min-height: 30px;
+    padding: 0 10px;
     border: 1px solid var(--line-strong);
-    background: var(--panel-3);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-3) 82%, transparent);
     color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 9px;
+    font-family: var(--font-ui);
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     cursor: pointer;
     text-transform: uppercase;
   }
@@ -141,12 +147,18 @@
   .result-apply {
     border-color: var(--accent-thread);
     color: var(--accent-thread);
-    background: transparent;
+    background: color-mix(in srgb, var(--accent-thread) 10%, transparent);
   }
 
   .result-apply:hover {
-    background: var(--accent-thread);
-    color: var(--bg);
+    background: color-mix(in srgb, var(--accent-thread) 24%, transparent);
+    color: var(--text-strong);
+  }
+
+  .result-btn:hover {
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+    color: var(--text-strong);
+    box-shadow: var(--shadow-sm);
   }
 
   .result-dismiss:hover {

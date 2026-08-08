@@ -749,36 +749,41 @@
 <style>
   .chatstream {
     display: grid;
-    grid-template-rows: 32px auto minmax(0, 1fr) auto;
+    grid-template-rows: 48px auto minmax(0, 1fr) auto;
     height: 100%;
-    background: var(--bg);
+    background: transparent;
   }
   .cs-notice {
-    padding: 6px 10px;
+    margin: 0 var(--space-4);
+    padding: 10px 12px;
     border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-raised) 88%, transparent);
     color: var(--accent-thread);
-    font-size: 10px;
-    letter-spacing: 0.04em;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    box-shadow: var(--shadow-sm);
   }
 
   /* ── Top bar ──────────────────────────────── */
   .cs-topbar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 8px;
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
     border-bottom: 1px solid var(--line);
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
     overflow: hidden;
   }
   .cs-select {
-    background: var(--panel-2);
+    min-height: 34px;
+    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
     color: var(--text);
     border: 1px solid var(--line-strong);
-    font-family: var(--font-mono);
+    border-radius: var(--radius);
+    font-family: var(--font-ui);
     font-size: 11px;
-    padding: 2px 6px;
+    padding: 0 10px;
     max-width: 160px;
     cursor: pointer;
   }
@@ -789,27 +794,37 @@
   }
   .cs-channels {
     display: flex;
-    gap: 2px;
+    gap: 6px;
     overflow-x: auto;
+    padding-block: 6px;
   }
   .cs-channel-btn {
-    background: transparent;
+    min-height: 32px;
+    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
     border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
     color: var(--muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 11px;
-    padding: 2px 8px;
+    font-weight: 600;
+    padding: 0 12px;
     cursor: pointer;
     white-space: nowrap;
-    transition: color var(--motion-fast), border-color var(--motion-fast);
+    transition:
+      color var(--motion-fast),
+      border-color var(--motion-fast),
+      background var(--motion-fast),
+      box-shadow var(--motion-fast);
   }
   .cs-channel-btn:hover,
   .cs-channel-btn.active {
     color: var(--text-strong);
     border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
   }
   .cs-channel-btn.active {
-    background: var(--panel-2);
+    border-color: color-mix(in srgb, var(--accent-thread) 38%, var(--line-strong));
+    box-shadow: var(--accent-glow);
   }
   .cs-spacer { flex: 1; }
   .cs-context {
@@ -818,11 +833,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--muted-2);
-    font-size: 10px;
+    font-size: 11px;
   }
   .cs-status-booting {
     color: var(--muted-2);
-    animation: cs-pulse 1.5s steps(2, jump-none) infinite;
+    animation: cs-pulse 1.6s ease-in-out infinite;
   }
   .cs-status-error { color: var(--accent-intent); }
   .cs-status-ready { font-weight: 700; }
@@ -834,24 +849,31 @@
   /* ── Message list ─────────────────────────── */
   .cs-messages {
     overflow-y: auto;
-    padding: 0;
+    padding: var(--space-4);
     min-height: 0;
     outline: none;
+    display: grid;
+    gap: var(--space-3);
+    align-content: start;
+    scroll-behavior: smooth;
   }
   .cs-messages:focus-visible {
-    outline: 1px solid var(--line-strong);
-    outline-offset: -2px;
+    outline-offset: -4px;
   }
   .cs-state {
-    padding: 20px;
+    padding: var(--space-6) var(--space-5);
     color: var(--muted);
     text-align: center;
     line-height: 1.7;
+    border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
+    box-shadow: var(--shadow-sm);
   }
   .cs-state-hint {
-    margin-top: 8px;
+    margin-top: var(--space-2);
     color: var(--muted-2);
-    font-size: 11px;
+    font-size: 12px;
   }
   .cs-error {
     color: var(--intent-clarify);
@@ -859,10 +881,7 @@
 
   /* ── Message row ──────────────────────────── */
   .cs-row {
-    border-bottom: 1px solid var(--line);
-  }
-  .cs-row:last-child {
-    border-bottom: none;
+    animation: cs-row-enter var(--motion-med);
   }
   .cs-row-inner {
     display: flex;
@@ -876,27 +895,39 @@
   .cs-composer {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 8px;
-    padding: 10px;
+    gap: var(--space-2);
+    padding: var(--space-4);
     border-top: 1px solid var(--line);
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 86%, transparent);
   }
 
   .cs-input {
-    min-height: 56px;
-    padding: 8px 10px;
+    min-height: 64px;
+    padding: 12px 14px;
     border: 1px solid var(--line-strong);
-    background: var(--panel-2);
-    color: var(--text);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+    color: var(--text-strong);
     resize: vertical;
+    line-height: 1.6;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
 
   .cs-send-btn {
-    padding: 0 12px;
+    min-height: 44px;
+    padding: 0 14px;
     border: 1px solid var(--line-strong);
-    background: var(--panel-2);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
     color: var(--text);
     cursor: pointer;
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .cs-send-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+    color: var(--text-strong);
   }
 
   .cs-send-btn:disabled {
@@ -910,12 +941,16 @@
   }
 
   .cs-companion {
-    border-top: 1px solid var(--line);
-    background: var(--panel-2);
+    margin: 0 var(--space-4) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
   }
 
   .cs-companion-body {
-    padding: 10px 12px;
+    padding: 12px 14px;
     white-space: pre-wrap;
     color: var(--text);
     border-left: 2px solid var(--accent-thread);
@@ -925,23 +960,62 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px 10px;
+    padding: 8px 14px 12px;
     color: var(--muted);
     font-size: 9px;
     letter-spacing: 0.04em;
+    background: color-mix(in srgb, var(--panel-3) 78%, transparent);
   }
 
   .cs-companion-btn {
-    padding: 2px 8px;
+    min-height: 30px;
+    padding: 0 10px;
     border: 1px solid var(--line-strong);
-    background: transparent;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
     color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 9px;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 600;
     cursor: pointer;
   }
 
   .cs-companion-btn:hover:not(:disabled) {
-    background: var(--hover-strong);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+  }
+
+  @keyframes cs-row-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .chatstream {
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+    .cs-topbar {
+      flex-wrap: wrap;
+      padding-block: var(--space-2);
+    }
+    .cs-context {
+      width: 100%;
+      max-width: none;
+      order: 4;
+    }
+    .cs-composer {
+      grid-template-columns: 1fr;
+    }
+    .cs-send-btn,
+    .cs-select,
+    .cs-channel-btn,
+    .cs-companion-btn {
+      min-height: 40px;
+    }
   }
 </style>

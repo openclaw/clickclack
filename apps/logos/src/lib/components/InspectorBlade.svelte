@@ -208,8 +208,9 @@
     grid-template-rows: auto minmax(0, 1fr);
     border: 1px solid var(--line-strong);
     border-top: none;
-    background: var(--panel);
-    font-family: var(--font-mono);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    font-family: var(--font-body);
     font-size: 10px;
     line-height: 1.45;
     max-height: 0;
@@ -229,18 +230,21 @@
   .inspector-tabs {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 6px;
     border-bottom: 1px solid var(--line);
-    background: var(--panel-3);
+    background: color-mix(in srgb, var(--panel-3) 84%, transparent);
+    padding: 8px 10px;
+    flex-wrap: wrap;
   }
 
   .inspector-tab {
-    padding: 4px 10px;
-    border: 0;
-    border-right: 1px solid var(--line);
-    background: transparent;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
     color: var(--muted-2);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.05em;
@@ -255,25 +259,24 @@
   }
 
   .inspector-tab.active {
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
     color: var(--text-strong);
-    border-bottom: 1px solid var(--panel);
-    margin-bottom: -1px;
+    border-color: color-mix(in srgb, var(--accent-thread) 38%, var(--line-strong));
   }
 
   .inspector-tab:focus-visible {
-    outline: 1px solid var(--text-strong);
-    outline-offset: -2px;
+    outline-offset: 2px;
   }
 
   .inspector-close {
     margin-left: auto;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 0;
-    background: transparent;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-2) 84%, transparent);
     color: var(--muted);
     cursor: pointer;
     flex-shrink: 0;
@@ -286,7 +289,7 @@
 
   /* ── Body ── */
   .inspector-body {
-    padding: 6px 8px;
+    padding: 10px 12px;
     max-height: 300px;
     overflow-y: auto;
   }
@@ -298,19 +301,21 @@
 
   .inspect-grid {
     display: grid;
-    gap: 1px;
+    gap: 8px;
   }
 
   .inspect-row {
     display: grid;
     grid-template-columns: 130px 1fr;
-    gap: 8px;
-    padding: 3px 4px;
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
   }
 
   .inspect-row:last-child {
-    border-bottom: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
   }
 
   .inspect-label {
@@ -322,8 +327,8 @@
   }
 
   .inspect-value {
-    color: var(--text);
-    font-size: 10px;
+    color: var(--text-strong);
+    font-size: 11px;
   }
 
   .inspect-value.mono {
@@ -333,16 +338,17 @@
   /* ── Memory citations ── */
   .inspect-memory-list {
     display: grid;
-    gap: 3px;
+    gap: 8px;
   }
 
   .inspect-memory-node {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    padding: 3px 6px;
+    padding: 10px 12px;
     border: 1px solid var(--line);
-    background: var(--panel-2);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
   }
 
   .node-marker {
@@ -378,9 +384,10 @@
   /* ── Raw JSON ── */
   .inspect-json {
     margin: 0;
-    padding: 6px 8px;
+    padding: 10px 12px;
     border: 1px solid var(--line);
-    background: var(--panel-2);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 86%, transparent);
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 9.5px;
@@ -394,15 +401,17 @@
   /* ── Execution stack ── */
   .inspect-stack {
     display: grid;
-    gap: 1px;
+    gap: 8px;
   }
 
   .stack-frame {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    padding: 3px 6px;
+    padding: 10px 12px;
     border-left: 2px solid var(--line);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel-2) 80%, transparent);
     font-size: 10px;
   }
 
@@ -415,11 +424,11 @@
 
   /* ── Empty/placeholder ── */
   .inspect-empty {
-    padding: 14px 8px;
+    padding: 18px 12px;
     color: var(--muted);
     font-style: italic;
     text-align: center;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
   }
 
   /* ── Scrollbar ── */

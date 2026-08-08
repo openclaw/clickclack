@@ -71,12 +71,12 @@
 </script>
 
 {#if isOpen}
-  <div class="palette-overlay" role="dialog" aria-label="command palette" on:click|stopPropagation>
+  <div class="palette-overlay" role="dialog" aria-label="command palette" tabindex="-1" on:click|stopPropagation>
     <div class="palette-bar logos-palette">
       <span class="prompt">&gt;</span>
       <input
         bind:value={input}
-        placeholder=":persona analyst | :inspect | :telemetry | :threads"
+        placeholder=":persona analyst | :inspect | :telemetry | :threads | :memory"
         on:keydown={(e) => {
           if (e.key === "Enter") runCommand();
         }}
@@ -92,22 +92,29 @@
 <style>
   .palette-overlay {
     position: fixed;
-    top: 0;
-    left: 48px;
-    right: 0;
+    inset: 0;
     z-index: 100;
-    background: var(--bg);
-    border-bottom: 1px solid var(--line-strong);
+    display: grid;
+    align-content: start;
+    justify-items: center;
+    padding: 80px var(--space-4) 0;
+    background: rgba(8, 10, 14, 0.56);
+    backdrop-filter: blur(12px);
   }
   .palette-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
+    gap: var(--space-2);
+    width: min(760px, 100%);
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
+    border-radius: var(--radius-xl);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+    box-shadow: var(--shadow-lg);
   }
   .prompt {
     color: var(--accent-thread);
+    font-size: 16px;
   }
   input {
     flex: 1;
@@ -115,13 +122,19 @@
     border: none;
     outline: none;
     color: var(--text-strong);
-    font-family: var(--font-mono);
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: 15px;
   }
   .palette-feedback {
-    padding: 8px 14px;
+    width: min(760px, 100%);
+    margin-top: var(--space-2);
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--accent-verified);
+    box-shadow: var(--shadow-sm);
   }
 </style>

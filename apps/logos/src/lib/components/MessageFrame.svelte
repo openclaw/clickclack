@@ -190,13 +190,22 @@
     grid-template-columns: 4px 1fr;
     gap: 0;
     border: 1px solid var(--line);
-    background: var(--panel-2);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel-2) 92%, transparent);
     position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
   }
 
   .msg-frame.msg-active {
-    border-color: var(--line-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 32%, var(--line-strong));
     background: var(--panel);
+    box-shadow: var(--shadow-md);
+  }
+
+  .msg-frame:hover {
+    border-color: color-mix(in srgb, var(--accent-thread) 20%, var(--line-strong));
+    background: color-mix(in srgb, var(--panel-raised) 78%, var(--panel));
   }
 
   /* ── Intent edge band ── */
@@ -205,11 +214,12 @@
     min-height: 100%;
     background: var(--intent-color, var(--intent-default));
     flex-shrink: 0;
+    opacity: 0.8;
   }
 
   /* ── Content area ── */
   .msg-content {
-    padding: 10px 12px;
+    padding: var(--space-4);
     min-width: 0;
   }
 
@@ -217,12 +227,12 @@
   .msg-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 2px;
-    margin-bottom: 6px;
+    gap: 6px;
+    margin-bottom: var(--space-3);
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     color: var(--muted);
     line-height: 1.5;
   }
@@ -230,15 +240,28 @@
   .meta-tag {
     display: inline-flex;
     align-items: center;
-    padding: 1px 4px;
-    border: 1px solid transparent;
+    gap: 6px;
+    min-height: 22px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-3) 72%, transparent);
     white-space: nowrap;
+  }
+
+  .meta-tag::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted-2) 72%, transparent);
+    flex-shrink: 0;
   }
 
   .meta-conf {
     color: var(--text-strong);
     font-weight: 700;
-    border-color: var(--line);
+    border-color: color-mix(in srgb, var(--accent-thread) 22%, var(--line));
   }
 
   .meta-clickable {
@@ -248,12 +271,12 @@
 
   .meta-clickable:hover {
     background: var(--hover-strong);
-    border-color: var(--line-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 40%, var(--line-strong));
+    box-shadow: var(--accent-glow);
   }
 
   .meta-clickable:focus-visible {
-    outline: 1px solid var(--text-strong);
-    outline-offset: -1px;
+    outline-offset: 1px;
   }
 
   .meta-latency {
@@ -262,14 +285,17 @@
   }
 
   .msg-confidence-track {
-    height: 4px;
-    margin: 0 0 10px;
-    border: 1px solid var(--line);
-    background: var(--panel);
+    height: 6px;
+    margin: 0 0 var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel) 65%, transparent);
+    overflow: hidden;
   }
 
   .msg-confidence-bar {
     height: 100%;
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.08);
   }
 
   /* ── Body ── */
@@ -277,7 +303,7 @@
     color: var(--cog-fg);
     font-family: var(--font-body);
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.72;
     word-wrap: break-word;
     overflow-wrap: break-word;
     transition: opacity var(--motion-med);
@@ -293,21 +319,23 @@
   }
 
   .msg-body :global(pre) {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    padding: 8px 10px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+    border-radius: var(--radius);
+    padding: 10px 12px;
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
     overflow-x: auto;
-    margin: 6px 0;
+    margin: 8px 0;
   }
 
   .msg-body :global(code) {
     font-family: var(--font-mono);
     font-size: 0.9em;
-    background: var(--panel);
-    padding: 1px 4px;
+    background: color-mix(in srgb, var(--panel-3) 86%, transparent);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
   }
 
   .msg-body :global(pre code) {
@@ -327,8 +355,8 @@
 
   .msg-body :global(blockquote) {
     border-left: 2px solid var(--line-strong);
-    margin: 6px 0;
-    padding: 2px 0 2px 10px;
+    margin: 8px 0;
+    padding: 4px 0 4px 12px;
     color: var(--cog-cloud);
   }
 
@@ -354,21 +382,26 @@
   .msg-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding-top: 8px;
-    margin-top: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: var(--space-3);
+    margin-top: var(--space-3);
     border-top: 1px solid var(--line);
     opacity: 0;
-    transition: opacity var(--motion-fast);
-    font-family: var(--font-mono);
+    transform: translateY(6px);
+    transition:
+      opacity var(--motion-fast),
+      transform var(--motion-fast);
+    font-family: var(--font-ui);
     font-size: 10px;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
   }
 
   .msg-frame:hover .msg-actions,
   .msg-frame:focus-within .msg-actions,
   .msg-frame.msg-active .msg-actions {
     opacity: 1;
+    transform: translateY(0);
   }
 
   .msg-action-prompt {
@@ -378,26 +411,28 @@
   }
 
   .msg-action-btn {
-    padding: 2px 6px;
+    min-height: 30px;
+    padding: 0 10px;
     border: 1px solid var(--line);
-    background: transparent;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--panel-3) 72%, transparent);
     color: var(--muted);
-    font-family: var(--font-mono);
-    font-size: 9px;
+    font-family: var(--font-ui);
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
     cursor: pointer;
   }
 
   .msg-action-btn:hover {
-    background: var(--hover-strong);
+    background: color-mix(in srgb, var(--panel-raised) 90%, transparent);
     color: var(--text-strong);
-    border-color: var(--line-strong);
+    border-color: color-mix(in srgb, var(--accent-thread) 42%, var(--line-strong));
+    box-shadow: var(--shadow-sm);
   }
 
   .msg-action-btn:focus-visible {
-    outline: 1px solid var(--text-strong);
-    outline-offset: -1px;
+    outline-offset: 2px;
   }
 
   @media (prefers-reduced-motion: reduce) {

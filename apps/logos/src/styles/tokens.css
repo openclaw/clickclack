@@ -1,68 +1,84 @@
 /* PROJECT LOGOS — Design Tokens (app shell)
-   Spec LOGOS_SPEC §8: pure black bg, off-white type, charcoal borders,
-   0px radius, functional 2px accents, Inter + JetBrains Mono. */
+   Phase D shifts LOGOS from hard-terminal black to a layered operator console:
+   darker charcoals, softer radii, eased motion, restrained shadowing, and a
+   cleaner hierarchy between reading text and dense diagnostic data. */
 
 :root {
-  --cog-bg: #000000;
-  --cog-fg: #F4F4F0;
-  --cog-line: #1A1A1A;
-  --cog-void: #050505;
-  --cog-steel: #0d0d0d;
-  --cog-plate: #121212;
-  --cog-deck: #161616;
-  --cog-rule: #2a2a2a;
-  --cog-fog: #555555;
-  --cog-slate: #777777;
-  --cog-cloud: #a0a0a0;
-  --cog-mist: #c8c8c4;
-  --cog-chalk: #e0e0dc;
-  --cog-ash: #eaeae6;
+  --cog-bg: #0e0f12;
+  --cog-fg: #f3f4f6;
+  --cog-line: #20242b;
+  --cog-void: #0b0c0f;
+  --cog-steel: #14161a;
+  --cog-plate: #1a1d22;
+  --cog-deck: #21262d;
+  --cog-rule: #2d3440;
+  --cog-fog: #7b828f;
+  --cog-slate: #959daa;
+  --cog-cloud: #b8c0cb;
+  --cog-mist: #d4d8de;
+  --cog-chalk: #e6e8ec;
+  --cog-ash: #f0f2f5;
 
-  --intent-ask: #D1D1D1;
-  --intent-command: #FFB000;
-  --intent-reflect: #4A5568;
-  --intent-draft: #00FF66;
-  --intent-clarify: #FF0055;
-  --intent-explore: #0088FF;
+  --intent-ask: #c9d2dd;
+  --intent-command: #ffb84d;
+  --intent-reflect: #8aa0b8;
+  --intent-draft: #38d989;
+  --intent-clarify: #ff5e7a;
+  --intent-explore: #4aa8ff;
   --intent-default: var(--cog-fog);
 
-  --accent-verified: #00FF66;
-  --accent-intent: #FFB000;
-  --accent-thread: #0088FF;
-  --accent-exec: #F4F4F0;
+  --accent-verified: #38d989;
+  --accent-intent: #ffb84d;
+  --accent-thread: #4aa8ff;
+  --accent-exec: #f3f4f6;
 
   --rail: var(--cog-void);
   --bg: var(--cog-bg);
   --panel: var(--cog-steel);
   --panel-2: var(--cog-plate);
   --panel-3: var(--cog-deck);
+  --panel-raised: #252a32;
   --surface: var(--panel-2);
-  --hover: rgba(244, 244, 240, 0.05);
-  --hover-strong: rgba(244, 244, 240, 0.09);
+  --hover: rgba(243, 244, 246, 0.05);
+  --hover-strong: rgba(243, 244, 246, 0.1);
   --line: var(--cog-line);
   --line-strong: var(--cog-rule);
   --text: var(--cog-cloud);
   --text-strong: var(--cog-fg);
   --muted: var(--cog-fog);
   --muted-2: var(--cog-slate);
+  --focus-ring: color-mix(in srgb, var(--accent-thread) 72%, transparent);
 
-  --radius-sm: 0px;
-  --radius: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 
   --font-body: "Inter Variable", "Inter", "Neue Haas Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-body);
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  --motion-fast: 100ms linear;
-  --motion-med: 150ms linear;
+  --motion-fast: 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-med: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-slow: 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --motion-step: steps(2, jump-none);
 
-  --shadow: none;
-  --accent-glow: none;
+  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.14);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 18px 42px rgba(0, 0, 0, 0.22);
+  --shadow: var(--shadow-sm);
+  --accent-glow: 0 0 0 1px color-mix(in srgb, var(--accent-thread) 18%, transparent);
 
-  --scrollbar: rgba(244, 244, 240, 0.12);
-  --scrollbar-hover: rgba(244, 244, 240, 0.24);
+  --scrollbar: rgba(243, 244, 246, 0.14);
+  --scrollbar-hover: rgba(243, 244, 246, 0.26);
 
   color-scheme: dark;
   font-family: var(--font-body);

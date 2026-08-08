@@ -64,40 +64,61 @@
 <style>
   .console {
     display: grid;
-    grid-template-rows: 40px minmax(0, 1fr) 28px;
+    grid-template-rows: 52px minmax(0, 1fr) 36px;
     height: 100%;
+    min-width: 0;
   }
   .console-topbar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 12px;
+    gap: var(--space-3);
+    padding: 0 var(--space-4);
     border-bottom: 1px solid var(--line);
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    backdrop-filter: blur(12px);
   }
   .brand {
     font-weight: 700;
     color: var(--text-strong);
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
+    font-size: 12px;
   }
   .spacer { flex: 1; }
   .persona-tag {
-    border: 1px solid var(--line-strong);
-    padding: 2px 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--accent-intent) 28%, var(--line));
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--accent-intent) 10%, transparent);
+    color: var(--text-strong);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   }
   .ghost {
-    background: transparent;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel-2) 78%, transparent);
     color: var(--muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-size: 11px;
-    padding: 2px 8px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     cursor: pointer;
+    box-shadow: var(--accent-glow);
   }
   .ghost:hover,
   .ghost.active {
     color: var(--text-strong);
     border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+    box-shadow: var(--shadow-sm);
+  }
+  .ghost.active {
+    border-color: color-mix(in srgb, var(--accent-thread) 45%, var(--line-strong));
   }
   .console-body {
     display: grid;
@@ -107,39 +128,83 @@
   }
   .console-body.semantic-open {
     grid-template-columns: minmax(0, 1fr) 340px;
+    gap: var(--space-3);
   }
   .pane {
-    border-right: 1px solid var(--line);
     display: grid;
-    grid-template-rows: 30px minmax(0, 1fr);
+    grid-template-rows: 42px minmax(0, 1fr);
     min-height: 0;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 75%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
   }
   .pane-head {
     display: flex;
     align-items: center;
-    padding: 0 10px;
+    padding: 0 var(--space-4);
     border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
+    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
     color: var(--muted-2);
+    font-size: 11px;
+    letter-spacing: 0.04em;
   }
   .chat-body {
     min-height: 0;
   }
   .right-pane {
     overflow: hidden;
-    transition: all var(--motion-med);
+    transition:
+      opacity var(--motion-med),
+      transform var(--motion-med),
+      width var(--motion-med);
   }
   .right-pane:not(.open) {
     opacity: 0;
     pointer-events: none;
+    transform: translateX(12px);
   }
   .console-statusbar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
     border-top: 1px solid var(--line);
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
     color: var(--muted-2);
+    font-size: 11px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 900px) {
+    .console-topbar {
+      flex-wrap: wrap;
+      min-height: 52px;
+      padding-block: var(--space-2);
+    }
+    .console-body.semantic-open {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .right-pane.open {
+      position: absolute;
+      inset: 76px var(--space-3) 48px var(--space-3);
+      z-index: 10;
+      box-shadow: var(--shadow-lg);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .console {
+      grid-template-rows: auto minmax(0, 1fr) 40px;
+    }
+    .brand {
+      width: 100%;
+    }
+    .persona-tag,
+    .ghost {
+      min-height: 40px;
+    }
   }
 </style>

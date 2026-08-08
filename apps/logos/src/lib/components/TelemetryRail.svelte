@@ -47,10 +47,10 @@
   .telemetry-rail {
     display: flex;
     flex-direction: column;
-    gap: 0;
-    padding: 0;
-    background: var(--rail);
-    font-family: var(--font-mono);
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: transparent;
+    font-family: var(--font-body);
     min-height: 0;
   }
 
@@ -58,10 +58,12 @@
     display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
-    gap: 2px;
-    padding: 10px 12px 8px;
-    border-bottom: 1px solid var(--line);
-    border-left: 2px solid var(--accent-thread);
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    box-shadow: var(--shadow-sm);
   }
 
   .rail-label {
@@ -77,5 +79,6 @@
     color: var(--text-strong);
     letter-spacing: 0.04em;
     word-break: break-all;
+    font-family: var(--font-mono);
   }
 </style>

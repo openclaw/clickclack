@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "electron": "43.2.0",
+    "electron": "43.3.0",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.1"
   }

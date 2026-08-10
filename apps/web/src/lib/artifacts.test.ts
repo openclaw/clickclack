@@ -54,10 +54,7 @@ test("classifyArtifact detects docx by extension and by content type", () => {
   assert.equal(classifyArtifact(upload("resume.docx")), "docx");
   assert.equal(
     classifyArtifact(
-      upload(
-        "resume",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ),
+      upload("resume", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     ),
     "docx",
   );

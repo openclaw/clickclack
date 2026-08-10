@@ -39,13 +39,13 @@
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "fflate": "^0.8.3",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "wrangler": "4.119.0"
+    "wrangler": "4.120.0"
   },
   "engines": {
     "node": ">=24"

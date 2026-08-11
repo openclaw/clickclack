@@ -1203,6 +1203,7 @@ type Store interface {
 	ReleaseUploadQuotaReservation(ctx context.Context, reservationID, userID string) error
 	FirstUser(ctx context.Context) (User, error)
 	GetUser(ctx context.Context, id string) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
 	ListWorkspaces(ctx context.Context, userID string) ([]Workspace, error)
 	CreateWorkspace(ctx context.Context, input CreateWorkspaceInput, ownerID string) (Workspace, error)
 	GetWorkspace(ctx context.Context, workspaceID, userID string) (Workspace, error)

@@ -200,6 +200,14 @@ func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
 	return s.hydrateUserNotificationSettings(ctx, storeUserFromGetUser(row))
 }
 
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (store.User, error) {
+	row, err := s.q.GetUserByIdentityEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	if err != nil {
+		return store.User{}, err
+	}
+	return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityEmail(row))
+}
+
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {
 	displayName, handle, avatarURL, err := normalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
 	if err != nil {

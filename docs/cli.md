@@ -17,7 +17,7 @@ clickclack <command> [flags]
 Commands:
   serve      run the HTTP/WebSocket server (default if no command given)
   migrate    apply embedded SQL migrations
-  admin      bootstrap, FakeCo seed, user create, invite create, bot create, events prune, magic-link create
+  admin      bootstrap, FakeCo seed, user create, member add, invite create, bot create, events prune, magic-link create
   backup     write a SQLite backup file
   export     write a JSON dump to a file or stdout
   login      consume a magic-link token and store/print a session token
@@ -115,6 +115,17 @@ clickclack admin user create --name "Ari" --email ari@example.com [--workspace w
 
 Creates a user. With `--workspace`, also adds them to that workspace as a
 `member`. Prints the new user ID.
+
+### `admin member add`
+
+```sh
+clickclack admin member add --workspace wsp_... --email ari@example.com [--role member]
+```
+
+Adds an existing user to a workspace as a `member`, `moderator`, or `owner`.
+Existing memberships succeed without changing their role. Prints the workspace
+ID, user ID, resulting role, and whether the membership was added or already
+present.
 
 ### `admin fakeco seed`
 

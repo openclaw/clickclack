@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -191,6 +192,168 @@ func TestAdminBotCreateUsesExplicitAuthorizedActor(t *testing.T) {
 	if ownersByHandle["cli-service"] != "" || ownersByHandle["cli-personal"] != member.ID {
 		t.Fatalf("unexpected bot ownership: %#v", ownersByHandle)
 	}
+}
+
+func TestAdminMemberAddAddsExistingUserToSecondWorkspace(t *testing.T) {
+	dbURL, user, _, second := setupAdminMemberTest(t)
+
+	output := captureStdout(t, func() error {
+		return admin([]string{
+			"member", "add",
+			"--db", dbURL,
+			"--workspace", second.ID,
+			"--email", " Existing@Example.COM ",
+		})
+	})
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=added\n", second.ID, user.ID)
+	if output != wantOutput {
+		t.Fatalf("unexpected output: got %q want %q", output, wantOutput)
+	}
+
+	ctx := context.Background()
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	workspaces, err := st.ListWorkspaces(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) != 2 {
+		t.Fatalf("expected two workspace memberships, got %#v", workspaces)
+	}
+	for _, workspace := range workspaces {
+		if workspace.ID == second.ID && workspace.Role == store.WorkspaceRoleMember {
+			return
+		}
+	}
+	t.Fatalf("second workspace membership not found: %#v", workspaces)
+}
+
+func TestAdminMemberAddRejectsUnknownEmail(t *testing.T) {
+	dbURL, _, _, second := setupAdminMemberTest(t)
+	err := admin([]string{
+		"member", "add",
+		"--db", dbURL,
+		"--workspace", second.ID,
+		"--email", " Missing@Example.COM ",
+	})
+	if err == nil || !strings.Contains(err.Error(), `no user found for email "missing@example.com"`) {
+		t.Fatalf("expected unknown email error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "clickclack admin user create --workspace "+second.ID) {
+		t.Fatalf("expected actionable user create guidance, got %v", err)
+	}
+}
+
+func TestAdminMemberAddValidatesRequiredFlagsBeforeOpeningDatabase(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "workspace", args: []string{"--email", "existing@example.com"}, wantErr: "--workspace is required"},
+		{name: "email", args: []string{"--workspace", "wsp_missing"}, wantErr: "--email is required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "missing.db")
+			args := append([]string{"member", "add", "--db", "sqlite://" + dbPath}, test.args...)
+			err := admin(args)
+			if err == nil || err.Error() != test.wantErr {
+				t.Fatalf("expected %q, got %v", test.wantErr, err)
+			}
+			if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("validation opened the database before rejecting the command: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestAdminMemberAddRejectsInvalidRole(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "missing.db")
+	err := admin([]string{
+		"member", "add",
+		"--db", "sqlite://" + dbPath,
+		"--workspace", "wsp_missing",
+		"--email", "existing@example.com",
+		"--role", store.WorkspaceRoleGuest,
+	})
+	if err == nil || !strings.Contains(err.Error(), "--role must be one of member, moderator, owner") {
+		t.Fatalf("expected invalid role error, got %v", err)
+	}
+	if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("validation opened the database before rejecting the command: %v", statErr)
+	}
+}
+
+func TestAdminMemberAddIsIdempotentForExistingMember(t *testing.T) {
+	dbURL, user, first, _ := setupAdminMemberTest(t)
+
+	output := captureStdout(t, func() error {
+		return admin([]string{
+			"member", "add",
+			"--db", dbURL,
+			"--workspace", first.ID,
+			"--email", "existing@example.com",
+			"--role", store.WorkspaceRoleOwner,
+		})
+	})
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=already_member\n", first.ID, user.ID)
+	if output != wantOutput {
+		t.Fatalf("unexpected output: got %q want %q", output, wantOutput)
+	}
+
+	ctx := context.Background()
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	workspaces, err := st.ListWorkspaces(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) != 1 || workspaces[0].ID != first.ID || workspaces[0].Role != store.WorkspaceRoleMember {
+		t.Fatalf("existing membership changed: %#v", workspaces)
+	}
+}
+
+func setupAdminMemberTest(t *testing.T) (string, store.User, store.Workspace, store.Workspace) {
+	t.Helper()
+	ctx := context.Background()
+	dbURL := "sqlite://" + filepath.Join(t.TempDir(), "clickclack.db")
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "First", Slug: "first"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Second", Slug: "second"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Existing", Email: "existing@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, first.ID, user.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return dbURL, user, first, second
 }
 
 func TestOpenUploadStorageValidation(t *testing.T) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -279,6 +280,79 @@ func admin(args []string) error {
 			}
 		}
 		fmt.Printf("%s\n", user.ID)
+		return nil
+	case "member":
+		if len(args) < 2 || args[1] != "add" {
+			return fmt.Errorf("usage: clickclack admin member add --workspace WORKSPACE_ID --email EMAIL [--role member]")
+		}
+		flags := flag.NewFlagSet("admin member add", flag.ExitOnError)
+		data := flags.String("data", defaultData(), "data directory")
+		dbURL := flags.String("db", defaultDB(), "database URL")
+		workspaceID := flags.String("workspace", "", "workspace id")
+		email := flags.String("email", "", "existing user email")
+		role := flags.String("role", store.WorkspaceRoleMember, "workspace role")
+		if err := flags.Parse(args[2:]); err != nil {
+			return err
+		}
+		*workspaceID = strings.TrimSpace(*workspaceID)
+		*email = strings.ToLower(strings.TrimSpace(*email))
+		*role = strings.TrimSpace(*role)
+		if *workspaceID == "" {
+			return fmt.Errorf("--workspace is required")
+		}
+		if *email == "" {
+			return fmt.Errorf("--email is required")
+		}
+		switch *role {
+		case store.WorkspaceRoleMember, store.WorkspaceRoleModerator, store.WorkspaceRoleOwner:
+		default:
+			return fmt.Errorf("--role must be one of member, moderator, owner; guest and bot are managed by other flows")
+		}
+		st, err := openStore(resolveDB(*data, *dbURL))
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		ctx := context.Background()
+		if err := st.Migrate(ctx); err != nil {
+			return err
+		}
+		user, err := st.GetUserByEmail(ctx, *email)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("no user found for email %q; use clickclack admin user create --workspace %s --email %s", *email, *workspaceID, *email)
+		}
+		if err != nil {
+			return err
+		}
+		workspaces, err := st.ListWorkspaces(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		status := "added"
+		for _, workspace := range workspaces {
+			if workspace.ID == *workspaceID {
+				status = "already_member"
+				break
+			}
+		}
+		if err := st.AddWorkspaceMember(ctx, *workspaceID, user.ID, *role); err != nil {
+			return err
+		}
+		workspaces, err = st.ListWorkspaces(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		resultRole := ""
+		for _, workspace := range workspaces {
+			if workspace.ID == *workspaceID {
+				resultRole = workspace.Role
+				break
+			}
+		}
+		if resultRole == "" {
+			return fmt.Errorf("workspace membership was not created")
+		}
+		fmt.Printf("workspace=%s user=%s role=%s status=%s\n", *workspaceID, user.ID, resultRole, status)
 		return nil
 	case "invite":
 		if len(args) < 2 || args[1] != "create" {

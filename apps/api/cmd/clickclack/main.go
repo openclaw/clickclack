@@ -283,32 +283,37 @@ func admin(args []string) error {
 		return nil
 	case "member":
 		if len(args) < 2 || args[1] != "add" {
-			return fmt.Errorf("usage: clickclack admin member add --workspace WORKSPACE_ID --email EMAIL [--role member]")
+			return fmt.Errorf("usage: clickclack admin member add --workspace WORKSPACE_ID --created-by USER_ID (--email EMAIL | --user USER_ID) [--role member]")
 		}
 		flags := flag.NewFlagSet("admin member add", flag.ExitOnError)
 		data := flags.String("data", defaultData(), "data directory")
 		dbURL := flags.String("db", defaultDB(), "database URL")
 		workspaceID := flags.String("workspace", "", "workspace id")
+		createdBy := flags.String("created-by", "", "owner or moderator user id")
 		email := flags.String("email", "", "existing user email")
+		userID := flags.String("user", "", "existing user id")
 		role := flags.String("role", store.WorkspaceRoleMember, "workspace role")
 		if err := flags.Parse(args[2:]); err != nil {
 			return err
 		}
 		*workspaceID = strings.TrimSpace(*workspaceID)
-		// Left as typed: the store folds case on both sides, and errors should
-		// echo the address the operator actually passed.
+		*createdBy = strings.TrimSpace(*createdBy)
 		*email = strings.TrimSpace(*email)
+		*userID = strings.TrimSpace(*userID)
 		*role = strings.TrimSpace(*role)
 		if *workspaceID == "" {
 			return fmt.Errorf("--workspace is required")
 		}
-		if *email == "" {
-			return fmt.Errorf("--email is required")
+		if *createdBy == "" {
+			return fmt.Errorf("--created-by is required")
+		}
+		if (*email == "") == (*userID == "") {
+			return fmt.Errorf("exactly one of --email or --user is required")
 		}
 		switch *role {
-		case store.WorkspaceRoleMember, store.WorkspaceRoleModerator, store.WorkspaceRoleOwner:
+		case store.WorkspaceRoleMember, store.WorkspaceRoleModerator:
 		default:
-			return fmt.Errorf("--role must be one of member, moderator, owner; guest and bot are managed by other flows")
+			return fmt.Errorf("--role must be one of member or moderator; owner, guest, and bot are managed by other flows")
 		}
 		st, err := openStore(resolveDB(*data, *dbURL))
 		if err != nil {
@@ -319,42 +324,38 @@ func admin(args []string) error {
 		if err := st.Migrate(ctx); err != nil {
 			return err
 		}
-		user, err := st.GetUserByEmail(ctx, *email)
+		var user store.User
+		if *userID != "" {
+			user, err = st.GetUser(ctx, *userID)
+		} else {
+			user, err = st.GetUserByEmail(ctx, *email)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
+			if *userID != "" {
+				return fmt.Errorf("no user found for id %q", *userID)
+			}
 			return fmt.Errorf("no user found for email %q; use clickclack admin user create --workspace %s --email %s", *email, *workspaceID, *email)
 		}
+		if errors.Is(err, store.ErrAmbiguousUserEmail) {
+			return fmt.Errorf("multiple users found for email %q; retry with --user USER_ID", *email)
+		}
 		if err != nil {
 			return err
 		}
-		workspaces, err := st.ListWorkspaces(ctx, user.ID)
+		result, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+			WorkspaceID: *workspaceID,
+			UserID:      user.ID,
+			ActorUserID: *createdBy,
+			Role:        *role,
+		})
 		if err != nil {
 			return err
 		}
-		status := "added"
-		for _, workspace := range workspaces {
-			if workspace.ID == *workspaceID {
-				status = "already_member"
-				break
-			}
+		status := "already_member"
+		if result.Added {
+			status = "added"
 		}
-		if err := st.AddWorkspaceMember(ctx, *workspaceID, user.ID, *role); err != nil {
-			return err
-		}
-		workspaces, err = st.ListWorkspaces(ctx, user.ID)
-		if err != nil {
-			return err
-		}
-		resultRole := ""
-		for _, workspace := range workspaces {
-			if workspace.ID == *workspaceID {
-				resultRole = workspace.Role
-				break
-			}
-		}
-		if resultRole == "" {
-			return fmt.Errorf("workspace membership was not created")
-		}
-		fmt.Printf("workspace=%s user=%s role=%s status=%s\n", *workspaceID, user.ID, resultRole, status)
+		fmt.Printf("workspace=%s user=%s role=%s status=%s\n", *workspaceID, user.ID, result.Role, status)
 		return nil
 	case "invite":
 		if len(args) < 2 || args[1] != "create" {

@@ -1902,43 +1902,6 @@ func (q *Queries) GetUserByIdentityEmail(ctx context.Context, email string) (Get
 	return i, err
 }
 
-const getUserByIdentityEmailFold = `-- name: GetUserByIdentityEmailFold :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
-FROM identities i
-JOIN users u ON u.id = i.user_id
-WHERE lower(i.email) = lower(?1)
-ORDER BY u.created_at
-LIMIT 1
-`
-
-type GetUserByIdentityEmailFoldRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
-}
-
-// Case-insensitive twin of GetUserByIdentityEmail. Identity rows keep the
-// casing they were created with (admin user create stores the address as
-// given), so an exact match cannot find them from a normalized lookup.
-func (q *Queries) GetUserByIdentityEmailFold(ctx context.Context, email string) (GetUserByIdentityEmailFoldRow, error) {
-	row := q.db.QueryRowContext(ctx, getUserByIdentityEmailFold, email)
-	var i GetUserByIdentityEmailFoldRow
-	err := row.Scan(
-		&i.ID,
-		&i.Kind,
-		&i.OwnerUserID,
-		&i.DisplayName,
-		&i.Handle,
-		&i.AvatarUrl,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const getUserByIdentityProviderSubject = `-- name: GetUserByIdentityProviderSubject :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
 FROM identities i
@@ -2928,7 +2891,7 @@ func (q *Queries) InsertWorkspace(ctx context.Context, arg InsertWorkspaceParams
 	return err
 }
 
-const insertWorkspaceMember = `-- name: InsertWorkspaceMember :exec
+const insertWorkspaceMember = `-- name: InsertWorkspaceMember :execrows
 INSERT OR IGNORE INTO workspace_members (
   workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
 )
@@ -2956,14 +2919,17 @@ type InsertWorkspaceMemberParams struct {
 	CreatedAt   string `json:"created_at"`
 }
 
-func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspaceMemberParams) error {
-	_, err := q.db.ExecContext(ctx, insertWorkspaceMember,
+func (q *Queries) InsertWorkspaceMember(ctx context.Context, arg InsertWorkspaceMemberParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertWorkspaceMember,
 		arg.WorkspaceID,
 		arg.UserID,
 		arg.Role,
 		arg.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const latestEventCursor = `-- name: LatestEventCursor :one
@@ -3964,6 +3930,59 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 			&i.ReplyCount,
 			&i.LastReplyAt,
 			&i.LastReplyAuthorIdsJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersByIdentityEmailFold = `-- name: ListUsersByIdentityEmailFold :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+FROM identities i
+JOIN users u ON u.id = i.user_id
+WHERE lower(i.email) = lower(?1)
+ORDER BY u.created_at, u.id
+LIMIT 2
+`
+
+type ListUsersByIdentityEmailFoldRow struct {
+	ID          string         `json:"id"`
+	Kind        string         `json:"kind"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+}
+
+// Case-insensitive twin of GetUserByIdentityEmail. Identity rows keep the
+// casing they were created with (admin user create stores the address as
+// given), so an exact match cannot find them from a normalized lookup.
+func (q *Queries) ListUsersByIdentityEmailFold(ctx context.Context, email string) ([]ListUsersByIdentityEmailFoldRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersByIdentityEmailFold, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersByIdentityEmailFoldRow
+	for rows.Next() {
+		var i ListUsersByIdentityEmailFoldRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

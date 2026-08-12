@@ -146,6 +146,11 @@ var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
 // current owner, not just a moderator.
 var ErrWorkspaceOwnerRequired = errors.New("workspace owner permission required")
 
+// ErrAmbiguousUserEmail is returned when a case-insensitive identity email
+// lookup resolves to more than one user. Callers must use an unambiguous user
+// ID rather than guessing which account should receive access.
+var ErrAmbiguousUserEmail = errors.New("multiple users have this identity email")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
@@ -351,6 +356,18 @@ type Event struct {
 type CreateUserInput struct {
 	DisplayName string
 	Email       string
+}
+
+type AddWorkspaceMemberInput struct {
+	WorkspaceID string
+	UserID      string
+	ActorUserID string
+	Role        string
+}
+
+type AddWorkspaceMemberResult struct {
+	Role  string
+	Added bool
 }
 
 type CreateBotInput struct {
@@ -1190,6 +1207,7 @@ type Store interface {
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error
+	AddWorkspaceMemberByActor(ctx context.Context, input AddWorkspaceMemberInput) (AddWorkspaceMemberResult, error)
 	EnsureDefaultWorkspaceMember(ctx context.Context, userID string) (Workspace, error)
 	EnsureDefaultGuestWorkspaceMember(ctx context.Context, userID, role string) (Workspace, error)
 	ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorUserID string, page WorkspaceMemberPageRequest) (WorkspaceMemberPage, error)

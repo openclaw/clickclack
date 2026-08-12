@@ -217,11 +217,17 @@ func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
 // Identity rows keep the casing they were created with, so this folds both
 // sides rather than assuming stored addresses are already normalized.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (store.User, error) {
-	row, err := s.q.GetUserByIdentityEmailFold(ctx, strings.TrimSpace(email))
+	rows, err := s.q.ListUsersByIdentityEmailFold(ctx, strings.TrimSpace(email))
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityEmailFold(row))
+	if len(rows) == 0 {
+		return store.User{}, sql.ErrNoRows
+	}
+	if len(rows) > 1 {
+		return store.User{}, store.ErrAmbiguousUserEmail
+	}
+	return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityEmailFold(rows[0]))
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {
@@ -501,7 +507,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, input store.CreateWorkspace
 	if !inserted {
 		return store.Workspace{}, errors.New("could not create workspace route_id after collision retries")
 	}
-	if err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+	if _, err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
 		WorkspaceID: w.ID,
 		UserID:      ownerID,
 		Role:        "owner",

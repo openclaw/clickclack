@@ -111,13 +111,13 @@ LIMIT 1;
 -- Case-insensitive twin of GetUserByIdentityEmail. Identity rows keep the
 -- casing they were created with (admin user create stores the address as
 -- given), so an exact match cannot find them from a normalized lookup.
--- name: GetUserByIdentityEmailFold :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+-- name: ListUsersByIdentityEmailFold :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE lower(i.email) = lower(sqlc.arg(email))
-ORDER BY u.created_at
-LIMIT 1;
+ORDER BY u.created_at, u.id
+LIMIT 2;
 
 -- name: GetUserByIdentityProviderSubject :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
@@ -317,7 +317,7 @@ ORDER BY u.id;
 INSERT INTO invites (id, workspace_id, token, created_by, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(token), sqlc.arg(created_by), sqlc.arg(created_at));
 
--- name: InsertWorkspaceMember :exec
+-- name: InsertWorkspaceMember :execrows
 INSERT OR IGNORE INTO workspace_members (
   workspace_id, user_id, role, created_at, role_sort, sort_name, sort_handle
 )

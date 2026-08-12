@@ -195,28 +195,29 @@ func TestAdminBotCreateUsesExplicitAuthorizedActor(t *testing.T) {
 }
 
 func TestAdminMemberAddAddsExistingUserToSecondWorkspace(t *testing.T) {
-	dbURL, user, _, second := setupAdminMemberTest(t)
+	fixture := setupAdminMemberTest(t)
 
 	output := captureStdout(t, func() error {
 		return admin([]string{
 			"member", "add",
-			"--db", dbURL,
-			"--workspace", second.ID,
+			"--db", fixture.dbURL,
+			"--workspace", fixture.second.ID,
+			"--created-by", fixture.owner.ID,
 			"--email", " Existing@Example.COM ",
 		})
 	})
-	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=added\n", second.ID, user.ID)
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=added\n", fixture.second.ID, fixture.user.ID)
 	if output != wantOutput {
 		t.Fatalf("unexpected output: got %q want %q", output, wantOutput)
 	}
 
 	ctx := context.Background()
-	st, err := sqlitestore.Open(dbURL)
+	st, err := sqlitestore.Open(fixture.dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	workspaces, err := st.ListWorkspaces(ctx, user.ID)
+	workspaces, err := st.ListWorkspaces(ctx, fixture.user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +225,7 @@ func TestAdminMemberAddAddsExistingUserToSecondWorkspace(t *testing.T) {
 		t.Fatalf("expected two workspace memberships, got %#v", workspaces)
 	}
 	for _, workspace := range workspaces {
-		if workspace.ID == second.ID && workspace.Role == store.WorkspaceRoleMember {
+		if workspace.ID == fixture.second.ID && workspace.Role == store.WorkspaceRoleMember {
 			return
 		}
 	}
@@ -232,17 +233,18 @@ func TestAdminMemberAddAddsExistingUserToSecondWorkspace(t *testing.T) {
 }
 
 func TestAdminMemberAddRejectsUnknownEmail(t *testing.T) {
-	dbURL, _, _, second := setupAdminMemberTest(t)
+	fixture := setupAdminMemberTest(t)
 	err := admin([]string{
 		"member", "add",
-		"--db", dbURL,
-		"--workspace", second.ID,
+		"--db", fixture.dbURL,
+		"--workspace", fixture.second.ID,
+		"--created-by", fixture.owner.ID,
 		"--email", " Missing@Example.COM ",
 	})
 	if err == nil || !strings.Contains(err.Error(), `no user found for email "Missing@Example.COM"`) {
 		t.Fatalf("expected unknown email error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "clickclack admin user create --workspace "+second.ID) {
+	if !strings.Contains(err.Error(), "clickclack admin user create --workspace "+fixture.second.ID) {
 		t.Fatalf("expected actionable user create guidance, got %v", err)
 	}
 }
@@ -253,8 +255,10 @@ func TestAdminMemberAddValidatesRequiredFlagsBeforeOpeningDatabase(t *testing.T)
 		args    []string
 		wantErr string
 	}{
-		{name: "workspace", args: []string{"--email", "existing@example.com"}, wantErr: "--workspace is required"},
-		{name: "email", args: []string{"--workspace", "wsp_missing"}, wantErr: "--email is required"},
+		{name: "workspace", args: []string{"--created-by", "usr_owner", "--email", "existing@example.com"}, wantErr: "--workspace is required"},
+		{name: "actor", args: []string{"--workspace", "wsp_missing", "--email", "existing@example.com"}, wantErr: "--created-by is required"},
+		{name: "selector", args: []string{"--workspace", "wsp_missing", "--created-by", "usr_owner"}, wantErr: "exactly one of --email or --user is required"},
+		{name: "selectors", args: []string{"--workspace", "wsp_missing", "--created-by", "usr_owner", "--email", "existing@example.com", "--user", "usr_existing"}, wantErr: "exactly one of --email or --user is required"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -277,10 +281,11 @@ func TestAdminMemberAddRejectsInvalidRole(t *testing.T) {
 		"member", "add",
 		"--db", "sqlite://" + dbPath,
 		"--workspace", "wsp_missing",
+		"--created-by", "usr_owner",
 		"--email", "existing@example.com",
 		"--role", store.WorkspaceRoleGuest,
 	})
-	if err == nil || !strings.Contains(err.Error(), "--role must be one of member, moderator, owner") {
+	if err == nil || !strings.Contains(err.Error(), "--role must be one of member or moderator") {
 		t.Fatalf("expected invalid role error, got %v", err)
 	}
 	if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
@@ -289,33 +294,34 @@ func TestAdminMemberAddRejectsInvalidRole(t *testing.T) {
 }
 
 func TestAdminMemberAddIsIdempotentForExistingMember(t *testing.T) {
-	dbURL, user, first, _ := setupAdminMemberTest(t)
+	fixture := setupAdminMemberTest(t)
 
 	output := captureStdout(t, func() error {
 		return admin([]string{
 			"member", "add",
-			"--db", dbURL,
-			"--workspace", first.ID,
+			"--db", fixture.dbURL,
+			"--workspace", fixture.first.ID,
+			"--created-by", fixture.owner.ID,
 			"--email", "existing@example.com",
-			"--role", store.WorkspaceRoleOwner,
+			"--role", store.WorkspaceRoleModerator,
 		})
 	})
-	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=already_member\n", first.ID, user.ID)
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=already_member\n", fixture.first.ID, fixture.user.ID)
 	if output != wantOutput {
 		t.Fatalf("unexpected output: got %q want %q", output, wantOutput)
 	}
 
 	ctx := context.Background()
-	st, err := sqlitestore.Open(dbURL)
+	st, err := sqlitestore.Open(fixture.dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	workspaces, err := st.ListWorkspaces(ctx, user.ID)
+	workspaces, err := st.ListWorkspaces(ctx, fixture.user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workspaces) != 1 || workspaces[0].ID != first.ID || workspaces[0].Role != store.WorkspaceRoleMember {
+	if len(workspaces) != 1 || workspaces[0].ID != fixture.first.ID || workspaces[0].Role != store.WorkspaceRoleMember {
 		t.Fatalf("existing membership changed: %#v", workspaces)
 	}
 }
@@ -353,6 +359,7 @@ func TestAdminMemberAddResolvesMixedCaseIdentityEmail(t *testing.T) {
 			"member", "add",
 			"--db", dbURL,
 			"--workspace", workspace.ID,
+			"--created-by", owner.ID,
 			"--email", "existing@example.com",
 		})
 	})
@@ -362,7 +369,81 @@ func TestAdminMemberAddResolvesMixedCaseIdentityEmail(t *testing.T) {
 	}
 }
 
-func setupAdminMemberTest(t *testing.T) (string, store.User, store.Workspace, store.Workspace) {
+func TestAdminMemberAddRejectsAmbiguousEmailAndAcceptsUserID(t *testing.T) {
+	fixture := setupAdminMemberTest(t)
+	ctx := context.Background()
+	st, err := sqlitestore.Open(fixture.dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Duplicate", Email: "EXISTING@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	err = admin([]string{
+		"member", "add",
+		"--db", fixture.dbURL,
+		"--workspace", fixture.second.ID,
+		"--created-by", fixture.owner.ID,
+		"--email", "existing@example.com",
+	})
+	if err == nil || !strings.Contains(err.Error(), "multiple users found") || !strings.Contains(err.Error(), "--user USER_ID") {
+		t.Fatalf("expected actionable ambiguous-email error, got %v", err)
+	}
+
+	output := captureStdout(t, func() error {
+		return admin([]string{
+			"member", "add",
+			"--db", fixture.dbURL,
+			"--workspace", fixture.second.ID,
+			"--created-by", fixture.owner.ID,
+			"--user", fixture.user.ID,
+		})
+	})
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=added\n", fixture.second.ID, fixture.user.ID)
+	if output != wantOutput {
+		t.Fatalf("unexpected ID-selected output: got %q want %q", output, wantOutput)
+	}
+}
+
+func TestAdminMemberAddEnforcesManagerRoleInStore(t *testing.T) {
+	fixture := setupAdminMemberTest(t)
+	err := admin([]string{
+		"member", "add",
+		"--db", fixture.dbURL,
+		"--workspace", fixture.second.ID,
+		"--created-by", fixture.user.ID,
+		"--user", fixture.user.ID,
+	})
+	if !errors.Is(err, store.ErrNotWorkspaceManager) {
+		t.Fatalf("expected non-manager rejection, got %v", err)
+	}
+}
+
+func TestAdminMemberAddRejectsUnknownUserID(t *testing.T) {
+	fixture := setupAdminMemberTest(t)
+	err := admin([]string{
+		"member", "add",
+		"--db", fixture.dbURL,
+		"--workspace", fixture.second.ID,
+		"--created-by", fixture.owner.ID,
+		"--user", "usr_missing",
+	})
+	if err == nil || err.Error() != `no user found for id "usr_missing"` {
+		t.Fatalf("expected unknown user ID error, got %v", err)
+	}
+}
+
+type adminMemberFixture struct {
+	dbURL         string
+	owner, user   store.User
+	first, second store.Workspace
+}
+
+func setupAdminMemberTest(t *testing.T) adminMemberFixture {
 	t.Helper()
 	ctx := context.Background()
 	dbURL := "sqlite://" + filepath.Join(t.TempDir(), "clickclack.db")
@@ -395,7 +476,7 @@ func setupAdminMemberTest(t *testing.T) (string, store.User, store.Workspace, st
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return dbURL, user, first, second
+	return adminMemberFixture{dbURL: dbURL, owner: owner, user: user, first: first, second: second}
 }
 
 func TestOpenUploadStorageValidation(t *testing.T) {

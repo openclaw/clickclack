@@ -119,13 +119,21 @@ Creates a user. With `--workspace`, also adds them to that workspace as a
 ### `admin member add`
 
 ```sh
-clickclack admin member add --workspace wsp_... --email ari@example.com [--role member]
+clickclack admin member add \
+  --workspace wsp_... \
+  --created-by usr_manager \
+  --email ari@example.com \
+  [--role member]
 ```
 
-Adds an existing user to a workspace as a `member`, `moderator`, or `owner`.
-Existing memberships succeed without changing their role. Prints the workspace
-ID, user ID, resulting role, and whether the membership was added or already
-present.
+Adds an existing human user to a workspace as a `member`, or as a `moderator`
+when `--created-by` identifies the workspace owner. Workspace moderators may
+add members; ordinary members and guests may not add anyone. Existing
+memberships succeed without changing their role. Use `--user usr_...` instead
+of `--email` when multiple identities share an email address. Prints the
+workspace ID, user ID, resulting role, and whether the membership was added or
+already present. Ownership changes continue to use the dedicated transfer
+operation.
 
 ### `admin fakeco seed`
 

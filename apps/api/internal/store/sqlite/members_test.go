@@ -331,6 +331,130 @@ func TestWorkspaceMemberPageMigrationsUpgradeExistingData(t *testing.T) {
 	}
 }
 
+func TestAddWorkspaceMemberByActorEnforcesRolesAndInsertOutcome(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "member-add-owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "member-add-moderator@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "member-add-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	guest, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Guest", Email: "member-add-guest@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, guest.ID, store.WorkspaceRoleGuest); err != nil {
+		t.Fatal(err)
+	}
+	firstTarget, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "First Target", Email: "member-add-first@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondTarget, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Second Target", Email: "member-add-second@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, actor := range []store.User{member, guest} {
+		_, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+			WorkspaceID: workspace.ID,
+			UserID:      firstTarget.ID,
+			ActorUserID: actor.ID,
+			Role:        store.WorkspaceRoleMember,
+		})
+		if !errors.Is(err, store.ErrNotWorkspaceManager) {
+			t.Fatalf("expected %s to be denied, got %v", actor.DisplayName, err)
+		}
+	}
+	if _, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      firstTarget.ID,
+		ActorUserID: moderator.ID,
+		Role:        store.WorkspaceRoleModerator,
+	}); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+		t.Fatalf("expected moderator assignment to require owner, got %v", err)
+	}
+	first, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      firstTarget.ID,
+		ActorUserID: owner.ID,
+		Role:        store.WorkspaceRoleModerator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Added || first.Role != store.WorkspaceRoleModerator {
+		t.Fatalf("unexpected first insert result: %#v", first)
+	}
+	replay, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      firstTarget.ID,
+		ActorUserID: owner.ID,
+		Role:        store.WorkspaceRoleMember,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.Added || replay.Role != store.WorkspaceRoleModerator {
+		t.Fatalf("idempotent add changed or misreported the role: %#v", replay)
+	}
+	second, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      secondTarget.ID,
+		ActorUserID: moderator.ID,
+		Role:        store.WorkspaceRoleMember,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Added || second.Role != store.WorkspaceRoleMember {
+		t.Fatalf("moderator could not add a member: %#v", second)
+	}
+	if _, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      secondTarget.ID,
+		ActorUserID: owner.ID,
+		Role:        store.WorkspaceRoleOwner,
+	}); err == nil {
+		t.Fatal("owner role was accepted outside the ownership-transfer flow")
+	}
+
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspace.ID, firstTarget.ID); err != nil {
+		t.Fatal(err)
+	}
+	readded, err := st.AddWorkspaceMemberByActor(ctx, store.AddWorkspaceMemberInput{
+		WorkspaceID: workspace.ID,
+		UserID:      firstTarget.ID,
+		ActorUserID: owner.ID,
+		Role:        store.WorkspaceRoleMember,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !readded.Added || readded.Role != store.WorkspaceRoleMember {
+		t.Fatalf("re-add restored a stale privileged role: %#v", readded)
+	}
+}
+
 func memberNames(members []store.WorkspaceMember) []string {
 	names := make([]string, 0, len(members))
 	for _, member := range members {

@@ -26,8 +26,11 @@ GET  /api/workspaces/{workspace_id}/members   # paginated public member director
 form of `name` and must be unique.
 
 The owner who creates the workspace is auto-added with role `owner`. Adding
-other members today goes through auth/bootstrap flows or admin commands; the
-HTTP API exposes moderation for existing members, not arbitrary invites.
+other members today goes through auth/bootstrap flows or the admin CLI. The
+admin CLI requires an existing owner or moderator actor, enforces that role in
+the store transaction, and reserves ownership changes for the dedicated
+transfer flow. The HTTP API exposes moderation for existing members, not
+arbitrary invites.
 
 Owners and moderators can update the workspace name, slug, and icon. An icon
 must reference an upload from the same workspace. Owners can transfer ownership

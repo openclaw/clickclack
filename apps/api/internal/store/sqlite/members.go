@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
@@ -28,7 +30,7 @@ func (s *Store) AddWorkspaceMember(ctx context.Context, workspaceID, userID, rol
 		  )`, userID).Scan(&one); err != nil {
 		return err
 	}
-	if err := storedb.New(tx).InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+	if _, err := storedb.New(tx).InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
 		UserID:      userID,
 		Role:        normalizeWorkspaceRole(role),
@@ -37,6 +39,83 @@ func (s *Store) AddWorkspaceMember(ctx context.Context, workspaceID, userID, rol
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Store) AddWorkspaceMemberByActor(ctx context.Context, input store.AddWorkspaceMemberInput) (store.AddWorkspaceMemberResult, error) {
+	workspaceID := strings.TrimSpace(input.WorkspaceID)
+	userID := strings.TrimSpace(input.UserID)
+	actorUserID := strings.TrimSpace(input.ActorUserID)
+	role := strings.TrimSpace(input.Role)
+	if workspaceID == "" {
+		return store.AddWorkspaceMemberResult{}, errors.New("workspace is required")
+	}
+	if userID == "" {
+		return store.AddWorkspaceMemberResult{}, errors.New("user is required")
+	}
+	if actorUserID == "" {
+		return store.AddWorkspaceMemberResult{}, errors.New("actor user is required")
+	}
+	if role == "" {
+		role = store.WorkspaceRoleMember
+	}
+	if role != store.WorkspaceRoleMember && role != store.WorkspaceRoleModerator {
+		return store.AddWorkspaceMemberResult{}, fmt.Errorf("role %q cannot be assigned when adding a workspace member", role)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	defer tx.Rollback()
+	qtx := storedb.New(tx)
+	roleRows, err := qtx.MembershipRolesForUpdate(ctx, storedb.MembershipRolesForUpdateParams{
+		WorkspaceID:  workspaceID,
+		ActorUserID:  actorUserID,
+		TargetUserID: userID,
+	})
+	if err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	actorRole := ""
+	for _, row := range roleRows {
+		if row.UserID == actorUserID {
+			actorRole = row.Role
+			break
+		}
+	}
+	if actorRole != store.WorkspaceRoleOwner && actorRole != store.WorkspaceRoleModerator {
+		return store.AddWorkspaceMemberResult{}, store.ErrNotWorkspaceManager
+	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, actorUserID); err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	if role == store.WorkspaceRoleModerator && actorRole != store.WorkspaceRoleOwner {
+		return store.AddWorkspaceMemberResult{}, store.ErrWorkspaceOwnerRequired
+	}
+	var userKind string
+	if err := tx.QueryRowContext(ctx, `SELECT kind FROM users WHERE id = ?`, userID).Scan(&userKind); err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	if userKind != "human" {
+		return store.AddWorkspaceMemberResult{}, errors.New("only human users can be added with this operation")
+	}
+	rows, err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+		WorkspaceID: workspaceID,
+		UserID:      userID,
+		Role:        role,
+		CreatedAt:   now(),
+	})
+	if err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	resultRole, err := memberRoleTx(ctx, tx, workspaceID, userID)
+	if err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.AddWorkspaceMemberResult{}, err
+	}
+	return store.AddWorkspaceMemberResult{Role: resultRole, Added: rows == 1}, nil
 }
 
 func (s *Store) ListWorkspaceMemberPage(ctx context.Context, workspaceID, actorUserID string, page store.WorkspaceMemberPageRequest) (store.WorkspaceMemberPage, error) {

@@ -221,7 +221,7 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		}
 		return store.User{}, store.BotToken{}, err
 	}
-	if err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
+	if _, err := qtx.InsertWorkspaceMember(ctx, storedb.InsertWorkspaceMemberParams{
 		WorkspaceID: workspaceID,
 		UserID:      bot.ID,
 		Role:        "bot",

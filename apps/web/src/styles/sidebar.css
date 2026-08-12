@@ -13,7 +13,10 @@
     0 0 / 14px 14px,
     var(--rail);
   border-right: 1px solid var(--line);
-  overflow-y: auto;
+  /* Scrolling lives on .guild-list, not here. A scroll container clips its
+     overflow on BOTH axes — setting overflow-y alone makes the visible
+     overflow-x compute to auto — so scrolling the rail itself would clip the
+     workspace-create popover, which is anchored outside it at left: 100%. */
   position: relative;
 }
 
@@ -106,6 +109,11 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  /* Keeps a long workspace list scrollable while the rail stays an unclipped
+     positioning context for .guild-create. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .guild-wrap {

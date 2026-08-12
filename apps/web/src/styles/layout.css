@@ -124,6 +124,12 @@
 .shell {
   display: grid;
   grid-template-columns: 72px 260px minmax(0, 1fr) 0;
+  /* One explicit constrained row: without it the implicit row grows to the
+     tallest item (a crowded workspace rail), the rail overflows the shell,
+     and focusing the rail's + button programmatically scrolls this
+     overflow:hidden box — pushing the guild-create popover above the
+     viewport. A constrained row lets .guild-list's internal scroll engage. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   min-height: 100vh;

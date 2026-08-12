@@ -239,7 +239,7 @@ func TestAdminMemberAddRejectsUnknownEmail(t *testing.T) {
 		"--workspace", second.ID,
 		"--email", " Missing@Example.COM ",
 	})
-	if err == nil || !strings.Contains(err.Error(), `no user found for email "missing@example.com"`) {
+	if err == nil || !strings.Contains(err.Error(), `no user found for email "Missing@Example.COM"`) {
 		t.Fatalf("expected unknown email error, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "clickclack admin user create --workspace "+second.ID) {
@@ -317,6 +317,48 @@ func TestAdminMemberAddIsIdempotentForExistingMember(t *testing.T) {
 	}
 	if len(workspaces) != 1 || workspaces[0].ID != first.ID || workspaces[0].Role != store.WorkspaceRoleMember {
 		t.Fatalf("existing membership changed: %#v", workspaces)
+	}
+}
+
+// Regression: admin user create stores the address exactly as typed, so a
+// mixed-case identity must still resolve from a differently-cased lookup.
+func TestAdminMemberAddResolvesMixedCaseIdentityEmail(t *testing.T) {
+	ctx := context.Background()
+	dbURL := "sqlite://" + filepath.Join(t.TempDir(), "clickclack.db")
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Mixed", Slug: "mixed"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixed, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Mixed", Email: "Existing@Example.COM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureStdout(t, func() error {
+		return admin([]string{
+			"member", "add",
+			"--db", dbURL,
+			"--workspace", workspace.ID,
+			"--email", "existing@example.com",
+		})
+	})
+	wantOutput := fmt.Sprintf("workspace=%s user=%s role=member status=added\n", workspace.ID, mixed.ID)
+	if output != wantOutput {
+		t.Fatalf("unexpected output: got %q want %q", output, wantOutput)
 	}
 }
 

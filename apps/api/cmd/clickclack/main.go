@@ -295,7 +295,9 @@ func admin(args []string) error {
 			return err
 		}
 		*workspaceID = strings.TrimSpace(*workspaceID)
-		*email = strings.ToLower(strings.TrimSpace(*email))
+		// Left as typed: the store folds case on both sides, and errors should
+		// echo the address the operator actually passed.
+		*email = strings.TrimSpace(*email)
 		*role = strings.TrimSpace(*role)
 		if *workspaceID == "" {
 			return fmt.Errorf("--workspace is required")

@@ -214,12 +214,14 @@ func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
 	return s.hydrateUserNotificationSettings(ctx, storeUserFromGetUser(row))
 }
 
+// Identity rows keep the casing they were created with, so this folds both
+// sides rather than assuming stored addresses are already normalized.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (store.User, error) {
-	row, err := s.q.GetUserByIdentityEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	row, err := s.q.GetUserByIdentityEmailFold(ctx, strings.TrimSpace(email))
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityEmail(row))
+	return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityEmailFold(row))
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {

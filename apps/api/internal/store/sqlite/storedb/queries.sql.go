@@ -1902,6 +1902,43 @@ func (q *Queries) GetUserByIdentityEmail(ctx context.Context, email string) (Get
 	return i, err
 }
 
+const getUserByIdentityEmailFold = `-- name: GetUserByIdentityEmailFold :one
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+FROM identities i
+JOIN users u ON u.id = i.user_id
+WHERE lower(i.email) = lower(?1)
+ORDER BY u.created_at
+LIMIT 1
+`
+
+type GetUserByIdentityEmailFoldRow struct {
+	ID          string         `json:"id"`
+	Kind        string         `json:"kind"`
+	OwnerUserID sql.NullString `json:"owner_user_id"`
+	DisplayName string         `json:"display_name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	CreatedAt   string         `json:"created_at"`
+}
+
+// Case-insensitive twin of GetUserByIdentityEmail. Identity rows keep the
+// casing they were created with (admin user create stores the address as
+// given), so an exact match cannot find them from a normalized lookup.
+func (q *Queries) GetUserByIdentityEmailFold(ctx context.Context, email string) (GetUserByIdentityEmailFoldRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByIdentityEmailFold, email)
+	var i GetUserByIdentityEmailFoldRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.OwnerUserID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByIdentityProviderSubject = `-- name: GetUserByIdentityProviderSubject :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
 FROM identities i

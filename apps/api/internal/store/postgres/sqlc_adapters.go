@@ -115,6 +115,10 @@ func storeUserFromIdentityEmail(row storedb.GetUserByIdentityEmailRow) store.Use
 	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
 }
 
+func storeUserFromIdentityEmailFold(row storedb.GetUserByIdentityEmailFoldRow) store.User {
+	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+}
+
 func storeUserFromIdentityProviderSubject(row storedb.GetUserByIdentityProviderSubjectRow) store.User {
 	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
 }

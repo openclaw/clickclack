@@ -1437,10 +1437,6 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func websocketBearerToken(r *http.Request) string {
-	return strings.TrimPrefix(websocketBearerProtocol(r), websocketBearerProtocolPrefix)
-}
-
 func websocketBearerProtocol(r *http.Request) string {
 	for _, protocol := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
 		protocol = strings.TrimSpace(protocol)
@@ -1845,14 +1841,6 @@ func optionalString(value string) *string {
 
 func queryInt(r *http.Request, key string, fallback int) int {
 	value, err := strconv.Atoi(r.URL.Query().Get(key))
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
-func queryInt64(r *http.Request, key string, fallback int64) int64 {
-	value, err := strconv.ParseInt(r.URL.Query().Get(key), 10, 64)
 	if err != nil {
 		return fallback
 	}

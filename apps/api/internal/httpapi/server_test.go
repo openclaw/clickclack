@@ -3711,19 +3711,9 @@ func TestUploadRejectsInvalidMultipartShapes(t *testing.T) {
 
 func TestQueryHelpersParseValues(t *testing.T) {
 	t.Parallel()
-	req := httptest.NewRequest(http.MethodGet, "/?limit=42&after_seq=123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?limit=42", nil)
 	if got := queryInt(req, "limit", 10); got != 42 {
 		t.Fatalf("unexpected int query value %d", got)
-	}
-	if got := queryInt64(req, "after_seq", 10); got != 123 {
-		t.Fatalf("unexpected int64 query value %d", got)
-	}
-	req = httptest.NewRequest(http.MethodGet, "/?after_seq=bad", nil)
-	if got := queryInt64(req, "after_seq", 10); got != 10 {
-		t.Fatalf("unexpected fallback int64 query value %d", got)
-	}
-	if got := websocketBearerToken(httptest.NewRequest(http.MethodGet, "/", nil)); got != "" {
-		t.Fatalf("unexpected bearer token %q", got)
 	}
 	server := New(nil, nil, Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "https://app.clickclack.test/path"}})
 	patterns := server.websocketOriginPatterns(httptest.NewRequest(http.MethodGet, "/", nil))

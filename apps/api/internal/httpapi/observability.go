@@ -65,17 +65,19 @@ type metricValue struct {
 }
 
 type metricsRegistry struct {
-	mu                sync.Mutex
-	values            map[metricKey]metricValue
-	githubOAuthEvents map[string]uint64
-	ready             bool
-	readyMu           sync.RWMutex
+	mu                  sync.Mutex
+	values              map[metricKey]metricValue
+	githubOAuthEvents   map[string]uint64
+	openclawOAuthEvents map[string]uint64
+	ready               bool
+	readyMu             sync.RWMutex
 }
 
 func newMetricsRegistry() *metricsRegistry {
 	return &metricsRegistry{
-		values:            make(map[metricKey]metricValue),
-		githubOAuthEvents: make(map[string]uint64),
+		values:              make(map[metricKey]metricValue),
+		githubOAuthEvents:   make(map[string]uint64),
+		openclawOAuthEvents: make(map[string]uint64),
 	}
 }
 
@@ -123,6 +125,15 @@ func (s *Server) recordGitHubOAuthEvent(event string) {
 	s.metrics.mu.Unlock()
 }
 
+func (s *Server) recordOpenClawIDOAuthEvent(event string) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.mu.Lock()
+	s.metrics.openclawOAuthEvents[event]++
+	s.metrics.mu.Unlock()
+}
+
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -166,6 +177,12 @@ func (m *metricsRegistry) render(build buildMetadata) string {
 		oauthEvents = append(oauthEvents, event)
 		oauthEventValues[event] = value
 	}
+	openclawEvents := make([]string, 0, len(m.openclawOAuthEvents))
+	openclawEventValues := make(map[string]uint64, len(m.openclawOAuthEvents))
+	for event, value := range m.openclawOAuthEvents {
+		openclawEvents = append(openclawEvents, event)
+		openclawEventValues[event] = value
+	}
 	m.mu.Unlock()
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].Method != keys[j].Method {
@@ -203,6 +220,12 @@ func (m *metricsRegistry) render(build buildMetadata) string {
 	out.WriteString("# TYPE clickclack_github_oauth_events_total counter\n")
 	for _, event := range oauthEvents {
 		fmt.Fprintf(&out, "clickclack_github_oauth_events_total{event=\"%s\"} %d\n", metricLabel(event), oauthEventValues[event])
+	}
+	sort.Strings(openclawEvents)
+	out.WriteString("# HELP clickclack_openclaw_id_oauth_events_total OpenClaw ID OIDC lifecycle events by bounded event category.\n")
+	out.WriteString("# TYPE clickclack_openclaw_id_oauth_events_total counter\n")
+	for _, event := range openclawEvents {
+		fmt.Fprintf(&out, "clickclack_openclaw_id_oauth_events_total{event=\"%s\"} %d\n", metricLabel(event), openclawEventValues[event])
 	}
 	return out.String()
 }

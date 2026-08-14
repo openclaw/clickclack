@@ -13,28 +13,31 @@ import (
 )
 
 type Config struct {
-	Addr                string   `json:"addr"`
-	Data                string   `json:"data"`
-	DB                  string   `json:"db"`
-	Uploads             string   `json:"uploads"`
-	Environment         string   `json:"environment"`
-	MetricsEnabled      bool     `json:"metrics_enabled"`
-	PublicURL           string   `json:"public_url"`
-	PublicAPIURL        string   `json:"public_api_url"`
-	EmbedFrameAncestors []string `json:"embed_frame_ancestors"`
-	CookieNamespace     string   `json:"cookie_namespace"`
-	DevBootstrap        bool     `json:"dev_bootstrap"`
-	GitHubClientID      string   `json:"github_client_id"`
-	GitHubClientSecret  string   `json:"github_client_secret"`
-	GitHubAllowedOrg    string   `json:"github_allowed_org"`
-	GitHubModeratorOrg  string   `json:"github_moderator_org"`
-	AccessTeamDomain    string   `json:"access_team_domain"`
-	AccessAUD           string   `json:"access_aud"`
-	PushoverAPIToken    string   `json:"pushover_api_token"`
-	R2AccountID         string   `json:"r2_account_id"`
-	R2AccessKeyID       string   `json:"r2_access_key_id"`
-	R2SecretAccessKey   string   `json:"r2_secret_access_key"`
-	R2Endpoint          string   `json:"r2_endpoint"`
+	Addr                   string   `json:"addr"`
+	Data                   string   `json:"data"`
+	DB                     string   `json:"db"`
+	Uploads                string   `json:"uploads"`
+	Environment            string   `json:"environment"`
+	MetricsEnabled         bool     `json:"metrics_enabled"`
+	PublicURL              string   `json:"public_url"`
+	PublicAPIURL           string   `json:"public_api_url"`
+	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
+	CookieNamespace        string   `json:"cookie_namespace"`
+	DevBootstrap           bool     `json:"dev_bootstrap"`
+	GitHubClientID         string   `json:"github_client_id"`
+	GitHubClientSecret     string   `json:"github_client_secret"`
+	GitHubAllowedOrg       string   `json:"github_allowed_org"`
+	GitHubModeratorOrg     string   `json:"github_moderator_org"`
+	OpenClawIDClientID     string   `json:"openclaw_id_client_id"`
+	OpenClawIDClientSecret string   `json:"openclaw_id_client_secret"`
+	OpenClawIDIssuer       string   `json:"openclaw_id_issuer"`
+	AccessTeamDomain       string   `json:"access_team_domain"`
+	AccessAUD              string   `json:"access_aud"`
+	PushoverAPIToken       string   `json:"pushover_api_token"`
+	R2AccountID            string   `json:"r2_account_id"`
+	R2AccessKeyID          string   `json:"r2_access_key_id"`
+	R2SecretAccessKey      string   `json:"r2_secret_access_key"`
+	R2Endpoint             string   `json:"r2_endpoint"`
 }
 
 func Defaults() Config {
@@ -111,6 +114,15 @@ func Load(path string) (Config, error) {
 	if env := os.Getenv("CLICKCLACK_GITHUB_MODERATOR_ORG"); env != "" {
 		cfg.GitHubModeratorOrg = env
 	}
+	if env := os.Getenv("OPENCLAW_ID_CLIENT_ID"); env != "" {
+		cfg.OpenClawIDClientID = env
+	}
+	if env := os.Getenv("OPENCLAW_ID_CLIENT_SECRET"); env != "" {
+		cfg.OpenClawIDClientSecret = env
+	}
+	if env := os.Getenv("OPENCLAW_ID_ISSUER"); env != "" {
+		cfg.OpenClawIDIssuer = env
+	}
 	if env := os.Getenv("CLICKCLACK_ACCESS_TEAM_DOMAIN"); env != "" {
 		cfg.AccessTeamDomain = env
 	}
@@ -182,6 +194,14 @@ func (c *Config) ValidateServe() error {
 	if (allowedOrg != "" || moderatorOrg != "") && !hasClientID {
 		return errors.New("GitHub organization settings require GitHub OAuth credentials")
 	}
+	openclawClientID := strings.TrimSpace(c.OpenClawIDClientID)
+	openclawClientSecret := strings.TrimSpace(c.OpenClawIDClientSecret)
+	if (openclawClientID != "") != (openclawClientSecret != "") {
+		return errors.New("OPENCLAW_ID_CLIENT_ID and OPENCLAW_ID_CLIENT_SECRET must be configured together")
+	}
+	if openclawClientID != "" && publicURL == "" {
+		return errors.New("OpenClaw ID sign-in requires CLICKCLACK_PUBLIC_URL")
+	}
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)
 	}
@@ -193,6 +213,9 @@ func (c *Config) ValidateServe() error {
 	c.GitHubClientSecret = clientSecret
 	c.GitHubAllowedOrg = allowedOrg
 	c.GitHubModeratorOrg = moderatorOrg
+	c.OpenClawIDClientID = openclawClientID
+	c.OpenClawIDClientSecret = openclawClientSecret
+	c.OpenClawIDIssuer = strings.TrimSpace(c.OpenClawIDIssuer)
 	return nil
 }
 

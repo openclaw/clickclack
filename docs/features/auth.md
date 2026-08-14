@@ -238,6 +238,49 @@ that scope, so team-only hosting should set `CLICKCLACK_GITHUB_ALLOWED_ORG`.
 Guest restrictions and moderator controls are documented in
 [moderation.md](moderation.md).
 
+## OpenClaw ID (optional)
+
+OpenClaw ID is the first-party OIDC provider at `https://id.openclaw.ai`
+(issuer `https://id.openclaw.ai/api/auth`). ClickClack is registered as a
+confidential OAuth 2.1 client. Configure the server through the environment:
+
+```sh
+OPENCLAW_ID_CLIENT_ID=...
+OPENCLAW_ID_CLIENT_SECRET=...
+# Optional issuer override for staging or tests:
+# OPENCLAW_ID_ISSUER=https://id.openclaw.ai/api/auth
+```
+
+Without a client ID and client secret, `GET /api/auth/openclaw/start` returns
+`501`. Both credentials must be configured together, and the flow requires
+`CLICKCLACK_PUBLIC_URL`.
+
+Flow:
+
+1. `GET /api/auth/openclaw/start` reuses the GitHub OAuth transaction store: a
+   database-backed, ten-minute transaction, the same HTTP-only browser-binding
+   cookie, and a SHA-256 PKCE challenge, then redirects to
+   `<issuer>/oauth2/authorize` with `scope=openid profile email`.
+2. OpenClaw ID redirects back to `GET /api/auth/openclaw/callback?code&state`.
+3. The handler atomically consumes the state only when the browser binding
+   matches, exchanges the code at `<issuer>/oauth2/token` using
+   `client_secret_basic` plus the stored PKCE verifier, and reads the returned
+   `id_token`. The token arrives directly from the issuer over TLS on an
+   authenticated confidential-client exchange, so no local JWKS signature check
+   runs; issuer, audience, expiry, and a verified email claim are enforced.
+4. The handler links or creates the user by lowercased email exactly like the
+   magic-link path (`GetOrCreateUserByEmail`), joins the default workspace,
+   creates a normal session, sets the configured session cookie, and redirects
+   to `/`.
+
+Accounts without a verified email (`email_verified`) are rejected with `403`.
+There is no desktop handoff for OpenClaw ID yet; the web login shows the
+button only in the browser. Register the exact redirect URI
+`<public-url>/api/auth/openclaw/callback` with the identity provider.
+
+When metrics are enabled, `clickclack_openclaw_id_oauth_events_total` exposes
+the same bounded event categories as the GitHub counter.
+
 ## Authorization
 
 Every store mutation that touches a workspace runs `requireMembership` (or the

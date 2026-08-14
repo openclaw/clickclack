@@ -4090,6 +4090,17 @@
         </svg>
         Continue with GitHub
       </a>
+      {#if !desktop}
+        <a class="openclaw-login" href={apiURL("/api/auth/openclaw/start")}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 3.5A6.5 6.5 0 1 1 5.5 12 6.51 6.51 0 0 1 12 5.5Zm0 3A3.5 3.5 0 1 0 15.5 12 3.5 3.5 0 0 0 12 8.5Z"
+            />
+          </svg>
+          Sign in with OpenClaw ID
+        </a>
+      {/if}
       <p class="auth-foot">{desktopAuthStatus || "Any GitHub account can join."}</p>
     </section>
   </main>

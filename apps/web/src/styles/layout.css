@@ -112,6 +112,30 @@
   transform: translateY(-1px);
 }
 
+.openclaw-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 46px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--muted-2);
+  transition:
+    transform 80ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.openclaw-login:hover {
+  background: color-mix(in srgb, var(--text-strong) 6%, transparent);
+  border-color: var(--muted);
+  transform: translateY(-1px);
+}
+
 .auth-foot {
   margin: 0;
   color: var(--muted-2);

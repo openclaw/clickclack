@@ -22,6 +22,9 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "secret")
 	t.Setenv("CLICKCLACK_GITHUB_ALLOWED_ORG", "openclaw")
 	t.Setenv("CLICKCLACK_GITHUB_MODERATOR_ORG", "openclaw")
+	t.Setenv("OPENCLAW_ID_CLIENT_ID", "ocid-client")
+	t.Setenv("OPENCLAW_ID_CLIENT_SECRET", "ocid-secret")
+	t.Setenv("OPENCLAW_ID_ISSUER", "https://id.openclaw.test/api/auth")
 	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "app-token")
 	t.Setenv("CLICKCLACK_R2_ACCOUNT_ID", "account")
 	t.Setenv("CLICKCLACK_R2_ACCESS_KEY_ID", "access")
@@ -33,6 +36,9 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	}
 	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.PublicAPIURL != "https://api.clickclack.test/services/clickclack/" || len(cfg.EmbedFrameAncestors) != 2 || cfg.EmbedFrameAncestors[0] != "https://control.example.com" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
 		t.Fatalf("unexpected env config: %#v", cfg)
+	}
+	if cfg.OpenClawIDClientID != "ocid-client" || cfg.OpenClawIDClientSecret != "ocid-secret" || cfg.OpenClawIDIssuer != "https://id.openclaw.test/api/auth" {
+		t.Fatalf("unexpected OpenClaw ID env config: %#v", cfg)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -62,6 +68,9 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("CLICKCLACK_GITHUB_CLIENT_SECRET", "")
 	t.Setenv("CLICKCLACK_GITHUB_ALLOWED_ORG", "")
 	t.Setenv("CLICKCLACK_GITHUB_MODERATOR_ORG", "")
+	t.Setenv("OPENCLAW_ID_CLIENT_ID", "")
+	t.Setenv("OPENCLAW_ID_CLIENT_SECRET", "")
+	t.Setenv("OPENCLAW_ID_ISSUER", "")
 	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "")
 	t.Setenv("CLICKCLACK_R2_ACCOUNT_ID", "")
 	t.Setenv("CLICKCLACK_R2_ACCESS_KEY_ID", "")
@@ -164,6 +173,8 @@ func TestValidateServe(t *testing.T) {
 		{"missing client secret", Config{PublicURL: "https://chat.example.com", GitHubClientID: "client"}},
 		{"oauth without public url", Config{GitHubClientID: "client", GitHubClientSecret: "secret"}},
 		{"org without oauth", Config{GitHubAllowedOrg: "openclaw"}},
+		{"missing openclaw id client secret", Config{PublicURL: "https://chat.example.com", OpenClawIDClientID: "client"}},
+		{"openclaw id without public url", Config{OpenClawIDClientID: "client", OpenClawIDClientSecret: "secret"}},
 		{"access domain only", Config{AccessTeamDomain: "https://openclaw.cloudflareaccess.com"}},
 		{"access audience only", Config{AccessAUD: "test-aud"}},
 		{"access domain must use https", Config{AccessTeamDomain: "http://openclaw.cloudflareaccess.com", AccessAUD: "test-aud"}},

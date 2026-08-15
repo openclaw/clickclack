@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -295,5 +296,32 @@ func TestOpenClawIDConfigDefaults(t *testing.T) {
 	}
 	if config.HTTPClient == nil || config.HTTPClient.Timeout != defaultOpenClawIDHTTPTimeout {
 		t.Fatal("expected default HTTP client timeout")
+	}
+}
+
+func TestOpenClawIDOAuthDoesNotExposeInternalStoreErrors(t *testing.T) {
+	t.Parallel()
+	base := newEmptyHTTPStore(t)
+	handler := New(failingOAuthTransactionStore{
+		Store: base,
+		err:   errors.New(`postgres://admin:secret@database.internal:5432/clickclack`),
+	}, realtime.NewHub(), Options{OpenClawID: OpenClawIDConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		PublicURL:    "https://app.clickclack.test",
+	}}).Handler()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/openclaw/start", nil)
+	request.RemoteAddr = "127.0.0.1:12345"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("expected internal error, got %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "admin") || strings.Contains(body, "secret") || strings.Contains(body, "database.internal") {
+		t.Fatalf("internal OAuth error leaked to client: %s", body)
+	}
+	if !strings.Contains(body, "openclaw id oauth request failed") {
+		t.Fatalf("unexpected public OAuth error: %s", body)
 	}
 }

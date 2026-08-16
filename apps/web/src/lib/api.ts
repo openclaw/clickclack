@@ -49,7 +49,7 @@ export function apiResourceURL(value: string): string {
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 
 export function applyDefaultFetchTimeout(init: RequestInit = {}): RequestInit {
-  if (init.signal) return init;
+  if (init.signal || init.body instanceof FormData) return init;
   return { ...init, signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS) };
 }
 

@@ -10,7 +10,7 @@ function hangUntilAborted(_input: RequestInfo | URL, init?: RequestInit): Promis
   return new Promise((_resolve, reject) => {
     const signal = init?.signal;
     if (!signal) return;
-    const fail = () => reject(abortError());
+    const fail = () => reject(signal.reason ?? abortError());
     if (signal.aborted) {
       fail();
       return;
@@ -50,7 +50,7 @@ test("api() aborts a hung fetch with the default timeout", async () => {
     });
     await assert.rejects(Promise.race([pending, watchdog]), (error: unknown) => {
       assert.ok(error instanceof DOMException);
-      assert.equal(error.name, "AbortError");
+      assert.equal(error.name, "TimeoutError");
       return true;
     });
     return undefined;
@@ -66,7 +66,7 @@ test("api() requests AbortSignal.timeout with the shared default duration", asyn
     });
     await assert.rejects(Promise.race([pending, watchdog]), (error: unknown) => {
       assert.ok(error instanceof DOMException);
-      assert.equal(error.name, "AbortError");
+      assert.equal(error.name, "TimeoutError");
       return true;
     });
     return undefined;
@@ -94,7 +94,7 @@ test("applyDefaultFetchTimeout aborts a hung slash-command-style fetch", async (
     );
     await assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof DOMException);
-      assert.equal(error.name, "AbortError");
+      assert.equal(error.name, "TimeoutError");
       return true;
     });
     assert.deepEqual(timeoutArgs, [DEFAULT_FETCH_TIMEOUT_MS]);
@@ -119,4 +119,10 @@ test("api() keeps a caller-provided signal instead of replacing it", async () =>
     async () => api<{ ok: boolean }>("/api/session", { signal: controller.signal }),
   );
   assert.equal(seen, controller.signal);
+});
+
+test("applyDefaultFetchTimeout leaves streaming form uploads unbounded", () => {
+  const init: RequestInit = { method: "POST", body: new FormData() };
+  assert.equal(applyDefaultFetchTimeout(init), init);
+  assert.equal(init.signal, undefined);
 });

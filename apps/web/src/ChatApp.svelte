@@ -53,6 +53,7 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
+  import { nextMemberCursor } from "./lib/member-cursor";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
@@ -1109,6 +1110,7 @@
     try {
       const members: User[] = [];
       let cursor: string | undefined;
+      const seenCursors = new Set<string>();
       do {
         const page = await listWorkspaceMembersPage({
           workspaceID,
@@ -1116,7 +1118,7 @@
           limit: 100,
         });
         members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
+        cursor = nextMemberCursor(page, seenCursors);
       } while (cursor);
       if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
       workspaceMemberUsers = members;

@@ -3,6 +3,10 @@
 ## Unreleased
 
 - Added "Sign in with OpenClaw ID" browser login through the first-party OIDC provider at id.openclaw.ai, reusing the existing OAuth transaction store, email-linked user provisioning, and session cookies alongside GitHub login.
+- Fixed browser API and slash-command requests hanging indefinitely when the API host stalls, while preserving unbounded streaming uploads.
+
+## v0.3.1 - 2026-08-14
+
 - Updated the minimum Go toolchain to 1.26.6 to resolve GO-2026-5026, GO-2026-5972, GO-2026-6090, and GO-2026-6218.
 
 ## v0.3.0 - 2026-08-13

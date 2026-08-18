@@ -1,4 +1,4 @@
-import { api, apiURL, APIError } from "./api";
+import { api, apiURL, APIError, applyDefaultFetchTimeout } from "./api";
 import type { SlashCommand, WorkspaceBotCommand } from "./types";
 
 // Result of POST /api/hooks/slash/{channel_id}. `in_channel` responses are
@@ -51,16 +51,19 @@ export async function dispatchSlashCommand(
   const form = new URLSearchParams();
   form.set("command", command);
   form.set("text", text);
-  const response = await fetch(apiURL(`/api/hooks/slash/${channelID}`), {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-      "X-ClickClack-CSRF": "1",
-    },
-    body: form.toString(),
-  });
+  const response = await fetch(
+    apiURL(`/api/hooks/slash/${channelID}`),
+    applyDefaultFetchTimeout({
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-ClickClack-CSRF": "1",
+      },
+      body: form.toString(),
+    }),
+  );
   const raw = await response.text();
   if (!response.ok) {
     throw new APIError(response.status, raw);

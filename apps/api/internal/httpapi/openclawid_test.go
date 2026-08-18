@@ -2,10 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -323,5 +326,149 @@ func TestOpenClawIDOAuthDoesNotExposeInternalStoreErrors(t *testing.T) {
 	}
 	if !strings.Contains(body, "openclaw id oauth request failed") {
 		t.Fatalf("unexpected public OAuth error: %s", body)
+	}
+}
+
+func TestOpenClawIDOAuthErrorBranches(t *testing.T) {
+	t.Parallel()
+	st := newEmptyHTTPStore(t)
+	configured := New(st, realtime.NewHub(), Options{OpenClawID: OpenClawIDConfig{
+		ClientID:     "c",
+		ClientSecret: "s",
+		PublicURL:    "https://app.clickclack.test",
+	}}).Handler()
+
+	// Ambiguous browser-binding cookie on start.
+	ambiguous := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/openclaw/start", nil)
+	ambiguous.RemoteAddr = "127.0.0.1:12345"
+	ambiguous.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: strings.Repeat("a", oauthEncodedSecretLength)})
+	ambiguous.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: strings.Repeat("b", oauthEncodedSecretLength)})
+	recorder := httptest.NewRecorder()
+	configured.ServeHTTP(recorder, ambiguous)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected ambiguous binding rejection, got %d", recorder.Code)
+	}
+
+	// Callback with valid-shaped state but no binding cookie.
+	missingCookie := httptest.NewRequest(http.MethodGet,
+		"http://127.0.0.1:8080/api/auth/openclaw/callback?code=x&state="+strings.Repeat("a", oauthEncodedSecretLength), nil)
+	missingCookie.RemoteAddr = "127.0.0.1:12345"
+	recorder = httptest.NewRecorder()
+	configured.ServeHTTP(recorder, missingCookie)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing binding cookie rejection, got %d", recorder.Code)
+	}
+
+	// Start without any public URL outside loopback fails closed.
+	noPublic := New(st, realtime.NewHub(), Options{DisableDevAuth: true, OpenClawID: OpenClawIDConfig{
+		ClientID:     "c",
+		ClientSecret: "s",
+	}})
+	external := httptest.NewRequest(http.MethodGet, "http://example.test/api/auth/openclaw/start", nil)
+	external.RemoteAddr = "203.0.113.9:443"
+	if _, err := noPublic.openclawIDRedirectURL(external); err == nil {
+		t.Fatal("expected redirect URL error without public URL")
+	}
+
+	// Loopback dev fallback derives scheme from TLS state.
+	devSrv := New(st, realtime.NewHub(), Options{OpenClawID: OpenClawIDConfig{ClientID: "c", ClientSecret: "s"}})
+	loopback := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/openclaw/start", nil)
+	loopback.RemoteAddr = "127.0.0.1:9999"
+	if url, err := devSrv.openclawIDRedirectURL(loopback); err != nil || !strings.HasPrefix(url, "http://127.0.0.1:8080/") {
+		t.Fatalf("unexpected loopback redirect %q: %v", url, err)
+	}
+	loopbackTLS := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:8443/api/auth/openclaw/start", nil)
+	loopbackTLS.RemoteAddr = "127.0.0.1:9999"
+	loopbackTLS.TLS = &tls.ConnectionState{}
+	if url, err := devSrv.openclawIDRedirectURL(loopbackTLS); err != nil || !strings.HasPrefix(url, "https://") {
+		t.Fatalf("unexpected tls redirect %q: %v", url, err)
+	}
+
+	// Token exchange against an unparseable token URL surfaces an error.
+	badExchange := New(st, realtime.NewHub(), Options{OpenClawID: OpenClawIDConfig{
+		ClientID: "c", ClientSecret: "s", PublicURL: "https://example.test", TokenURL: "://bad",
+	}})
+	if _, err := badExchange.exchangeOpenClawIDCode(context.Background(), "code", strings.Repeat("v", 43), "https://example.test/cb"); err == nil {
+		t.Fatal("expected exchange error for bad token URL")
+	}
+}
+
+type consumeFailingOAuthStore struct {
+	store.Store
+	err error
+}
+
+func (s consumeFailingOAuthStore) ConsumeOAuthTransaction(context.Context, string, string, time.Time) (store.OAuthTransaction, error) {
+	return store.OAuthTransaction{}, s.err
+}
+
+func TestOpenClawIDOAuthStoreFailureBranches(t *testing.T) {
+	t.Parallel()
+	base := newEmptyHTTPStore(t)
+	config := OpenClawIDConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		PublicURL:    "https://app.clickclack.test",
+		AuthURL:      "https://id.example/oauth2/authorize",
+	}
+
+	// Capacity exhaustion surfaces 503, not a generic server error.
+	capacity := New(failingOAuthTransactionStore{
+		Store: base,
+		err:   store.ErrOAuthCapacityExceeded,
+	}, realtime.NewHub(), Options{OpenClawID: config}).Handler()
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/openclaw/start", nil)
+	request.RemoteAddr = "127.0.0.1:12345"
+	recorder := httptest.NewRecorder()
+	capacity.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected capacity rejection, got %d", recorder.Code)
+	}
+
+	// Generic consume failure surfaces the sanitized server error.
+	consume := New(consumeFailingOAuthStore{
+		Store: base,
+		err:   errors.New("disk on fire"),
+	}, realtime.NewHub(), Options{OpenClawID: config}).Handler()
+	shaped := strings.Repeat("a", oauthEncodedSecretLength)
+	callback := httptest.NewRequest(http.MethodGet,
+		"http://127.0.0.1:8080/api/auth/openclaw/callback?code=x&state="+shaped, nil)
+	callback.RemoteAddr = "127.0.0.1:12345"
+	callback.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: shaped})
+	recorder = httptest.NewRecorder()
+	consume.ServeHTTP(recorder, callback)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("expected consume server error, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "disk on fire") {
+		t.Fatalf("internal error leaked: %s", recorder.Body.String())
+	}
+
+	// Real start then callback without a code: transaction consumed, 400.
+	live := New(base, realtime.NewHub(), Options{OpenClawID: config}).Handler()
+	start := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/auth/openclaw/start", nil)
+	start.RemoteAddr = "127.0.0.1:12345"
+	recorder = httptest.NewRecorder()
+	live.ServeHTTP(recorder, start)
+	if recorder.Code != http.StatusFound {
+		t.Fatalf("expected start redirect, got %d", recorder.Code)
+	}
+	location, err := url.Parse(recorder.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+	state := location.Query().Get("state")
+	binding := findCookie(recorder.Result().Cookies(), "cc_oauth_binding")
+	if state == "" || binding == nil {
+		t.Fatal("missing state or binding cookie from start")
+	}
+	noCode := httptest.NewRequest(http.MethodGet,
+		"http://127.0.0.1:8080/api/auth/openclaw/callback?state="+url.QueryEscape(state), nil)
+	noCode.RemoteAddr = "127.0.0.1:12345"
+	noCode.AddCookie(&http.Cookie{Name: "cc_oauth_binding", Value: binding.Value})
+	recorder = httptest.NewRecorder()
+	live.ServeHTTP(recorder, noCode)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing code rejection, got %d", recorder.Code)
 	}
 }

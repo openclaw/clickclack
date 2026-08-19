@@ -150,6 +150,12 @@ func serve(args []string) error {
 			AllowedOrg:   cfg.GitHubAllowedOrg,
 			ModeratorOrg: cfg.GitHubModeratorOrg,
 		},
+		OpenClawID: httpapi.OpenClawIDConfig{
+			ClientID:     cfg.OpenClawIDClientID,
+			ClientSecret: cfg.OpenClawIDClientSecret,
+			Issuer:       cfg.OpenClawIDIssuer,
+			PublicURL:    cfg.PublicURL,
+		},
 		Access: httpapi.AccessConfig{
 			TeamDomain: cfg.AccessTeamDomain,
 			Audience:   cfg.AccessAUD,

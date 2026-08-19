@@ -230,6 +230,25 @@ GitHub for `read:org` and only accepts active members of that org. See
 [features/auth.md](features/auth.md) and
 [features/moderation.md](features/moderation.md).
 
+## OpenClaw ID sign-in
+
+If you want first-party OpenClaw ID (OIDC) login, set:
+
+```sh
+CLICKCLACK_PUBLIC_URL=https://chat.example.com
+OPENCLAW_ID_CLIENT_ID=...
+OPENCLAW_ID_CLIENT_SECRET=...
+# Optional issuer override (default https://id.openclaw.ai/api/auth):
+# OPENCLAW_ID_ISSUER=https://id.openclaw.ai/api/auth
+```
+
+Register the redirect URI `<public-url>/api/auth/openclaw/callback` with the
+identity provider. On the hosted Cloudflare deployment, set the credentials as
+Worker secrets (`wrangler secret put OPENCLAW_ID_CLIENT_ID` and
+`wrangler secret put OPENCLAW_ID_CLIENT_SECRET`); the Worker passes them into
+the container when present. See [features/auth.md](features/auth.md) for the
+flow details.
+
 `CLICKCLACK_PUBLIC_URL` is startup-validated as an exact origin. Non-loopback
 origins must use HTTPS and cannot contain a path, credentials, query, or
 fragment. GitHub OAuth credentials are rejected without it.
@@ -285,6 +304,7 @@ If a deployment configures edge rate limiting, cover:
 - `GET /api/auth/github/start`
 - `GET /api/auth/github/desktop/start`
 - `POST /api/auth/github/desktop/consume`
+- `GET /api/auth/openclaw/start`
 
 Use a client identity that is trustworthy for the complete deployment path and
 leave enough headroom for legitimate users behind shared networks. The Go

@@ -33,6 +33,7 @@ type Server struct {
 	uploadDir             string
 	uploadStorage         uploadstore.Store
 	githubOAuth           GitHubOAuthConfig
+	openclawID            OpenClawIDConfig
 	access                *accessVerifier
 	frontendURL           string
 	publicAPIURL          string
@@ -81,6 +82,7 @@ type Options struct {
 	UploadDir           string
 	UploadStorage       uploadstore.Store
 	GitHubOAuth         GitHubOAuthConfig
+	OpenClawID          OpenClawIDConfig
 	Access              AccessConfig
 	FrontendURL         string
 	PublicAPIURL        string
@@ -118,6 +120,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		uploadDir:             options.UploadDir,
 		uploadStorage:         uploadStorage,
 		githubOAuth:           options.GitHubOAuth.withDefaults(),
+		openclawID:            options.OpenClawID.withDefaults(),
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
@@ -161,6 +164,8 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
 		r.Post("/auth/github/desktop/consume", s.githubDesktopConsume)
 		r.Get("/auth/github/callback", s.githubCallback)
+		r.Get("/auth/openclaw/start", s.openclawIDStart)
+		r.Get("/auth/openclaw/callback", s.openclawIDCallback)
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
 		r.Get("/me/bots", s.listMyBots)

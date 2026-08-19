@@ -4112,7 +4112,7 @@
           <img class="auth-logo" src="/login/chat-totum-logo.svg" alt="Totum Chat" />
           <div class="auth-copy">
             <h1>Bem-vindo ao Totum Chat.</h1>
-            <p>Entre com sua conta GitHub para acessar seu espaço.</p>
+            <p>Escolha seu provedor de acesso para entrar no seu espaço.</p>
           </div>
           <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -4120,6 +4120,17 @@
             </svg>
             Entrar com GitHub
           </a>
+          {#if !desktop}
+            <a class="openclaw-login" href={apiURL("/api/auth/openclaw/start")}>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 3.5A6.5 6.5 0 1 1 5.5 12 6.51 6.51 0 0 1 12 5.5Zm0 3A3.5 3.5 0 1 0 15.5 12 3.5 3.5 0 0 0 12 8.5Z"
+                />
+              </svg>
+              Entrar com OpenClaw ID
+            </a>
+          {/if}
           <p class="auth-foot">{desktopAuthStatus || "Use a conta GitHub autorizada para o seu workspace."}</p>
         </div>
       </div>

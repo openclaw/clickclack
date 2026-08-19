@@ -193,6 +193,47 @@ paths:
           description: GitHub provider request failed
         "503":
           description: Desktop grant capacity exhausted or canonical callback origin unavailable
+  /api/auth/openclaw/start:
+    get:
+      operationId: startOpenClawIDOAuth
+      responses:
+        "302":
+          description: Redirect to OpenClaw ID OIDC authorization
+        "400":
+          description: Ambiguous OAuth browser-binding cookies
+        "429":
+          description: Deployment edge rate limit exceeded, when configured
+        "500":
+          description: OAuth browser binding, state, PKCE generation, or persistence failed
+        "501":
+          description: OpenClaw ID sign-in not configured
+        "503":
+          description: OAuth transaction capacity exhausted or canonical callback origin unavailable
+  /api/auth/openclaw/callback:
+    get:
+      operationId: finishOpenClawIDOAuth
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Browser session created and redirected to the web app
+        "400":
+          description: Invalid OAuth callback
+        "403":
+          description: OpenClaw ID token invalid or account email not verified
+        "500":
+          description: Identity, workspace, or session persistence failed
+        "502":
+          description: OpenClaw ID provider request failed
+        "503":
+          description: Canonical callback origin unavailable
   /api/me:
     get:
       operationId: getMe

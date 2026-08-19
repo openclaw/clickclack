@@ -5,118 +5,197 @@
   min-height: 100vh;
   min-height: 100dvh;
   place-items: center;
-  padding: calc(32px + var(--safe-area-top)) calc(32px + var(--safe-area-right))
-    calc(32px + var(--safe-area-bottom)) calc(32px + var(--safe-area-left));
-  background:
-    radial-gradient(color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1.5px) 0 0 /
-      18px 18px,
-    radial-gradient(
-      700px 500px at 30% 20%,
-      color-mix(in srgb, var(--brand-a) 14%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      700px 500px at 80% 90%,
-      color-mix(in srgb, var(--brand-b) 10%, transparent),
-      transparent 60%
-    ),
-    var(--bg);
+  padding: calc(32px + var(--safe-area-top)) calc(24px + var(--safe-area-right))
+    calc(32px + var(--safe-area-bottom)) calc(24px + var(--safe-area-left));
+  background: #0e0918;
+  color: #d1cece;
+  font-family: geomanist, "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
 .auth-panel {
   display: grid;
-  gap: 22px;
-  width: min(100%, 440px);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0))
-    var(--panel);
-  /* The auth card is the app's first keycap: hard bottom edge, then depth. */
-  box-shadow: var(--key-edge), var(--shadow);
-  padding: 36px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: min(100%, 1040px);
+  min-height: 680px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #1b1728;
+  box-shadow: inset 0 0 0 1px hsla(0, 0%, 100%, 0.1), inset 0 1px 0 hsla(0, 0%, 100%, 0.1);
 }
 
-.auth-brand {
+.auth-slider {
+  position: relative;
+  min-height: 680px;
+  overflow: hidden;
+  background: #0e0918;
+}
+
+.auth-slider img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.04);
+  transition: opacity 900ms ease-in-out, transform 4s ease-out;
+}
+
+.auth-slider img.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.auth-slider-veil {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, #0e0918 0%, rgba(14, 9, 24, 0.6) 27%, rgba(14, 9, 24, 0.08) 63%, transparent 100%);
+}
+
+.auth-slider-copy {
+  position: absolute;
+  right: 32px;
+  bottom: 64px;
+  left: 32px;
+  margin: 0;
+  color: #d1cece;
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1.25;
+}
+
+.auth-slider-dots {
+  position: absolute;
+  bottom: 26px;
+  left: 32px;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-.auth-brand .mark {
-  width: 44px;
-  height: 44px;
+.auth-slider-dots button {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: width 300ms ease, background 300ms ease;
+}
+
+.auth-slider-dots button.active {
+  width: 32px;
+  background: #da2128;
+}
+
+.auth-slider-dots button:focus-visible {
+  outline: 1px solid #da2128;
+  outline-offset: 3px;
+}
+
+.auth-form {
   display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-  color: var(--brand-contrast);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--brand-b) 65%, transparent);
+  align-items: center;
+  padding: 48px;
 }
 
-.auth-brand .brand-text strong {
-  display: block;
-  color: var(--text-strong);
-  letter-spacing: -0.01em;
+.auth-form-inner {
+  display: grid;
+  gap: 28px;
+  width: min(100%, 360px);
+  margin: 0 auto;
 }
 
-.auth-brand .brand-text span {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
+.auth-logo {
+  width: auto;
+  height: 32px;
+  margin-bottom: 12px;
 }
 
 .auth-copy {
   display: grid;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 10px;
 }
 
 .auth-copy h1 {
   margin: 0;
-  font-size: 28px;
+  color: #fff;
+  font-family: inherit;
+  font-size: clamp(32px, 3vw, 38px);
+  font-weight: 300;
+  line-height: 1.2;
   letter-spacing: -0.02em;
-  color: var(--text-strong);
-  font-family: var(--font-display);
-  font-weight: 700;
 }
 
 .auth-copy p {
   margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
+  color: #d1cece;
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1.25;
 }
 
 .github-login {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 46px;
-  border-radius: 12px;
-  background: #0d1117;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e3433e, #da2128);
   color: white;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
   text-decoration: none;
-  border: 1px solid #2b2f36;
+  box-shadow: inset 0 1px 1px #ffffff33, 0 1px 2px #08080833, 0 4px 4px #08080814, inset 0 6px 12px #ffffff1f;
   transition:
-    transform 80ms ease,
-    background 120ms ease,
-    border-color 120ms ease;
+    box-shadow 300ms ease,
+    transform 150ms ease;
 }
 
 .github-login:hover {
-  background: #161b22;
-  border-color: #3f4750;
+  box-shadow: inset 0 1px 1px #ffffff33, 0 1px 2px #08080833, 0 4px 4px #08080814, inset 0 6px 12px #ffffff1f, 0 7px 80px -12px #da2128;
   transform: translateY(-1px);
+}
+
+.github-login:focus-visible {
+  outline: 1px solid #da2128;
+  outline-offset: 3px;
 }
 
 .auth-foot {
   margin: 0;
-  color: var(--muted-2);
-  font-size: 12px;
-  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .auth-shell {
+    padding: 20px;
+  }
+
+  .auth-panel {
+    display: block;
+    min-height: 0;
+  }
+
+  .auth-slider {
+    display: none;
+  }
+
+  .auth-form {
+    min-height: min(680px, calc(100dvh - 40px));
+    padding: 36px 28px;
+  }
+
+  .auth-copy h1 {
+    font-size: 36px;
+  }
 }
 
 /* ---------- SHELL ---------- */

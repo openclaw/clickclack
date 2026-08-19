@@ -161,6 +161,12 @@
   let status = "loading";
   let authRequired = false;
   let desktopAuthStatus = "";
+  const authSlides = [
+    "/login/login-image-1.png",
+    "/login/login-image-2.png",
+    "/login/login-image-3.png",
+  ];
+  let authSlideIndex = 0;
   let connected = false;
   let realtimeError = "";
   let realtimeInitializedWorkspaceID = "";
@@ -379,11 +385,15 @@
       void goto(route, { keepFocus: true, noScroll: true });
     });
     const stopDesktopQuickCompose = desktop?.onQuickCompose(() => focusActiveComposer());
+    const authSlider = window.setInterval(() => {
+      authSlideIndex = (authSlideIndex + 1) % authSlides.length;
+    }, 4000);
     mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
     return () => {
       mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
       stopDesktopNavigate?.();
       stopDesktopQuickCompose?.();
+      window.clearInterval(authSlider);
     };
   });
 
@@ -4063,6 +4073,7 @@
 
 <svelte:head>
   <meta name="color-scheme" content="light dark" />
+  <title>Totum Chat</title>
 </svelte:head>
 
 <svelte:window onkeydowncapture={handleWindowKeydown} onpointerdowncapture={rememberTypeToFocusPointer} />
@@ -4072,25 +4083,46 @@
     <div class="desktop-auth-titlebar" data-platform={desktop.platform} aria-hidden="true"></div>
   {/if}
   <main class="auth-shell">
-    <section class="auth-panel" aria-label="Sign in">
-      <div class="auth-brand">
-        <div class="mark">cc</div>
-        <div class="brand-text">
-          <strong>ClickClack</strong>
-          <span>OpenClaw workspace chat</span>
+    <section class="auth-panel" aria-label="Entrar no Totum Chat">
+      <div class="auth-slider" aria-label="Apresentação do Totum Chat">
+        {#each authSlides as slide, index}
+          <img
+            class:active={index === authSlideIndex}
+            src={slide}
+            alt=""
+            aria-hidden={index === authSlideIndex ? "false" : "true"}
+          />
+        {/each}
+        <div class="auth-slider-veil"></div>
+        <p class="auth-slider-copy">Conversas, times e agentes organizados em um único espaço.</p>
+        <div class="auth-slider-dots" aria-label="Selecionar imagem">
+          {#each authSlides as _, index}
+            <button
+              class:active={index === authSlideIndex}
+              type="button"
+              aria-label={`Ir para imagem ${index + 1}`}
+              aria-current={index === authSlideIndex ? "true" : undefined}
+              onclick={() => (authSlideIndex = index)}
+            ></button>
+          {/each}
         </div>
       </div>
-      <div class="auth-copy">
-        <h1>Welcome.</h1>
-        <p>Sign in with GitHub to join the guest room.</p>
+      <div class="auth-form">
+        <div class="auth-form-inner">
+          <img class="auth-logo" src="/login/chat-totum-logo.svg" alt="Totum Chat" />
+          <div class="auth-copy">
+            <h1>Bem-vindo ao Totum Chat.</h1>
+            <p>Entre com sua conta GitHub para acessar seu espaço.</p>
+          </div>
+          <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.37-3.87-1.37-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.94 10.94 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z" />
+            </svg>
+            Entrar com GitHub
+          </a>
+          <p class="auth-foot">{desktopAuthStatus || "Use a conta GitHub autorizada para o seu workspace."}</p>
+        </div>
       </div>
-      <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.37-3.87-1.37-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.94 10.94 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z"/>
-        </svg>
-        Continue with GitHub
-      </a>
-      <p class="auth-foot">{desktopAuthStatus || "Any GitHub account can join."}</p>
     </section>
   </main>
 {:else}

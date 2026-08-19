@@ -1,0 +1,45 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to VPS Nova
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+          config: |
+            Host vps-nova
+              HostName ${{ secrets.VPS_HOST }}
+              User ${{ secrets.VPS_USER }}
+              IdentityFile ~/.ssh/id_rsa
+              StrictHostKeyChecking no
+
+      - name: Deploy via SSH
+        run: |
+          ssh vps-nova << 'EOF'
+            set -e
+            cd ${{ secrets.VPS_PATH }}
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile
+            echo "🏗️ Building..."
+            pnpm build
+            echo "🔄 Restarting PM2..."
+            pm2 restart ${{ secrets.PM2_APP_NAME }} --update-env
+            echo "✅ Deploy complete!"
+            pm2 status ${{ secrets.PM2_APP_NAME }}
+          EOF

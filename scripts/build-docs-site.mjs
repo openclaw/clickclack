@@ -426,16 +426,35 @@ function tocFromHtml(html) {
   const re = /<h([23]) id="([^"]+)">([\s\S]*?)<\/h[23]>/g;
   let m;
   while ((m = re.exec(html))) {
-    const text = m[3]
-      .replace(/<a class="anchor"[^>]*>.*?<\/a>/, "")
-      .replace(/<[^>]+>/g, "")
-      .trim();
+    const text = htmlTextContent(m[3]).trim();
     items.push({ level: Number(m[1]), id: m[2], text });
   }
   if (items.length < 2) return "";
   return `<nav class="toc" aria-label="On this page"><h2>On this page</h2>${items
     .map((i) => `<a class="toc-l${i.level}" href="#${i.id}">${escapeHtml(i.text)}</a>`)
     .join("")}</nav>`;
+}
+
+function htmlTextContent(html) {
+  let text = "";
+  let skipAnchor = false;
+  for (let index = 0; index < html.length; ) {
+    if (html[index] !== "<") {
+      if (!skipAnchor) text += html[index];
+      index += 1;
+      continue;
+    }
+    const tagEnd = html.indexOf(">", index + 1);
+    if (tagEnd < 0) break;
+    const tag = html.slice(index + 1, tagEnd).trim();
+    if (tag.startsWith('a class="anchor"')) {
+      skipAnchor = true;
+    } else if (tag === "/a" && skipAnchor) {
+      skipAnchor = false;
+    }
+    index = tagEnd + 1;
+  }
+  return text;
 }
 
 function isHomePage(page) {

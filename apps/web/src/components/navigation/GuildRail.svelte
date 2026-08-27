@@ -6,6 +6,8 @@
   type Props = {
     workspaces: Workspace[];
     homeHref?: string;
+    homeLabel?: string;
+    homeTitle?: string;
     selectedWorkspaceID: string;
     workspaceName: string;
     showWorkspaceCreate: boolean;
@@ -19,6 +21,8 @@
   let {
     workspaces,
     homeHref = "/",
+    homeLabel = "cc",
+    homeTitle = "ClickClack home",
     selectedWorkspaceID,
     workspaceName,
     showWorkspaceCreate,
@@ -35,8 +39,8 @@
 </script>
 
 <nav id="workspace-navigation" class="guild-rail" aria-label="Workspaces">
-  <a class="guild home" title="ClickClack home" href={homeHref}>
-    <span>cc</span>
+  <a class="guild home" title={homeTitle} aria-label={homeTitle} href={homeHref}>
+    <span>{homeLabel}</span>
   </a>
   <div class="guild-divider" aria-hidden="true"></div>
   <div class="guild-list">

@@ -36,6 +36,7 @@ type Server struct {
 	openclawID            OpenClawIDConfig
 	access                *accessVerifier
 	frontendURL           string
+	homeLinkConfig        HomeLinkConfig
 	publicAPIURL          string
 	embedFrameAncestors   []string
 	cookies               authpolicy.CookieNames
@@ -86,6 +87,7 @@ type Options struct {
 	Access              AccessConfig
 	FrontendURL         string
 	PublicAPIURL        string
+	HomeLink            HomeLinkConfig
 	EmbedFrameAncestors []string
 	CookieNames         authpolicy.CookieNames
 	DisableDevAuth      bool
@@ -123,6 +125,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		openclawID:            options.OpenClawID.withDefaults(),
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
+		homeLinkConfig:        options.HomeLink,
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
 		cookies:               cookieNames,
@@ -166,6 +169,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/auth/github/callback", s.githubCallback)
 		r.Get("/auth/openclaw/start", s.openclawIDStart)
 		r.Get("/auth/openclaw/callback", s.openclawIDCallback)
+		r.Get("/home-link", s.homeLink)
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
 		r.Get("/me/bots", s.listMyBots)

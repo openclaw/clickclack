@@ -36,6 +36,8 @@ hook in `cmd/clickclack/main.go`.
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
 | —                     | `CLICKCLACK_PUBLIC_API_URL`      | public URL  | Canonical external API base. May use a different origin and a normalized base path. |
+| —                     | `CLICKCLACK_HOME_URL`            | `/`         | Destination of the workspace rail's home button (`home_url` in the config file). An absolute `http(s)` URL or a path starting with `/`; use it when ClickClack lives inside a larger product. |
+| —                     | `CLICKCLACK_HOME_LABEL`          | `cc`        | Short label (max 32 characters) on that button, e.g. the product name (`home_label` in the config file). |
 | `--embed-frame-ancestors` | `CLICKCLACK_EMBED_FRAME_ANCESTORS` | unset | Comma- or whitespace-separated exact origins allowed to frame `/embed/*`; see [Embedded threads](features/embedding.md). |
 | `--access-team-domain` | `CLICKCLACK_ACCESS_TEAM_DOMAIN` | unset | Cloudflare Access team HTTPS origin. Must be configured together with the Access audience. |
 | `--access-aud`        | `CLICKCLACK_ACCESS_AUD`         | unset       | Expected Cloudflare Access application audience tag. Must be non-empty when the team domain is set. |

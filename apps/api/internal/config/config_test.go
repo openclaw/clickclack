@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -223,5 +224,59 @@ func TestLoadAccessConfigFromEnvironmentAndJSON(t *testing.T) {
 	}
 	if cfg.AccessTeamDomain != "https://file.cloudflareaccess.com" || cfg.AccessAUD != "test-file-aud" {
 		t.Fatalf("Access JSON config was not loaded: %#v", cfg)
+	}
+}
+
+func TestNormalizeHomeLink(t *testing.T) {
+	cases := []struct {
+		name      string
+		url       string
+		label     string
+		wantURL   string
+		wantLabel string
+		wantErr   bool
+	}{
+		{name: "empty keeps defaults", wantURL: "", wantLabel: ""},
+		{name: "absolute https", url: " https://mfs.example.com/ ", label: " MFS ", wantURL: "https://mfs.example.com/", wantLabel: "MFS"},
+		{name: "absolute path", url: "/app", label: "Home", wantURL: "/app", wantLabel: "Home"},
+		{name: "label only", label: "MFS", wantLabel: "MFS"},
+		{name: "javascript scheme", url: "javascript:alert(1)", wantErr: true},
+		{name: "protocol relative", url: "//evil.example.com", wantErr: true},
+		{name: "relative path", url: "app", wantErr: true},
+		{name: "label too long", url: "/app", label: strings.Repeat("x", MaxHomeLabelLength+1), wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotURL, gotLabel, err := NormalizeHomeLink(tc.url, tc.label)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got url=%q label=%q", gotURL, gotLabel)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotURL != tc.wantURL || gotLabel != tc.wantLabel {
+				t.Fatalf("got url=%q label=%q, want url=%q label=%q", gotURL, gotLabel, tc.wantURL, tc.wantLabel)
+			}
+		})
+	}
+}
+
+func TestValidateServeRejectsBadHomeLink(t *testing.T) {
+	cfg := Defaults()
+	cfg.HomeURL = "ftp://files.example.com"
+	if err := cfg.ValidateServe(); err == nil || !strings.Contains(err.Error(), "CLICKCLACK_HOME_URL") {
+		t.Fatalf("expected home URL error, got %v", err)
+	}
+	cfg = Defaults()
+	cfg.HomeURL = " https://mfs.example.com "
+	cfg.HomeLabel = " MFS "
+	if err := cfg.ValidateServe(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HomeURL != "https://mfs.example.com" || cfg.HomeLabel != "MFS" {
+		t.Fatalf("expected trimmed home link, got url=%q label=%q", cfg.HomeURL, cfg.HomeLabel)
 	}
 }

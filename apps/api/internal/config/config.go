@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 )
@@ -21,6 +22,8 @@ type Config struct {
 	MetricsEnabled         bool     `json:"metrics_enabled"`
 	PublicURL              string   `json:"public_url"`
 	PublicAPIURL           string   `json:"public_api_url"`
+	HomeURL                string   `json:"home_url"`
+	HomeLabel              string   `json:"home_label"`
 	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
 	CookieNamespace        string   `json:"cookie_namespace"`
 	DevBootstrap           bool     `json:"dev_bootstrap"`
@@ -88,6 +91,12 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_PUBLIC_API_URL"); env != "" {
 		cfg.PublicAPIURL = env
+	}
+	if env := os.Getenv("CLICKCLACK_HOME_URL"); env != "" {
+		cfg.HomeURL = env
+	}
+	if env := os.Getenv("CLICKCLACK_HOME_LABEL"); env != "" {
+		cfg.HomeLabel = env
 	}
 	if env := os.Getenv("CLICKCLACK_EMBED_FRAME_ANCESTORS"); env != "" {
 		cfg.EmbedFrameAncestors = ParseEmbedFrameAncestors(env)
@@ -205,6 +214,12 @@ func (c *Config) ValidateServe() error {
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)
 	}
+	homeURL, homeLabel, err := NormalizeHomeLink(c.HomeURL, c.HomeLabel)
+	if err != nil {
+		return err
+	}
+	c.HomeURL = homeURL
+	c.HomeLabel = homeLabel
 	c.PublicAPIURL = publicAPIURL
 	c.EmbedFrameAncestors = embedFrameAncestors
 	c.CookieNamespace = namespace
@@ -272,4 +287,36 @@ func validatePublicURLPair(publicURL, publicAPIURL string) error {
 		}
 	}
 	return nil
+}
+
+// MaxHomeLabelLength bounds the label rendered on the workspace rail's home
+// button; it is a short badge, not a title.
+const MaxHomeLabelLength = 32
+
+// NormalizeHomeLink validates the optional deployment-specific home link that
+// replaces the ClickClack landing page behind the workspace rail's home
+// button. Empty values keep the built-in default. A URL must be either an
+// absolute http(s) URL or an absolute path on this deployment, so a
+// misconfiguration can never turn the button into a javascript: or
+// protocol-relative link.
+func NormalizeHomeLink(rawURL, rawLabel string) (string, string, error) {
+	homeURL := strings.TrimSpace(rawURL)
+	if homeURL != "" {
+		switch {
+		case strings.HasPrefix(homeURL, "//"):
+			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
+		case strings.HasPrefix(homeURL, "/"):
+			// Absolute path on this deployment.
+		default:
+			parsed, err := url.Parse(homeURL)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+				return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
+			}
+		}
+	}
+	homeLabel := strings.TrimSpace(rawLabel)
+	if utf8.RuneCountInString(homeLabel) > MaxHomeLabelLength {
+		return "", "", fmt.Errorf("CLICKCLACK_HOME_LABEL must be at most %d characters", MaxHomeLabelLength)
+	}
+	return homeURL, homeLabel, nil
 }

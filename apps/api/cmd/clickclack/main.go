@@ -142,6 +142,7 @@ func serve(args []string) error {
 		CookieNames:         cookieNames,
 		FrontendURL:         cfg.PublicURL,
 		PublicAPIURL:        cfg.PublicAPIURL,
+		HomeLink:            httpapi.HomeLinkConfig{URL: cfg.HomeURL, Label: cfg.HomeLabel},
 		EmbedFrameAncestors: cfg.EmbedFrameAncestors,
 		GitHubOAuth: httpapi.GitHubOAuthConfig{
 			ClientID:     cfg.GitHubClientID,

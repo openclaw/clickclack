@@ -2877,6 +2877,7 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 		options    Options
 		url        string
 		remoteAddr string
+		headers    http.Header
 		wantSecure bool
 	}{
 		{
@@ -2894,6 +2895,26 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 			wantSecure: false,
 		},
 		{
+			name:       "local_dev_ignores_untrusted_forwarded_https",
+			options:    Options{},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers:    http.Header{"X-Forwarded-Proto": []string{"https"}},
+			wantSecure: false,
+		},
+		{
+			name:       "trusted_loopback_proxy_https",
+			options:    Options{},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"https"},
+				"X-Forwarded-For":   []string{"127.0.0.2"},
+				"X-Real-IP":         []string{"127.0.0.2"},
+			},
+			wantSecure: true,
+		},
+		{
 			name:       "local_dev_http_public_host",
 			options:    Options{},
 			url:        "http://app.example.test/",
@@ -2907,16 +2928,38 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 			remoteAddr: "127.0.0.1:45678",
 			wantSecure: true,
 		},
+		{
+			name:       "openclaw_id_public_https",
+			options:    Options{OpenClawID: OpenClawIDConfig{PublicURL: "https://app.example.test"}},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			wantSecure: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
 			req.RemoteAddr = tc.remoteAddr
-			recorder := httptest.NewRecorder()
-			New(nil, nil, tc.options).setSessionCookie(recorder, req, session)
-			cookie := findCookie(recorder.Result().Cookies(), "cc_session")
-			if cookie == nil || cookie.Secure != tc.wantSecure {
-				t.Fatalf("expected secure=%v session cookie, got %#v", tc.wantSecure, cookie)
+			for name, values := range tc.headers {
+				for _, value := range values {
+					req.Header.Add(name, value)
+				}
+			}
+			server := New(nil, nil, tc.options)
+
+			sessionResponse := httptest.NewRecorder()
+			server.setSessionCookie(sessionResponse, req, session)
+			sessionCookie := findCookie(sessionResponse.Result().Cookies(), server.cookies.Session)
+
+			bindingResponse := httptest.NewRecorder()
+			if _, err := server.oauthBrowserBinding(bindingResponse, req); err != nil {
+				t.Fatal(err)
+			}
+			bindingCookie := findCookie(bindingResponse.Result().Cookies(), server.cookies.OAuthBinding)
+
+			if sessionCookie == nil || sessionCookie.Secure != tc.wantSecure ||
+				bindingCookie == nil || bindingCookie.Secure != tc.wantSecure {
+				t.Fatalf("expected secure=%v authentication cookies, got session=%#v binding=%#v", tc.wantSecure, sessionCookie, bindingCookie)
 			}
 		})
 	}

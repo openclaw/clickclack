@@ -545,7 +545,7 @@ func (s *Server) githubRedirectURL(r *http.Request) (string, error) {
 			return "", errors.New("github oauth requires a configured public URL")
 		}
 		scheme := "http"
-		if r.TLS != nil {
+		if requestIsHTTPS(r) {
 			scheme = "https"
 		}
 		base = scheme + "://" + r.Host
@@ -568,23 +568,25 @@ func (s *Server) cookiePath() string {
 }
 
 func (s *Server) secureCookies(r *http.Request) bool {
-	if publicURL, err := url.Parse(strings.TrimSpace(s.publicAPIURL)); err == nil && publicURL.Scheme == "https" {
-		return true
-	}
-	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil {
-		if publicURL.Scheme == "https" {
-			return true
-		}
-	}
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		return true
-	}
-	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil {
-		if !s.disableDevAuth && publicURL.Scheme == "http" && isLocalHostPort(publicURL.Host) {
-			return false
-		}
-	}
-	return !(!s.disableDevAuth && isLocalHostPort(r.RemoteAddr) && isLocalHostPort(r.Host))
+	requestHTTPS := requestIsHTTPS(r)
+	return urlIsHTTPS(s.publicAPIURL) ||
+		urlIsHTTPS(s.githubOAuth.PublicURL) ||
+		urlIsHTTPS(s.openclawID.PublicURL) ||
+		requestHTTPS ||
+		!(!s.disableDevAuth &&
+			(isLocalDevRequest(r) ||
+				urlIsLoopbackHTTP(s.githubOAuth.PublicURL) ||
+				urlIsLoopbackHTTP(s.openclawID.PublicURL)))
+}
+
+func urlIsHTTPS(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && parsed.Scheme == "https"
+}
+
+func urlIsLoopbackHTTP(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && parsed.Scheme == "http" && isLocalHostPort(parsed.Host)
 }
 
 func (s *Server) oauthBrowserBinding(w http.ResponseWriter, r *http.Request) (string, error) {

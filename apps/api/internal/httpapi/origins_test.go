@@ -136,6 +136,81 @@ func TestConfiguredCookieSameSite(t *testing.T) {
 	}
 }
 
+func TestLocalRequestSchemeTrust(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		url        string
+		remoteAddr string
+		headers    http.Header
+		wantBase   string
+	}{
+		{
+			name:       "loopback_http",
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			wantBase:   "http://127.0.0.1:8080",
+		},
+		{
+			name:       "direct_https",
+			url:        "https://127.0.0.1:8443/",
+			remoteAddr: "127.0.0.1:45678",
+			wantBase:   "https://127.0.0.1:8443",
+		},
+		{
+			name:       "untrusted_forwarded_https",
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers:    http.Header{"X-Forwarded-Proto": []string{"https"}},
+			wantBase:   "http://127.0.0.1:8080",
+		},
+		{
+			name:       "trusted_loopback_proxy_https",
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"https"},
+				"X-Forwarded-For":   []string{"127.0.0.2"},
+				"X-Real-IP":         []string{"127.0.0.2"},
+			},
+			wantBase: "https://127.0.0.1:8080",
+		},
+		{
+			name:       "duplicate_forwarded_proto",
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"https", "http"},
+				"X-Forwarded-For":   []string{"127.0.0.2"},
+				"X-Real-IP":         []string{"127.0.0.2"},
+			},
+			wantBase: "http://127.0.0.1:8080",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			request.RemoteAddr = tc.remoteAddr
+			for name, values := range tc.headers {
+				for _, value := range values {
+					request.Header.Add(name, value)
+				}
+			}
+			server := New(nil, nil, Options{})
+
+			if got := server.apiBaseURL(request); got != tc.wantBase {
+				t.Fatalf("API base URL = %q, want %q", got, tc.wantBase)
+			}
+			if got, err := server.githubRedirectURL(request); err != nil || got != tc.wantBase+"/api/auth/github/callback" {
+				t.Fatalf("GitHub redirect URL = %q, want %q: %v", got, tc.wantBase+"/api/auth/github/callback", err)
+			}
+			if got, err := server.openclawIDRedirectURL(request); err != nil || got != tc.wantBase+"/api/auth/openclaw/callback" {
+				t.Fatalf("OpenClaw ID redirect URL = %q, want %q: %v", got, tc.wantBase+"/api/auth/openclaw/callback", err)
+			}
+		})
+	}
+}
+
 func TestGitHubCallbackUsesCanonicalAPIBase(t *testing.T) {
 	t.Parallel()
 	server := New(nil, nil, Options{

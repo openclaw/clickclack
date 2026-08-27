@@ -257,7 +257,7 @@ func (s *Server) openclawIDRedirectURL(r *http.Request) (string, error) {
 			return "", errors.New("openclaw id sign-in requires a configured public URL")
 		}
 		scheme := "http"
-		if r.TLS != nil {
+		if requestIsHTTPS(r) {
 			scheme = "https"
 		}
 		base = scheme + "://" + r.Host

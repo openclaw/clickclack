@@ -100,6 +100,15 @@ func canonicalOriginString(origin string) (string, bool) {
 	return canonicalOrigin(parsed)
 }
 
+func requestIsHTTPS(r *http.Request) bool {
+	forwardedProto := r.Header.Values("X-Forwarded-Proto")
+	return r.TLS != nil ||
+		isLocalHostPort(r.RemoteAddr) &&
+			loopbackProxyClientIP(r) != "" &&
+			len(forwardedProto) == 1 &&
+			strings.EqualFold(strings.TrimSpace(forwardedProto[0]), "https")
+}
+
 func (s *Server) apiBaseURL(r *http.Request) string {
 	if s.publicAPIURL != "" {
 		return s.publicAPIURL
@@ -108,7 +117,7 @@ func (s *Server) apiBaseURL(r *http.Request) string {
 		return ""
 	}
 	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+	if requestIsHTTPS(r) {
 		scheme = "https"
 	}
 	base, err := authpolicy.CanonicalPublicAPIURL(scheme + "://" + r.Host)

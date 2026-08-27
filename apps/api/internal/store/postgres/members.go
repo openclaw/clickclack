@@ -211,7 +211,7 @@ func postgresWorkspaceMemberCounts(ctx context.Context, tx *sql.Tx, workspaceID 
 
 func postgresWorkspaceMemberPageFromRows(workspaceID string, req store.WorkspaceMemberPageRequest, totalCount *int, totalByRole *store.WorkspaceMemberRoleCounts, rows []storedb.ListWorkspaceMemberPageRow) (store.WorkspaceMemberPage, error) {
 	page := store.WorkspaceMemberPage{
-		Members:     make([]store.WorkspaceMember, 0, min(len(rows), req.Limit)),
+		Members:     make([]store.WorkspaceMember, 0, len(rows)),
 		TotalCount:  totalCount,
 		TotalByRole: totalByRole,
 	}

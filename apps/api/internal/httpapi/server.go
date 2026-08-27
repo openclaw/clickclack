@@ -763,11 +763,11 @@ func parseWorkspaceMemberPageRequest(r *http.Request) (store.WorkspaceMemberPage
 		Role:   values.Get("role"),
 	}
 	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
-		limit, err := strconv.Atoi(rawLimit)
+		limit, err := strconv.ParseInt(rawLimit, 10, 32)
 		if err != nil || limit < 1 {
 			return page, fmt.Errorf("%w: limit must be positive", store.ErrInvalidWorkspaceMemberPage)
 		}
-		page.Limit = limit
+		page.Limit = int(limit)
 	}
 	return page, nil
 }
@@ -1845,11 +1845,11 @@ func optionalString(value string) *string {
 }
 
 func queryInt(r *http.Request, key string, fallback int) int {
-	value, err := strconv.Atoi(r.URL.Query().Get(key))
+	value, err := strconv.ParseInt(r.URL.Query().Get(key), 10, 32)
 	if err != nil {
 		return fallback
 	}
-	return value
+	return int(value)
 }
 
 func parseMessagePageRequest(r *http.Request) (store.MessagePageRequest, error) {

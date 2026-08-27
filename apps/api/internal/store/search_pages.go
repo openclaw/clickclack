@@ -155,7 +155,7 @@ func EncodeSearchCursor(req SearchPageRequest, rank float64, createdAt, messageI
 
 func BuildSearchPage(req SearchPageRequest, entries []SearchPageEntry) (SearchPage, error) {
 	page := SearchPage{
-		Results: make([]SearchHit, 0, min(len(entries), req.Limit)),
+		Results: make([]SearchHit, 0, len(entries)),
 	}
 	hasMore := len(entries) > req.Limit
 	if hasMore {

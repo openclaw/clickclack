@@ -3711,9 +3711,28 @@ func TestUploadRejectsInvalidMultipartShapes(t *testing.T) {
 
 func TestQueryHelpersParseValues(t *testing.T) {
 	t.Parallel()
-	req := httptest.NewRequest(http.MethodGet, "/?limit=42", nil)
-	if got := queryInt(req, "limit", 10); got != 42 {
-		t.Fatalf("unexpected int query value %d", got)
+	for _, test := range []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{name: "missing", want: 10},
+		{name: "invalid", value: "bad", want: 10},
+		{name: "minimum database integer", value: "-2147483648", want: -2147483648},
+		{name: "negative", value: "-1", want: -1},
+		{name: "zero", value: "0", want: 0},
+		{name: "positive", value: "42", want: 42},
+		{name: "maximum database integer", value: "2147483647", want: 2147483647},
+		{name: "above database integer", value: "2147483648", want: 10},
+		{name: "below database integer", value: "-2147483649", want: 10},
+		{name: "maximum 64-bit integer", value: "9223372036854775807", want: 10},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/?limit="+test.value, nil)
+			if got := queryInt(req, "limit", 10); got != test.want {
+				t.Fatalf("queryInt() = %d, want %d", got, test.want)
+			}
+		})
 	}
 	server := New(nil, nil, Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "https://app.clickclack.test/path"}})
 	patterns := server.websocketOriginPatterns(httptest.NewRequest(http.MethodGet, "/", nil))
@@ -3722,6 +3741,44 @@ func TestQueryHelpersParseValues(t *testing.T) {
 	}
 	if patterns := New(nil, nil, Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "%"}}).websocketOriginPatterns(httptest.NewRequest(http.MethodGet, "/", nil)); patterns != nil {
 		t.Fatalf("unexpected invalid websocket origin patterns: %#v", patterns)
+	}
+}
+
+func TestPaginationLimitParsersUseDatabaseWidth(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{name: "missing"},
+		{name: "negative", value: "-1", wantErr: true},
+		{name: "zero", value: "0", wantErr: true},
+		{name: "positive", value: "1", want: 1},
+		{name: "maximum database integer", value: "2147483647", want: 2147483647},
+		{name: "above database integer", value: "2147483648", wantErr: true},
+		{name: "maximum 64-bit integer", value: "9223372036854775807", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/?limit="+test.value, nil)
+
+			search, searchErr := parseSearchPageRequest(req, "usr_test")
+			if got := searchErr != nil; got != test.wantErr {
+				t.Fatalf("parseSearchPageRequest() error = %v, want error %v", searchErr, test.wantErr)
+			}
+			if searchErr == nil && search.Limit != test.want {
+				t.Fatalf("search limit = %d, want %d", search.Limit, test.want)
+			}
+
+			members, memberErr := parseWorkspaceMemberPageRequest(req)
+			if got := memberErr != nil; got != test.wantErr {
+				t.Fatalf("parseWorkspaceMemberPageRequest() error = %v, want error %v", memberErr, test.wantErr)
+			}
+			if memberErr == nil && members.Limit != test.want {
+				t.Fatalf("member limit = %d, want %d", members.Limit, test.want)
+			}
+		})
 	}
 }
 

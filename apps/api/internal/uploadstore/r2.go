@@ -15,10 +15,17 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
-const defaultR2ResponseHeaderTimeout = 30 * time.Second
+const (
+	defaultR2ResponseHeaderTimeout = 30 * time.Second
+	// Idle read bound for ServeHTTP. Client.Timeout stays 0 for streaming.
+	defaultR2ServeBodyIdleTimeout = 30 * time.Second
+)
+
+var errServeBodyStalled = errors.New("r2 serve: body read stalled")
 
 type R2Config struct {
 	AccountID       string
@@ -32,14 +39,15 @@ type R2Config struct {
 }
 
 type R2 struct {
-	accountID       string
-	accessKeyID     string
-	secretAccessKey string
-	bucket          string
-	prefix          string
-	endpoint        string
-	region          string
-	httpClient      *http.Client
+	accountID            string
+	accessKeyID          string
+	secretAccessKey      string
+	bucket               string
+	prefix               string
+	endpoint             string
+	region               string
+	httpClient           *http.Client
+	serveBodyIdleTimeout time.Duration
 }
 
 func NewR2(cfg R2Config) (*R2, error) {
@@ -72,14 +80,15 @@ func NewR2(cfg R2Config) (*R2, error) {
 		prefix += "/"
 	}
 	return &R2{
-		accountID:       cfg.AccountID,
-		accessKeyID:     cfg.AccessKeyID,
-		secretAccessKey: cfg.SecretAccessKey,
-		bucket:          cfg.Bucket,
-		prefix:          prefix,
-		endpoint:        endpoint,
-		region:          region,
-		httpClient:      client,
+		accountID:            cfg.AccountID,
+		accessKeyID:          cfg.AccessKeyID,
+		secretAccessKey:      cfg.SecretAccessKey,
+		bucket:               cfg.Bucket,
+		prefix:               prefix,
+		endpoint:             endpoint,
+		region:               region,
+		httpClient:           client,
+		serveBodyIdleTimeout: defaultR2ServeBodyIdleTimeout,
 	}, nil
 }
 
@@ -180,6 +189,7 @@ func (s *R2) ServeHTTP(w http.ResponseWriter, r *http.Request, object Object) er
 	if err != nil {
 		return err
 	}
+	resp.Body = wrapServeBody(resp.Body, s.serveBodyIdleTimeout)
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
@@ -366,6 +376,39 @@ func copyHeader(dst, src http.Header, name string) {
 	if value := src.Get(name); value != "" {
 		dst.Set(name, value)
 	}
+}
+
+func wrapServeBody(body io.ReadCloser, timeout time.Duration) io.ReadCloser {
+	if timeout <= 0 {
+		timeout = defaultR2ServeBodyIdleTimeout
+	}
+	return &idleTimeoutReadCloser{rc: body, timeout: timeout}
+}
+
+type idleTimeoutReadCloser struct {
+	rc       io.ReadCloser
+	timeout  time.Duration
+	timedOut atomic.Bool
+}
+
+func (r *idleTimeoutReadCloser) Read(p []byte) (int, error) {
+	timer := time.AfterFunc(r.timeout, func() {
+		r.timedOut.Store(true)
+		_ = r.rc.Close()
+	})
+	defer timer.Stop()
+	n, err := r.rc.Read(p)
+	if n > 0 {
+		return n, err
+	}
+	if r.timedOut.Load() {
+		return 0, errServeBodyStalled
+	}
+	return 0, err
+}
+
+func (r *idleTimeoutReadCloser) Close() error {
+	return r.rc.Close()
 }
 
 func responseError(prefix string, resp *http.Response) error {

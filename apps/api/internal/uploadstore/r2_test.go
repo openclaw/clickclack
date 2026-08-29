@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestR2SaveServeAndDelete(t *testing.T) {
@@ -100,6 +101,67 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 	}
 	if err := store.Delete(context.Background(), savedPath); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestR2ServeHTTPStalledBodyDoesNotHang(t *testing.T) {
+	t.Parallel()
+	headersSent := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		close(headersSent)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(func() {
+		server.CloseClientConnections()
+		server.Close()
+	})
+
+	store, err := NewR2(R2Config{
+		AccountID:       "account",
+		AccessKeyID:     "access",
+		SecretAccessKey: "secret",
+		Bucket:          "bucket",
+		Prefix:          "prefix",
+		Endpoint:        server.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.serveBodyIdleTimeout = 50 * time.Millisecond
+
+	done := make(chan error, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/api/uploads/upl_stalled", nil)
+		done <- store.ServeHTTP(httptest.NewRecorder(), req, Object{
+			Path:        "r2://bucket/prefix/upload-stalled",
+			ContentType: "application/octet-stream",
+			ByteSize:    100,
+		})
+	}()
+
+	select {
+	case <-headersSent:
+	case <-time.After(2 * time.Second):
+		t.Fatal("r2 handler never sent response headers")
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, errServeBodyStalled) {
+			t.Fatalf("expected stalled-body error, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ServeHTTP hung on stalled R2 body")
 	}
 }
 

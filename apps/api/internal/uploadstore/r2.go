@@ -15,17 +15,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
-const (
-	defaultR2ResponseHeaderTimeout = 30 * time.Second
-	// Idle read bound for ServeHTTP. Client.Timeout stays 0 for streaming.
-	defaultR2ServeBodyIdleTimeout = 30 * time.Second
-)
-
-var errServeBodyStalled = errors.New("r2 serve: body read stalled")
+const defaultR2ResponseHeaderTimeout = 30 * time.Second
 
 type R2Config struct {
 	AccountID       string
@@ -39,15 +32,14 @@ type R2Config struct {
 }
 
 type R2 struct {
-	accountID            string
-	accessKeyID          string
-	secretAccessKey      string
-	bucket               string
-	prefix               string
-	endpoint             string
-	region               string
-	httpClient           *http.Client
-	serveBodyIdleTimeout time.Duration
+	accountID       string
+	accessKeyID     string
+	secretAccessKey string
+	bucket          string
+	prefix          string
+	endpoint        string
+	region          string
+	httpClient      *http.Client
 }
 
 func NewR2(cfg R2Config) (*R2, error) {
@@ -80,26 +72,19 @@ func NewR2(cfg R2Config) (*R2, error) {
 		prefix += "/"
 	}
 	return &R2{
-		accountID:            cfg.AccountID,
-		accessKeyID:          cfg.AccessKeyID,
-		secretAccessKey:      cfg.SecretAccessKey,
-		bucket:               cfg.Bucket,
-		prefix:               prefix,
-		endpoint:             endpoint,
-		region:               region,
-		httpClient:           client,
-		serveBodyIdleTimeout: defaultR2ServeBodyIdleTimeout,
+		accountID:       cfg.AccountID,
+		accessKeyID:     cfg.AccessKeyID,
+		secretAccessKey: cfg.SecretAccessKey,
+		bucket:          cfg.Bucket,
+		prefix:          prefix,
+		endpoint:        endpoint,
+		region:          region,
+		httpClient:      client,
 	}, nil
 }
 
 func defaultR2HTTPClient() *http.Client {
-	transport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		return &http.Client{}
-	}
-	cloned := transport.Clone()
-	cloned.ResponseHeaderTimeout = defaultR2ResponseHeaderTimeout
-	return &http.Client{Transport: cloned}
+	return &http.Client{Transport: r2Transport{}}
 }
 
 func (s *R2) Save(ctx context.Context, body io.Reader, options SaveOptions) (SavedObject, error) {
@@ -189,35 +174,32 @@ func (s *R2) ServeHTTP(w http.ResponseWriter, r *http.Request, object Object) er
 	if err != nil {
 		return err
 	}
-	resp.Body = wrapServeBody(resp.Body, s.serveBodyIdleTimeout)
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
 	}
-	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
-		copyHeader(w.Header(), resp.Header, "Accept-Ranges")
-		copyHeader(w.Header(), resp.Header, "Content-Length")
-		copyHeader(w.Header(), resp.Header, "Content-Range")
-		w.WriteHeader(resp.StatusCode)
-		_, err = io.Copy(w, resp.Body)
-		return err
-	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
 		return responseError("serve r2 upload", resp)
 	}
 	copyHeader(w.Header(), resp.Header, "Accept-Ranges")
 	copyHeader(w.Header(), resp.Header, "Content-Length")
 	copyHeader(w.Header(), resp.Header, "Content-Range")
-	copyHeader(w.Header(), resp.Header, "ETag")
-	copyHeader(w.Header(), resp.Header, "Last-Modified")
-	if object.ContentType != "" {
-		w.Header().Set("Content-Type", object.ContentType)
-	} else {
-		copyHeader(w.Header(), resp.Header, "Content-Type")
+	if resp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		copyHeader(w.Header(), resp.Header, "ETag")
+		copyHeader(w.Header(), resp.Header, "Last-Modified")
+		if object.ContentType != "" {
+			w.Header().Set("Content-Type", object.ContentType)
+		} else {
+			copyHeader(w.Header(), resp.Header, "Content-Type")
+		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, err = io.Copy(w, resp.Body)
-	return err
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		// The file response is committed: abort the stream instead of appending
+		// an API error or successfully terminating a truncated chunked body.
+		panic(http.ErrAbortHandler)
+	}
+	return nil
 }
 
 func (s *R2) newRequest(ctx context.Context, method, key string, body io.Reader) (*http.Request, error) {
@@ -378,43 +360,14 @@ func copyHeader(dst, src http.Header, name string) {
 	}
 }
 
-func wrapServeBody(body io.ReadCloser, timeout time.Duration) io.ReadCloser {
-	if timeout <= 0 {
-		timeout = defaultR2ServeBodyIdleTimeout
-	}
-	return &idleTimeoutReadCloser{rc: body, timeout: timeout}
-}
-
-type idleTimeoutReadCloser struct {
-	rc       io.ReadCloser
-	timeout  time.Duration
-	timedOut atomic.Bool
-}
-
-func (r *idleTimeoutReadCloser) Read(p []byte) (int, error) {
-	timer := time.AfterFunc(r.timeout, func() {
-		r.timedOut.Store(true)
-		_ = r.rc.Close()
-	})
-	defer timer.Stop()
-	n, err := r.rc.Read(p)
-	if n > 0 {
-		return n, err
-	}
-	if r.timedOut.Load() {
-		return 0, errServeBodyStalled
-	}
-	return 0, err
-}
-
-func (r *idleTimeoutReadCloser) Close() error {
-	return r.rc.Close()
-}
-
 func responseError(prefix string, resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
+	message := fmt.Sprintf("%s: %s", prefix, resp.Status)
 	if len(body) > 0 {
-		return fmt.Errorf("%s: %s: %s", prefix, resp.Status, strings.TrimSpace(string(body)))
+		message += ": " + strings.TrimSpace(string(body))
 	}
-	return fmt.Errorf("%s: %s", prefix, resp.Status)
+	if err != nil {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	return errors.New(message)
 }

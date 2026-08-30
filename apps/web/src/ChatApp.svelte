@@ -5,7 +5,6 @@
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
-  import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
   import {
     INITIAL_MESSAGE_LIMIT,
@@ -53,7 +52,7 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
-  import { listWorkspaceMembersPage } from "./lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
@@ -136,7 +135,6 @@
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
   let pendingUpload: Upload | null = null;
-  let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
   let channelSettingsOpen = false;
@@ -144,7 +142,6 @@
   let channelSettingsError = "";
   let showCreateChannel = false;
   let showCreateDirect = false;
-  let gifQuery = "";
   let browserNotificationsEnabled = false;
   // Client-only preferences for agent activity. Consecutive same-turn
   // agent_commentary/agent_tool rows are coalesced into one preamble block;
@@ -209,6 +206,8 @@
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let workspaceMembersLoadSerial = 0;
+  let workspaceMembersAbort: AbortController | null = null;
+  let workspaceMembersError = "";
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let channelNotifLoadSerial = 0;
@@ -355,12 +354,6 @@
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
-  $: filteredGifs = showGifPicker
-    ? gifLibrary.filter((gif) => {
-        const query = gifQuery.trim().toLowerCase();
-        return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
-      })
-    : [];
 
   onMount(() => {
     loadActivityPrefs();
@@ -473,6 +466,8 @@
   }
 
   onDestroy(() => {
+    workspaceMembersLoadSerial += 1;
+    workspaceMembersAbort?.abort();
     socket?.close();
     socket = null;
     connected = false;
@@ -779,6 +774,8 @@
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
       workspaceMembersLoadSerial += 1;
+      workspaceMembersAbort?.abort();
+      workspaceMembersError = "";
       slashCommands = [];
       botCommands = [];
       topics = [];
@@ -1102,27 +1099,22 @@
 
   async function loadWorkspaceMembers(workspaceID = selectedWorkspaceID) {
     const serial = ++workspaceMembersLoadSerial;
+    workspaceMembersAbort?.abort();
+    const controller = new AbortController();
+    workspaceMembersAbort = controller;
+    workspaceMembersError = "";
     if (!workspaceID) {
       workspaceMemberUsers = [];
       return;
     }
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({
-          workspaceID,
-          cursor,
-          limit: 100,
-        });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
       if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
-      workspaceMemberUsers = members;
-    } catch {
-      if (serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+      workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
         workspaceMemberUsers = [];
+        workspaceMembersError = memberLoadErrorMessage(error);
       }
     }
   }
@@ -3846,22 +3838,6 @@
     openImageViewer(markdownImageViewerURL(target), target.alt || "Image");
   }
 
-  function appendToComposer(snippet: string) {
-    const prefix = messageBody && !messageBody.endsWith("\n") ? "\n" : "";
-    messageBody = `${messageBody}${prefix}${snippet}`;
-  }
-
-  function applyMarkdownWrap(before: string, after = before) {
-    const placeholder = before === "```" ? "\ncode\n" : "text";
-    appendToComposer(`${before}${placeholder}${after}`);
-  }
-
-  function pickGif(url: string, title: string) {
-    appendToComposer(`![${title}](${url})`);
-    showGifPicker = false;
-    gifQuery = "";
-  }
-
   function closeSidePanel() {
     if (selectedArtifact) {
       closeArtifactViewer();
@@ -4307,6 +4283,10 @@
       agentNames={activeRespondingAgentNames}
     />
 
+    {#if workspaceMembersError}
+      <p class="composer-notice composer-notice--error" role="status">Mentions unavailable: {workspaceMembersError}</p>
+    {/if}
+
     {#if composerNotice}
       <div
         class="composer-notice"
@@ -4353,9 +4333,6 @@
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
       showToolbar
-      showGifPicker={showGifPicker}
-      gifQuery={gifQuery}
-      filteredGifs={filteredGifs}
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
@@ -4372,11 +4349,6 @@
       onUploadFile={uploadFile}
       onRemoveUpload={() => (pendingUpload = null)}
       onClearReply={clearReplyTarget}
-      onApplyMarkdownWrap={applyMarkdownWrap}
-      onAppendToComposer={appendToComposer}
-      onToggleGif={() => (showGifPicker = !showGifPicker)}
-      onGifQuery={(value) => (gifQuery = value)}
-      onPickGif={pickGif}
     />
     </div>
   </main>

@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestR2SaveServeAndDelete(t *testing.T) {
@@ -23,6 +22,10 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 		}
 		if !strings.HasPrefix(r.URL.Path, "/bucket/prefix/upload-") {
 			t.Fatalf("unexpected object path %q", r.URL.Path)
+		}
+		if strings.HasSuffix(r.URL.Path, "upload-missing") {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 		switch r.Method {
 		case http.MethodPut:
@@ -102,66 +105,12 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 	if err := store.Delete(context.Background(), savedPath); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestR2ServeHTTPStalledBodyDoesNotHang(t *testing.T) {
-	t.Parallel()
-	headersSent := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Length", "100")
-		w.WriteHeader(http.StatusOK)
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		close(headersSent)
-		<-r.Context().Done()
-	}))
-	t.Cleanup(func() {
-		server.CloseClientConnections()
-		server.Close()
-	})
-
-	store, err := NewR2(R2Config{
-		AccountID:       "account",
-		AccessKeyID:     "access",
-		SecretAccessKey: "secret",
-		Bucket:          "bucket",
-		Prefix:          "prefix",
-		Endpoint:        server.URL,
-	})
-	if err != nil {
-		t.Fatal(err)
+	recorder = httptest.NewRecorder()
+	if err := store.ServeHTTP(recorder, req, Object{Path: "prefix/upload-missing"}); !errors.Is(err, ErrNotFound) || recorder.Body.Len() != 0 {
+		t.Fatalf("missing object must fail before writing file bytes: %v", err)
 	}
-	store.serveBodyIdleTimeout = 50 * time.Millisecond
-
-	done := make(chan error, 1)
-	go func() {
-		req := httptest.NewRequest(http.MethodGet, "/api/uploads/upl_stalled", nil)
-		done <- store.ServeHTTP(httptest.NewRecorder(), req, Object{
-			Path:        "r2://bucket/prefix/upload-stalled",
-			ContentType: "application/octet-stream",
-			ByteSize:    100,
-		})
-	}()
-
-	select {
-	case <-headersSent:
-	case <-time.After(2 * time.Second):
-		t.Fatal("r2 handler never sent response headers")
-	}
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, errServeBodyStalled) {
-			t.Fatalf("expected stalled-body error, got %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("ServeHTTP hung on stalled R2 body")
+	if err := store.Delete(context.Background(), "prefix/upload-missing"); err != nil {
+		t.Fatalf("deleting a missing object must succeed: %v", err)
 	}
 }
 
@@ -185,13 +134,6 @@ func TestR2ConfigValidation(t *testing.T) {
 	}
 	if store.httpClient == nil || store.httpClient.Timeout != 0 {
 		t.Fatalf("expected streaming-safe client timeout, got %#v", store.httpClient)
-	}
-	transport, ok := store.httpClient.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected default transport, got %#v", store.httpClient.Transport)
-	}
-	if transport.ResponseHeaderTimeout != defaultR2ResponseHeaderTimeout {
-		t.Fatalf("expected response header timeout %s, got %s", defaultR2ResponseHeaderTimeout, transport.ResponseHeaderTimeout)
 	}
 	customClient := &http.Client{}
 	store, err = NewR2(R2Config{AccountID: "account", AccessKeyID: "access", SecretAccessKey: "secret", Bucket: "bucket", HTTPClient: customClient})

@@ -2,12 +2,13 @@
   import { onDestroy, onMount, tick } from "svelte";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
+  import ProfilePane from "../profile/ProfilePane.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
-  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -60,12 +61,16 @@
   let realtimeError = $state("");
   let sending = $state(false);
   let selectedImage = $state<{ url: string; title: string } | null>(null);
+  let selectedProfile = $state<User | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
   let failedSubmission: MessageSubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
+  let memberLoadAbort: AbortController | null = null;
+  let memberLoadError = $state("");
+  let loadingNewerSerial: number | null = null;
 
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
@@ -83,18 +88,19 @@
 
   async function loadWorkspaceMembers(workspaceID: string) {
     const serial = ++memberLoadSerial;
+    memberLoadAbort?.abort();
+    const controller = new AbortController();
+    memberLoadAbort = controller;
+    memberLoadError = "";
     workspaceMemberUsers = [];
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      if (serial === memberLoadSerial) workspaceMemberUsers = members;
-    } catch {
-      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
+      if (serial === memberLoadSerial) workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === memberLoadSerial) {
+        workspaceMemberUsers = [];
+        memberLoadError = memberLoadErrorMessage(error);
+      }
     }
   }
 
@@ -153,6 +159,8 @@
   }
 
   function clearChannel() {
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     socket = null;
     route = null;
@@ -165,6 +173,7 @@
     hasOlder = false;
     hasNewer = false;
     replyTarget = null;
+    selectedProfile = null;
   }
 
   function handleLoadError(error: unknown) {
@@ -242,6 +251,19 @@
       sendError = readableAPIError(error, "Could not load older messages.");
     } finally {
       loadingOlder = false;
+    }
+  }
+
+  async function loadNewerMessages() {
+    const serial = loadSerial;
+    if (loadingNewerSerial === serial || !hasNewer) return;
+    loadingNewerSerial = serial;
+    try {
+      await syncNewMessages(() => serial === loadSerial);
+    } catch (error) {
+      if (serial === loadSerial) reportRealtimeError(error);
+    } finally {
+      if (loadingNewerSerial === serial) loadingNewerSerial = null;
     }
   }
 
@@ -471,8 +493,10 @@
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
-    const url = markdownImageViewerURL(event);
-    if (url) selectedImage = { url, title: "Message image" };
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
+    selectedImage = { url: markdownImageViewerURL(target), title: target.alt || "Image" };
   }
 
   function openArtifact(upload: Upload) {
@@ -488,6 +512,11 @@
     if (viewState === "auth" && document.visibilityState === "visible") void loadChannel();
   }
 
+  function openProfileDialog(node: HTMLDialogElement) {
+    node.showModal();
+    return { destroy: () => node.close() };
+  }
+
   onMount(() => {
     void loadChannel();
     window.addEventListener("focus", retryAuthOnFocus);
@@ -496,6 +525,8 @@
 
   onDestroy(() => {
     loadSerial += 1;
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     window.removeEventListener("focus", retryAuthOnFocus);
     document.removeEventListener("visibilitychange", retryAuthOnFocus);
@@ -532,16 +563,17 @@
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => {}}
       onInlineImagePointerUp={handleInlineImagePointerUp}
-      onOpenProfile={() => {}}
+      onOpenProfile={(profile) => (selectedProfile = profile || null)}
       onReply={(message) => setReplyTarget(message)}
       onOpenThread={openThread}
       onJumpToQuote={jumpToQuote}
       onOpenImage={(url, title) => (selectedImage = { url, title })}
       onOpenArtifact={openArtifact}
       onLoadOlder={() => void loadOlderMessages()}
-      onLoadNewer={() => queueMessageSync()}
+      onLoadNewer={() => void loadNewerMessages()}
     />
     <div class="embed-channel-composer-dock">
+      {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
         value={messageBody}
@@ -607,7 +639,32 @@
   />
 {/if}
 
+{#if selectedProfile}
+  <dialog
+    class="embed-profile thread open"
+    aria-label="Profile"
+    use:openProfileDialog
+    onclose={() => (selectedProfile = null)}
+  >
+    <ProfilePane profile={selectedProfile} currentUser={user} onClose={() => (selectedProfile = null)} />
+  </dialog>
+{/if}
+
 <style>
+  .embed-profile {
+    width: min(400px, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--text);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .embed-profile::backdrop {
+    background: rgba(5, 8, 15, 0.54);
+  }
+
   .embed-channel-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -678,12 +735,7 @@
   }
 
   .embed-notice {
-    position: absolute;
-    right: 14px;
-    bottom: calc(100% - 2px);
-    left: 14px;
-    z-index: 2;
-    margin: 0;
+    margin: 6px 14px 0;
     padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
     border-radius: var(--radius);

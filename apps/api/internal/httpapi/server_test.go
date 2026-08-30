@@ -922,7 +922,7 @@ func TestJSONBodiesAreSizeLimited(t *testing.T) {
 func TestHTTPDeadlinesSkipWebSocketUpgrades(t *testing.T) {
 	t.Parallel()
 	var normal deadlineRecorder
-	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", nil))
+	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", strings.NewReader("body")))
 	if len(normal.readDeadlines) != 2 || normal.readDeadlines[0].IsZero() || !normal.readDeadlines[1].IsZero() {
 		t.Fatalf("unexpected read deadlines: %#v", normal.readDeadlines)
 	}

@@ -4,7 +4,7 @@
   import { isWorkspaceManager } from "$lib/permissions";
   import type { Upload, Workspace } from "$lib/types";
   import {
-    listWorkspaceMembersPage,
+    listAllWorkspaceMembers,
     type WorkspaceMember,
   } from "$lib/workspace-members";
 
@@ -44,7 +44,11 @@
 
   $effect(() => {
     if (!isOwner || !workspace || transferLoadedFor === workspace.id) return;
-    void loadTransferMembers(workspace.id);
+    const controller = new AbortController();
+    transferMembers = [];
+    transferUserID = "";
+    void loadTransferMembers(workspace.id, controller.signal);
+    return () => controller.abort();
   });
 
   function capitalize(value: string | undefined): string {
@@ -125,24 +129,10 @@
     }
   }
 
-  async function loadTransferMembers(workspaceID: string) {
+  async function loadTransferMembers(workspaceID: string, signal: AbortSignal) {
     try {
-      const members: WorkspaceMember[] = [];
-      let cursor: string | undefined;
-      const seenCursors = new Set<string>();
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, limit: 200, cursor });
-        members.push(...page.members);
-        cursor = page.has_more ? page.next_cursor : undefined;
-        if (page.has_more && !cursor) {
-          throw new Error("Member directory returned an incomplete page");
-        }
-        if (cursor && seenCursors.has(cursor)) {
-          throw new Error("Member directory repeated a pagination cursor");
-        }
-        if (cursor) seenCursors.add(cursor);
-      } while (cursor);
-      if (workspace?.id !== workspaceID) return;
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 200, signal });
+      if (signal.aborted || workspace?.id !== workspaceID) return;
       transferMembers = members.filter(
         (member) =>
           member.user.kind === "human" &&
@@ -153,7 +143,7 @@
       transferUserID = transferMembers[0]?.user.id ?? "";
       transferLoadedFor = workspaceID;
     } catch (err) {
-      error = errorMessage(err);
+      if (!signal.aborted && workspace?.id === workspaceID) error = errorMessage(err);
     }
   }
 

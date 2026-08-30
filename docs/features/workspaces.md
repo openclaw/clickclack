@@ -50,6 +50,12 @@ case-insensitive literal `q` search over display name and handle, and optional
 omit `total_count` so infinite scrolling does not repeat count work. The member
 directory does not include moderation state.
 
+Chat, embedded channels and threads, and ownership settings load the complete
+member directory across pages. Missing or repeated continuation cursors stop
+the load; chat shows a mentions-unavailable notice while messaging stays usable.
+Changing views cancels the old directory request, and each page retains its
+30-second timeout. The member directory and pickers still support manual paging.
+
 ## Channels
 
 ```http

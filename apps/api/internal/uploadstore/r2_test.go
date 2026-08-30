@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestR2SaveServeAndDelete(t *testing.T) {
@@ -141,6 +143,64 @@ func TestR2ConfigValidation(t *testing.T) {
 	}
 }
 
+func TestDefaultR2HTTPClientFallbackUsesHeaderTimeout(t *testing.T) {
+	saved := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = saved })
+	http.DefaultTransport = stubRoundTripper{}
+
+	store, err := NewR2(R2Config{
+		AccountID:       "account",
+		AccessKeyID:     "access",
+		SecretAccessKey: "secret",
+		Bucket:          "bucket",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := store.httpClient
+	if client.Timeout != 0 {
+		t.Fatalf("expected streaming-safe client timeout, got %s", client.Timeout)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected fallback *http.Transport, got %#v", client.Transport)
+	}
+	if transport.ResponseHeaderTimeout != defaultR2ResponseHeaderTimeout {
+		t.Fatalf("expected response header timeout %s, got %s", defaultR2ResponseHeaderTimeout, transport.ResponseHeaderTimeout)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				_, _ = io.Copy(io.Discard, c)
+			}(conn)
+		}
+	}()
+
+	transport.ResponseHeaderTimeout = 50 * time.Millisecond
+	req, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Do(req)
+	if err == nil {
+		t.Fatal("expected header timeout against a silent listener")
+	}
+	if !strings.Contains(err.Error(), "timeout awaiting response headers") {
+		t.Fatalf("expected response header timeout, got %v", err)
+	}
+}
+
 func TestR2SaveEmptyUploadUsesContentLength(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -203,4 +263,10 @@ func TestR2RejectsKeysOutsidePrefix(t *testing.T) {
 	if key != "prefix/upload-1" {
 		t.Fatalf("unexpected key: %q", key)
 	}
+}
+
+type stubRoundTripper struct{}
+
+func (stubRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("unused stub transport")
 }

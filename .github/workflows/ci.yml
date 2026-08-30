@@ -15,7 +15,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "11.20.0"
+  PNPM_VERSION: "11.24.0"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
       - name: Deadcode
         run: |
           output_file=$(mktemp)
-          go run golang.org/x/tools/cmd/deadcode@v0.45.0 -test ./... > "$output_file"
+          go run golang.org/x/tools/cmd/deadcode@v0.49.0 -test ./... > "$output_file"
           if [ -s "$output_file" ]; then
             cat "$output_file"
             exit 1
@@ -91,7 +91,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -151,7 +151,7 @@ jobs:
           cache: true
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ env.PNPM_VERSION }}
 

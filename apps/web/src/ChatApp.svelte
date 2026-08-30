@@ -5,7 +5,6 @@
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
-  import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
   import {
     INITIAL_MESSAGE_LIMIT,
@@ -136,7 +135,6 @@
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
   let pendingUpload: Upload | null = null;
-  let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
   let channelSettingsOpen = false;
@@ -144,7 +142,6 @@
   let channelSettingsError = "";
   let showCreateChannel = false;
   let showCreateDirect = false;
-  let gifQuery = "";
   let browserNotificationsEnabled = false;
   // Client-only preferences for agent activity. Consecutive same-turn
   // agent_commentary/agent_tool rows are coalesced into one preamble block;
@@ -355,12 +352,6 @@
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
-  $: filteredGifs = showGifPicker
-    ? gifLibrary.filter((gif) => {
-        const query = gifQuery.trim().toLowerCase();
-        return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
-      })
-    : [];
 
   onMount(() => {
     loadActivityPrefs();
@@ -3846,22 +3837,6 @@
     openImageViewer(markdownImageViewerURL(target), target.alt || "Image");
   }
 
-  function appendToComposer(snippet: string) {
-    const prefix = messageBody && !messageBody.endsWith("\n") ? "\n" : "";
-    messageBody = `${messageBody}${prefix}${snippet}`;
-  }
-
-  function applyMarkdownWrap(before: string, after = before) {
-    const placeholder = before === "```" ? "\ncode\n" : "text";
-    appendToComposer(`${before}${placeholder}${after}`);
-  }
-
-  function pickGif(url: string, title: string) {
-    appendToComposer(`![${title}](${url})`);
-    showGifPicker = false;
-    gifQuery = "";
-  }
-
   function closeSidePanel() {
     if (selectedArtifact) {
       closeArtifactViewer();
@@ -4353,9 +4328,6 @@
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
       showToolbar
-      showGifPicker={showGifPicker}
-      gifQuery={gifQuery}
-      filteredGifs={filteredGifs}
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
@@ -4372,11 +4344,6 @@
       onUploadFile={uploadFile}
       onRemoveUpload={() => (pendingUpload = null)}
       onClearReply={clearReplyTarget}
-      onApplyMarkdownWrap={applyMarkdownWrap}
-      onAppendToComposer={appendToComposer}
-      onToggleGif={() => (showGifPicker = !showGifPicker)}
-      onGifQuery={(value) => (gifQuery = value)}
-      onPickGif={pickGif}
     />
     </div>
   </main>

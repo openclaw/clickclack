@@ -36,6 +36,10 @@ Owners and moderators can update the workspace name, slug, and icon. An icon
 must reference an upload from the same workspace. Owners can transfer ownership
 to a human member or moderator; the former owner becomes a moderator.
 
+The provisioned `clickclack` and `guests` slugs are reserved. Profile updates can
+retain the workspace's current normalized slug, but creating a workspace or
+changing its slug to a reserved value is rejected.
+
 Workspace deletion is owner-only and permanent. The metadata transaction first
 records every upload object in a durable cleanup queue, then deletes the
 workspace and its dependent rows. A successful response means metadata deletion

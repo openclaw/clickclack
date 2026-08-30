@@ -128,6 +128,19 @@ JOIN users u ON u.id = i.user_id
 WHERE i.provider = sqlc.arg(provider)
   AND i.provider_subject = sqlc.arg(provider_subject);
 
+-- name: ListIdentitySyncUsers :many
+SELECT u.id, u.kind, u.display_name, u.handle, u.avatar_url,
+       i.provider, i.provider_subject, i.email
+FROM users u
+JOIN identities i ON i.user_id = u.id
+WHERE u.id IN (
+  SELECT candidate.user_id FROM identities candidate
+  WHERE candidate.provider = sqlc.arg(source)
+     OR lower(candidate.email) IN (SELECT jsonb_array_elements_text(CAST(sqlc.arg(emails) AS jsonb)))
+)
+ORDER BY u.id, i.id
+FOR UPDATE OF u, i;
+
 -- name: InsertHumanUser :exec
 INSERT INTO users (id, display_name, avatar_url, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(display_name), sqlc.arg(avatar_url), sqlc.arg(created_at));

@@ -1232,9 +1232,7 @@ func normalizeWorkspaceSettings(current store.Workspace, input store.UpdateWorks
 		if workspaceSlug == "" {
 			return "", "", "", errors.New("workspace slug is required")
 		}
-		// A workspace that already owns a reserved slug (the Access-provisioned
-		// default workspace) must stay editable: rejecting its unchanged slug
-		// would block every name and icon update from the settings form.
+		// Profile updates include the current slug, even for a provisioned workspace.
 		if workspaceSlug != current.Slug && isReservedWorkspaceSlug(workspaceSlug) {
 			return "", "", "", errors.New("workspace slug is reserved")
 		}

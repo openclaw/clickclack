@@ -29,14 +29,17 @@ func TestAdminIdentitySyncPreservesExistingUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := filepath.Join(dir, "profiles.json")
-	if err := os.WriteFile(file, []byte(`{"profiles":[{"id":"profile-a","displayName":"Person","emails":["person@example.com"],"hasAvatar":true}]}`), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(`{"profiles":[{"id":"profile-a","displayName":"Person","emails":["person@example.com"],"hasAvatar":true},{"id":"profile-local","displayName":"Local proof","emails":[" LOCAL-PROOF "]}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	output := captureStdout(t, func() error {
 		return admin([]string{"identity", "sync", "--db", dbURL, "--source", "https://control.example.com", "--file", file})
 	})
-	var report struct{ Linked, Updated int }
-	if err := json.Unmarshal([]byte(output), &report); err != nil || report.Linked != 1 || report.Updated != 1 {
+	var report struct {
+		Linked, Updated int
+		Unmatched       []string `json:"unmatched_profile_ids"`
+	}
+	if err := json.Unmarshal([]byte(output), &report); err != nil || report.Linked != 1 || report.Updated != 1 || len(report.Unmatched) != 1 || report.Unmatched[0] != "profile-local" {
 		t.Fatalf("unexpected sync report: %s (%v)", output, err)
 	}
 	got, err := st.GetUser(ctx, user.ID)
@@ -63,7 +66,7 @@ func TestAdminIdentitySyncPreservesExistingUser(t *testing.T) {
 }
 
 func TestAdminIdentitySyncValidatesBeforeOpeningDatabase(t *testing.T) {
-	for _, body := range []string{`{"profiles":null}`, `{"profiles":[{"id":"x","emails":["not an email"]}]}`, `{"profiles":[]} trailing`, strings.Repeat(" ", (4<<20)+1)} {
+	for _, body := range []string{`{"profiles":null}`, `{"profiles":[{"id":"x","emails":["   "]}]}`, `{"profiles":[]} trailing`, strings.Repeat(" ", (4<<20)+1)} {
 		t.Run(body[:min(len(body), 35)], func(t *testing.T) {
 			dir := t.TempDir()
 			file, database := filepath.Join(dir, "profiles.json"), filepath.Join(dir, "unopened.db")

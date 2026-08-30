@@ -3,7 +3,6 @@ package store
 import (
 	"errors"
 	"fmt"
-	"net/mail"
 	"net/url"
 	"strings"
 )
@@ -72,8 +71,9 @@ func NormalizeIdentitySync(input IdentitySyncInput) (IdentitySyncInput, error) {
 		}
 		for i, email := range profile.Emails {
 			email = strings.ToLower(strings.TrimSpace(email))
-			parsed, err := mail.ParseAddress(email)
-			if err != nil || parsed.Address != email || parsed.Name != "" || len(email) > 320 {
+			// OpenClaw's profile owner also stores opaque login aliases here;
+			// preserve its trim/lowercase/nonempty contract instead of RFC email syntax.
+			if email == "" || len(email) > 320 {
 				return input, fmt.Errorf("profile %q has an invalid email alias", profile.ID)
 			}
 			if profile.MergedInto == nil {

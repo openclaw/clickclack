@@ -42,7 +42,9 @@ data; keep it outside the repository, restrict its permissions, and delete it
 after use. Import only an authenticated export from the origin named by
 `--source`: this is an operator command, not a public identity assertion API.
 
-The first sync matches case-insensitive email aliases against existing users.
+The first sync matches case-insensitive aliases against existing users. OpenClaw's
+`emails` field can also contain opaque login aliases; these are matched exactly
+after trimming and lowercasing, or reported as unmatched when absent in ClickClack.
 It records the canonical source origin and profile ID as a new identity attached
 to the matched user. Later syncs use that mapping even when source emails change.
 Imported aliases do not become new ClickClack login identities. The command

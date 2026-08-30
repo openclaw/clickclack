@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -740,6 +740,29 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const otherPage = await page.context().newPage();
   await otherPage.goto("about:blank");
   await otherPage.bringToFront();
+  // Hidden tabs may suspend frames entirely. Keep network and DOM work live
+  // while holding only animation callbacks until the burst has been ingested.
+  await page.evaluate(() => {
+    const request = window.requestAnimationFrame;
+    const cancel = window.cancelAnimationFrame;
+    const pending = new Map<number, FrameRequestCallback>();
+    let nextID = -1;
+    window.requestAnimationFrame = (callback) => {
+      const id = nextID--;
+      pending.set(id, callback);
+      return id;
+    };
+    window.cancelAnimationFrame = (id) => {
+      if (!pending.delete(id)) cancel(id);
+    };
+    Reflect.set(window, "resumeActivityFrames", () => {
+      window.requestAnimationFrame = request;
+      window.cancelAnimationFrame = cancel;
+      for (const callback of pending.values()) request(callback);
+      pending.clear();
+      Reflect.deleteProperty(window, "resumeActivityFrames");
+    });
+  });
   for (const data of [
     {
       body: "**bash inspect**\n\nchecked the virtualized timeline measurement",
@@ -763,11 +786,21 @@ test("coalesces durable agent activity and applies activity preferences", async 
     });
     expect(response.ok()).toBe(true);
   }
-  await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(4);
-  await expect(livePreamble).toContainText("Third live activity row grows the preamble");
+  try {
+    await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(4);
+    await expect(livePreamble).toContainText("Third live activity row grows the preamble");
+  } finally {
+    // Capture the real paused-frame state without screenshot's frame waits.
+    const capture = await page.context().newCDPSession(page);
+    const { data } = await capture.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(test.info().outputPath("agent-activity.png"), Buffer.from(data, "base64"));
+    await capture.detach();
+    await page.evaluate(() => Reflect.get(window, "resumeActivityFrames")());
+  }
   await expectScrollAtMessageEnd(page);
   await page.bringToFront();
   await otherPage.close();
+  await page.screenshot({ path: test.info().outputPath("agent-activity.png") });
 
   // Ignore any replayed events from the initial realtime subscription; this
   // assertion begins with the background activity posted below.
@@ -2806,13 +2839,34 @@ test("automatic read receipts do not clear unseen paged history", async ({ page 
     return current;
   }
 
+  // Hold the canonical route's startup after the sidebar becomes usable.
+  // An early channel click must survive the older route finishing its boot.
+  let dmLoads = 0;
+  let releaseBoot!: () => void;
+  let bootHeld!: () => void;
+  const held = new Promise<void>((resolve) => (bootHeld = resolve));
+  const release = new Promise<void>((resolve) => (releaseBoot = resolve));
+  await page.route("**/api/dms?**", async (route) => {
+    if (++dmLoads === 2) {
+      bootHeld();
+      await release;
+    }
+    await route.continue();
+  });
   await page.goto("/app");
+  await held;
   await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
+  releaseBoot();
+  try {
+    await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+  } finally {
+    await page.screenshot({ path: test.info().outputPath("startup-navigation.png") });
+  }
   await settleScrollFrames(page);
   const unreadJump = page.getByRole("button", { name: /Jump to \d+ new messages/ });
   await expect(unreadJump).toBeVisible();
   await page.getByLabel("Search messages").fill("latesttargetword");
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     page.getByLabel("Search results").locator(".search-result", { hasText: "latesttargetword" }),
   ).toBeVisible();

@@ -122,6 +122,9 @@ progress while retaining targetless, workspace-wide presence events.
 
 ## Recovery rules
 
+- The web client applies durable data before checkpointing its cursor. Timeline
+  scrolling and read receipts settle independently, so suspended animation frames
+  in a hidden tab do not block subsequent events.
 - The client sends `after_cursor` on every connect/reconnect.
 - On WebSocket connect, the server pages durable events with a higher `cursor`
   until it reaches the visible tail captured for that connection. If replay is

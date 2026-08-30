@@ -124,6 +124,10 @@ and `/app/wsp_.../msg_...` remain compatibility inputs. The app resolves them
 through `/api/routes/{workspace_route_id}/{target_route_id}` and replaces the
 URL with the canonical public route after permission checks.
 
+Channel clicks during startup use the same route owner as later navigation.
+Only the current route request can apply a result or error; an older failure
+cannot interrupt navigation after returning to the same channel.
+
 Message URLs resolve through the root message and inherit that message's
 channel or DM visibility. A channel citation highlights its root in the parent
 conversation while it has no replies; the same URL opens the thread panel once

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed background agent activity ingestion and channel navigation during startup, including stale route failures after revisiting a channel.
 - Fixed stalled R2 response reads and truncated downloads without interrupting progressing streams. Thanks @SebTardif.
 - Fixed R2 header stalls while preserving configured HTTP transport wrappers. Thanks @SebTardif.
 - Fixed member-directory pagination loops across chat, embeds, and workspace settings, and restored loading newer embedded channel messages. Thanks @SebTardif.

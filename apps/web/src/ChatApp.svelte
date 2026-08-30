@@ -2238,7 +2238,7 @@
   }
 
   function isAtLiveEdge(): boolean {
-    return messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
+    return messageList?.isFollowing() || messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
   }
 
   async function revealOwnSentMessage() {

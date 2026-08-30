@@ -124,7 +124,8 @@ progress while retaining targetless, workspace-wide presence events.
 
 - The web client applies durable data before checkpointing its cursor. Timeline
   scrolling and read receipts settle independently, so suspended animation frames
-  in a hidden tab do not block subsequent events.
+  in a hidden tab do not block subsequent events. Live chat stays pinned as
+  successive messages grow an existing group, including after the tab resumes.
 - The client sends `after_cursor` on every connect/reconnect.
 - On WebSocket connect, the server pages durable events with a higher `cursor`
   until it reaches the visible tail captured for that connection. If replay is

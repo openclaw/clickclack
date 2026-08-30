@@ -240,6 +240,7 @@
   }
 
   function closeGifPicker() {
+    if (!showGifPicker) return;
     showGifPicker = false;
     gifQuery = "";
     input?.focus();

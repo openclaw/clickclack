@@ -1220,7 +1220,8 @@ func normalizeWorkspaceSettings(current store.Workspace, input store.UpdateWorks
 		if workspaceSlug == "" {
 			return "", "", "", errors.New("workspace slug is required")
 		}
-		if isReservedWorkspaceSlug(workspaceSlug) {
+		// Profile updates include the current slug, even for a provisioned workspace.
+		if workspaceSlug != current.Slug && isReservedWorkspaceSlug(workspaceSlug) {
 			return "", "", "", errors.New("workspace slug is reserved")
 		}
 	}

@@ -56,9 +56,3 @@ func (h *Hub) Publish(event store.Event) {
 		}
 	}
 }
-
-func (h *Hub) PublishMany(events []store.Event) {
-	for _, event := range events {
-		h.Publish(event)
-	}
-}

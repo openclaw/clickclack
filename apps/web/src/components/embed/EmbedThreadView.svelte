@@ -7,7 +7,7 @@
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
-  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -64,6 +64,8 @@
   let failedSubmission: ReplySubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
+  let memberLoadAbort: AbortController | null = null;
+  let memberLoadError = $state("");
 
   const replyDisabled = $derived(
     replySending || Boolean(directConversation && !directConversation.can_send),
@@ -87,18 +89,19 @@
 
   async function loadWorkspaceMembers(workspaceID: string) {
     const serial = ++memberLoadSerial;
+    memberLoadAbort?.abort();
+    const controller = new AbortController();
+    memberLoadAbort = controller;
+    memberLoadError = "";
     workspaceMemberUsers = [];
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      if (serial === memberLoadSerial) workspaceMemberUsers = members;
-    } catch {
-      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
+      if (serial === memberLoadSerial) workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === memberLoadSerial) {
+        workspaceMemberUsers = [];
+        memberLoadError = memberLoadErrorMessage(error);
+      }
     }
   }
 
@@ -131,6 +134,8 @@
   }
 
   function clearThread() {
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     socket = null;
     route = null;
@@ -378,8 +383,10 @@
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
-    const url = markdownImageViewerURL(event);
-    if (url) selectedImage = { url, title: "Message image" };
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
+    selectedImage = { url: markdownImageViewerURL(target), title: target.alt || "Image" };
   }
 
   function openArtifact(upload: Upload) {
@@ -399,6 +406,8 @@
 
   onDestroy(() => {
     loadSerial += 1;
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     window.removeEventListener("focus", retryAuthOnFocus);
     document.removeEventListener("visibilitychange", retryAuthOnFocus);
@@ -444,6 +453,7 @@
         onOpenArtifact={openArtifact}
       />
     </section>
+    {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
     {#if replyError}<p class="embed-notice" role="status">{replyError}</p>{/if}
   </main>
 {:else if viewState === "auth"}
@@ -494,6 +504,8 @@
 <style>
   .embed-shell {
     position: relative;
+    display: flex;
+    flex-direction: column;
     height: 100vh;
     height: 100dvh;
     min-width: 0;
@@ -505,7 +517,8 @@
     position: relative;
     inset: auto;
     z-index: auto;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     width: 100%;
     max-width: none;
     border-left: 0;
@@ -526,12 +539,8 @@
   }
 
   .embed-notice {
-    position: absolute;
-    right: 14px;
-    bottom: 78px;
-    left: 14px;
-    z-index: 2;
-    margin: 0;
+    flex: none;
+    margin: 0 14px 6px;
     padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
     border-radius: var(--radius);

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed R2 header stalls while preserving configured HTTP transport wrappers. Thanks @SebTardif.
+- Fixed member-directory pagination loops across chat, embeds, and workspace settings, and restored loading newer embedded channel messages. Thanks @SebTardif.
+- Fixed profile saves for provisioned workspaces retaining their reserved slug. Thanks @sercada.
+- Fixed embedded channel formatting, GIF, profile, and image controls by sharing working composer behavior across views.
+- Added explicit OpenClaw profile identity synchronization for existing ClickClack users, preserving message authors and custom avatars while reusing OpenClaw names and avatar URLs.
 - Updated Go, SQLite, web, Electron 43, pnpm, lint/format, Cloudflare, container-base, and CI tooling dependencies while preserving macOS 12 desktop support.
 - Added "Sign in with OpenClaw ID" browser login through the first-party OIDC provider at id.openclaw.ai, reusing the existing OAuth transaction store, email-linked user provisioning, and session cookies alongside GitHub login.
 - Fixed browser API and slash-command requests hanging indefinitely when the API host stalls, while preserving unbounded streaming uploads.

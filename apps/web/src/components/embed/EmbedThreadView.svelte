@@ -378,8 +378,10 @@
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
-    const url = markdownImageViewerURL(event);
-    if (url) selectedImage = { url, title: "Message image" };
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
+    selectedImage = { url: markdownImageViewerURL(target), title: target.alt || "Image" };
   }
 
   function openArtifact(upload: Upload) {

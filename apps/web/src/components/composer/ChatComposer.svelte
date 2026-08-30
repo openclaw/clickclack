@@ -3,7 +3,7 @@
   import { autoGrow } from "../../lib/actions/autogrow";
   import { avatarInitial, handleLabel } from "../../lib/chat/people";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
-  import type { GifItem } from "../../lib/gifs";
+  import { gifLibrary } from "../../lib/gifs";
   import type { Message, SlashCommand, Upload, User, WorkspaceBotCommand } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
@@ -38,9 +38,6 @@
     replyTarget?: Message | null;
     showUpload?: boolean;
     showToolbar?: boolean;
-    showGifPicker?: boolean;
-    gifQuery?: string;
-    filteredGifs?: GifItem[];
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
@@ -53,11 +50,6 @@
     onUploadFile?: (event: Event) => void;
     onRemoveUpload?: () => void;
     onClearReply?: () => void;
-    onApplyMarkdownWrap?: (before: string, after?: string) => void;
-    onAppendToComposer?: (snippet: string) => void;
-    onToggleGif?: () => void;
-    onGifQuery?: (value: string) => void;
-    onPickGif?: (url: string, title: string) => void;
   };
 
   let {
@@ -70,9 +62,6 @@
     replyTarget = null,
     showUpload = false,
     showToolbar = false,
-    showGifPicker = false,
-    gifQuery = "",
-    filteredGifs = [],
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
@@ -85,17 +74,21 @@
     onUploadFile = () => {},
     onRemoveUpload = () => {},
     onClearReply = () => {},
-    onApplyMarkdownWrap = () => {},
-    onAppendToComposer = () => {},
-    onToggleGif = () => {},
-    onGifQuery = () => {},
-    onPickGif = () => {},
   }: Props = $props();
 
   let input: HTMLTextAreaElement | null = $state(null);
   let caret = $state(0);
   let dismissedToken = $state("");
   let selectedSuggestionIndex = $state(0);
+  let showGifPicker = $state(false);
+  let gifQuery = $state("");
+
+  const filteredGifs = $derived.by(() => {
+    const query = gifQuery.trim().toLowerCase();
+    return gifLibrary.filter((gif) =>
+      !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query)),
+    );
+  });
 
   const activeToken = $derived.by(() => detectActiveToken(value, caret));
   const activeSuggestions = $derived.by(() => {
@@ -221,12 +214,41 @@
     if (!activeToken) return;
     const nextValue = `${value.slice(0, activeToken.start)}${suggestion.insertText}${value.slice(activeToken.end)}`;
     const nextCaret = activeToken.start + suggestion.insertText.length;
+    void updateValue(nextValue, nextCaret);
+  }
+
+  async function updateValue(nextValue: string, start = nextValue.length, end = start) {
+    if (disabled) return;
     onValue(nextValue);
-    void tick().then(() => {
-      input?.focus();
-      input?.setSelectionRange(nextCaret, nextCaret);
-      caret = nextCaret;
-    });
+    // The parent owns the draft; restore selection after its value reaches the textarea.
+    await tick();
+    if (disabled) return;
+    input?.focus();
+    input?.setSelectionRange(start, end);
+    caret = start;
+  }
+
+  function applyMarkdownWrap(before: string, after = before, placeholder = "text") {
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? start;
+    const text = value.slice(start, end) || placeholder;
+    void updateValue(
+      `${value.slice(0, start)}${before}${text}${after}${value.slice(end)}`,
+      start + before.length,
+      start + before.length + text.length,
+    );
+  }
+
+  function closeGifPicker() {
+    showGifPicker = false;
+    gifQuery = "";
+    input?.focus();
+  }
+
+  function pickGif(url: string, title: string) {
+    const prefix = value && !value.endsWith("\n") ? "\n" : "";
+    void updateValue(`${value}${prefix}![${title}](${url})`);
+    closeGifPicker();
   }
 
   function handleInput(event: Event) {
@@ -272,15 +294,17 @@
   onsubmit={(event) => {
     event.preventDefault();
     if (disabled) return;
+    closeGifPicker();
     onSubmit();
   }}
 >
-  {#if showGifPicker}
+  {#if showToolbar && showGifPicker && !disabled}
     <GifPicker
       gifs={filteredGifs}
       query={gifQuery}
-      onQuery={onGifQuery}
-      onPick={onPickGif}
+      onQuery={(query) => (gifQuery = query)}
+      onPick={pickGif}
+      onClose={closeGifPicker}
     />
   {/if}
   {#if activeSuggestions.length > 0}
@@ -360,9 +384,11 @@
       <ComposerToolbar
         showGifPicker={showGifPicker}
         {disabled}
-        onWrap={onApplyMarkdownWrap}
-        onAppend={onAppendToComposer}
-        onToggleGif={onToggleGif}
+        onWrap={applyMarkdownWrap}
+        onToggleGif={() => {
+          if (showGifPicker) closeGifPicker();
+          else showGifPicker = true;
+        }}
       />
     {/if}
   </div>

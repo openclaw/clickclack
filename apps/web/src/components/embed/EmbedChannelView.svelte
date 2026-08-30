@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
+  import ProfilePane from "../profile/ProfilePane.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
@@ -60,6 +61,7 @@
   let realtimeError = $state("");
   let sending = $state(false);
   let selectedImage = $state<{ url: string; title: string } | null>(null);
+  let selectedProfile = $state<User | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
@@ -165,6 +167,7 @@
     hasOlder = false;
     hasNewer = false;
     replyTarget = null;
+    selectedProfile = null;
   }
 
   function handleLoadError(error: unknown) {
@@ -471,8 +474,10 @@
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
-    const url = markdownImageViewerURL(event);
-    if (url) selectedImage = { url, title: "Message image" };
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
+    selectedImage = { url: markdownImageViewerURL(target), title: target.alt || "Image" };
   }
 
   function openArtifact(upload: Upload) {
@@ -486,6 +491,11 @@
 
   function retryAuthOnFocus() {
     if (viewState === "auth" && document.visibilityState === "visible") void loadChannel();
+  }
+
+  function openProfileDialog(node: HTMLDialogElement) {
+    node.showModal();
+    return { destroy: () => node.close() };
   }
 
   onMount(() => {
@@ -532,7 +542,7 @@
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => {}}
       onInlineImagePointerUp={handleInlineImagePointerUp}
-      onOpenProfile={() => {}}
+      onOpenProfile={(profile) => (selectedProfile = profile || null)}
       onReply={(message) => setReplyTarget(message)}
       onOpenThread={openThread}
       onJumpToQuote={jumpToQuote}
@@ -607,7 +617,32 @@
   />
 {/if}
 
+{#if selectedProfile}
+  <dialog
+    class="embed-profile thread open"
+    aria-label="Profile"
+    use:openProfileDialog
+    onclose={() => (selectedProfile = null)}
+  >
+    <ProfilePane profile={selectedProfile} currentUser={user} onClose={() => (selectedProfile = null)} />
+  </dialog>
+{/if}
+
 <style>
+  .embed-profile {
+    width: min(400px, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--text);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .embed-profile::backdrop {
+    background: rgba(5, 8, 15, 0.54);
+  }
+
   .embed-channel-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

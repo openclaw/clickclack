@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { GifItem } from "../../lib/gifs";
 
   type Props = {
@@ -6,15 +7,28 @@
     query: string;
     onQuery: (value: string) => void;
     onPick: (url: string, title: string) => void;
+    onClose: () => void;
   };
 
-  let { gifs, query, onQuery, onPick }: Props = $props();
+  let { gifs, query, onQuery, onPick, onClose }: Props = $props();
+  let search = $state<HTMLInputElement>();
+  onMount(() => search?.focus());
 </script>
 
-<section class="gif-picker" aria-label="GIF picker panel">
+<section class="gif-picker" role="dialog" tabindex="-1" aria-label="GIF picker panel"
+  onkeydown={(event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+    } else if (event.key === "Enter" && event.target === search) {
+      event.preventDefault();
+    }
+  }}
+>
   <div class="gif-picker-head">
     <strong>GIFs</strong>
     <input
+      bind:this={search}
       value={query}
       placeholder="Search reactions"
       aria-label="Search GIFs"
@@ -29,4 +43,5 @@
       </button>
     {/each}
   </div>
+  {#if gifs.length === 0}<p role="status">No GIFs found</p>{/if}
 </section>

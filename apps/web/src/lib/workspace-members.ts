@@ -42,11 +42,22 @@ export async function listWorkspaceMembersPage(
   if (params.role) search.set("role", params.role);
   const qs = search.toString();
   const path = `/api/workspaces/${params.workspaceID}/members${qs ? `?${qs}` : ""}`;
-  // A caller's cancellation signal must preserve the per-request timeout.
-  const signal = params.signal
-    ? AbortSignal.any([params.signal, AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS)])
-    : undefined;
-  return api<WorkspaceMemberPage>(path, { signal });
+  const callerSignal = params.signal;
+  if (!callerSignal) return api<WorkspaceMemberPage>(path);
+  callerSignal.throwIfAborted();
+  // Compose cancellation with the page timeout using the existing browser API baseline.
+  const controller = new AbortController();
+  const timeout = AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS);
+  const onCancel = () => controller.abort(callerSignal.reason);
+  const onTimeout = () => controller.abort(timeout.reason);
+  callerSignal.addEventListener("abort", onCancel, { once: true });
+  timeout.addEventListener("abort", onTimeout, { once: true });
+  try {
+    return await api<WorkspaceMemberPage>(path, { signal: controller.signal });
+  } finally {
+    callerSignal.removeEventListener("abort", onCancel);
+    timeout.removeEventListener("abort", onTimeout);
+  }
 }
 
 export async function listAllWorkspaceMembers(

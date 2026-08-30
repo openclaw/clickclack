@@ -23,6 +23,13 @@ async function fixture(page: Page) {
 
 const surfaces = ["chat", "channel", "thread", "overview"] as const;
 type Surface = (typeof surfaces)[number];
+
+async function withoutAbortSignalAny(page: Page) {
+  await page.addInitScript(() => {
+    delete (AbortSignal as Partial<typeof AbortSignal>).any;
+  });
+}
+
 function destination(surface: Surface, data: Awaited<ReturnType<typeof fixture>>) {
   const { workspace, channel, root } = data;
   if (surface === "overview") return `/app/${workspace.route_id}/settings/overview`;
@@ -96,7 +103,10 @@ for (const surface of surfaces) {
     });
   }
 
-  test(`${surface} discovers members on a valid second page`, async ({ page }) => {
+  test(`${surface} discovers members on a valid second page without AbortSignal.any`, async ({
+    page,
+  }) => {
+    await withoutAbortSignalAny(page);
     const data = await fixture(page);
     const requests: string[] = [];
     await page.route(`**/api/workspaces/${data.workspace.id}/members?**`, async (route) => {
@@ -132,7 +142,10 @@ for (const surface of surfaces) {
     expect(requests).toEqual(["", "second"]);
   });
 
-  test(`${surface} cancels member traversal when navigating away`, async ({ page }) => {
+  test(`${surface} cancels member traversal when navigating away without AbortSignal.any`, async ({
+    page,
+  }) => {
+    await withoutAbortSignalAny(page);
     const data = await fixture(page);
     const next = await fixture(page);
     let started = false;
@@ -171,7 +184,10 @@ for (const surface of surfaces) {
   });
 }
 
-test("cancellable member requests retain the default page timeout", async ({ page }) => {
+test("cancellable member requests retain the default page timeout without AbortSignal.any", async ({
+  page,
+}) => {
+  await withoutAbortSignalAny(page);
   const data = await fixture(page);
   await page.addInitScript(() => {
     const timers: { delay: number; controller: AbortController }[] = [];

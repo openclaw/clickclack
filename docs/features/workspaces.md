@@ -58,7 +58,8 @@ Chat, embedded channels and threads, and ownership settings load the complete
 member directory across pages. Missing or repeated continuation cursors stop
 the load; chat shows a mentions-unavailable notice while messaging stays usable.
 Changing views cancels the old directory request, and each page retains its
-30-second timeout. The member directory and pickers still support manual paging.
+30-second timeout without requiring `AbortSignal.any`. The member directory and
+pickers still support manual paging.
 
 ## Channels
 

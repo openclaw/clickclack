@@ -137,6 +137,10 @@ The password is never accepted as a flag, because process arguments are visible
 to other processes on the host. Password sign-in also has to be enabled on the
 server with `--password-auth`; see [Auth](features/auth.md).
 
+Use this to hand out a temporary password. The account owner replaces it from
+the app's account settings, which never routes the new secret through an
+operator.
+
 ### `admin member add`
 
 ```sh

@@ -1292,7 +1292,9 @@ type Store interface {
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
 	RevokeSession(ctx context.Context, token string) error
+	RevokeOtherUserSessions(ctx context.Context, userID, keepToken string) (int64, error)
 	GetPasswordLogin(ctx context.Context, identifier string) (PasswordLogin, error)
+	GetUserPasswordHash(ctx context.Context, userID string) (string, error)
 	SetUserPassword(ctx context.Context, userID, passwordHash string) error
 	ClearUserPassword(ctx context.Context, userID string) error
 	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error

@@ -166,6 +166,33 @@ func (s *Store) RevokeSession(ctx context.Context, token string) error {
 	return err
 }
 
+// GetUserPasswordHash returns the stored hash for an account, or an empty
+// string when the account has no password on file. Callers read the empty
+// string as "not enrolled" rather than as a lookup failure.
+func (s *Store) GetUserPasswordHash(ctx context.Context, userID string) (string, error) {
+	hash, err := s.q.GetUserPasswordHash(ctx, strings.TrimSpace(userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return hash, err
+}
+
+// RevokeOtherUserSessions ends every live session for a user except the one
+// holding keepToken, and reports how many it ended. An empty keepToken revokes
+// all of them, which is the safe direction for a caller that cannot identify
+// its own session.
+func (s *Store) RevokeOtherUserSessions(ctx context.Context, userID, keepToken string) (int64, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return 0, errors.New("user id is required")
+	}
+	return s.q.RevokeUserSessionsExceptTokenHash(ctx, storedb.RevokeUserSessionsExceptTokenHashParams{
+		RevokedAt:     sqlText(now()),
+		UserID:        userID,
+		KeepTokenHash: tokenHash(strings.TrimSpace(keepToken)),
+	})
+}
+
 func (s *Store) GetOrCreateUserByEmail(ctx context.Context, provider, email, displayName string) (store.User, error) {
 	provider = strings.TrimSpace(provider)
 	email = strings.ToLower(strings.TrimSpace(email))

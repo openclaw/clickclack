@@ -136,6 +136,32 @@ paths:
           description: Too many attempts for this client address or identifier
         "501":
           description: Password login is not configured
+  /api/auth/password/change:
+    post:
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password replaced; the account's other sessions were revoked
+        "400":
+          description: Missing or unacceptable password
+        "401":
+          description: Not signed in, or the current password is wrong
+        "403":
+          description: Cross-site requests are not allowed, and bot tokens cannot change passwords
+        "409":
+          description: The account has no password set; an administrator enrolls it first
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this account
+        "501":
+          description: Password login is not configured
   /api/auth/logout:
     post:
       operationId: logout
@@ -1917,6 +1943,14 @@ components:
           description: Account email address or handle
         password:
           type: string
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
     ConsumeDesktopGitHubOAuthRequest:
       type: object
       required: [code, code_verifier]
@@ -1989,6 +2023,9 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferences"
+        password_enrolled:
+          type: boolean
+          description: Whether this account has a password on file. Reported only for the signed-in caller, on /api/me.
     BotToken:
       type: object
       required: [id, bot_user_id, workspace_id, name, scopes, created_at]

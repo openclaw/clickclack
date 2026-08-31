@@ -1879,3 +1879,18 @@ UPDATE sessions
 SET revoked_at = sqlc.arg(revoked_at)
 WHERE token_hash = sqlc.arg(token_hash)
   AND revoked_at IS NULL;
+
+-- name: GetUserPasswordHash :one
+SELECT password_hash
+FROM user_passwords
+WHERE user_id = sqlc.arg(user_id);
+
+-- A password change ends the account's other sessions. The caller's own
+-- session is spared by token hash so the person changing the password is not
+-- signed out of the tab they are working in.
+-- name: RevokeUserSessionsExceptTokenHash :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND revoked_at IS NULL
+  AND token_hash <> sqlc.arg(keep_token_hash);

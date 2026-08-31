@@ -1971,6 +1971,19 @@ func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetU
 	return i, err
 }
 
+const getUserPasswordHash = `-- name: GetUserPasswordHash :one
+SELECT password_hash
+FROM user_passwords
+WHERE user_id = ?1
+`
+
+func (q *Queries) GetUserPasswordHash(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserPasswordHash, userID)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
+}
+
 const getWorkspace = `-- name: GetWorkspace :one
 SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
@@ -5435,6 +5448,31 @@ type RevokeSessionByTokenHashParams struct {
 
 func (q *Queries) RevokeSessionByTokenHash(ctx context.Context, arg RevokeSessionByTokenHashParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, revokeSessionByTokenHash, arg.RevokedAt, arg.TokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeUserSessionsExceptTokenHash = `-- name: RevokeUserSessionsExceptTokenHash :execrows
+UPDATE sessions
+SET revoked_at = ?1
+WHERE user_id = ?2
+  AND revoked_at IS NULL
+  AND token_hash <> ?3
+`
+
+type RevokeUserSessionsExceptTokenHashParams struct {
+	RevokedAt     sql.NullString `json:"revoked_at"`
+	UserID        string         `json:"user_id"`
+	KeepTokenHash string         `json:"keep_token_hash"`
+}
+
+// A password change ends the account's other sessions. The caller's own
+// session is spared by token hash so the person changing the password is not
+// signed out of the tab they are working in.
+func (q *Queries) RevokeUserSessionsExceptTokenHash(ctx context.Context, arg RevokeUserSessionsExceptTokenHashParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeUserSessionsExceptTokenHash, arg.RevokedAt, arg.UserID, arg.KeepTokenHash)
 	if err != nil {
 		return 0, err
 	}

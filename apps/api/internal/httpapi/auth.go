@@ -137,6 +137,109 @@ func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password s
 	return login.User, true
 }
 
+// errPasswordChangeUnenrolled is returned when the caller has no password on
+// file. This endpoint deliberately never creates the first one: enabling
+// password sign-in for an account stays an administrator action.
+var errPasswordChangeUnenrolled = errors.New("this account has no password set; ask an administrator to enable password sign-in first")
+
+// changePassword replaces the caller's own password after checking the current
+// one. It is the self-service half of clickclack admin user set-password: an
+// operator hands out a temporary password, and the account owner replaces it
+// here without the operator ever learning the replacement.
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	if !s.passwordAuthEnabled {
+		writeError(w, http.StatusNotImplemented, errors.New("password login is not configured"))
+		return
+	}
+	if !s.requireSameOriginJSON(w, r) {
+		return
+	}
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot change passwords"))
+		return
+	}
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.CurrentPassword == "" || body.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, errors.New("current_password and new_password are required"))
+		return
+	}
+	if err := passwordauth.ValidatePassword(body.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// Only wrong guesses spend the budget, so rotating a password several times
+	// in a row never locks the account owner out of their own account.
+	if s.passwordChangeLimiter.blocked(act.user.ID) {
+		writeError(w, http.StatusTooManyRequests, errors.New("too many password change attempts, retry later"))
+		return
+	}
+	stored, err := s.store.GetUserPasswordHash(r.Context(), act.user.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if stored == "" {
+		writeError(w, http.StatusConflict, errPasswordChangeUnenrolled)
+		return
+	}
+	matched, err := passwordauth.Verify(stored, body.CurrentPassword)
+	if err != nil || !matched {
+		s.passwordChangeLimiter.record(act.user.ID)
+		writeError(w, http.StatusUnauthorized, errors.New("current password is incorrect"))
+		return
+	}
+	hash, err := passwordauth.Hash(body.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// A password change is how someone locks out a device they no longer
+	// control, so every other session for the account ends here. The caller
+	// keeps the session it is holding, which leaves the tab it just used signed
+	// in. A caller the server cannot place in a session, such as a trusted-proxy
+	// assertion, revokes all of them instead.
+	//
+	// Revocation runs before the new hash is stored, deliberately. These are two
+	// statements rather than one transaction, and this order makes the only
+	// reachable partial state a recoverable one: a failure here changes nothing,
+	// and a failure below leaves the old password working on a signed-in device
+	// the owner still holds. The reverse order could report failure after the
+	// password had already changed.
+	if _, err := s.store.RevokeOtherUserSessions(r.Context(), act.user.ID, requestSessionToken(r, s.cookies.Session)); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if err := s.store.SetUserPassword(r.Context(), act.user.ID, hash); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// requestSessionToken returns the bearer or cookie session token this request
+// authenticated with, or an empty string when it used neither.
+func requestSessionToken(r *http.Request, cookieName string) string {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	if cookie, err := requestCookie(r, cookieName); err == nil {
+		return cookie.Value
+	}
+	return ""
+}
+
 // logout revokes the caller's session and expires the cookie. It succeeds even
 // without a valid session so that a stale browser can always return to a
 // signed-out state.

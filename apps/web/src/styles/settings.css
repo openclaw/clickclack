@@ -3169,3 +3169,20 @@
 .settings-signout .profile-actions {
   padding-top: 0;
 }
+
+.settings-password {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-password__intro strong {
+  display: block;
+  color: var(--text-strong);
+}
+
+.settings-password__intro p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}

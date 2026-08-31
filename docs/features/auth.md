@@ -323,6 +323,11 @@ Setting a password on an account that has none enables password login for it.
 `--clear` disables it again. `--user usr_...` selects an account by ID when an
 email is ambiguous or absent.
 
+The usual shape is a handover: the operator sets a temporary password, tells the
+person once, and the person replaces it from the app with
+`POST /api/auth/password/change` (below). The operator never learns the
+replacement.
+
 Flow and guarantees:
 
 1. `POST /api/auth/password/login` takes `identifier` (an identity email or a
@@ -339,6 +344,46 @@ Flow and guarantees:
    per-identifier budget is the narrow one and its window is long, which is
    what makes online guessing impractical.
 6. Bot users are never reachable through this endpoint.
+
+### Changing a password
+
+`POST /api/auth/password/change` takes `current_password` and `new_password`
+from an authenticated caller, session cookie or bearer session token alike:
+
+```http
+POST /api/auth/password/change
+{ "current_password": "<temporary>", "new_password": "<theirs>" }
+```
+
+- It only ever replaces a password. An account with none on file gets `409` and
+  stays unenrolled, so enabling password sign-in remains an operator decision.
+- The current password is verified against the stored argon2id hash in constant
+  time, and the new one has to satisfy the same length rules the admin command
+  enforces.
+- It carries the same `Content-Type`, `Origin`, and `Sec-Fetch-Site` rejections
+  as password login, on top of the session CSRF header every unsafe cookie
+  request already needs.
+- Wrong current passwords are rate limited per account, five in fifteen minutes.
+  Only failures spend the budget, so rotating a password repeatedly never locks
+  the owner out.
+- Bot tokens are rejected. Bots have no password.
+- **A successful change revokes every other session for the account** and keeps
+  the caller's own, so a lost or borrowed device is signed out by changing the
+  password. The account owner stays signed in where they made the change. There
+  was no prior house precedent for revoking sessions on a credential change
+  (`admin user set-password` does not), so this endpoint sets it, matching the
+  conventional safe default. Revocation is issued before the new hash is
+  stored: the two writes are not one transaction, and this order keeps the only
+  reachable partial state recoverable, with the old password still working on
+  the device the owner is holding.
+- The `501` behaviour matches login: with `CLICKCLACK_PASSWORD_AUTH_ENABLED`
+  off, the endpoint is not available and the settings form does not render.
+
+`GET /api/me` reports `password_enrolled` for the signed-in account. The web
+settings modal renders its Change Password form only when that flag is true and
+the runtime config advertises `password` among the enabled auth methods. The
+flag describes the account, never the deployment, and is reported only to the
+account itself, so it discloses nothing about who else is enrolled.
 
 `POST /api/auth/logout` revokes the caller's session and expires the cookie. It
 is idempotent, so a stale browser can always return to a signed-out state.
@@ -366,7 +411,9 @@ expires.
 
 ## What is intentionally missing
 
-- Self-service registration and password reset. Passwords are administered
-  entirely through `clickclack admin user set-password`.
+- Self-service registration, and password reset for someone who has forgotten
+  theirs. An operator re-issues a temporary password with
+  `clickclack admin user set-password`; changing a known password is
+  self-service.
 - SMTP delivery for magic links (V0 prints the token; V1 will add delivery).
 - Per-channel ACLs and a historical moderation audit log.

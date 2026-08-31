@@ -5,9 +5,11 @@
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
   import MyBotsSection from "./MyBotsSection.svelte";
+  import ChangePasswordSection from "./ChangePasswordSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
-  import { APIError, api } from "../../lib/api";
+  import { APIError, api, authMethods } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
+  import { canChangePassword } from "../../lib/password";
   import {
     ACCOUNT_SETTINGS_SECTIONS,
     DEFAULT_ACCOUNT_SETTINGS_SECTION,
@@ -58,6 +60,9 @@
   let activeSection = $state<AccountSettingsSectionId>(DEFAULT_ACCOUNT_SETTINGS_SECTION);
   let refreshedUser = $state<User | null>(null);
   const user = $derived(refreshedUser?.id === initialUser.id ? refreshedUser : initialUser);
+  // Only the /api/me refresh carries password_enrolled, so the section appears
+  // once the modal has server-side truth rather than ChatApp's cached user.
+  const showChangePassword = $derived(canChangePassword(user, authMethods()));
   let userStatus = $state<"ready" | "loading" | "error">("ready");
   let userError = $state("");
 
@@ -253,6 +258,9 @@
           {onOtherAlign}
           {onBrowserNotificationsChanged}
         />
+        {#if showChangePassword}
+          <ChangePasswordSection />
+        {/if}
         <div class="settings-signout">
           <div>
             <strong>Sign out</strong>

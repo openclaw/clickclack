@@ -49,6 +49,7 @@ type Server struct {
 	setupCodeClaimLimiter *slidingWindowLimiter
 	passwordIPLimiter     *slidingWindowLimiter
 	passwordIDLimiter     *slidingWindowLimiter
+	passwordChangeLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
 	callbackClient        *http.Client
 }
@@ -79,6 +80,11 @@ const (
 	passwordLoginIPWindow = time.Minute
 	passwordLoginIDLimit  = 5
 	passwordLoginIDWindow = 15 * time.Minute
+	// passwordChangeLimit/Window bound wrong current-password guesses against
+	// one signed-in account, so a borrowed session cannot be used to search for
+	// the password it is already holding a session for.
+	passwordChangeLimit  = 5
+	passwordChangeWindow = 15 * time.Minute
 )
 
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
@@ -149,6 +155,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
 		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
+		passwordChangeLimiter: newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
 		callbackClient:        callbackClient,
 		build: buildMetadata{
@@ -179,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
 		r.Post("/auth/password/login", s.passwordLogin)
+		r.Post("/auth/password/change", s.changePassword)
 		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/github/start", s.githubStart)
 		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
@@ -449,10 +457,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	preferences, err := s.store.GetAppearancePreferences(r.Context(), act.user.ID)
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  act.user,
-		AppearancePreferences: preferences,
-	}}, err)
+	payload := currentUserPayload{User: act.user, AppearancePreferences: preferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), act.user.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
@@ -484,15 +493,26 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		NotificationSettings:  body.NotificationSettings,
 		AppearancePreferences: body.AppearancePreferences,
 	})
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  updated.User,
-		AppearancePreferences: updated.AppearancePreferences,
-	}}, err)
+	payload := currentUserPayload{User: updated.User, AppearancePreferences: updated.AppearancePreferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), updated.User.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 type currentUserPayload struct {
 	store.User
 	AppearancePreferences *store.AppearancePreferences `json:"appearance_preferences,omitempty"`
+	PasswordEnrolled      bool                         `json:"password_enrolled"`
+}
+
+// passwordEnrolled reports whether an account has a password on file. The SPA
+// pairs it with the advertised auth methods to decide whether to offer the
+// change-password form. It is reported only for the caller's own account, so it
+// discloses nothing about who else can sign in with a password.
+func (s *Server) passwordEnrolled(ctx context.Context, userID string) (bool, error) {
+	hash, err := s.store.GetUserPasswordHash(ctx, userID)
+	return hash != "", err
 }
 
 func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {

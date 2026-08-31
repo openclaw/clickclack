@@ -141,3 +141,101 @@ func TestRevokeSessionIsIdempotent(t *testing.T) {
 		t.Fatalf("expected revoking an unknown token to succeed, got %v", err)
 	}
 }
+
+func TestGetUserPasswordHash(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Maggie", Email: "maggie@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// "No password on file" is a value, not a lookup failure: callers branch on
+	// the empty string rather than on sql.ErrNoRows.
+	hash, err := st.GetUserPasswordHash(ctx, user.ID)
+	if err != nil || hash != "" {
+		t.Fatalf("expected an empty hash for an unenrolled account, got %q err=%v", hash, err)
+	}
+	if hash, err = st.GetUserPasswordHash(ctx, "usr_never_created"); err != nil || hash != "" {
+		t.Fatalf("expected an empty hash for an unknown account, got %q err=%v", hash, err)
+	}
+
+	if err := st.SetUserPassword(ctx, user.ID, "$argon2id$stored"); err != nil {
+		t.Fatal(err)
+	}
+	if hash, err = st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "$argon2id$stored" {
+		t.Fatalf("expected the stored hash, got %q err=%v", hash, err)
+	}
+	if err := st.ClearUserPassword(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if hash, err = st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "" {
+		t.Fatalf("expected the cleared hash to read empty, got %q err=%v", hash, err)
+	}
+}
+
+func TestRevokeOtherUserSessions(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Maggie", Email: "maggie@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Ari", Email: "ari@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var revoked []store.Session
+	for i := 0; i < 2; i++ {
+		session, err := st.CreateSession(ctx, user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revoked = append(revoked, session)
+	}
+	bystander, err := st.CreateSession(ctx, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count, err := st.RevokeOtherUserSessions(ctx, user.ID, kept.Token)
+	if err != nil || count != 2 {
+		t.Fatalf("expected two sessions revoked, got %d err=%v", count, err)
+	}
+	if _, err := st.GetSessionUser(ctx, kept.Token); err != nil {
+		t.Fatalf("expected the kept session to survive, got %v", err)
+	}
+	for _, session := range revoked {
+		if _, err := st.GetSessionUser(ctx, session.Token); err == nil {
+			t.Fatal("expected the other sessions to stop resolving")
+		}
+	}
+	// One account's password change must never sign another account out.
+	if _, err := st.GetSessionUser(ctx, bystander.Token); err != nil {
+		t.Fatalf("expected another account's session to be untouched, got %v", err)
+	}
+
+	// Already-revoked sessions are not counted twice.
+	if count, err = st.RevokeOtherUserSessions(ctx, user.ID, kept.Token); err != nil || count != 0 {
+		t.Fatalf("expected a repeat revocation to touch nothing, got %d err=%v", count, err)
+	}
+	// A caller that cannot name its own session revokes every session, which is
+	// the safe direction.
+	if count, err = st.RevokeOtherUserSessions(ctx, user.ID, ""); err != nil || count != 1 {
+		t.Fatalf("expected an empty keep token to revoke the last session, got %d err=%v", count, err)
+	}
+	if _, err := st.GetSessionUser(ctx, kept.Token); err == nil {
+		t.Fatal("expected an empty keep token to revoke every session")
+	}
+	if _, err := st.RevokeOtherUserSessions(ctx, "  ", kept.Token); err == nil {
+		t.Fatal("expected a missing user id to be rejected")
+	}
+}

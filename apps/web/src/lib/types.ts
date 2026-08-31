@@ -10,6 +10,8 @@ export type User = {
   created_at: string;
   notification_settings?: NotificationSettings;
   appearance_preferences?: AppearancePreferences;
+  // Reported only for the signed-in account, on /api/me.
+  password_enrolled?: boolean;
 };
 
 export type NotificationSettings = {

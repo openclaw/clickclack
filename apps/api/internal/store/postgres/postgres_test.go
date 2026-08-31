@@ -307,6 +307,7 @@ func newIsolatedPostgresTestStore(t *testing.T) *Store {
 	}
 	query := parsed.Query()
 	query.Set("search_path", schema)
+	query.Set("application_name", schema)
 	parsed.RawQuery = query.Encode()
 	st, err := Open(parsed.String())
 	if err != nil {

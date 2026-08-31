@@ -183,11 +183,15 @@ for (const leave of ["root", "workspace"] as const) {
         await page.getByRole("link", { name: other.name, exact: true }).click();
         await expect(page).not.toHaveURL(new RegExp(workspace.route_id));
       }
-      const url = page.url();
+      const destination =
+        leave === "root"
+          ? new RegExp(`/app/${workspace.route_id}/${roots[1].route_id}$`)
+          : new RegExp(`/app/${other.route_id}(?:/|$)`);
+      await expect(page).toHaveURL(destination);
       release.resolve();
       await delivered.promise;
       await expect(page.locator(`.reply[data-message-id="${replies[0].id}"]`)).toHaveCount(0);
-      await expect(page).toHaveURL(url);
+      await expect(page).toHaveURL(destination);
     } finally {
       release.resolve();
     }

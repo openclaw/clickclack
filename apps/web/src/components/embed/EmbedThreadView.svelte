@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { newNonce } from "../../lib/chat/messages";
   import { onDestroy, onMount, tick } from "svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
@@ -105,12 +106,6 @@
     }
   }
 
-  function newNonce(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
     if (scope !== route?.target_id) return;

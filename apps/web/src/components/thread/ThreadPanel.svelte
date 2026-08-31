@@ -38,6 +38,8 @@
     agentResponding?: boolean;
     respondingAgentNames?: string[];
     replyDisabled?: boolean;
+    replySending?: boolean;
+    replyError?: string;
     headerLabel?: string;
     headerDetail?: string;
     openHref?: string;
@@ -81,6 +83,8 @@
     agentResponding = false,
     respondingAgentNames = [],
     replyDisabled = false,
+    replySending = false,
+    replyError = "",
     headerLabel = "Thread",
     headerDetail,
     openHref,
@@ -776,13 +780,14 @@
   />
 {/if}
 <AgentResponding active={agentResponding} agentNames={respondingAgentNames} />
+{#if replyError}<p class="composer-notice composer-notice--error" role="alert">{replyError}</p>{/if}
 <ChatComposer
   value={replyBody}
   placeholder={replyDisabled ? "No active recipient" : "Reply in thread"}
   ariaLabel="Reply body"
   submitLabel="Reply"
   formClass="composer reply-composer"
-  disabled={replyDisabled}
+  disabled={replyDisabled || replySending}
   replyTarget={replyTarget}
   {mentionPeople}
   onValue={onReplyBody}

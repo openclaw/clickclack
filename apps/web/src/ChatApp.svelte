@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
+  import { toStore } from "svelte/store";
   import {
     DEFAULT_HOME_LINK,
     homeLinkTitle,
@@ -22,6 +23,7 @@
   } from "./lib/chat/messageWindow";
   import { collectMentionPeople, collectRecentPeople, dmTitle } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
+  import { newNonce } from "./lib/chat/messages";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
   import {
@@ -29,6 +31,7 @@
     type MessageEditSession,
   } from "./lib/messageEditing.svelte";
   import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
+  import { ThreadController } from "./lib/thread.svelte";
   import { ReactionController } from "./lib/reactions.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
@@ -90,18 +93,26 @@
   let channelNotifSaving = false;
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
-  let replies: Message[] = [];
+  $: replies = $threadView.replies;
   let selectedWorkspaceID = "";
   let selectedChannelID = "";
   let selectedDirectID = "";
-  let selectedThread: Message | null = null;
+  const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`);
+  // This legacy component consumes the rune-based owner through a reactive store.
+  const threadView = toStore(() => ({
+    root: thread.root,
+    selection: thread.selection,
+    replies: thread.replies,
+    state: thread.state,
+    draft: thread.draft,
+    error: thread.error,
+  }));
   let selectedComposerTopicID = "";
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
   let topicFilterLoading = false;
   let recoverableDraftMessages = new Map<string, Message[]>();
-  let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
   let openPinnedPanelAfterRoute = false;
@@ -129,7 +140,6 @@
   let shellElement: HTMLElement | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
-  let replyBody = "";
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
@@ -193,7 +203,7 @@
   let mobileNavOpen = false;
   let mobileNavViewport = false;
   let replyTarget: Message | null = null;
-  let replyContext: "channel" | "dm" | "thread" | null = null;
+  let replyContext: "channel" | "dm" | null = null;
   let messageInput: HTMLTextAreaElement | null = null;
   let replyInput: HTMLTextAreaElement | null = null;
   let activeComposerContext: "message" | "thread" = "message";
@@ -332,7 +342,7 @@
   );
   $: pinnedMessageIDs = new Set(pinnedMessages.map((message) => message.id));
   $: activeRespondingAgentNames = respondingAgentNames(agentProgressTurns, botCommands, lookupUser);
-  $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
+  $: sidePanelOpen = pinnedPanelOpen || $threadView.selection !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
   $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
@@ -356,7 +366,6 @@
       : "";
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
-  $: if (replyContext === "thread" && replyTarget && selectedThread && replyTarget.id !== selectedThread.id && !replies.some((r) => r.id === replyTarget?.id)) clearReplyTarget();
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
@@ -475,6 +484,7 @@
   }
 
   onDestroy(() => {
+    thread.close();
     routeApplySerial += 1;
     workspaceMembersLoadSerial += 1;
     workspaceMembersAbort?.abort();
@@ -562,12 +572,7 @@
     setActiveMessages(messages.map((message) =>
       message.author?.id === updated.id ? { ...message, author: updated } : message,
     ));
-    replies = replies.map((reply) =>
-      reply.author?.id === updated.id ? { ...reply, author: updated } : reply,
-    );
-    if (selectedThread?.author?.id === updated.id) {
-      selectedThread = { ...selectedThread, author: updated };
-    }
+    thread.updateAuthor(updated);
   }
 
   function syncBrowserNotificationState() {
@@ -663,7 +668,7 @@
     if (!targetID) return "";
     return channels.find((channel) => channel.id === targetID || channel.route_id === targetID)?.route_id ||
       directConversations.find((conversation) => conversation.id === targetID || conversation.route_id === targetID)?.route_id ||
-      (selectedThread?.id === targetID ? selectedThread.route_id || "" : "") ||
+      (thread.root?.id === targetID ? thread.root.route_id || "" : "") ||
       messages.find((message) => message.id === targetID)?.route_id ||
       targetID;
   }
@@ -678,12 +683,10 @@
     // Navigating away abandons a thread borrowed from search; drop the session
     // too so the pane doesn't linger invisibly.
     if (searchThreadDetour) resetSearch();
-    selectedThread = null;
-    selectedThreadState = null;
+    thread.close();
     selectedProfile = null;
     pinnedPanelOpen = false;
     activeComposerContext = "message";
-    replies = [];
     mobileNavOpen = false;
   }
 
@@ -761,6 +764,7 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
+    if (targetIDParam !== thread.selection?.messageID && targetIDParam !== thread.root?.route_id) thread.close();
     try {
       reactionController.clear();
       const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
@@ -797,11 +801,9 @@
         workspaceMemberUsers = [];
         selectedChannelID = "";
         selectedDirectID = "";
-        selectedThread = null;
-        selectedThreadState = null;
+        thread.close();
         selectedProfile = null;
         activeComposerContext = "message";
-        replies = [];
         resetSearch();
         resetHistoryPaging();
         messagesLoading = true;
@@ -888,13 +890,13 @@
       }
 
       if (routeTarget?.target_type === "thread") {
-        const resolved = await applyThreadRoute(routeTarget);
+        const resolved = await applyThreadRoute(routeTarget, serial);
         if (serial !== routeApplySerial) return;
         if (resolved) {
           appliedRouteKey = canonicalRouteKey;
           connectPendingRealtime(workspace.id);
-          return;
         }
+        return;
       }
 
       const fallbackTargetID = defaultTargetID();
@@ -959,7 +961,7 @@
     }
   }
 
-  async function applyThreadRoute(route: RouteTarget): Promise<boolean> {
+  async function applyThreadRoute(route: RouteTarget, serial: number): Promise<boolean> {
     if (route.workspace_id !== selectedWorkspaceID) return false;
     const parentChannelID = route.parent_type === "channel" ? route.parent_id || "" : "";
     const parentDirectID = route.parent_type === "direct" ? route.parent_id || "" : "";
@@ -975,28 +977,28 @@
     } else {
       return false;
     }
-    const sameThread = selectedThread?.id === route.target_id && viewKey === currentConversationKey();
+    const sameThread = thread.root?.id === route.target_id && viewKey === currentConversationKey();
     selectedProfile = null;
     pinnedPanelOpen = false;
     activeComposerContext = "thread";
     mobileNavOpen = false;
-    await refreshThread(route.target_id);
+    if (!await selectThread(route.target_id, undefined, () => serial === routeApplySerial)) return false;
+    const selection = thread.selection;
     if (parentChannelID) await loadPinnedMessages(parentChannelID, "");
+    if (!thread.isCurrent(selection) || serial !== routeApplySerial) return false;
     if (
       !sameThread &&
       parentChannelID &&
-      selectedThread &&
-      (selectedThread.thread_state?.reply_count ?? 0) === 0
+      thread.root &&
+      (thread.root.thread_state?.reply_count ?? 0) === 0
     ) {
-      const root = selectedThread;
-      selectedThread = null;
-      selectedThreadState = null;
-      replies = [];
+      const root = thread.root;
+      thread.close();
       activeComposerContext = "message";
       await loadMessagesAround(root);
       return true;
     }
-    if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
+    if (!sameThread && thread.root) await loadMessagesAround(thread.root);
     return true;
   }
 
@@ -1038,10 +1040,9 @@
     }
     if (resetSidePanel) {
       if (searchThreadDetour) resetSearch();
-      selectedThread = null;
+      thread.close();
       selectedProfile = null;
       activeComposerContext = "message";
-      replies = [];
     }
     if (loadInitialMessages) await loadMessages();
   }
@@ -1544,7 +1545,7 @@
     if (scrollAnchor) ids.add(scrollAnchor);
     const editSession = editController.session(key);
     if (editSession) ids.add(editSession.messageID);
-    if (selectedThread && belongsToView(selectedThread, key)) ids.add(selectedThread.id);
+    if (thread.root && belongsToView(thread.root, key)) ids.add(thread.root.id);
     if (replyTarget && belongsToView(replyTarget, key)) ids.add(replyTarget.id);
     for (const message of messages) {
       if ((message.status === "pending" || message.status === "failed") && belongsToView(message, key)) {
@@ -2281,12 +2282,6 @@
 
   let pendingDrafts = new Map<string, OutgoingDraft>();
 
-  function newNonce(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  }
 
   function buildOptimisticMessage(nonce: string, draft: OutgoingDraft, id = `tmp_${nonce}`): Message {
     const now = new Date().toISOString();
@@ -2637,13 +2632,10 @@
     setActiveMessages(
       messages.map((current) => (current.id === updated.id ? { ...current, ...updated } : current)),
     );
-    replies = replies.map((reply) =>
-      reply.id === updated.id ? { ...reply, ...updated } : reply,
-    );
+    thread.updateMessage(updated);
     pinnedMessages = pinnedMessages.map((current) =>
       current.id === updated.id ? { ...current, ...updated } : current,
     );
-    if (selectedThread?.id === updated.id) selectedThread = { ...selectedThread, ...updated };
   }
 
   function requestMessageDelete(message: Message) {
@@ -2662,9 +2654,8 @@
       const deleted = data.message;
       editController.cancelMessage(currentConversationKey(), deleted.id);
       setActiveMessages(messages.map((current) => (current.id === deleted.id ? { ...current, ...deleted } : current)));
-      replies = replies.map((reply) => (reply.id === deleted.id ? { ...reply, ...deleted } : reply));
+      thread.updateMessage(deleted);
       pinnedMessages = pinnedMessages.filter((current) => current.id !== deleted.id);
-      if (selectedThread?.id === deleted.id) selectedThread = { ...selectedThread, ...deleted };
       if (replyTarget?.id === deleted.id) clearReplyTarget();
       status = "";
       pendingDeleteMessage = null;
@@ -2678,15 +2669,16 @@
   }
 
   async function openThread(message: Message) {
+    routeApplySerial++;
     resetSearch();
     pinnedPanelOpen = false;
-    await refreshThread(message.id, message);
-    if (selectedWorkspaceID && selectedThread?.route_id && window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)) {
-      await navigateToApp(selectedWorkspaceID, selectedThread.id);
+    const loaded = await selectThread(message.id, message);
+    if (loaded && selectedWorkspaceID && thread.root?.route_id) {
+      await navigateToApp(selectedWorkspaceID, thread.root.id);
     }
   }
 
-  async function refreshThread(
+  async function selectThread(
     messageID: string,
     optimisticRoot?: Message,
     shouldCommit: () => boolean = () => true,
@@ -2694,23 +2686,22 @@
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedProfile = null;
-    if (optimisticRoot) {
-      selectedThread = optimisticRoot;
-      activeComposerContext = "thread";
-    }
-    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    if (!shouldCommit()) return false;
-    const [root, ...loadedReplies] = [
-      { ...data.root, thread_state: data.thread_state },
-      ...data.replies,
-    ];
-    reactionController.seedMessages([root, ...loadedReplies]);
-    editController.reconcile(currentConversationKey(), [root, ...loadedReplies]);
-    selectedThread = root;
     activeComposerContext = "thread";
+    thread.select(messageID, optimisticRoot);
+    try {
+      return await refreshThread(shouldCommit);
+    } catch {
+      // The owner retains the load error for the pane; background refreshes still reject.
+      return false;
+    }
+  }
+
+  async function refreshThread(shouldCommit: () => boolean = () => true): Promise<boolean> {
+    if (!await thread.refresh(shouldCommit) || !thread.root) return false;
+    const root = thread.root;
+    reactionController.seedMessages([root, ...thread.replies]);
+    editController.reconcile(currentConversationKey(), [root, ...thread.replies]);
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
-    replies = loadedReplies;
-    selectedThreadState = data.thread_state;
     return true;
   }
 
@@ -2734,30 +2725,17 @@
   }
 
   async function sendReply() {
-    const body = replyBody.trim();
-    if (!body || !selectedThread) return;
-    if (selectedDirect && !selectedDirectWritable) {
-      status = "This direct message has no active recipient";
-      return;
-    }
-    const quote = replyTarget && replyContext === "thread" ? replyTarget : null;
-    replyBody = "";
-    const payload: Record<string, unknown> = { body, nonce: newNonce() };
-    if (quote) payload.quoted_message_id = quote.id;
-    const data = await api<{ message: Message; thread_state: ThreadState }>(`/api/messages/${selectedThread.id}/thread/replies`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    if (quote) clearReplyTarget();
-    if (!replies.some((reply) => reply.id === data.message.id)) {
-      replies = [...replies, data.message];
-    }
-    selectedThreadState = data.thread_state;
+    if (selectedDirect && !selectedDirectWritable) return;
+    await thread.send();
   }
 
   function setReplyTarget(message: Message, context: "channel" | "dm" | "thread") {
-    replyTarget = message;
-    replyContext = context;
+    if (context === "thread") {
+      thread.setQuote(message);
+    } else {
+      replyTarget = message;
+      replyContext = context;
+    }
     activeComposerContext = context === "thread" ? "thread" : "message";
   }
 
@@ -2766,7 +2744,7 @@
   }
 
   function activeComposerTarget(): HTMLTextAreaElement | null {
-    if (activeComposerContext === "thread" && selectedThread && replyInput) return replyInput;
+    if (activeComposerContext === "thread" && thread.root && replyInput) return replyInput;
     return messageInput;
   }
 
@@ -2830,7 +2808,7 @@
     const query = searchQuery.trim();
     // Search takes over the shared right pane: retire whatever occupies it.
     if (selectedArtifact) closeArtifactViewer();
-    if (selectedThread || selectedProfile) closeSidePanel();
+    if (thread.root || selectedProfile) closeSidePanel();
     const requestID = ++searchRequestID;
     const scope: SearchScope =
       selectedDirectID && selectedDirect
@@ -2947,23 +2925,17 @@
       searchReturnScrollTop = returnScrollTop;
       const requestID = searchRequestID;
       searchThreadDetour = true;
-      try {
-        const loaded = await refreshThread(
-          result.thread_root_id,
-          undefined,
-          () =>
-            requestID === searchRequestID &&
-            searchThreadDetour &&
-            searchSession?.activeResultID === result.id,
-        );
-        if (!loaded) return;
-      } catch (error) {
-        searchThreadDetour = false;
-        await tick();
-        throw error;
-      }
-      if (selectedThread?.route_id) {
-        await navigateToApp(selectedWorkspaceID, selectedThread.id);
+      const loaded = await selectThread(
+        result.thread_root_id,
+        undefined,
+        () =>
+          requestID === searchRequestID &&
+          searchThreadDetour &&
+          searchSession?.activeResultID === result.id,
+      );
+      if (!loaded) return;
+      if (thread.root?.route_id) {
+        await navigateToApp(selectedWorkspaceID, thread.root.id);
       }
       await tick();
       const reply = document.querySelector<HTMLElement>(
@@ -2982,13 +2954,12 @@
   }
 
   async function returnToSearchFromThread() {
+    routeApplySerial++;
     if (!searchSession || !searchThreadDetour) return;
     const parentTargetID = currentConversationKey();
-    if (replyContext === "thread") clearReplyTarget();
-    selectedThread = null;
+    thread.close();
     selectedProfile = null;
     activeComposerContext = "message";
-    replies = [];
     searchThreadDetour = false;
     if (selectedWorkspaceID && parentTargetID) {
       await navigateToApp(selectedWorkspaceID, parentTargetID);
@@ -3236,7 +3207,7 @@
   ) {
     const serial = ++realtimeReconcileSerial;
     if (!workspaceID || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
-    const selectedThreadID = selectedThread?.id || "";
+    const selectedThreadID = thread.root?.id || "";
     const selectedBotProfileID = selectedProfile?.kind === "bot" ? selectedProfile.id : "";
     typingEntries = [];
     agentProgressTurns = [];
@@ -3279,8 +3250,8 @@
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     await loadPinnedMessages();
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
-    if (selectedThreadID && selectedThread?.id === selectedThreadID) {
-      await refreshThread(selectedThreadID, selectedThread);
+    if (selectedThreadID && thread.root?.id === selectedThreadID) {
+      await refreshThread(isCurrent);
     }
     if (selectedBotProfileID && selectedProfile?.id === selectedBotProfileID) {
       const refreshed = lookupUser(selectedBotProfileID);
@@ -3428,13 +3399,13 @@
       event.type === "thread.state_updated" &&
       shouldRefreshThreadSummary(rootID, event)
     ) {
-      if (selectedThread?.id === rootID) {
-        await refreshThread(rootID, selectedThread);
+      if (thread.root?.id === rootID) {
+        await refreshThread(isCurrent);
       } else {
         await refreshThreadSummary(rootID);
       }
-    } else if (event.type !== "thread.reply_created" && selectedThread && rootID === selectedThread.id) {
-      await refreshThread(selectedThread.id, selectedThread);
+    } else if (event.type !== "thread.reply_created" && thread.root && rootID === thread.root.id) {
+      await refreshThread(isCurrent);
     }
   }
 
@@ -3472,7 +3443,7 @@
     }
     if (selectedProfile?.id === botUserID) selectedProfile = null;
 
-    const selectedThreadID = selectedThread?.id || "";
+    const threadSelection = thread.selection;
     await Promise.all([
       loadDirectConversations(),
       loadModerationMembers(),
@@ -3481,7 +3452,7 @@
     ]);
     void loadWorkspaceMembers();
     await loadMessages();
-    if (selectedThreadID) await refreshThread(selectedThreadID);
+    if (thread.isCurrent(threadSelection)) await refreshThread();
   }
 
   async function handleBotMembershipRemovedEvent(event: RealtimeEvent) {
@@ -3684,7 +3655,7 @@
     if (fromMessages) return fromMessages;
     const fromReplies = replies.find((msg) => msg.author?.id === userID)?.author;
     if (fromReplies) return fromReplies;
-    if (selectedThread?.author?.id === userID) return selectedThread.author;
+    if (thread.root?.author?.id === userID) return thread.root.author;
     const fromModeration = moderationMembers.find((member) => member.user.id === userID)?.user;
     if (fromModeration) return fromModeration;
     for (const dm of directConversations) {
@@ -3718,11 +3689,12 @@
   }
 
   function openUserProfile(profile?: User | null) {
+    routeApplySerial++;
     if (!profile || profile.deleted_at) return;
     resetSearch();
     selectedArtifact = null;
     artifactConversationKey = "";
-    selectedThread = null;
+    thread.close();
     pinnedPanelOpen = false;
     selectedProfile = profile;
     if (
@@ -3734,7 +3706,7 @@
   }
 
   function handleComposerKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget && replyContext !== "thread") {
+    if (event.key === "Escape" && replyTarget) {
       event.preventDefault();
       clearReplyTarget();
       return;
@@ -3746,9 +3718,9 @@
   }
 
   function handleReplyKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget && replyContext === "thread") {
+    if (event.key === "Escape" && thread.draft?.quote) {
       event.preventDefault();
-      clearReplyTarget();
+      thread.setQuote(null);
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -3764,7 +3736,7 @@
 
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    artifactThreadScrollTop = selectedThread
+    artifactThreadScrollTop = thread.root
       ? (document.querySelector<HTMLElement>(".thread-scroll")?.scrollTop ?? null)
       : null;
     artifactConversationKey = activeConversationKey;
@@ -3790,7 +3762,7 @@
         trigger.focus({ preventScroll: true });
         return;
       }
-      const scope = selectedThread ? document.querySelector<HTMLElement>(".thread") : document;
+      const scope = thread.root ? document.querySelector<HTMLElement>(".thread") : document;
       scope
         ?.querySelector<HTMLElement>(`[data-artifact-upload-id="${CSS.escape(uploadID)}"]`)
         ?.focus({ preventScroll: true });
@@ -3848,15 +3820,14 @@
       pinnedPanelOpen = false;
       return;
     }
-    const threadWasOpen = selectedThread !== null;
+    routeApplySerial++;
+    const threadWasOpen = thread.selection !== null;
     const searchDetourWasOpen = searchThreadDetour;
     const parentTargetID = currentConversationKey();
     editController.cancel(parentTargetID, "thread");
-    if (replyContext === "thread") clearReplyTarget();
-    selectedThread = null;
+    thread.close();
     selectedProfile = null;
     activeComposerContext = "message";
-    replies = [];
     // Closing a thread opened from search closes the whole pane, session included.
     if (searchDetourWasOpen) resetSearch();
     if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
@@ -3865,7 +3836,7 @@
   }
 
   function toggleSidePanelFromTopbar() {
-    if (selectedThread) {
+    if (thread.root) {
       closeSidePanel();
       return;
     }
@@ -3910,19 +3881,18 @@
   }
 
   async function togglePinnedPanel() {
+    routeApplySerial++;
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
       return;
     }
     if (!selectedChannelID || selectedDirectID) return;
-    const threadWasOpen = selectedThread !== null;
+    const threadWasOpen = thread.selection !== null;
     const searchDetourWasOpen = searchThreadDetour;
     const parentTargetID = currentConversationKey();
     resetSearch();
-    selectedThread = null;
-    selectedThreadState = null;
+    thread.close();
     selectedProfile = null;
-    replies = [];
     if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
       openPinnedPanelAfterRoute = true;
       await navigateToApp(selectedWorkspaceID, parentTargetID);
@@ -3933,14 +3903,15 @@
   }
 
   async function openPinnedMessageThread(message: Message) {
+    routeApplySerial++;
     pinnedPanelOpen = false;
-    await refreshThread(message.thread_root_id, message.parent_message_id ? undefined : message);
+    const loaded = await selectThread(message.thread_root_id, message.parent_message_id ? undefined : message);
     if (
-      selectedWorkspaceID &&
-      selectedThread?.route_id &&
-      window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)
+      loaded && selectedWorkspaceID &&
+      thread.root?.route_id &&
+      window.location.pathname !== appHref(selectedWorkspaceID, thread.root.id)
     ) {
-      await navigateToApp(selectedWorkspaceID, selectedThread.id);
+      await navigateToApp(selectedWorkspaceID, thread.root.id);
     }
   }
 
@@ -4199,7 +4170,7 @@
         workspaceName={selectedWorkspace?.name}
         currentUserID={user?.id}
         {searchQuery}
-        threadOpen={selectedThread !== null}
+        threadOpen={$threadView.root !== null}
         pinnedOpen={pinnedPanelOpen}
         {channelNotifPreference}
         {channelNotifSaving}
@@ -4243,7 +4214,7 @@
       loadingOlder={activeLoadingOlder}
       loadingNewer={activeLoadingNewer}
       prepending={olderPageState !== "idle"}
-      selectedThreadID={selectedThread?.id}
+      selectedThreadID={$threadView.root?.id}
       currentUserID={user?.id}
       {reactionController}
       reactionsDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
@@ -4282,7 +4253,7 @@
 
     <div class="composer-dock">
     <AgentResponding
-      active={agentResponding && selectedThread === null}
+      active={agentResponding && $threadView.root === null}
       agentNames={activeRespondingAgentNames}
     />
 
@@ -4406,13 +4377,15 @@
           void setTopicFilter(topicID);
         }}
       />
-    {:else if selectedThread}
+    {:else if $threadView.root}
       <ThreadPanel
-        root={selectedThread}
+        root={$threadView.root}
         {replies}
-        threadState={selectedThreadState}
-        {replyBody}
-        replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
+        threadState={$threadView.state}
+        replyBody={$threadView.draft?.body ?? ""}
+        replyTarget={$threadView.draft?.quote ?? null}
+        replyError={$threadView.draft?.error || $threadView.error}
+        replySending={$threadView.draft?.sending ?? false}
         {mentionPeople}
         {mentionAttentionUserID}
         {agentResponding}
@@ -4420,7 +4393,7 @@
         replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onClose={closeSidePanel}
         onBack={searchThreadDetour && searchSession ? () => void returnToSearchFromThread() : undefined}
-        onReplyBody={(value) => (replyBody = value)}
+        onReplyBody={(value) => thread.updateDraft(value)}
         onSubmitReply={() => void sendReply()}
         onReplyKeydown={handleReplyKey}
         onReplyFocus={() => (activeComposerContext = "thread")}
@@ -4429,7 +4402,7 @@
         {reactionController}
         reactionsDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onSetReplyTarget={setReplyTarget}
-        onClearReply={clearReplyTarget}
+        onClearReply={() => thread.setQuote(null)}
         canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
         {deletingMessageIDs}
         onDeleteMessage={requestMessageDelete}
@@ -4446,6 +4419,17 @@
         onOpenImage={openImageViewer}
         onOpenArtifact={openArtifactViewer}
       />
+    {:else if $threadView.selection}
+      <header>
+        <strong>Thread</strong>
+        <button class="close" aria-label="Close thread" onclick={closeSidePanel}>×</button>
+      </header>
+      {#if $threadView.error}
+        <p class="composer-notice" role="alert">{$threadView.error}</p>
+        <button type="button" class="ghost-action" onclick={() => $threadView.selection && void selectThread($threadView.selection.messageID)}>Retry loading thread</button>
+      {:else}
+        <p class="composer-notice" role="status">Loading thread…</p>
+      {/if}
     {:else if selectedProfile}
       <ProfilePane
         profile={selectedProfile}

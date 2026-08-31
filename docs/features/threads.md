@@ -62,6 +62,22 @@ A reply emits two durable events: `thread.reply_created` and
 `thread.state_updated`. Both go into the workspace event stream and reach
 subscribers via the realtime hub.
 
+## Web thread lifecycle
+
+Selecting a thread clears the previous thread's replies immediately. Closing
+or replacing the pane invalidates its pending loads, including route, search,
+pin, and realtime refreshes. A delayed response cannot reopen a closed pane or
+replace the thread selected afterward. Current background refresh failures
+still stop realtime checkpointing until recovery.
+
+Reply drafts and quotes belong to their root message for the current app
+session. Switching threads or closing the pane preserves an unsent draft;
+reopening that thread restores it. Submitting disables duplicate sends while
+the request is pending. Failures show an error beside the reply composer and
+retain the text and quote. Retrying unchanged content reuses the original
+nonce, so a lost response does not create a duplicate reply. Drafts are kept in
+memory and are not persisted across page reloads.
+
 ## Ordering and pagination
 
 Replies are ordered by `thread_seq` ascending. `limit` is clamped to `1..200`

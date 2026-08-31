@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed CLI status pairing a channel with the wrong workspace and silently treating discovery failures as empty selections.
+
 - Fixed channel-list refreshes hiding live messages and notifications, and prevented duplicate message alerts after realtime recovery.
 
 - Fixed profile and notification saves overwriting changes from another tab, and aligned SDK account updates with the API's partial settings contract.

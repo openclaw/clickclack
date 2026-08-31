@@ -96,13 +96,9 @@ func (c apiClient) status(args []string) error {
 	if err != nil {
 		return err
 	}
-	workspace, workspaceErr := c.resolveWorkspace()
-	if workspaceErr != nil && strings.TrimSpace(c.opts.Workspace) != "" {
-		return workspaceErr
-	}
-	channel, channelErr := c.resolveChannel()
-	if channelErr != nil && strings.TrimSpace(c.opts.Channel) != "" {
-		return channelErr
+	workspace, channel, err := c.resolveChannel()
+	if err != nil && (strings.TrimSpace(c.opts.Channel) != "" || !errors.Is(err, errNoWorkspaces) && !errors.Is(err, errNoChannels)) {
+		return err
 	}
 	return c.write(map[string]any{"server": c.opts.Server, "user": user, "workspace": workspace, "channel": channel}, "", fmt.Sprintf("server\t%s\nuser\t%s\nworkspace\t%s\nchannel\t%s\n", c.opts.Server, user.ID, workspace.ID, channel.ID))
 }
@@ -184,7 +180,7 @@ func (c apiClient) send(args []string) error {
 	if err != nil {
 		return err
 	}
-	channel, err := c.resolveChannel()
+	_, channel, err := c.resolveChannel()
 	if err != nil {
 		return err
 	}
@@ -209,7 +205,7 @@ func (c apiClient) messagesList(args []string) error {
 		return err
 	}
 	c = c.withOptions(opts, true)
-	channel, err := c.resolveChannel()
+	_, channel, err := c.resolveChannel()
 	if err != nil {
 		return err
 	}

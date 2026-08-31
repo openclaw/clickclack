@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -526,29 +527,128 @@ func TestMessagesListOmitsAfterSeqUntilExplicitlySet(t *testing.T) {
 	}
 }
 
-func TestStatusFailsForExplicitMissingWorkspaceOrChannel(t *testing.T) {
+func TestStatusSelectsMatchingWorkspaceAndChannel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/me":
 			_ = json.NewEncoder(w).Encode(map[string]any{"user": store.User{ID: "usr_1", DisplayName: "User"}})
 		case "/api/workspaces":
-			_ = json.NewEncoder(w).Encode(map[string]any{"workspaces": []store.Workspace{{ID: "wsp_1", Slug: "one", Name: "One"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"workspaces": []store.Workspace{
+				{ID: "wsp_1", Slug: "one", Name: "One"}, {ID: "wsp_2", Slug: "two", Name: "Two"},
+			}})
 		case "/api/workspaces/wsp_1/channels":
-			_ = json.NewEncoder(w).Encode(map[string]any{"channels": []store.Channel{{ID: "chn_1", WorkspaceID: "wsp_1", Name: "general"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"channels": []store.Channel{
+				{ID: "chn_misc", WorkspaceID: "wsp_1", Name: "misc"}, {ID: "chn_1", WorkspaceID: "wsp_1", Name: "general"},
+			}})
+		case "/api/workspaces/wsp_2/channels":
+			_ = json.NewEncoder(w).Encode(map[string]any{"channels": []store.Channel{{ID: "chn_2", WorkspaceID: "wsp_2", Name: "proof"}}})
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(server.Close)
 
-	c := apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", Workspace: "missing", Plain: true}, http: server.Client()}
-	if err := c.status(nil); err == nil || !strings.Contains(err.Error(), `workspace "missing" not found`) {
-		t.Fatalf("expected missing workspace error, got %v", err)
+	for _, tt := range []struct {
+		name, workspace, channel, wantWorkspace, wantChannel, wantError string
+	}{
+		{name: "general default", wantWorkspace: "wsp_1", wantChannel: "chn_1"},
+		{name: "first channel default", workspace: "TWO", wantWorkspace: "wsp_2", wantChannel: "chn_2"},
+		{name: "channel ID across workspaces", channel: "chn_2", wantWorkspace: "wsp_2", wantChannel: "chn_2"},
+		{name: "channel name", workspace: "two", channel: "proof", wantWorkspace: "wsp_2", wantChannel: "chn_2"},
+		{name: "hash name", workspace: "wsp_2", channel: "#proof", wantWorkspace: "wsp_2", wantChannel: "chn_2"},
+		{name: "workspace constrains ID", workspace: "wsp_1", channel: "chn_2", wantError: `channel "chn_2" not found`},
+		{name: "missing workspace", workspace: "missing", wantError: `workspace "missing" not found`},
+		{name: "missing channel", workspace: "wsp_1", channel: "missing", wantError: `channel "missing" not found`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", Workspace: tt.workspace, Channel: tt.channel, JSON: true}, http: server.Client()}
+			var err error
+			output := captureStdout(t, func() error { err = c.status(nil); return nil })
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) || output != "" {
+					t.Fatalf("expected %q without stdout, got %v, %q", tt.wantError, err, output)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result struct {
+				Workspace store.Workspace `json:"workspace"`
+				Channel   store.Channel   `json:"channel"`
+			}
+			if err := json.Unmarshal([]byte(output), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Workspace.ID != tt.wantWorkspace || result.Channel.ID != tt.wantChannel || result.Channel.WorkspaceID != result.Workspace.ID {
+				t.Fatalf("mismatched selection: workspace=%s channel=%s channel workspace=%s", result.Workspace.ID, result.Channel.ID, result.Channel.WorkspaceID)
+			}
+		})
 	}
+}
 
-	c = apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", Workspace: "wsp_1", Channel: "missing", Plain: true}, http: server.Client()}
-	if err := c.status(nil); err == nil || !strings.Contains(err.Error(), `channel "missing" not found`) {
-		t.Fatalf("expected missing channel error, got %v", err)
+func TestStatusDistinguishesEmptyListsFromDiscoveryErrors(t *testing.T) {
+	for _, owner := range []string{"workspaces", "channels"} {
+		for _, tt := range []struct {
+			name, body, wantError string
+			code                  int
+		}{
+			{name: "empty", code: http.StatusOK, body: fmt.Sprintf(`{"%s":[]}`, owner)},
+			{name: "forbidden", code: http.StatusForbidden, body: `{"error":"denied"}`, wantError: "403 Forbidden: denied"},
+			{name: "unavailable", code: http.StatusServiceUnavailable, body: `{"error":"unavailable"}`, wantError: "503 Service Unavailable: unavailable"},
+			{name: "malformed", code: http.StatusOK, body: "not-json", wantError: "invalid character"},
+		} {
+			t.Run(owner+"/"+tt.name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					if r.URL.Path == "/api/"+owner || owner == "channels" && r.URL.Path == "/api/workspaces/wsp_1/channels" {
+						w.WriteHeader(tt.code)
+						_, _ = io.WriteString(w, tt.body)
+						return
+					}
+					switch r.URL.Path {
+					case "/api/me":
+						_, _ = io.WriteString(w, `{"user":{"id":"usr_1"}}`)
+					case "/api/workspaces":
+						_, _ = io.WriteString(w, `{"workspaces":[{"id":"wsp_1"}]}`)
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				t.Cleanup(server.Close)
+				c := apiClient{opts: clientOptions{Server: server.URL, UserID: "usr_1", JSON: true}, http: server.Client()}
+				var err error
+				output := captureStdout(t, func() error { err = c.status(nil); return nil })
+				if tt.wantError != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.wantError) || output != "" {
+						t.Fatalf("expected %q without stdout, got %v, %q", tt.wantError, err, output)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				var result struct {
+					Workspace store.Workspace `json:"workspace"`
+					Channel   store.Channel   `json:"channel"`
+				}
+				if err := json.Unmarshal([]byte(output), &result); err != nil {
+					t.Fatal(err)
+				}
+				wantWorkspace := ""
+				if owner == "channels" {
+					wantWorkspace = "wsp_1"
+				}
+				if result.Workspace.ID != wantWorkspace || result.Channel.ID != "" {
+					t.Fatalf("unexpected empty selection: %#v", result)
+				}
+				c.opts.Channel = "general"
+				output = captureStdout(t, func() error { err = c.status(nil); return nil })
+				if err == nil || output != "" {
+					t.Fatalf("explicit channel must fail on an empty list without stdout, got %v, %q", err, output)
+				}
+			})
+		}
 	}
 }

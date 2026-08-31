@@ -193,6 +193,11 @@ func (c apiClient) listWorkspacesContext(ctx context.Context) ([]store.Workspace
 	return result.Workspaces, nil
 }
 
+var (
+	errNoWorkspaces = errors.New("no workspaces visible")
+	errNoChannels   = errors.New("no channels visible")
+)
+
 func (c apiClient) resolveWorkspace() (store.Workspace, error) {
 	return c.resolveWorkspaceContext(context.Background())
 }
@@ -205,7 +210,7 @@ func (c apiClient) resolveWorkspaceContext(ctx context.Context) (store.Workspace
 	needle := strings.TrimSpace(c.opts.Workspace)
 	if needle == "" {
 		if len(items) == 0 {
-			return store.Workspace{}, errors.New("no workspaces visible")
+			return store.Workspace{}, errNoWorkspaces
 		}
 		return items[0], nil
 	}
@@ -231,66 +236,47 @@ func (c apiClient) listChannelsContext(ctx context.Context, workspaceID string) 
 	return result.Channels, nil
 }
 
-func (c apiClient) resolveChannel() (store.Channel, error) {
+func (c apiClient) resolveChannel() (store.Workspace, store.Channel, error) {
 	return c.resolveChannelContext(context.Background())
 }
 
-func (c apiClient) resolveChannelContext(ctx context.Context) (store.Channel, error) {
+func (c apiClient) resolveChannelContext(ctx context.Context) (store.Workspace, store.Channel, error) {
 	needle := strings.TrimSpace(c.opts.Channel)
-	if strings.HasPrefix(needle, "chn_") {
-		workspaces, err := c.channelSearchWorkspacesContext(ctx)
-		if err != nil {
-			return store.Channel{}, err
-		}
-		for _, workspace := range workspaces {
-			items, err := c.listChannelsContext(ctx, workspace.ID)
-			if err != nil {
-				return store.Channel{}, err
-			}
-			for _, item := range items {
-				if item.ID == needle {
-					return item, nil
-				}
-			}
-		}
-		return store.Channel{}, fmt.Errorf("channel %q not found", needle)
+	byID := strings.HasPrefix(needle, "chn_")
+	var workspaces []store.Workspace
+	var err error
+	if byID && strings.TrimSpace(c.opts.Workspace) == "" {
+		workspaces, err = c.listWorkspacesContext(ctx)
+	} else {
+		var workspace store.Workspace
+		workspace, err = c.resolveWorkspaceContext(ctx)
+		workspaces = []store.Workspace{workspace}
 	}
-	workspace, err := c.resolveWorkspaceContext(ctx)
 	if err != nil {
-		return store.Channel{}, err
+		return store.Workspace{}, store.Channel{}, err
 	}
-	items, err := c.listChannelsContext(ctx, workspace.ID)
-	if err != nil {
-		return store.Channel{}, err
-	}
+	name := strings.TrimPrefix(needle, "#")
 	if needle == "" {
+		name = "general"
+	}
+	for _, workspace := range workspaces {
+		items, err := c.listChannelsContext(ctx, workspace.ID)
+		if err != nil {
+			return workspace, store.Channel{}, err
+		}
 		for _, item := range items {
-			if item.Name == "general" {
-				return item, nil
+			if item.ID == needle || !byID && item.Name == name {
+				return workspace, item, nil
 			}
 		}
-		if len(items) == 0 {
-			return store.Channel{}, errors.New("no channels visible")
-		}
-		return items[0], nil
-	}
-	for _, item := range items {
-		if item.ID == needle || item.Name == strings.TrimPrefix(needle, "#") {
-			return item, nil
+		if needle == "" {
+			if len(items) == 0 {
+				return workspace, store.Channel{}, errNoChannels
+			}
+			return workspace, items[0], nil
 		}
 	}
-	return store.Channel{}, fmt.Errorf("channel %q not found", needle)
-}
-
-func (c apiClient) channelSearchWorkspacesContext(ctx context.Context) ([]store.Workspace, error) {
-	if strings.TrimSpace(c.opts.Workspace) != "" {
-		workspace, err := c.resolveWorkspaceContext(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return []store.Workspace{workspace}, nil
-	}
-	return c.listWorkspacesContext(ctx)
+	return store.Workspace{}, store.Channel{}, fmt.Errorf("channel %q not found", needle)
 }
 
 func (c apiClient) get(path string, out any) error {

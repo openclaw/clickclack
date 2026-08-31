@@ -105,7 +105,7 @@ func (c apiClient) runCanary(parent context.Context, options canaryOptions) (can
 	if user.Kind != "human" {
 		return canaryResult{}, errors.New("canary requires a human session token because OpenClaw ignores bot-authored messages")
 	}
-	channel, err := c.resolveChannelContext(ctx)
+	_, channel, err := c.resolveChannelContext(ctx)
 	if err != nil {
 		return canaryResult{}, fmt.Errorf("resolve canary channel: %w", err)
 	}

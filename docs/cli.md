@@ -262,6 +262,11 @@ clickclack --server http://localhost:8080 --token sst_... threads open msg_... -
 `workspaces list` prints `id slug name` in human mode. `channels list` prints
 `id name kind`. `messages list` prints `seq id author body`.
 
+`status` reports the workspace that contains the selected channel, including
+channel IDs resolved across workspaces. Successful empty workspace or channel
+lists produce an empty selection when no channel is requested; discovery
+failures (including HTTP and malformed-response errors) fail the command.
+
 ## Client writes
 
 ```sh

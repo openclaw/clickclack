@@ -325,6 +325,13 @@ test("embedded channel recovers newer messages from its message window", async (
   });
   await page.goto(destination("channel", data));
   await expect(page.getByLabel("Message body")).toBeVisible();
+  // Bootstrap reconciles the mocked snapshot before persisting its cursor.
+  // Let that replacement finish before exercising manual window recovery.
+  await expect
+    .poll(() =>
+      page.evaluate((id) => localStorage.getItem(`clickclack:${id}:cursor`), data.workspace.id),
+    )
+    .toBeTruthy();
   await page.locator(".messages-scroll").dispatchEvent("wheel", { deltaY: 100 });
   await page.screenshot({ path: testInfo.outputPath("newer-messages.png") });
   await expect

@@ -76,10 +76,14 @@ DM root messages support the same one-level thread model as channel messages.
 Thread replies carry `direct_conversation_id`, use `thread_seq`, and do not
 appear in the root DM timeline or unread root-message sequence.
 
+## Search
+
+[Search](search.md) supports one direct conversation through
+`direct_conversation_id`. The caller must be a conversation member; workspace
+and channel searches continue to exclude direct messages.
+
 ## What is intentionally missing
 
 - DM-only auth tokens.
 - One-on-one vs group distinctions in the API surface — the client decides
   based on member count.
-- DM-only search. Workspace/channel search excludes DMs; DM search needs a
-  separate endpoint so private messages never leak into channel results.

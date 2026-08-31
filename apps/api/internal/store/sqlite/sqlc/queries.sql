@@ -172,7 +172,7 @@ WHERE id = sqlc.arg(id)
   AND avatar_url = '';
 
 -- Avatar URLs equal to the generated fallback remain fallback-equivalent.
--- name: SetProviderAvatarUnlessExplicit :execrows
+-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = sqlc.arg(avatar_url)
 WHERE id = sqlc.arg(id)

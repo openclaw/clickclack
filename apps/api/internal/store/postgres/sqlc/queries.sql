@@ -121,12 +121,16 @@ WHERE lower(i.email) = lower(sqlc.arg(email))
 ORDER BY u.created_at, u.id
 LIMIT 2;
 
+-- name: LockIdentityProviderSubject :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.identity.' || sqlc.arg(provider)::text), hashtext(sqlc.arg(provider_subject)::text));
+
 -- name: GetUserByIdentityProviderSubject :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = sqlc.arg(provider)
-  AND i.provider_subject = sqlc.arg(provider_subject);
+  AND i.provider_subject = sqlc.arg(provider_subject)
+FOR UPDATE OF u;
 
 -- name: ListIdentitySyncUsers :many
 SELECT u.id, u.kind, u.display_name, u.handle, u.avatar_url,
@@ -175,7 +179,7 @@ WHERE id = sqlc.arg(id)
   AND avatar_url = '';
 
 -- Avatar URLs equal to the generated fallback remain fallback-equivalent.
--- name: SetProviderAvatarUnlessExplicit :execrows
+-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = sqlc.arg(avatar_url)
 WHERE id = sqlc.arg(id)

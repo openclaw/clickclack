@@ -728,7 +728,22 @@ func TestNamespacedOAuthSessionsCoexistAcrossSameHostPorts(t *testing.T) {
 
 func TestGitHubOAuthAllowsConcurrentStartsForOneBrowser(t *testing.T) {
 	t.Parallel()
-	st := newEmptyHTTPStore(t)
+	t.Run("SQLite", func(t *testing.T) {
+		testGitHubOAuthConcurrentCallbacks(t, newEmptyHTTPStore(t))
+	})
+	t.Run("Postgres", func(t *testing.T) {
+		st, _ := newIsolatedPostgresHTTPTestStore(t)
+		if err := st.Migrate(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		testGitHubOAuthConcurrentCallbacks(t, st)
+	})
+}
+
+func testGitHubOAuthConcurrentCallbacks(t *testing.T, st store.Store) {
+	t.Helper()
+	profiles := make(chan struct{}, 2)
+	releaseProfiles := make(chan struct{})
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/token":
@@ -739,6 +754,8 @@ func TestGitHubOAuthAllowsConcurrentStartsForOneBrowser(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": r.FormValue("code")})
 		case "/user":
+			profiles <- struct{}{}
+			<-releaseProfiles
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 92, "login": "concurrent", "email": "concurrent@example.com"})
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -782,20 +799,69 @@ func TestGitHubOAuthAllowsConcurrentStartsForOneBrowser(t *testing.T) {
 		t.Fatalf("unexpected concurrent state values %q and %q", firstState, secondState)
 	}
 
+	type callbackResult struct {
+		response *http.Response
+		err      error
+	}
+	results := make(chan callbackResult, 2)
 	for _, state := range []string{firstState, secondState} {
 		req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/github/callback?code="+state+"&state="+state, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		req.AddCookie(bindingCookie)
-		resp, err := client.Do(req)
+		go func() {
+			resp, err := client.Do(req)
+			results <- callbackResult{resp, err}
+		}()
+	}
+	for range 2 {
+		select {
+		case <-profiles:
+		case <-time.After(5 * time.Second):
+			close(releaseProfiles)
+			t.Fatal("both callbacks did not reach the synthetic provider")
+		}
+	}
+	close(releaseProfiles)
+	var userID, sessionToken string
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		resp := result.response
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/" {
+			t.Fatalf("expected concurrent callback success, got %s", resp.Status)
+		}
+		cookie := findCookie(resp.Cookies(), "cc_session")
+		if cookie == nil || cookie.Value == "" || cookie.Value == sessionToken {
+			t.Fatal("each callback must issue its own session cookie")
+		}
+		sessionToken = cookie.Value
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/api/me", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusFound {
-			t.Fatalf("expected concurrent callback success, got %s", resp.Status)
+		req.AddCookie(cookie)
+		me, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
 		}
+		var body struct {
+			User store.User `json:"user"`
+		}
+		err = json.NewDecoder(me.Body).Decode(&body)
+		user := body.User
+		me.Body.Close()
+		if err != nil || me.StatusCode != http.StatusOK || user.ID == "" {
+			t.Fatalf("session failed /api/me: status=%d user=%#v err=%v", me.StatusCode, user, err)
+		}
+		if userID != "" && user.ID != userID {
+			t.Fatalf("callbacks signed in different users: %s and %s", userID, user.ID)
+		}
+		userID = user.ID
 	}
 }
 

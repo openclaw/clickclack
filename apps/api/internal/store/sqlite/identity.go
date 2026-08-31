@@ -16,13 +16,19 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 	if provider == "" || subject == "" {
 		return store.User{}, errors.New("identity provider and subject are required")
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.User{}, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
 	lookup := storedb.GetUserByIdentityProviderSubjectParams{Provider: provider, ProviderSubject: subject}
-	row, err := s.q.GetUserByIdentityProviderSubject(ctx, lookup)
+	row, err := qtx.GetUserByIdentityProviderSubject(ctx, lookup)
 	if err == nil {
 		user := storeUserFromIdentityProviderSubject(row)
 		email := strings.TrimSpace(input.Email)
 		if email != "" {
-			if err := s.q.UpdateIdentityEmailIfEmpty(ctx, storedb.UpdateIdentityEmailIfEmptyParams{
+			if err := qtx.UpdateIdentityEmailIfEmpty(ctx, storedb.UpdateIdentityEmailIfEmptyParams{
 				Email:           email,
 				Provider:        provider,
 				ProviderSubject: subject,
@@ -30,7 +36,7 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 				return store.User{}, err
 			}
 		}
-		storedEmail, emailErr := s.q.GetIdentityEmailForUser(ctx, user.ID)
+		storedEmail, emailErr := qtx.GetIdentityEmailForUser(ctx, user.ID)
 		if emailErr == nil {
 			email = storedEmail
 		} else if !errors.Is(emailErr, sql.ErrNoRows) {
@@ -39,36 +45,23 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 		explicitAvatarURL := strings.TrimSpace(input.AvatarURL)
 		fallbackURL := store.ResolveAvatarURL("", email)
 		if explicitAvatarURL != "" {
-			updated, err := s.q.SetProviderAvatarUnlessExplicit(ctx, storedb.SetProviderAvatarUnlessExplicitParams{
+			if err := qtx.SetProviderAvatarUnlessExplicit(ctx, storedb.SetProviderAvatarUnlessExplicitParams{
 				ID:          user.ID,
 				AvatarUrl:   explicitAvatarURL,
 				FallbackUrl: fallbackURL,
-			})
-			if err != nil {
+			}); err != nil {
 				return store.User{}, err
 			}
-			if updated == 0 {
-				latestEmail, emailErr := s.q.GetIdentityEmailForUser(ctx, user.ID)
-				if emailErr == nil {
-					_, err = s.q.SetProviderAvatarUnlessExplicit(ctx, storedb.SetProviderAvatarUnlessExplicitParams{
-						ID:          user.ID,
-						AvatarUrl:   explicitAvatarURL,
-						FallbackUrl: store.ResolveAvatarURL("", latestEmail),
-					})
-					if err != nil {
-						return store.User{}, err
-					}
-				} else if !errors.Is(emailErr, sql.ErrNoRows) {
-					return store.User{}, emailErr
-				}
-			}
 		} else if fallbackURL != "" {
-			if err := s.q.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: user.ID, AvatarUrl: fallbackURL}); err != nil {
+			if err := qtx.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: user.ID, AvatarUrl: fallbackURL}); err != nil {
 				return store.User{}, err
 			}
 		}
-		row, err = s.q.GetUserByIdentityProviderSubject(ctx, lookup)
+		row, err = qtx.GetUserByIdentityProviderSubject(ctx, lookup)
 		if err != nil {
+			return store.User{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return store.User{}, err
 		}
 		return s.hydrateUserNotificationSettings(ctx, storeUserFromIdentityProviderSubject(row))
@@ -76,12 +69,6 @@ func (s *Store) UpsertIdentityUser(ctx context.Context, input store.UpsertIdenti
 	if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return store.User{}, err
-	}
-	defer tx.Rollback()
-	qtx := s.q.WithTx(tx)
 	user := store.User{
 		ID:          newID("usr"),
 		Kind:        "human",

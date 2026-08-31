@@ -166,6 +166,18 @@ Flow:
 4. The handler joins the appropriate workspace, creates a session, sets the
    configured session cookie, and redirects to `/`.
 
+GitHub accounts are matched only by provider and GitHub user ID, never linked
+by email. Concurrent first sign-ins for the same identity resolve to one user
+in both SQLite and PostgreSQL. Identity lookup, creation, and email/avatar
+reconciliation share one transaction. SQLite uses its immediate write
+transaction; PostgreSQL serializes the provider/subject pair before lookup and
+locks an existing user while reconciling its profile.
+
+Later sign-ins fill an empty identity email but keep an existing email and
+user-edited display name. A provider avatar can replace a blank or email-derived
+fallback avatar; explicit avatar overrides remain intact. Returned users retain
+their notification settings.
+
 The server stores hashes of state and browser-binding values. The short-lived
 PKCE verifier is stored because the callback must send it to GitHub. State is
 single-use, survives process restarts and multiple replicas, and permits up to

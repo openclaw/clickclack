@@ -4,6 +4,8 @@
 
 - Fixed CLI thread output dropping paging metadata, added latest and cursor windows, and aligned SDK message types with API thread summaries and attachments.
 
+- Fixed concurrent first GitHub sign-ins failing after OAuth state consumption; SQLite and PostgreSQL now resolve one provider identity atomically while preserving profile overrides and notification settings.
+
 - Fixed reaction viewer state when realtime events arrive before history pages, and refreshed root and reply reactions after authoritative reconnects in chat and embeds.
 
 - Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, ignored topic filter changes during loading, and target scrolling within long same-author message groups.

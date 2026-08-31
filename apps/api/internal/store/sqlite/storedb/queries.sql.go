@@ -5345,7 +5345,7 @@ func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokens
 	return result.RowsAffected()
 }
 
-const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :execrows
+const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = ?1
 WHERE id = ?2
@@ -5359,12 +5359,9 @@ type SetProviderAvatarUnlessExplicitParams struct {
 }
 
 // Avatar URLs equal to the generated fallback remain fallback-equivalent.
-func (q *Queries) SetProviderAvatarUnlessExplicit(ctx context.Context, arg SetProviderAvatarUnlessExplicitParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, setProviderAvatarUnlessExplicit, arg.AvatarUrl, arg.ID, arg.FallbackUrl)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+func (q *Queries) SetProviderAvatarUnlessExplicit(ctx context.Context, arg SetProviderAvatarUnlessExplicitParams) error {
+	_, err := q.db.ExecContext(ctx, setProviderAvatarUnlessExplicit, arg.AvatarUrl, arg.ID, arg.FallbackUrl)
+	return err
 }
 
 const setUserAvatarIfEmpty = `-- name: SetUserAvatarIfEmpty :exec

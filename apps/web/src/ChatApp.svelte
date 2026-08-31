@@ -1048,10 +1048,13 @@
         method: "POST",
         body: JSON.stringify({ name: workspaceName })
       });
+      // A committed create remains discoverable after its form loses ownership.
+      if (!workspaces.some((workspace) => workspace.id === data.workspace.id)) {
+        workspaces = [...workspaces, data.workspace];
+      }
       if (!isCurrent()) return;
       workspaceName = "";
       showWorkspaceCreate = false;
-      workspaces = [...workspaces, data.workspace];
       mobileNavOpen = false;
       await navigateToApp(data.workspace.id);
     } catch (error) {
@@ -1251,9 +1254,11 @@
         method: "POST",
         body: JSON.stringify({ name: channelName, kind: "public" })
       });
+      if (workspaceID === selectedWorkspaceID && !channels.some((channel) => channel.id === data.channel.id)) {
+        channels = [...channels, data.channel];
+      }
       if (!isCurrent()) return;
       channelName = "";
-      channels = [...channels, data.channel];
       showCreateChannel = false;
       await navigateToApp(workspaceID, data.channel.id);
     } catch (error) {
@@ -3139,8 +3144,10 @@
         method: "POST",
         body: JSON.stringify({ workspace_id: workspaceID, member_ids: [trimmed] })
       });
+      if (workspaceID === selectedWorkspaceID && !directConversations.some((conversation) => conversation.id === data.conversation.id)) {
+        upsertDirectConversation(data.conversation);
+      }
       if (!isCurrent()) return;
-      upsertDirectConversation(data.conversation);
       directMemberID = "";
       showCreateDirect = false;
       mobileNavOpen = false;

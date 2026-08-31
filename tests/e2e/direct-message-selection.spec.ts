@@ -237,46 +237,60 @@ test("a self DM request reports the server rejection without selecting a group",
   await expect(page).toHaveURL(before);
 });
 
-test("a delayed DM response cannot navigate or close a dialog in another workspace", async ({
-  page,
-}) => {
-  const data = await fixture(page, "none", false);
-  const other = await workspaceFixture(page, `Alternate ${randomUUID().slice(0, 8)}`);
-  await page.reload();
-  await waitForAppReady(page);
-  const held = deferred();
-  const requested = deferred();
-  const delivered = deferred();
-  await page.route("**/api/dms", async (route) => {
-    if (route.request().method() !== "POST") return route.continue();
-    const response = await route.fetch();
-    requested.resolve();
-    await held.promise;
-    await route.fulfill({ response });
-    delivered.resolve();
+for (const switchWorkspace of [false, true]) {
+  test(`a delayed DM response preserves the dialog ${switchWorkspace ? "in another workspace" : "in the same workspace"}`, async ({
+    page,
+  }) => {
+    const data = await fixture(page, "none", false);
+    const other = await workspaceFixture(page, `Alternate ${randomUUID().slice(0, 8)}`);
+    await page.reload();
+    await waitForAppReady(page);
+    const held = deferred();
+    const requested = deferred();
+    const delivered = deferred();
+    let created!: DirectConversation;
+    await page.route("**/api/dms", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      created = (await response.json()).conversation;
+      requested.resolve();
+      await held.promise;
+      await route.fulfill({ response });
+      delivered.resolve();
+    });
+    try {
+      await startFromDialog(page, data.alice.id);
+      await requested.promise;
+      await dialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
+      if (switchWorkspace) {
+        await page.getByRole("link", { name: other.workspace.name, exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/app/${other.workspace.route_id}(?:/|$)`));
+      }
+      await page.getByRole("button", { name: "Start direct message" }).click();
+      await dialog(page).getByLabel("Find a person").fill("keep this new recipient");
+      const destination = page.url();
+      held.resolve();
+      await delivered.promise;
+      // Allow the released response and any erroneous navigation to settle.
+      await page.waitForTimeout(300);
+      await expect(page).toHaveURL(destination);
+      await expect(dialog(page).getByLabel("Find a person")).toHaveValue("keep this new recipient");
+      await expect(
+        page.locator(`#sidebar-direct-messages-list a[href$="/${created.route_id}"]`),
+      ).toHaveCount(switchWorkspace ? 0 : 1);
+    } finally {
+      held.resolve();
+    }
   });
-  try {
-    await startFromDialog(page, data.alice.id);
-    await requested.promise;
-    await dialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("link", { name: other.workspace.name, exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/app/${other.workspace.route_id}(?:/|$)`));
-    await page.getByRole("button", { name: "Start direct message" }).click();
-    await dialog(page).getByLabel("Find a person").fill("keep this new recipient");
-    const destination = page.url();
-    held.resolve();
-    await delivered.promise;
-    // Allow the released response and any erroneous navigation to settle.
-    await page.waitForTimeout(300);
-    await expect(page).toHaveURL(destination);
-    await expect(dialog(page).getByLabel("Find a person")).toHaveValue("keep this new recipient");
-  } finally {
-    held.resolve();
-  }
-});
+}
 
 test("a profile DM start releases a superseded workspace create form", async ({ page }) => {
   const data = await fixture(page);
+  await expect
+    .poll(() =>
+      page.evaluate((id) => localStorage.getItem(`clickclack:${id}:cursor`), data.workspace.id),
+    )
+    .toBeTruthy();
   await page
     .locator("#sidebar-people-list")
     .getByRole("link")
@@ -296,7 +310,8 @@ test("a profile DM start releases a superseded workspace create form", async ({ 
   try {
     await page.getByRole("button", { name: "Create workspace" }).click();
     const input = page.getByLabel("Workspace name");
-    await input.fill(`Superseded ${randomUUID().slice(0, 8)}`);
+    const name = `Superseded ${randomUUID().slice(0, 8)}`;
+    await input.fill(name);
     await input.press("Enter");
     await requested.promise;
     await page
@@ -313,6 +328,7 @@ test("a profile DM start releases a superseded workspace create form", async ({ 
     await delivered.promise;
     await expect(input).toBeEnabled();
     await expect(page).toHaveURL(destination);
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   } finally {
     held.resolve();
   }

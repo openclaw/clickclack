@@ -77,6 +77,8 @@ routing or uniqueness.
 Workspace and channel create forms retain their names and show an error when
 creation fails. Pending forms prevent repeated submissions, and closing a form
 or navigating away prevents its late result from changing the current view.
+Successful creates still appear in their workspace's lists without reopening
+the dismissed form or replacing newer input.
 
 `kind` defaults to `public`. External management is opt-in and does not change
 channel authorization: it records an opaque identity and optional deep link for

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestGetThreadLatestReturnsBoundedChronologicalWindow(t *testing.T) {
@@ -51,7 +52,7 @@ func TestGetThreadLatestReturnsBoundedChronologicalWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: root.WorkspaceID, OwnerID: owner.ID, Filename: "thread.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: t.TempDir() + "/thread.txt"})
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: root.WorkspaceID, OwnerID: owner.ID, Filename: "thread.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: t.TempDir() + "/thread.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}

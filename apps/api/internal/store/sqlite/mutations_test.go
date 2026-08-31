@@ -9,6 +9,7 @@ import (
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestMutationsCreateDurableEvents(t *testing.T) {
@@ -345,7 +346,7 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	textUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	textUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "note.txt",
@@ -356,7 +357,7 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	otherUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: otherWorkspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "other.png",
@@ -367,7 +368,7 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	imageUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	imageUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "icon.png",
@@ -378,7 +379,7 @@ func TestUpdateWorkspaceValidatesIconUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	privateMemberUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	privateMemberUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     member.ID,
 		Filename:    "member-private.png",

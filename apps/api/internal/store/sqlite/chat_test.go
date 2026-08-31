@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
@@ -172,7 +173,7 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 		t.Fatal("expected events with empty cursor")
 	}
 
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "note.txt",
@@ -543,7 +544,7 @@ func TestStoreAccessErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspaces[0].ID, OwnerID: owner.ID, Filename: "x", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/x"})
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspaces[0].ID, OwnerID: owner.ID, Filename: "x", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -860,7 +861,7 @@ func TestStoreBranchCases(t *testing.T) {
 	if defaultChannel.Name != "general" || defaultChannel.Kind != "public" {
 		t.Fatalf("unexpected default channel: %#v", defaultChannel)
 	}
-	otherUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: secondWorkspace.ID, OwnerID: owner.ID, Filename: "other", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/other"})
+	otherUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: secondWorkspace.ID, OwnerID: owner.ID, Filename: "other", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/other"})
 	if err != nil {
 		t.Fatal(err)
 	}

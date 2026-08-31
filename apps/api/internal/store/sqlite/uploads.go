@@ -13,52 +13,6 @@ import (
 
 const uploadQuotaReservationTTL = 15 * time.Minute
 
-func (s *Store) CreateUpload(ctx context.Context, input store.CreateUploadInput) (store.Upload, error) {
-	nonce, err := normalizeClientNonce(input.Nonce)
-	if err != nil {
-		return store.Upload{}, err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return store.Upload{}, err
-	}
-	defer tx.Rollback()
-	if err := canCreateUploadTx(ctx, tx, input.WorkspaceID, input.OwnerID, input.ByteSize); err != nil {
-		return store.Upload{}, err
-	}
-	upload := store.Upload{
-		ID:          newID("upl"),
-		WorkspaceID: input.WorkspaceID,
-		OwnerID:     input.OwnerID,
-		Nonce:       nonce,
-		Filename:    input.Filename,
-		ContentType: input.ContentType,
-		ByteSize:    input.ByteSize,
-		Width:       input.Width,
-		Height:      input.Height,
-		DurationMS:  input.DurationMS,
-		StoragePath: input.StoragePath,
-		CreatedAt:   now(),
-	}
-	if err := s.q.WithTx(tx).InsertUpload(ctx, storedb.InsertUploadParams{
-		ID:          upload.ID,
-		WorkspaceID: upload.WorkspaceID,
-		OwnerID:     upload.OwnerID,
-		ClientNonce: upload.Nonce,
-		Filename:    upload.Filename,
-		ContentType: upload.ContentType,
-		ByteSize:    upload.ByteSize,
-		Width:       int64(upload.Width),
-		Height:      int64(upload.Height),
-		DurationMs:  int64(upload.DurationMS),
-		StoragePath: upload.StoragePath,
-		CreatedAt:   upload.CreatedAt,
-	}); err != nil {
-		return store.Upload{}, err
-	}
-	return upload, tx.Commit()
-}
-
 func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (store.UploadQuotaReservation, error) {
 	normalizedNonce, err := normalizeClientNonce(nonce)
 	if err != nil {
@@ -235,32 +189,6 @@ func (s *Store) UploadQuota(ctx context.Context, workspaceID, userID string) (st
 		return store.UploadQuota{}, err
 	}
 	return uploadQuotaTx(ctx, tx, workspaceID, userID)
-}
-
-func (s *Store) CanCreateUpload(ctx context.Context, workspaceID, userID string, byteSize int64) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	return canCreateUploadTx(ctx, tx, workspaceID, userID, byteSize)
-}
-
-func canCreateUploadTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string, byteSize int64) error {
-	if byteSize < 0 {
-		return errors.New("upload byte size must be non-negative")
-	}
-	if err := requireMembershipTx(ctx, tx, workspaceID, userID); err != nil {
-		return err
-	}
-	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
-		return err
-	}
-	quota, err := uploadQuotaTx(ctx, tx, workspaceID, userID)
-	if err != nil {
-		return err
-	}
-	return quota.CanFit(byteSize)
 }
 
 func uploadQuotaTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) (store.UploadQuota, error) {

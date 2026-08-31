@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestStoreFaultBranches(t *testing.T) {
@@ -94,7 +95,7 @@ func TestStoreFaultBranches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "x", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/x"})
+		upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "x", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/x"})
 		if err != nil {
 			t.Fatal(err)
 		}

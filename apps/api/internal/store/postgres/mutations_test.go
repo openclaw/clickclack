@@ -256,24 +256,30 @@ func TestWorkspaceDeleteLockBlocksNewUploads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	input := store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Filename:    "racing.txt",
+		ContentType: "text/plain",
+		ByteSize:    1,
+		StoragePath: "memory://racing.txt",
+	}
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "", input.ByteSize)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer tx.Rollback()
 	if err := storedb.New(tx).LockWorkspaceForUpdate(ctx, workspace.ID); err != nil {
 		t.Fatal(err)
 	}
 	result := make(chan error, 1)
 	go func() {
-		_, err := st.CreateUpload(ctx, store.CreateUploadInput{
-			WorkspaceID: workspace.ID,
-			OwnerID:     owner.ID,
-			Filename:    "racing.txt",
-			ContentType: "text/plain",
-			ByteSize:    1,
-			StoragePath: "memory://racing.txt",
-		})
+		_, err := st.CreateReservedUpload(ctx, reservation.ID, input)
 		result <- err
 	}()
 	select {

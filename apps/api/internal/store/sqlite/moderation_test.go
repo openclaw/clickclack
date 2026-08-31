@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestGuestWaitingRoomModeration(t *testing.T) {
@@ -219,7 +220,7 @@ func TestGuestWaitingRoomModeration(t *testing.T) {
 	if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: generalChannelID, UserID: guest.ID, Name: "renamed"}); !errors.Is(err, store.ErrModerationRestricted) {
 		t.Fatalf("expected block to stop channel updates, got %v", err)
 	}
-	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: guest.ID, Filename: "blocked.txt", ContentType: "text/plain", ByteSize: 7, StoragePath: "blocked.txt"}); !errors.Is(err, store.ErrModerationRestricted) {
+	if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: guest.ID, Filename: "blocked.txt", ContentType: "text/plain", ByteSize: 7, StoragePath: "blocked.txt"}); !errors.Is(err, store.ErrModerationRestricted) {
 		t.Fatalf("expected block to stop upload creation, got %v", err)
 	}
 	blocked = false

@@ -26,6 +26,7 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
 )
 
@@ -750,7 +751,7 @@ func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {
 			t.Fatal(err)
 		}
 		storagePaths = append(storagePaths, saved.Path)
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     ownerID,
 			Filename:    fmt.Sprintf("batch-%03d.txt", i),
@@ -1704,7 +1705,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		http.StatusBadRequest,
 	)
 	// Attachments use the same signed callback owner as other message updates.
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "callback.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: filepath.Join(dataDir, "callback.txt")})
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "callback.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: filepath.Join(dataDir, "callback.txt")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3214,7 +3215,7 @@ func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
 		t.Fatalf("unexpected missing nonce response: status=%s headers=%v", missingResponse.Status, missingResponse.Header)
 	}
 	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     owner.ID,
 			Filename:    fmt.Sprintf("quota-%d.txt", i),
@@ -3286,7 +3287,7 @@ func TestConcurrentUploadNonceReplayClaimsNonceBeforeQuota(t *testing.T) {
 	}
 	workspace := workspaces[0]
 	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     owner.ID,
 			Filename:    fmt.Sprintf("quota-%d.txt", i),
@@ -3437,7 +3438,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     bot.ID,
 		Filename:    "dm.txt",
@@ -3517,7 +3518,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	writeUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     writeBot.ID,
 		Filename:    "retry.txt",
@@ -3540,7 +3541,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherDMUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	otherDMUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     writeBot.ID,
 		Filename:    "other-dm.txt",

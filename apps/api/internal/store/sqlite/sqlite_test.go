@@ -15,6 +15,7 @@ import (
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestStoreValidationAndAdminHelpers(t *testing.T) {
@@ -163,7 +164,7 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	if _, _, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: workspace.ID, DisplayName: "Duplicate Handle", Handle: "owner-bot"}); err == nil {
 		t.Fatal("expected duplicate bot handle rejection")
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "secret.txt",
@@ -285,7 +286,7 @@ func TestUploadQuotaRejectsOwnerWorkspaceOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := workspaces[0]
-	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "almost-full.bin",
@@ -295,10 +296,26 @@ func TestUploadQuotaRejectsOwnerWorkspaceOverflow(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CanCreateUpload(ctx, workspace.ID, owner.ID, 2); !errors.Is(err, store.ErrUploadQuotaExceeded) {
+	quota, err := st.UploadQuota(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := quota.CanFit(2); !errors.Is(err, store.ErrUploadQuotaExceeded) {
 		t.Fatalf("expected quota denial, got %v", err)
 	}
-	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	reservation, err := st.ReserveUploadQuota(ctx, workspace.ID, owner.ID, "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.ReleaseUploadQuotaReservation(ctx, reservation.ID, owner.ID); err != nil {
+			t.Error(err)
+		}
+	})
+	if reservation.ByteSize != 1 {
+		t.Fatalf("expected reservation to clamp to remaining byte, got %d", reservation.ByteSize)
+	}
+	if _, err := st.CreateReservedUpload(ctx, reservation.ID, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Filename:    "overflow.bin",
@@ -324,7 +341,7 @@ func TestUploadNonceLookupSurvivesWorkspaceMembershipRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := workspaces[0]
-	created, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	created, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Nonce:       "stale-workspace-nonce",
@@ -364,7 +381,7 @@ func TestUploadNonceValidationCountsCharacters(t *testing.T) {
 	}
 	workspace := workspaces[0]
 	valid := strings.Repeat("é", 128)
-	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Nonce:       valid,
@@ -375,7 +392,7 @@ func TestUploadNonceValidationCountsCharacters(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("expected 128-character nonce to remain valid: %v", err)
 	}
-	if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     owner.ID,
 		Nonce:       strings.Repeat("é", 129),
@@ -387,7 +404,7 @@ func TestUploadNonceValidationCountsCharacters(t *testing.T) {
 		t.Fatalf("expected 129-character nonce rejection, got %v", err)
 	}
 	for _, nonce := range []string{string([]byte{0xff}), "invalid\x00nonce"} {
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     owner.ID,
 			Nonce:       nonce,
@@ -888,7 +905,7 @@ func TestStoreClosedDatabaseErrors(t *testing.T) {
 			return err
 		}},
 		{"create upload", func() error {
-			_, err := st.CreateUpload(ctx, store.CreateUploadInput{})
+			_, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{})
 			return err
 		}},
 		{"attach upload", func() error {

@@ -1230,7 +1230,6 @@ type Store interface {
 	UpdateMemberModeration(ctx context.Context, input UpdateMemberModerationInput) (MemberModeration, Event, error)
 	UserHasNonGuestMembership(ctx context.Context, userID string) (bool, error)
 	UploadQuota(ctx context.Context, workspaceID, userID string) (UploadQuota, error)
-	CanCreateUpload(ctx context.Context, workspaceID, userID string, byteSize int64) error
 	ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (UploadQuotaReservation, error)
 	CreateReservedUpload(ctx context.Context, reservationID string, input CreateUploadInput) (Upload, error)
 	ReleaseUploadQuotaReservation(ctx context.Context, reservationID, userID string) error
@@ -1273,7 +1272,6 @@ type Store interface {
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
 	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)
-	CreateUpload(ctx context.Context, input CreateUploadInput) (Upload, error)
 	GetUpload(ctx context.Context, uploadID, userID string) (Upload, error)
 	GetUploadByNonce(ctx context.Context, ownerID, nonce string) (Upload, error)
 	UploadHasDirectMessageAttachment(ctx context.Context, uploadID string) (bool, error)

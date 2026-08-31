@@ -54,7 +54,8 @@ let quitting = false;
 let routesReady = false;
 let pendingRoute: string | null = null;
 let pendingProtocolURL: string | null = null;
-let pendingDesktopAuth: { serverUrl: string; verifier: string } | null = null;
+type DesktopAuthAttempt = Readonly<{ serverUrl: string; verifier: string; window: BrowserWindow }>;
+let pendingDesktopAuth: DesktopAuthAttempt | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 let integratedTitleBar = false;
@@ -406,29 +407,24 @@ function registerIPC() {
       };
     }
   });
-  ipcMain.handle("settings:save", async (event, input: PublicDesktopSettings) => {
+  ipcMain.handle("settings:save", (event, input: PublicDesktopSettings) => {
     requireSettingsSender(event.sender.id);
-    const next = mergeSettings({
-      ...settings,
-      ...input,
-      serverUrl: normalizeServerURL(input.serverUrl),
-    });
-    settings = next;
-    await persistSettings();
-    integratedTitleBar = await serverSupportsIntegratedTitleBar(settings.serverUrl);
-    applyLoginItemSetting();
-    currentRoute = "/app";
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    const serverUrl = normalizeServerURL(input.serverUrl);
+    return queueSettingsSave(async () => {
+      const titleBar = await serverSupportsIntegratedTitleBar(serverUrl);
+      const next = mergeSettings({ ...settings, ...input, serverUrl });
+      await persistSettings(next);
+      settings = { ...next, window: settings.window };
+      integratedTitleBar = titleBar;
+      pendingDesktopAuth = null;
+      applyLoginItemSetting();
+      currentRoute = "/app";
       rememberWindowState();
-      const previousWindow = mainWindow;
-      mainWindow = null;
-      previousWindow.destroy();
+      mainWindow?.destroy();
       createMainWindow();
-    } else {
-      createMainWindow();
-    }
-    setTimeout(() => settingsWindow?.close(), 350);
-    return settingsInfo();
+      setTimeout(() => settingsWindow?.close(), 350);
+      return settingsInfo();
+    });
   });
 }
 
@@ -642,22 +638,38 @@ async function beginDesktopOAuth() {
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const serverUrl = normalizeServerURL(settings.serverUrl);
-  pendingDesktopAuth = { serverUrl, verifier };
+  const pending: DesktopAuthAttempt = {
+    serverUrl,
+    verifier,
+    window: mainWindow ?? createMainWindow(),
+  };
+  pendingDesktopAuth = pending;
   showMainWindow();
   try {
     await shell.openExternal(desktopOAuthStartURL(serverUrl, challenge));
   } catch (error) {
+    if (!isCurrentDesktopAuth(pending)) return;
     pendingDesktopAuth = null;
     throw error;
   }
 }
 
+function isCurrentDesktopAuth(pending: DesktopAuthAttempt): boolean {
+  return (
+    pendingDesktopAuth === pending &&
+    pending.serverUrl === settings.serverUrl &&
+    pending.window === mainWindow &&
+    !pending.window.isDestroyed()
+  );
+}
+
 async function completeDesktopOAuth(code: string) {
   const pending = pendingDesktopAuth;
-  if (!pending || pending.serverUrl !== normalizeServerURL(settings.serverUrl)) {
+  if (!pending) {
     await showDesktopAuthError("This sign-in request expired. Start again from ClickClack.");
     return;
   }
+  if (!isCurrentDesktopAuth(pending)) return;
   try {
     const response = await session.defaultSession.fetch(
       new URL("/api/auth/github/desktop/consume", pending.serverUrl).toString(),
@@ -675,6 +687,7 @@ async function completeDesktopOAuth(code: string) {
     );
     if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
     await response.arrayBuffer();
+    if (!isCurrentDesktopAuth(pending)) return;
     const meResponse = await session.defaultSession.fetch(
       new URL("/api/me", pending.serverUrl).toString(),
       {
@@ -688,12 +701,14 @@ async function completeDesktopOAuth(code: string) {
       throw new Error(`Server did not establish a desktop session (HTTP ${meResponse.status})`);
     }
     await meResponse.arrayBuffer();
-    pendingDesktopAuth = null;
+    if (!isCurrentDesktopAuth(pending)) return;
     currentRoute = "/app";
-    const window = mainWindow ?? createMainWindow(currentRoute);
-    await window.loadURL(appURL(pending.serverUrl, currentRoute));
+    await pending.window.loadURL(appURL(pending.serverUrl, currentRoute));
+    if (!isCurrentDesktopAuth(pending)) return;
+    pendingDesktopAuth = null;
     showMainWindow();
   } catch (error) {
+    if (!isCurrentDesktopAuth(pending)) return;
     const detail = error instanceof Error ? error.message : "Unknown authentication error";
     await showDesktopAuthError(`GitHub sign-in could not be completed. ${detail}`);
   }
@@ -803,7 +818,8 @@ function rememberWindowState() {
       y: bounds.y,
     },
   };
-  void persistSettings();
+  // Resolve the active server when this write reaches the queue, after any server switch.
+  void queueSettingsSave(() => persistSettings(settings));
 }
 
 function applyLoginItemSetting() {
@@ -819,15 +835,17 @@ async function readSettings(): Promise<DesktopSettings> {
   }
 }
 
-function persistSettings(): Promise<void> {
-  const snapshot = JSON.stringify(settings, null, 2) + "\n";
+async function persistSettings(candidate: DesktopSettings): Promise<void> {
+  const snapshot = JSON.stringify(candidate, null, 2) + "\n";
   const destination = settingsPath();
   const temporary = `${destination}.tmp`;
-  const operation = saveQueue.then(async () => {
-    await writeFile(temporary, snapshot, { encoding: "utf8", mode: 0o600 });
-    await rename(temporary, destination);
-  });
-  saveQueue = operation.catch(logSettingsError);
+  await writeFile(temporary, snapshot, { encoding: "utf8", mode: 0o600 });
+  await rename(temporary, destination);
+}
+
+function queueSettingsSave<T>(save: () => Promise<T>): Promise<T> {
+  const operation = saveQueue.then(save);
+  saveQueue = operation.then(() => {}, logSettingsError);
   return operation;
 }
 

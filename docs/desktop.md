@@ -68,6 +68,11 @@ Remote servers must use HTTPS. Plain HTTP is accepted only for `localhost`,
 `127.0.0.1`, and `::1`. Authentication returns to Electron's persistent browser
 session and remains scoped to the selected origin.
 
+Saving a server takes effect after the settings file is written successfully.
+Until then, the current server, window, and desktop controls stay active. A
+failed save leaves that selection intact and can be retried. Concurrent saves
+are applied in order, including window-state updates made while saving.
+
 GitHub sign-in opens in the system browser, where existing GitHub sessions,
 passkeys, password managers, and two-factor authentication already work. After
 GitHub approves the login, `chat.clickclack.desktop:/auth/callback` returns a
@@ -75,6 +80,11 @@ one-time grant to the running app. The app redeems it against the exact server
 that initiated the flow, verifies the resulting session through `/api/me`, and
 then reloads itself as the signed-in workspace. The app also accepts the legacy
 `clickclack://auth/callback` format when connecting to an older server.
+
+Each sign-in belongs to its initiating server and window. Selecting another
+server, replacing that window, or starting another sign-in prevents the old
+in-flight attempt from navigating, showing a late error, or clearing the new
+attempt. Errors from the current attempt still appear normally.
 
 Servers using namespaced cookies require desktop OAuth protocol 2. They return
 an update-required page before sending an older desktop client to GitHub.

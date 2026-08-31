@@ -30,6 +30,8 @@
 
 - Fixed delayed thread loads reopening closed panes or replacing newer selections, and preserved failed reply drafts and quotes with duplicate-safe retries.
 
+- Fixed failed desktop server saves changing the active selection, and prevented stale desktop OAuth completions and browser-open failures from affecting a replacement server, window, or sign-in attempt.
+
 - Added configurable workspace home destinations and labels, preserving desktop home navigation and keeping long labels within the badge. Thanks @sercada.
 
 - Fixed background message ingestion, live scrolling as same-author groups grow, and channel navigation during startup, including stale route failures after revisiting a channel.

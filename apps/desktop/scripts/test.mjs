@@ -19,9 +19,26 @@ await build({
   target: "node22",
 });
 
+await build({
+  absWorkingDir: root,
+  bundle: true,
+  entryPoints: ["src/main.ts"],
+  external: ["electron"],
+  format: "cjs",
+  outfile: path.join(root, ".test", "main.cjs"),
+  platform: "node",
+  target: "node22",
+});
+
 const result = spawnSync(
   process.execPath,
-  ["--test", outfile, releaseArtifactsTest, macosSigningTest],
+  [
+    "--test",
+    outfile,
+    path.join(root, "scripts", "main.test.mjs"),
+    releaseArtifactsTest,
+    macosSigningTest,
+  ],
   {
     stdio: "inherit",
   },

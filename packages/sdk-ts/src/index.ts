@@ -295,42 +295,9 @@ export type ReactionMutationResponse = components["schemas"]["ReactionMutationRe
 export type PinnedMessage = components["schemas"]["PinnedMessage"];
 export type PinMessageResponse = components["schemas"]["PinMessageResponse"];
 
-export type Message = {
-  id: string;
-  route_id?: string;
-  workspace_id: string;
-  channel_id?: string;
-  direct_conversation_id?: string;
-  author_id: string;
-  parent_message_id?: string;
-  thread_root_id: string;
-  topic_id?: string;
-  channel_seq?: number;
-  thread_seq?: number;
-  body: string;
-  body_format: "markdown";
-  created_at: string;
-  edited_at?: string;
-  deleted_at?: string;
-  kind?: MessageKind;
-  turn_id?: string;
-  author?: User;
-  attachments?: Upload[];
-  quoted_message_id?: string;
-  quoted_body_snapshot?: string;
-  quoted_author_id?: string;
-  quoted_author?: User;
-  nonce?: string;
-  reactions?: ReactionSummary[];
-};
+export type Message = components["schemas"]["Message"];
 
-export type MessagePage = {
-  messages: Message[];
-  oldest_seq: number;
-  newest_seq: number;
-  has_older: boolean;
-  has_newer: boolean;
-};
+export type MessagePage = components["schemas"]["MessagePage"];
 
 export type MessagePageOptions = {
   mode?: "latest";
@@ -370,19 +337,7 @@ export type SearchResponse = {
   next_cursor: string | null;
 };
 
-export type Upload = {
-  id: string;
-  workspace_id: string;
-  owner_id: string;
-  nonce?: string;
-  filename: string;
-  content_type: string;
-  byte_size: number;
-  width?: number;
-  height?: number;
-  duration_ms?: number;
-  created_at: string;
-};
+export type Upload = components["schemas"]["Upload"];
 
 export type DirectConversation = {
   id: string;
@@ -486,12 +441,7 @@ export type RealtimeEventPage = {
   tailCursor?: string;
 };
 
-export type ThreadState = {
-  root_message_id: string;
-  reply_count: number;
-  last_reply_at?: string;
-  last_reply_author_ids: string[];
-};
+export type ThreadState = components["schemas"]["ThreadState"];
 
 export type Thread = {
   root: Message;
@@ -499,12 +449,7 @@ export type Thread = {
   thread_state: ThreadState;
 };
 
-export type ThreadPage = Thread & {
-  oldest_seq: number;
-  newest_seq: number;
-  has_older: boolean;
-  has_newer: boolean;
-};
+export type ThreadPage = components["schemas"]["ThreadPage"];
 
 export type ClickClackClientOptions = {
   baseUrl: string;

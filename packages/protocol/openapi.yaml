@@ -3259,6 +3259,10 @@ components:
           description: Correlates durable agent activity rows from one agent turn.
         author:
           $ref: "#/components/schemas/User"
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Upload"
         quoted_message_id:
           type: string
         quoted_body_snapshot:

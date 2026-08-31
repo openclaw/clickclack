@@ -24,3 +24,15 @@ type _GetResultIncludesRequiredPaging = Assert<
     }
   >
 >;
+
+type ChannelMessage = Awaited<ReturnType<ClickClackClient["channels"]["messages"]>>[number];
+type DirectMessage = Awaited<ReturnType<ClickClackClient["dms"]["messages"]>>[number];
+type _ChannelSummaryAvailable = Assert<
+  IsAssignable<ChannelMessage["thread_state"], ThreadState | undefined>
+>;
+type _DirectSummaryAvailable = Assert<
+  IsAssignable<DirectMessage["thread_state"], ThreadState | undefined>
+>;
+type _AttachmentsPreserved = Assert<
+  IsAssignable<NonNullable<Message["attachments"]>[number], import("./index").Upload>
+>;

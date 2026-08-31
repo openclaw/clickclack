@@ -85,6 +85,10 @@ See [features/auth.md](features/auth.md).
 
 ## Thread history
 
+`Message` uses the generated API schema across channel history, DM history,
+and thread replies. Root messages expose optional `thread_state`; messages
+retain optional `attachments` typed as `Upload[]`.
+
 `threads.get` preserves the earliest-first default and supports bounded latest,
 before, after, and around windows. Sequences are local to the thread:
 

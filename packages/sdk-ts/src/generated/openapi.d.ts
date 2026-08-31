@@ -2003,6 +2003,7 @@ export interface components {
       /** @description Correlates durable agent activity rows from one agent turn. */
       turn_id?: string;
       author?: components["schemas"]["User"];
+      attachments?: components["schemas"]["Upload"][];
       quoted_message_id?: string;
       quoted_body_snapshot?: string;
       quoted_author_id?: string;

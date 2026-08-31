@@ -259,6 +259,19 @@ clickclack --server http://localhost:8080 --token sst_... messages list --channe
 clickclack --server http://localhost:8080 --token sst_... threads open msg_... --json
 ```
 
+`threads open` preserves the API's complete thread page in `--json` output,
+including `oldest_seq`, `newest_seq`, `has_older`, and `has_newer`. Its default
+is the earliest 100 replies. Use `--limit 1..200` and either `--latest`,
+`--before-seq S`, `--after-seq S`, or `--around-seq S` to select another window:
+
+```sh
+clickclack threads open msg_... --latest --limit 50 --json
+clickclack threads open msg_... --before-seq 151 --limit 50 --json
+```
+
+Cursors use thread sequences, including zero, and cannot be combined with one
+another or with `--latest`. See [thread pagination](features/threads.md#ordering-and-pagination).
+
 `workspaces list` prints `id slug name` in human mode. `channels list` prints
 `id name kind`. `messages list` prints `seq id author body`.
 

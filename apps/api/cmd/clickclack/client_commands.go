@@ -258,17 +258,24 @@ func (c apiClient) threadOpen(messageID string, args []string) error {
 	opts := c.opts
 	flags := flag.NewFlagSet("threads open", flag.ExitOnError)
 	addClientFlags(flags, &opts)
-	limit := flags.Int("limit", 100, "reply limit")
+	values := url.Values{"limit": {"100"}}
+	flags.Int("limit", 100, "reply limit (1–200)")
+	flags.Bool("latest", false, "show the latest reply window")
+	flags.Int64("before-seq", 0, "show replies before this thread sequence")
+	flags.Int64("after-seq", 0, "show replies after this thread sequence")
+	flags.Int64("around-seq", 0, "show replies around this thread sequence")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	c = c.withOptions(opts, true)
-	var result struct {
-		Root        store.Message     `json:"root"`
-		Replies     []store.Message   `json:"replies"`
-		ThreadState store.ThreadState `json:"thread_state"`
-	}
-	path := fmt.Sprintf("/api/messages/%s/thread?limit=%d", url.PathEscape(messageID), *limit)
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "limit", "latest", "before-seq", "after-seq", "around-seq":
+			values.Set(strings.ReplaceAll(f.Name, "-", "_"), f.Value.String())
+		}
+	})
+	var result store.ThreadPage
+	path := fmt.Sprintf("/api/messages/%s/thread?%s", url.PathEscape(messageID), values.Encode())
 	if err := c.get(path, &result); err != nil {
 		return err
 	}

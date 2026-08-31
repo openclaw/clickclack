@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { deferred, threadFixture, openThread, expectInsideThread } from "./thread-fixture";
+import {
+  deferred,
+  threadFixture,
+  openThread,
+  expectInsideThread,
+  scrollThreadTo,
+} from "./thread-fixture";
 
 test("rich native history stays bounded, preserves reading anchors and reloads trimmed edges", async ({
   page,
@@ -102,7 +108,7 @@ test("rich native history stays bounded, preserves reading anchors and reloads t
     await page.getByRole("button", { name: "Load older replies", exact: true }).click();
     await expect(page.locator(".reply-list")).toContainText("First existing reply");
     const anchor = page.locator(`.reply[data-message-id="${replies[99].id}"]`);
-    await anchor.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await scrollThreadTo(anchor, page);
     await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
     const y = (await anchor.boundingBox())!.y;
     for (let n = 361; n <= 368; n++) {

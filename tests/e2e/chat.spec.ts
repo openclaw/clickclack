@@ -1875,7 +1875,12 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     page.locator(".nav-section", { hasText: "People" }).getByText("Second User"),
   ).toBeVisible();
   await page.getByLabel("Message body").fill("private playwright");
+  const sentDM = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && /\/api\/dms\/[^/]+\/messages$/.test(response.url()),
+  );
   await page.getByRole("button", { name: "Send" }).click();
+  expect((await sentDM).ok()).toBe(true);
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
 
   // Direct-message search stays scoped to the open conversation.
@@ -2110,10 +2115,12 @@ test("unread bar jumps to the new-message divider across repeated unread cycles"
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
   await expect(page.getByRole("separator", { name: "New messages" })).toHaveCount(0);
 
+  await settleScrollFrames(page);
   await scrollport.evaluate((el) => {
     el.scrollTop = 0;
     el.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
+  await expect(page.locator(".markdown").filter({ hasText: "read history 0" })).toBeVisible();
 
   const secondUnreadResponse = await page.request.post(
     `/api/channels/${channel.channel.id}/messages`,

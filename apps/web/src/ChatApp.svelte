@@ -2990,6 +2990,8 @@
     const session = searchSession;
     const targetID = result.channel_id || result.direct_conversation_id || "";
     if (!session || !selectedWorkspaceID || !targetID) return;
+    // A result owns the pane even while Back's parent route is still resolving.
+    routeApplySerial++;
     searchSession = { ...session, activeResultID: result.id };
     if (currentConversationKey() !== targetID) {
       await navigateToApp(selectedWorkspaceID, targetID);

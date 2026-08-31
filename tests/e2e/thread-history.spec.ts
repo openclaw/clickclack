@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { threadFixture, openThread, expectInsideThread } from "./thread-fixture";
+import { threadFixture, openThread, expectInsideThread, scrollThreadTo } from "./thread-fixture";
 
 for (const surface of ["main", "embed"] as const) {
   test(`${surface} long threads keep latest replies, reachable history and quote targets`, async ({
@@ -27,7 +27,7 @@ for (const surface of ["main", "embed"] as const) {
     await page.getByRole("button", { name: "Load older replies", exact: true }).click();
     await expect(page.locator(".reply-list .reply")).toHaveCount(102);
     const anchor = row(seeded[15].id);
-    await anchor.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await scrollThreadTo(anchor, page);
     await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
     const before = (await anchor.boundingBox())!.y;
     const remote = await post("Remote reply 103");

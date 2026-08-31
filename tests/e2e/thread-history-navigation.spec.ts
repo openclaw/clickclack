@@ -1,5 +1,71 @@
 import { expect, test, type WebSocketRoute } from "@playwright/test";
-import { deferred, longThread, expectInsideThread } from "./thread-fixture";
+import { deferred, longThread, expectInsideThread, scrollThreadTo } from "./thread-fixture";
+import { waitForAppReady } from "./app-ready";
+
+test("a delayed parent route cannot dismiss a newly selected search reply", async ({ page }) => {
+  const { root, replies, workspace, channel } = await longThread(page, 8);
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await waitForAppReady(page);
+  await page.getByLabel("Search messages").fill('"Window reply 2"');
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const result = page.locator(".search-result").filter({ hasText: "Window reply 2" });
+  const rootResponse = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/routes/${workspace.route_id}/${root.route_id}`),
+  );
+  const pinsResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/channels/${channel.id}/pins`,
+  );
+  await result.click();
+  await (await rootResponse).finished();
+  await (await pinsResponse).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await expectInsideThread(page.locator(`.reply[data-message-id="${replies[1].id}"]`), page);
+  await expect(page).toHaveURL(new RegExp(`/${root.route_id}$`));
+
+  const parentEntered = deferred(),
+    parentRelease = deferred();
+  const threadEntered = deferred(),
+    threadRelease = deferred();
+  const parentPath = `/api/routes/${workspace.route_id}/${channel.route_id}`;
+  await page.route(`**${parentPath}`, async (route) => {
+    const response = await route.fetch();
+    parentEntered.resolve();
+    await parentRelease.promise;
+    await route.fulfill({ response });
+  });
+  await page.route(`**/api/messages/${root.id}/thread?*`, async (route) => {
+    const response = await route.fetch();
+    threadEntered.resolve();
+    await threadRelease.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.getByRole("button", { name: "Back to search results" }).click();
+    await parentEntered.promise;
+    await result.click();
+    await threadEntered.promise;
+    const parentResponse = page.waitForResponse((response) => response.url().endsWith(parentPath));
+    parentRelease.resolve();
+    await (await parentResponse).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    threadRelease.resolve();
+    await expectInsideThread(page.locator(`.reply[data-message-id="${replies[1].id}"]`), page);
+    await expect(page.getByRole("button", { name: "Back to search results" })).toBeVisible();
+  } finally {
+    parentRelease.resolve();
+    threadRelease.resolve();
+  }
+});
 
 test("old reply search targets stay visible, return to search, and report deleted or forbidden targets", async ({
   page,
@@ -61,9 +127,7 @@ test("a superseded around response cannot undo an explicit latest selection", as
       .getByRole("button", { name: /Jump to quoted message/ })
       .click();
     await entered.promise;
-    await page
-      .locator(`.reply[data-message-id="${replies[40].id}"]`)
-      .evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await scrollThreadTo(page.locator(`.reply[data-message-id="${replies[40].id}"]`), page);
     await page.getByRole("button", { name: "Jump to latest", exact: true }).click();
     await expectInsideThread(page.locator(`.reply[data-message-id="${quoted.id}"]`), page);
     release.resolve();

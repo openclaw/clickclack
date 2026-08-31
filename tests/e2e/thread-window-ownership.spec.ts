@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { threadFixture, openThread, deferred, longThread } from "./thread-fixture";
+import { threadFixture, openThread, deferred, longThread, scrollThreadTo } from "./thread-fixture";
 
 async function holdResponse(
   route: Route,
@@ -82,9 +82,7 @@ test("a delayed latest snapshot preserves a live reply and an acknowledged same-
 }) => {
   test.setTimeout(90_000);
   const { root, replies } = await longThread(page, 102);
-  await page
-    .locator(`.reply[data-message-id="${replies[10].id}"]`)
-    .evaluate((node) => node.scrollIntoView({ block: "start" }));
+  await scrollThreadTo(page.locator(`.reply[data-message-id="${replies[10].id}"]`), page);
   const entered = deferred(),
     release = deferred(),
     delivered = deferred();

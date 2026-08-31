@@ -66,6 +66,14 @@ export async function longThread(page: Page, count = 128) {
   return { ...fixture, root, replies };
 }
 
+export async function scrollThreadTo(row: Locator, page: Page) {
+  const viewport = page.getByRole("region", { name: "Thread messages", exact: true });
+  await viewport.hover();
+  // Real input cancels a queued history restore before selecting a reading anchor.
+  await page.mouse.wheel(0, (await row.boundingBox())!.y - (await viewport.boundingBox())!.y);
+  await expectInsideThread(row, page);
+}
+
 export async function expectInsideThread(row: Locator, page: Page) {
   await expect
     .poll(async () => {

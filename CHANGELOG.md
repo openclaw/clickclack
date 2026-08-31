@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed delayed parent navigation dismissing a newly selected search reply or hiding its load error.
+
 - Fixed stale pin and upload responses affecting newer selections, restored upload failure retries and member avatar fallbacks, and kept live messages read when a channel snapshot arrives before their events.
 
 - Fixed CLI status pairing a channel with the wrong workspace and silently treating discovery failures as empty selections.

@@ -714,6 +714,7 @@ func waitForBlockedPostgresQuery(t *testing.T, ctx context.Context, db *sql.DB, 
 			SELECT COUNT(*)
 			FROM pg_stat_activity
 			WHERE datname = current_database()
+			  AND application_name = current_schema()
 			  AND pid <> pg_backend_pid()
 			  AND wait_event_type = 'Lock'
 			  AND cardinality(pg_blocking_pids(pid)) > 0

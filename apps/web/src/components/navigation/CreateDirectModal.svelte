@@ -7,12 +7,14 @@
     people: User[];
     currentUserID?: string;
     memberID: string;
+    pending: boolean;
+    error: string;
     onMemberID: (value: string) => void;
     onClose: () => void;
     onStart: (memberID: string) => void;
   };
 
-  let { people, currentUserID, memberID, onMemberID, onClose, onStart }: Props = $props();
+  let { people, currentUserID, memberID, pending, error, onMemberID, onClose, onStart }: Props = $props();
 
   let query = $derived(memberID.trim().toLowerCase());
   let choices = $derived(people
@@ -48,6 +50,7 @@
         <span>Find a person</span>
         <input
           value={memberID}
+          disabled={pending}
           aria-label="Find a person"
           placeholder="Name, handle, or user id"
           autocomplete="off"
@@ -57,7 +60,7 @@
 
       <div class="person-picker" aria-label="People">
         {#each choices as person (person.id)}
-          <button type="button" class="person-choice" onclick={() => onStart(person.id)}>
+          <button type="button" class="person-choice" disabled={pending} onclick={() => onStart(person.id)}>
             <Avatar
               class="dm-avatar"
               id={person.id}
@@ -76,9 +79,10 @@
         {/if}
       </div>
 
+      {#if error}<p class="profile-status error" role="alert">{error}</p>{/if}
       <div class="profile-actions">
         <button type="button" class="ghost-action" onclick={onClose}>Cancel</button>
-        <button type="submit" class="primary-action">Start DM</button>
+        <button type="submit" class="primary-action" disabled={pending || !memberID.trim()}>{pending ? "Starting…" : "Start DM"}</button>
       </div>
     </form>
   </section>

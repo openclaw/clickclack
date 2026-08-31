@@ -263,7 +263,7 @@
       </div>
       <div class="nav-list" id="sidebar-people-list" hidden={!sections.people}>
         {#each recentPeople as person (person.id)}
-          {@const conversation = directConversationForUser(directConversations, person.id)}
+          {@const conversation = directConversationForUser(directConversations, person.id, currentUser?.id)}
           <a
             href={conversation ? hrefForDirect(conversation.id) : "#"}
             class="nav-item dm"

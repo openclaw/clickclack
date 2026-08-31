@@ -12,6 +12,8 @@
     onClose: () => void;
     onEdit?: () => void;
     onMessage?: (memberID: string) => void;
+    messagePending?: boolean;
+    messageError?: string;
     onApprove?: (memberID: string) => void;
     onTimeout?: (memberID: string) => void;
     onBlock?: (memberID: string) => void;
@@ -28,6 +30,8 @@
     onClose,
     onEdit,
     onMessage,
+    messagePending = false,
+    messageError = "",
     onApprove,
     onTimeout,
     onBlock,
@@ -88,8 +92,8 @@
     {#if (currentUser?.id !== profile.id && onMessage) || onSetStatus}
     <div class="profile-actions-row">
       {#if currentUser?.id !== profile.id && onMessage}
-        <button type="button" class="primary-action" onclick={() => onMessage?.(profile.id)}>
-          Message
+        <button type="button" class="primary-action" disabled={messagePending} onclick={() => onMessage?.(profile.id)}>
+          {messagePending ? "Starting…" : "Message"}
         </button>
       {/if}
       {#if onSetStatus}<button type="button" class="ghost-action" onclick={onSetStatus}>
@@ -97,6 +101,7 @@
       </button>{/if}
     </div>
     {/if}
+    {#if messageError}<p class="profile-status error" role="alert">{messageError}</p>{/if}
     <section class="profile-info">
       <header>
         <strong>Contact information</strong>

@@ -11,6 +11,8 @@
     selectedWorkspaceID: string;
     workspaceName: string;
     showWorkspaceCreate: boolean;
+    createPending: boolean;
+    createError: string;
     hrefForWorkspace: (workspaceID: string) => string;
     onSelectWorkspace: (workspaceID: string) => void;
     onToggleWorkspaceCreate: () => void;
@@ -26,6 +28,8 @@
     selectedWorkspaceID,
     workspaceName,
     showWorkspaceCreate,
+    createPending,
+    createError,
     hrefForWorkspace,
     onSelectWorkspace,
     onToggleWorkspaceCreate,
@@ -82,10 +86,13 @@
     >
       <input
         value={workspaceName}
+        disabled={createPending}
         placeholder="Workspace name"
         aria-label="Workspace name"
         oninput={(event) => onWorkspaceName(event.currentTarget.value)}
       />
+      {#if createError}<p class="profile-status error" role="alert">{createError}</p>{/if}
+      {#if createPending}<p class="profile-status" role="status">Creating workspace…</p>{/if}
     </form>
   {/if}
 </nav>

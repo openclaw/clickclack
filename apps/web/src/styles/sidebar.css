@@ -173,6 +173,10 @@
   z-index: 20;
 }
 
+.guild-create .profile-status {
+  max-width: 200px;
+}
+
 .guild-create input {
   height: 32px;
   padding: 0 10px;

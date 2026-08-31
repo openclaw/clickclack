@@ -74,6 +74,10 @@ external_url?, sidebar_section?}`. `name` is slugified to keep
 `(workspace_id, name)` unique. `display_title` is an optional presentation-only
 title; it is trimmed, limited to 200 Unicode characters, and does not affect
 routing or uniqueness.
+Workspace and channel create forms retain their names and show an error when
+creation fails. Pending forms prevent repeated submissions, and closing a form
+or navigating away prevents its late result from changing the current view.
+
 `kind` defaults to `public`. External management is opt-in and does not change
 channel authorization: it records an opaque identity and optional deep link for
 the application that owns the channel lifecycle.

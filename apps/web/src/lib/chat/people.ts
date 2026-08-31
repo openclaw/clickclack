@@ -94,8 +94,13 @@ export function collectMentionPeople(
 export function directConversationForUser(
   conversations: DirectConversation[],
   memberID: string,
+  currentUserID: string | undefined,
 ): DirectConversation | undefined {
-  return conversations.find((conversation) =>
-    conversation.members.some((member) => member.id === memberID),
+  if (!currentUserID || memberID === currentUserID) return undefined;
+  return conversations.find(
+    (conversation) =>
+      conversation.members.length === 2 &&
+      conversation.members.some((member) => member.id === currentUserID) &&
+      conversation.members.some((member) => member.id === memberID),
   );
 }

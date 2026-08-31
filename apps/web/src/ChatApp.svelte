@@ -143,6 +143,11 @@
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
+  let createPending: "workspace" | "channel" | "direct" | null = null;
+  let workspaceCreateError = "";
+  let channelCreateError = "";
+  let directCreateError = "";
+  let createActionSerial = 0;
   let searchQuery = "";
   // A search session owns the right pane until it is closed or replaced.
   // Opening a thread from a result "detours" the pane to that thread while the
@@ -788,6 +793,7 @@
       if (workspaceChanged) {
         captureScrollMemory();
         editController.clear();
+        resetCreateActions();
         selectedWorkspaceID = workspace.id;
         topicsLoadSerial += 1;
         slashCommandsLoadSerial += 1;
@@ -1002,19 +1008,57 @@
     return true;
   }
 
-  async function createWorkspace() {
-    if (!workspaceName.trim()) return;
-    const data = await api<{ workspace: Workspace }>("/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: workspaceName })
-    });
-    workspaceName = "";
+  function resetCreateActions() {
+    createActionSerial++;
+    createPending = null;
+    workspaceCreateError = "";
+    channelCreateError = "";
+    directCreateError = "";
     showWorkspaceCreate = false;
-    workspaces = [...workspaces, data.workspace];
-    mobileNavOpen = false;
-    await applyRoute(data.workspace.route_id || data.workspace.id, "");
-    await navigateToApp(data.workspace.id);
-    status = "ready";
+    showCreateChannel = false;
+    showCreateDirect = false;
+  }
+
+  function toggleWorkspaceCreate() {
+    const open = !showWorkspaceCreate;
+    resetCreateActions();
+    showWorkspaceCreate = open;
+  }
+
+  function openCreateChannel() {
+    resetCreateActions();
+    showCreateChannel = true;
+  }
+
+  function openCreateDirect() {
+    resetCreateActions();
+    showCreateDirect = true;
+  }
+
+  async function createWorkspace() {
+    if (createPending === "workspace" || !workspaceName.trim()) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "workspace";
+    workspaceCreateError = "";
+    try {
+      const data = await api<{ workspace: Workspace }>("/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: workspaceName })
+      });
+      if (!isCurrent()) return;
+      workspaceName = "";
+      showWorkspaceCreate = false;
+      workspaces = [...workspaces, data.workspace];
+      mobileNavOpen = false;
+      await navigateToApp(data.workspace.id);
+    } catch (error) {
+      if (isCurrent()) workspaceCreateError = readableAPIError(error, "Could not create workspace");
+    } finally {
+      if (request === createActionSerial) createPending = null;
+    }
   }
 
   async function selectWorkspace(workspaceID: string) {
@@ -1195,15 +1239,28 @@
   }
 
   async function createChannel() {
-    if (!selectedWorkspaceID || !channelName.trim()) return;
-    const data = await api<{ channel: Channel }>(`/api/workspaces/${selectedWorkspaceID}/channels`, {
-      method: "POST",
-      body: JSON.stringify({ name: channelName, kind: "public" })
-    });
-    channelName = "";
-    channels = [...channels, data.channel];
-    showCreateChannel = false;
-    await navigateToApp(selectedWorkspaceID, data.channel.id);
+    if (createPending === "channel" || !selectedWorkspaceID || !channelName.trim()) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "channel";
+    channelCreateError = "";
+    try {
+      const data = await api<{ channel: Channel }>(`/api/workspaces/${workspaceID}/channels`, {
+        method: "POST",
+        body: JSON.stringify({ name: channelName, kind: "public" })
+      });
+      if (!isCurrent()) return;
+      channelName = "";
+      channels = [...channels, data.channel];
+      showCreateChannel = false;
+      await navigateToApp(workspaceID, data.channel.id);
+    } catch (error) {
+      if (isCurrent()) channelCreateError = readableAPIError(error, "Could not create channel");
+    } finally {
+      if (request === createActionSerial) createPending = null;
+    }
   }
 
   async function selectChannel(channelID: string) {
@@ -3054,28 +3111,6 @@
       : [...directConversations, conversation];
   }
 
-  async function createDirectConversation(memberID = directMemberID) {
-    const trimmed = memberID.trim();
-    if (!selectedWorkspaceID || !trimmed) return;
-    const data = await api<{ conversation: DirectConversation }>("/api/dms", {
-      method: "POST",
-      body: JSON.stringify({ workspace_id: selectedWorkspaceID, member_ids: [trimmed] })
-    });
-    directMemberID = "";
-    showCreateDirect = false;
-    upsertDirectConversation(data.conversation);
-    mobileNavOpen = false;
-    await navigateToApp(selectedWorkspaceID, data.conversation.id);
-  }
-
-  async function startDirectFromModal(memberID: string) {
-    const trimmed = memberID.trim();
-    if (!trimmed) return;
-    await startDirectWithUser(trimmed);
-    directMemberID = "";
-    showCreateDirect = false;
-  }
-
   async function selectDirectConversation(conversationID: string) {
     mobileNavOpen = false;
     const targetPath = appHref(selectedWorkspaceID, conversationID);
@@ -3091,22 +3126,30 @@
 
   async function startDirectWithUser(memberID: string) {
     const trimmed = memberID.trim();
-    if (!selectedWorkspaceID || !trimmed) return;
-    const existing = directConversations.find((conversation) =>
-      conversation.members.some((member) => member.id === trimmed),
-    );
-    if (existing) {
+    if (createPending === "direct" || !selectedWorkspaceID || !trimmed) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "direct";
+    directCreateError = "";
+    try {
+      // The server owns exact membership, duplicate prevention, and reopening.
+      const data = await api<{ conversation: DirectConversation }>("/api/dms", {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceID, member_ids: [trimmed] })
+      });
+      if (!isCurrent()) return;
+      upsertDirectConversation(data.conversation);
+      directMemberID = "";
+      showCreateDirect = false;
       mobileNavOpen = false;
-      await navigateToApp(selectedWorkspaceID, existing.id);
-      return;
+      await navigateToApp(workspaceID, data.conversation.id);
+    } catch (error) {
+      if (isCurrent()) directCreateError = readableAPIError(error, "Could not start direct message");
+    } finally {
+      if (request === createActionSerial) createPending = null;
     }
-    const data = await api<{ conversation: DirectConversation }>("/api/dms", {
-      method: "POST",
-      body: JSON.stringify({ workspace_id: selectedWorkspaceID, member_ids: [trimmed] })
-    });
-    upsertDirectConversation(data.conversation);
-    mobileNavOpen = false;
-    await navigateToApp(selectedWorkspaceID, data.conversation.id);
   }
 
   function clearHiddenDirectUndo() {
@@ -3691,6 +3734,7 @@
   function openUserProfile(profile?: User | null) {
     routeApplySerial++;
     if (!profile || profile.deleted_at) return;
+    resetCreateActions();
     resetSearch();
     selectedArtifact = null;
     artifactConversationKey = "";
@@ -3821,6 +3865,7 @@
       return;
     }
     routeApplySerial++;
+    resetCreateActions();
     const threadWasOpen = thread.selection !== null;
     const searchDetourWasOpen = searchThreadDetour;
     const parentTargetID = currentConversationKey();
@@ -3990,14 +4035,13 @@
   function closeModal() {
     if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
     if (channelSettingsSaving) return;
+    resetCreateActions();
     pendingDeleteMessage = null;
     deleteMessageError = "";
     selectedImage = null;
     settingsModalOpen = false;
     channelSettingsOpen = false;
     channelSettingsError = "";
-    showCreateChannel = false;
-    showCreateDirect = false;
   }
 
   function closeMobileNav() {
@@ -4128,9 +4172,11 @@
     {selectedWorkspaceID}
     {workspaceName}
     {showWorkspaceCreate}
+    createPending={createPending === "workspace"}
+    createError={workspaceCreateError}
     hrefForWorkspace={(workspaceID) => appHref(workspaceID)}
     onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
-    onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
+    onToggleWorkspaceCreate={toggleWorkspaceCreate}
     onWorkspaceName={(value) => (workspaceName = value)}
     onCreateWorkspace={() => void createWorkspace()}
   />
@@ -4153,9 +4199,9 @@
     hrefForChannel={(channelID) => appHref(selectedWorkspaceID, channelID)}
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}
-    onCreateChannel={() => (showCreateChannel = true)}
+    onCreateChannel={openCreateChannel}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
-    onCreateDirect={() => (showCreateDirect = true)}
+    onCreateDirect={openCreateDirect}
     onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
     hiddenDirectTitle={hiddenDirectUndo?.title}
     onUndoHideDirect={() => void undoHideDirectConversation()}
@@ -4443,6 +4489,8 @@
         moderation={selectedProfileModeration}
         onClose={closeSidePanel}
         onEdit={openProfileSettings}
+        messagePending={createPending === "direct"}
+        messageError={directCreateError}
         onMessage={(memberID) => void startDirectWithUser(memberID)}
         onApprove={(memberID) => void updateMemberModeration(memberID, { role: "member", clear_timeout: true, blocked: false })}
         onTimeout={(memberID) => void updateMemberModeration(memberID, { timeout_minutes: 60 })}
@@ -4487,7 +4535,8 @@
 {#if showCreateChannel}
   <CreateChannelModal
     {channelName}
-    status=""
+    pending={createPending === "channel"}
+    error={channelCreateError}
     onChannelName={(value) => (channelName = value)}
     onClose={closeModal}
     onCreate={() => void createChannel()}
@@ -4498,9 +4547,11 @@
     people={recentPeople}
     currentUserID={user?.id}
     memberID={directMemberID}
+    pending={createPending === "direct"}
+    error={directCreateError}
     onMemberID={(value) => (directMemberID = value)}
     onClose={closeModal}
-    onStart={(memberID) => void startDirectFromModal(memberID)}
+    onStart={(memberID) => void startDirectWithUser(memberID)}
   />
 {/if}
 {#if pendingDeleteMessage}

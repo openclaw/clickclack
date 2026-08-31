@@ -50,3 +50,32 @@ test("shared create dialogs stay above their close backdrops", async ({ page }) 
   await directDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(directDialog).toBeHidden();
 });
+
+test("channel creation shows failures and retains the name for retry", async ({ page }) => {
+  await page.goto("/app");
+  await waitForAppReady(page);
+  let attempts = 0;
+  await page.route("**/api/workspaces/*/channels", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({ status: 503, json: { error: "Channel creation unavailable" } });
+    } else {
+      await route.continue();
+    }
+  });
+  const name = `retry-channel-${randomUUID().slice(0, 8)}`;
+  await page.getByRole("button", { name: "Create channel" }).click();
+  const dialog = page.locator(".profile-modal", {
+    has: page.getByRole("heading", { name: "Create channel" }),
+  });
+  const input = dialog.getByLabel("Channel name");
+  await input.fill(name);
+  await dialog.getByRole("button", { name: "Create channel", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Channel creation unavailable");
+  await expect(input).toHaveValue(name);
+  await dialog.getByRole("button", { name: "Create channel", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: `#${name}`, exact: true })).toBeVisible();
+  expect(attempts).toBe(2);
+});

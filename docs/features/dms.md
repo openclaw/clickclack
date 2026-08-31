@@ -31,7 +31,13 @@ create is deduplicated and the caller is added automatically.
 The web sidebar lists existing DMs and also derives a People section from DM
 members and hydrated message authors. Users appear there automatically as
 conversation context is loaded; clicking a person opens their DM when one
-exists, otherwise it opens the profile pane with a Message action.
+exists with exactly that person and the current user, otherwise it opens the
+profile pane with a Message action. Groups containing the person do not match.
+Explicit Message and Start DM actions use the server to create or reopen that
+exact one-to-one conversation. Failed starts show an error and retain the
+recipient for retry; closing the dialog or changing the current view prevents
+a late response from taking over navigation. Self-DMs remain unsupported and
+show the server's validation error.
 
 Closing a DM only hides it from the current user's sidebar. Membership,
 history, routes, and read state remain intact for every member. Direct links

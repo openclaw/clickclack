@@ -215,11 +215,6 @@ type AppearancePreferencesPatch struct {
 	Density       *string `json:"density,omitempty"`
 }
 
-type UpdateAppearancePreferencesInput struct {
-	UserID string
-	Patch  AppearancePreferencesPatch
-}
-
 type ChannelNotificationInput struct {
 	ChannelID  string
 	UserID     string
@@ -814,14 +809,6 @@ type UpdateUserProfileInput struct {
 	AvatarURL   string
 }
 
-type UpdateUserProfileAndNotificationSettingsInput struct {
-	UserID               string
-	DisplayName          string
-	Handle               string
-	AvatarURL            string
-	NotificationSettings *NotificationSettings
-}
-
 type UpdateCurrentUserInput struct {
 	UserID                string
 	DisplayName           *string
@@ -1213,11 +1200,8 @@ type Store interface {
 	RevokeConnectedAccount(ctx context.Context, accountID, requesterID string) (ConnectedAccount, error)
 	UpsertIdentityUser(ctx context.Context, input UpsertIdentityUserInput) (User, error)
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
-	UpdateUserProfileAndNotificationSettings(ctx context.Context, input UpdateUserProfileAndNotificationSettingsInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
-	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
-	UpdateAppearancePreferences(ctx context.Context, input UpdateAppearancePreferencesInput) (*AppearancePreferences, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)

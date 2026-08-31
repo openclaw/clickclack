@@ -13,21 +13,6 @@ import (
 
 var pushoverUserKeyRE = regexp.MustCompile(`^[A-Za-z0-9]{30}$`)
 
-func (s *Store) UpdateNotificationSettings(ctx context.Context, input store.UpdateNotificationSettingsInput) (store.NotificationSettings, error) {
-	settings, enabled, err := normalizeNotificationSettings(input)
-	if err != nil {
-		return store.NotificationSettings{}, err
-	}
-	if err := s.q.UpsertNotificationSettings(ctx, storedb.UpsertNotificationSettingsParams{
-		UserID:          input.UserID,
-		PushoverEnabled: enabled,
-		PushoverUserKey: settings.PushoverUserKey,
-	}); err != nil {
-		return store.NotificationSettings{}, err
-	}
-	return settings, nil
-}
-
 func normalizeNotificationSettings(input store.UpdateNotificationSettingsInput) (store.NotificationSettings, int64, error) {
 	userKey := strings.TrimSpace(input.PushoverUserKey)
 	if input.PushoverEnabled && userKey == "" {

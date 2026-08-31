@@ -33,10 +33,12 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	}
 	workspace := workspaces[0]
 	pushoverUserKey := "abcdefghijklmnopqrstuvwxyz1234"
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          owner.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: pushoverUserKey,
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: owner.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: pushoverUserKey,
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -98,10 +100,12 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	if want := store.ResolveAvatarURL("", "magic@example.com"); magicUser.AvatarURL != want {
 		t.Fatalf("expected magic-link Gravatar %q, got %#v", want, magicUser)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          magicUser.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: magicUser.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

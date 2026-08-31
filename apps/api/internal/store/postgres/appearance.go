@@ -26,28 +26,6 @@ func (s *Store) GetAppearancePreferences(ctx context.Context, userID string) (*s
 	return &preferences, nil
 }
 
-func (s *Store) UpdateAppearancePreferences(ctx context.Context, input store.UpdateAppearancePreferencesInput) (*store.AppearancePreferences, error) {
-	patch, err := store.NormalizeAppearancePreferencesPatch(input.Patch)
-	if err != nil {
-		return nil, err
-	}
-	if store.AppearancePreferencesPatchEmpty(patch) {
-		return s.GetAppearancePreferences(ctx, input.UserID)
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if err := updateAppearancePreferences(ctx, s.q.WithTx(tx), input.UserID, patch); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return s.GetAppearancePreferences(ctx, input.UserID)
-}
-
 func updateAppearancePreferences(ctx context.Context, q *storedb.Queries, userID string, patch store.AppearancePreferencesPatch) error {
 	if err := q.EnsureAppearancePreferences(ctx, userID); err != nil {
 		return err

@@ -272,20 +272,6 @@ func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserPro
 	return s.GetUser(ctx, input.UserID)
 }
 
-func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, input store.UpdateUserProfileAndNotificationSettingsInput) (store.User, error) {
-	result, err := s.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
-		UserID:               input.UserID,
-		DisplayName:          &input.DisplayName,
-		Handle:               &input.Handle,
-		AvatarURL:            &input.AvatarURL,
-		NotificationSettings: input.NotificationSettings,
-	})
-	if err != nil {
-		return store.User{}, err
-	}
-	return result.User, nil
-}
-
 func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrentUserInput) (store.CurrentUserState, error) {
 	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
 	if err != nil {

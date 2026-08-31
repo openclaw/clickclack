@@ -1356,10 +1356,12 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	if auth.User.DisplayName != "Auth User" || auth.Session.Token == "" {
 		t.Fatalf("unexpected auth payload: %#v", auth)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          auth.User.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: auth.User.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

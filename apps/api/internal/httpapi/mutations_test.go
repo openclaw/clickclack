@@ -54,10 +54,12 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, second.ID, "member"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          second.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "u12345678901234567890123456789",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: second.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "u12345678901234567890123456789",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -262,9 +264,9 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	}
 
 	secondBoard := "iris"
-	if _, err := st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
-		UserID: second.ID,
-		Patch:  store.AppearancePreferencesPatch{BoardTheme: &secondBoard},
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:                second.ID,
+		AppearancePreferences: &store.AppearancePreferencesPatch{BoardTheme: &secondBoard},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -730,10 +732,12 @@ func TestPushNotificationsRespectModerationVisibility(t *testing.T) {
 	if _, err := st.EnsureDefaultGuestWorkspaceMember(ctx, guest.ID, store.WorkspaceRoleGuest); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          guest.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "g12345678901234567890123456789",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: guest.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "g12345678901234567890123456789",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -779,10 +783,12 @@ func TestPushNotificationsRespectModerationVisibility(t *testing.T) {
 	if _, err := st.EnsureDefaultGuestWorkspaceMember(ctx, member.ID, store.WorkspaceRoleMember); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          member.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "m12345678901234567890123456789",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: member.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "m12345678901234567890123456789",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -591,10 +591,12 @@ func TestPushNotificationRecipientsRespectChannelMute(t *testing.T) {
 	}
 
 	// Enable push notifications for the member.
-	_, err = st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          member.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "m12345678901234567890123456789",
+	_, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: member.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "m12345678901234567890123456789",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

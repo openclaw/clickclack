@@ -28,20 +28,22 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 		t.Fatalf("expected missing preferences, got %#v", preferences)
 	}
 
-	if preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
-		UserID: user.ID,
-	}); err != nil {
+	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:                user.ID,
+		AppearancePreferences: &store.AppearancePreferencesPatch{},
+	})
+	if err != nil {
 		t.Fatal(err)
-	} else if preferences != nil {
-		t.Fatalf("empty patch created a row: %#v", preferences)
+	} else if account.AppearancePreferences != nil {
+		t.Fatalf("empty patch created a row: %#v", account.AppearancePreferences)
 	}
 
 	system := "system"
 	moss := "moss"
 	compact := "compact"
-	preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
+	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
-		Patch: store.AppearancePreferencesPatch{
+		AppearancePreferences: &store.AppearancePreferencesPatch{
 			ColorMode:  &system,
 			BoardTheme: &moss,
 			Density:    &compact,
@@ -50,15 +52,16 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preferences = account.AppearancePreferences
 	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "moss" || preferences.MessageLayout != "" || preferences.Density != "compact" {
 		t.Fatalf("unexpected initial preferences: %#v", preferences)
 	}
 
 	signal := "signal"
 	outlined := "outlined"
-	preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
+	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
-		Patch: store.AppearancePreferencesPatch{
+		AppearancePreferences: &store.AppearancePreferencesPatch{
 			BoardTheme:    &signal,
 			MessageLayout: &outlined,
 		},
@@ -66,14 +69,15 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preferences = account.AppearancePreferences
 	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "" || preferences.MessageLayout != "outlined" || preferences.Density != "compact" {
 		t.Fatalf("partial update replaced unrelated preferences: %#v", preferences)
 	}
 
 	invalid := "sepia"
-	if _, err := st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
-		UserID: user.ID,
-		Patch:  store.AppearancePreferencesPatch{ColorMode: &invalid},
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:                user.ID,
+		AppearancePreferences: &store.AppearancePreferencesPatch{ColorMode: &invalid},
 	}); err == nil {
 		t.Fatal("expected invalid color mode to fail")
 	}
@@ -107,7 +111,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 
 	newHandle := "@appearance-user"
 	dark := "dark"
-	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID:                user.ID,
 		Handle:                &newHandle,
 		AppearancePreferences: &store.AppearancePreferencesPatch{ColorMode: &dark},

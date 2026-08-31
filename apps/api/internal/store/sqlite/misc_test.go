@@ -49,16 +49,17 @@ func TestStoreMiscBranches(t *testing.T) {
 	if updatedOwner.Handle != "steipete" || updatedOwner.AvatarURL != "https://example.com/avatar.png" {
 		t.Fatalf("unexpected profile update: %#v", updatedOwner)
 	}
-	clearedOwner, err := st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+	empty := ""
+	clearedOwner, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID:      owner.ID,
-		DisplayName: updatedOwner.DisplayName,
-		Handle:      updatedOwner.Handle,
-		AvatarURL:   "",
+		DisplayName: &updatedOwner.DisplayName,
+		Handle:      &updatedOwner.Handle,
+		AvatarURL:   &empty,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clearedOwner.AvatarURL != ownerGravatar {
+	if clearedOwner.User.AvatarURL != ownerGravatar {
 		t.Fatalf("expected cleared avatar to restore Gravatar %q, got %#v", ownerGravatar, clearedOwner)
 	}
 	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{UserID: unnamed.ID, DisplayName: "Other", Handle: "STEIPETE"}); err == nil {
@@ -79,18 +80,24 @@ func TestStoreMiscBranches(t *testing.T) {
 	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{UserID: "usr_missing", DisplayName: "Missing"}); err == nil {
 		t.Fatal("expected missing profile user error")
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{UserID: owner.ID, PushoverEnabled: true}); err == nil {
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:               owner.ID,
+		NotificationSettings: &store.NotificationSettings{PushoverEnabled: true},
+	}); err == nil {
 		t.Fatal("expected missing pushover key error")
 	}
-	settings, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          owner.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "u12345678901234567890123456789",
+	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: owner.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "u12345678901234567890123456789",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !settings.PushoverEnabled || settings.PushoverUserKey == "" {
+	settings := account.User.NotificationSettings
+	if settings == nil || !settings.PushoverEnabled || settings.PushoverUserKey == "" {
 		t.Fatalf("unexpected notification settings: %#v", settings)
 	}
 	ownerWithSettings, err := st.GetUser(ctx, owner.ID)
@@ -166,16 +173,17 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fallbackIdentity, err = st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+	clearedIdentity, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID:      fallbackIdentity.ID,
-		DisplayName: fallbackIdentity.DisplayName,
-		AvatarURL:   "",
+		DisplayName: &fallbackIdentity.DisplayName,
+		Handle:      &empty,
+		AvatarURL:   &empty,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fallbackIdentity.AvatarURL != fallbackGravatar {
-		t.Fatalf("expected late identity email to restore Gravatar %q, got %#v", fallbackGravatar, fallbackIdentity)
+	if clearedIdentity.User.AvatarURL != fallbackGravatar {
+		t.Fatalf("expected late identity email to restore Gravatar %q, got %#v", fallbackGravatar, clearedIdentity)
 	}
 	emailIdentity, err := st.UpsertIdentityUser(ctx, store.UpsertIdentityUserInput{Provider: "github", ProviderSubject: "email", Email: "email@example.com"})
 	if err != nil {
@@ -469,10 +477,12 @@ func TestConcurrentProfileClearRestoresLateEmailFallback(t *testing.T) {
 	go func() {
 		defer group.Done()
 		<-start
-		_, err := st.UpdateUserProfileAndNotificationSettings(ctx, store.UpdateUserProfileAndNotificationSettingsInput{
+		empty := ""
+		_, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 			UserID:      user.ID,
-			DisplayName: user.DisplayName,
-			AvatarURL:   "",
+			DisplayName: &user.DisplayName,
+			Handle:      &empty,
+			AvatarURL:   &empty,
 		})
 		errors <- err
 	}()

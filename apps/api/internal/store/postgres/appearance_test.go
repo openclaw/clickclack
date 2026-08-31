@@ -44,9 +44,9 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	dark := "dark"
 	iris := "iris"
 	comfortable := "comfortable"
-	preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
+	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
-		Patch: store.AppearancePreferencesPatch{
+		AppearancePreferences: &store.AppearancePreferencesPatch{
 			ColorMode:  &dark,
 			BoardTheme: &iris,
 			Density:    &comfortable,
@@ -55,15 +55,16 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preferences = account.AppearancePreferences
 	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "iris" || preferences.MessageLayout != "" || preferences.Density != "" {
 		t.Fatalf("unexpected initial preferences: %#v", preferences)
 	}
 
 	standard := "standard"
 	ember := "ember"
-	preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
+	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
-		Patch: store.AppearancePreferencesPatch{
+		AppearancePreferences: &store.AppearancePreferencesPatch{
 			BoardTheme:    &ember,
 			MessageLayout: &standard,
 		},
@@ -71,14 +72,15 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preferences = account.AppearancePreferences
 	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "ember" || preferences.MessageLayout != "" || preferences.Density != "" {
 		t.Fatalf("partial update replaced unrelated preferences: %#v", preferences)
 	}
 
 	invalid := "roomy"
-	if _, err := st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
-		UserID: user.ID,
-		Patch:  store.AppearancePreferencesPatch{Density: &invalid},
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:                user.ID,
+		AppearancePreferences: &store.AppearancePreferencesPatch{Density: &invalid},
 	}); err == nil {
 		t.Fatal("expected invalid density to fail")
 	}
@@ -112,7 +114,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 
 	newHandle := "@appearance-postgres"
 	compact := "compact"
-	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID:                user.ID,
 		Handle:                &newHandle,
 		AppearancePreferences: &store.AppearancePreferencesPatch{Density: &compact},

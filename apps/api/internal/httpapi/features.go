@@ -599,7 +599,7 @@ func (s *Server) attachUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	event, err := s.store.AttachUpload(r.Context(), store.AttachUploadInput{MessageID: chi.URLParam(r, "message_id"), UploadID: body.UploadID, UserID: act.user.ID})
 	if err == nil && event.ID != "" {
-		s.hub.Publish(event)
+		s.publishEvent(r.Context(), event)
 	}
 	writeResult(w, map[string]any{"ok": true}, err)
 }

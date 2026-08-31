@@ -3039,6 +3039,17 @@ func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorPa
 	return cursor, err
 }
 
+const latestWorkspaceEventCursor = `-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = $1 ORDER BY cursor DESC LIMIT 1
+`
+
+func (q *Queries) LatestWorkspaceEventCursor(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestWorkspaceEventCursor, workspaceID)
+	var cursor string
+	err := row.Scan(&cursor)
+	return cursor, err
+}
+
 const listBotCommandsForBot = `-- name: ListBotCommandsForBot :many
 SELECT id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
 FROM bot_commands
@@ -4862,6 +4873,28 @@ func (q *Queries) LockChannelForUpdate(ctx context.Context, channelID string) (s
 	return id, err
 }
 
+const lockEventRecipient = `-- name: LockEventRecipient :one
+SELECT id FROM users WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) LockEventRecipient(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockEventRecipient, userID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockEventWorkspace = `-- name: LockEventWorkspace :one
+SELECT id FROM workspaces WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) LockEventWorkspace(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockEventWorkspace, workspaceID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockMessageForPinning = `-- name: LockMessageForPinning :one
 SELECT id FROM messages WHERE id = $1 FOR UPDATE
 `
@@ -4885,6 +4918,15 @@ func (q *Queries) LockMessageForReaction(ctx context.Context, messageID string) 
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockWorkspaceEventLog = `-- name: LockWorkspaceEventLog :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.events'), hashtext($1::text))
+`
+
+func (q *Queries) LockWorkspaceEventLog(ctx context.Context, workspaceID string) error {
+	_, err := q.db.ExecContext(ctx, lockWorkspaceEventLog, workspaceID)
+	return err
 }
 
 const lockWorkspaceForUpdate = `-- name: LockWorkspaceForUpdate :exec

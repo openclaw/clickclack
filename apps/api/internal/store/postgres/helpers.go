@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -288,9 +289,34 @@ func insertEventWithRecipientsAndMentions(ctx context.Context, tx *sql.Tx, works
 	if err != nil {
 		return store.Event{}, err
 	}
+	q := storedb.New(tx)
+	// Appending finalizes the transaction: domain writes and any other blocking
+	// locks must precede it. Acquire FK parent locks before the workspace fence,
+	// so a parent FOR UPDATE owner can still append and commit without deadlock.
+	if _, err := q.LockEventWorkspace(ctx, workspaceID); err != nil {
+		return store.Event{}, err
+	}
+	slices.Sort(recipients)
+	for _, userID := range recipients {
+		if _, err := q.LockEventRecipient(ctx, userID); err != nil {
+			return store.Event{}, err
+		}
+	}
+	if err := q.LockWorkspaceEventLog(ctx, workspaceID); err != nil {
+		return store.Event{}, err
+	}
+	// Read Committed gives this statement a fresh snapshot after the fence wait.
+	frontier, err := q.LatestWorkspaceEventCursor(ctx, workspaceID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return store.Event{}, err
+	}
+	cursor, err := store.EventCursorAfter(newID("cur"), frontier)
+	if err != nil {
+		return store.Event{}, err
+	}
 	event := store.Event{
 		ID:               newID("evt"),
-		Cursor:           newID("cur"),
+		Cursor:           cursor,
 		Type:             eventType,
 		WorkspaceID:      workspaceID,
 		ChannelID:        channelID,
@@ -304,7 +330,6 @@ func insertEventWithRecipientsAndMentions(ctx context.Context, tx *sql.Tx, works
 	if len(recipients) > 0 {
 		isPrivate = 1
 	}
-	q := storedb.New(tx)
 	if err := q.InsertEvent(ctx, storedb.InsertEventParams{
 		ID:               event.ID,
 		Cursor:           event.Cursor,

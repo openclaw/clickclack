@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed durable realtime events being skipped after delayed publication or concurrent PostgreSQL commits, restored idle WebSocket ping/disconnect handling, and kept attachment callbacks and moderation responses consistent with committed events.
+
 - Fixed person actions opening group DMs, preserved exact one-to-one reopening, and made failed workspace, channel, and DM creation visible and retryable without late responses taking over navigation.
 
 - Fixed concurrent PostgreSQL channel settings updates overwriting changes to omitted fields.

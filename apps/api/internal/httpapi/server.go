@@ -1331,7 +1331,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	events, unsubscribe := s.hub.Subscribe(workspaceID)
+	subscription, unsubscribe := s.hub.Subscribe(workspaceID)
 	defer unsubscribe()
 	acceptOptions := &websocket.AcceptOptions{OriginPatterns: s.websocketOriginPatterns(r)}
 	if bearerProtocol != "" {
@@ -1342,96 +1342,116 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.CloseNow()
-	ctx := r.Context()
-	replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
-	if err != nil {
-		_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-		return
-	}
+	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
-	if replayCursor != "" {
-		exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
+	// Startup and live delivery share one ordered, authorized durable-log drain.
+	// Capture a finite tail each time; a wake received during this drain stays queued.
+	drain := func() bool {
+		replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 		if err != nil {
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
+			return false
 		}
-		if !exists {
-			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-			return
-		}
-	}
-	if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
-		_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-		return
-	}
-	replayedEvents := 0
-	for replayTail != "" && replayCursor < replayTail {
-		pageCursor := replayCursor
-		backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
-		if err != nil {
-			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
-		}
-		if len(backlog) == 0 {
-			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-			return
-		}
-		if pageCursor != "" {
-			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+		if replayCursor != "" {
+			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
 			if err != nil {
 				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-				return
+				return false
 			}
 			if !exists {
 				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-				return
+				return false
 			}
 		}
-		previousCursor := pageCursor
-		for _, event := range backlog {
-			if event.Cursor > replayTail {
-				break
-			}
-			if replayedEvents >= s.realtimeReplayLimit {
-				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-				return
-			}
-			replayedEvents++
-			// ListEventsAfter prefilters visibility, while this live lookup closes
-			// the revocation window between fetching a page and writing its events.
-			deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+		if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return false
+		}
+		replayedEvents := 0
+		for replayTail != "" && replayCursor < replayTail {
+			pageCursor := replayCursor
+			backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
 			if err != nil {
 				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-				return
+				return false
 			}
-			if !deliver {
+			if len(backlog) == 0 {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return false
+			}
+			if pageCursor != "" {
+				exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+				if err != nil {
+					_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+					return false
+				}
+				if !exists {
+					_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+					return false
+				}
+			}
+			previousCursor := pageCursor
+			for _, event := range backlog {
+				if event.Cursor > replayTail {
+					break
+				}
+				if replayedEvents >= s.realtimeReplayLimit {
+					_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+					return false
+				}
+				replayedEvents++
+				// ListEventsAfter prefilters visibility, while this live lookup closes
+				// the revocation window between fetching a page and writing its events.
+				deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+				if err != nil {
+					_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+					return false
+				}
+				if !deliver {
+					replayCursor = event.Cursor
+					continue
+				}
+				if err := writeWS(ctx, conn, event); err != nil {
+					return false
+				}
 				replayCursor = event.Cursor
-				continue
 			}
-			if err := writeWS(ctx, conn, event); err != nil {
-				return
+			if replayCursor == previousCursor {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return false
 			}
-			replayCursor = event.Cursor
 		}
-		if replayCursor == previousCursor {
-			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
-		}
+		return true
+	}
+	if !drain() {
+		return
 	}
 	for {
+		// Prefer overflow termination to starting another durable drain.
+		select {
+		case <-subscription.Done:
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+			return
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case event, ok := <-events:
+		case <-subscription.Done:
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+			return
+		case _, ok := <-subscription.Wake:
 			if !ok {
-				_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
-				return
-			}
-			if event.Cursor != "" && event.Cursor <= replayCursor {
 				continue
 			}
-			// Bot deletion and membership-removal revocations are intentionally
-			// ephemeral, so they only arrive on the live hub path, never replay.
+			if !drain() {
+				return
+			}
+		case event, ok := <-subscription.Events:
+			if !ok {
+				continue
+			}
+			// Revocations and other cursorless events are intentionally ephemeral.
 			if eventRevokesWorkspaceAccess(event, act.user.ID) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
 				return

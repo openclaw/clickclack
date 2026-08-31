@@ -11,7 +11,8 @@ import (
 func TestHubSubscribePublishAndUnsubscribe(t *testing.T) {
 	t.Parallel()
 	hub := NewHub()
-	events, unsubscribe := hub.Subscribe("wsp_1")
+	eventsSubscription, unsubscribe := hub.Subscribe("wsp_1")
+	events := eventsSubscription.Events
 	event := store.Event{ID: "evt_1", WorkspaceID: "wsp_1", Type: "message.created"}
 	hub.Publish(event)
 
@@ -42,9 +43,12 @@ func TestHubSubscribePublishAndUnsubscribe(t *testing.T) {
 func TestHubOverflowClosesOnlySlowSubscriber(t *testing.T) {
 	t.Parallel()
 	hub := NewHub()
-	slow, unsubscribeSlow := hub.Subscribe("wsp_1")
-	healthy, unsubscribeHealthy := hub.Subscribe("wsp_1")
-	isolated, unsubscribeIsolated := hub.Subscribe("wsp_2")
+	slowSubscription, unsubscribeSlow := hub.Subscribe("wsp_1")
+	slow := slowSubscription.Events
+	healthySubscription, unsubscribeHealthy := hub.Subscribe("wsp_1")
+	healthy := healthySubscription.Events
+	isolatedSubscription, unsubscribeIsolated := hub.Subscribe("wsp_2")
+	isolated := isolatedSubscription.Events
 	defer unsubscribeHealthy()
 	defer unsubscribeIsolated()
 
@@ -108,5 +112,41 @@ func receiveEvent(t *testing.T, events <-chan store.Event) store.Event {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for event")
 		return store.Event{}
+	}
+}
+
+func TestDurableWakeCoalescesWithoutPrivatePayload(t *testing.T) {
+	hub := NewHub()
+	sub, unsubscribe := hub.Subscribe("workspace")
+	defer unsubscribe()
+	for i := 0; i < subscriberBufferSize*2; i++ {
+		hub.Publish(store.Event{WorkspaceID: "workspace", Cursor: fmt.Sprintf("cur_%d", i), RecipientUserIDs: []string{"private-user"}, Payload: "private"})
+	}
+	select {
+	case <-sub.Wake:
+	default:
+		t.Fatal("missing durable wake")
+	}
+	select {
+	case <-sub.Wake:
+		t.Fatal("durable wakes were not coalesced")
+	default:
+	}
+	select {
+	case event := <-sub.Events:
+		t.Fatalf("private receipt sent to ephemeral queue: %#v", event)
+	default:
+	}
+	select {
+	case <-sub.Done:
+		t.Fatal("durable burst overflowed subscription")
+	default:
+	}
+	// Once a drain consumes a wake, a publication during that drain must remain queued.
+	hub.Publish(store.Event{WorkspaceID: "workspace", Cursor: "cur_next"})
+	select {
+	case <-sub.Wake:
+	default:
+		t.Fatal("wake during drain lost")
 	}
 }

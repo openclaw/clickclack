@@ -112,3 +112,46 @@ func TestMessageNonceRecoveryFollowsCurrentAccess(t *testing.T) {
 		t.Fatalf("expected replayed hidden channel nonce to be blocked, got %v", err)
 	}
 }
+
+func TestModerationHydrationFailureRollsBack(t *testing.T) {
+	ctx := t.Context()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "hydrate-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "hydrate-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	before, err := st.LatestEventCursor(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only guest quota hydration needs this table; moderation authorization and writes still work.
+	if _, err := st.db.ExecContext(ctx, `DROP TABLE slash_command_invocations`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{WorkspaceID: workspace.ID, ActorUserID: owner.ID, TargetUserID: member.ID, Role: store.WorkspaceRoleGuest}); err == nil {
+		t.Fatal("expected quota hydration failure")
+	}
+	role, err := st.memberRole(ctx, workspace.ID, member.ID)
+	if err != nil || role != store.WorkspaceRoleMember {
+		t.Fatalf("failed moderation committed role %q: %v", role, err)
+	}
+	after, err := st.LatestEventCursor(ctx, workspace.ID, owner.ID)
+	if err != nil || after != before {
+		t.Fatalf("failed moderation committed an event: before=%s after=%s error=%v", before, after, err)
+	}
+}

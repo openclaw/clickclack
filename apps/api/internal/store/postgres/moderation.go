@@ -229,6 +229,10 @@ func (s *Store) ListWorkspaceMembers(ctx context.Context, workspaceID, actorUser
 	if err := requireModeratorTx(ctx, tx, workspaceID, actorUserID); err != nil {
 		return nil, err
 	}
+	return listWorkspaceMembersTx(ctx, tx, workspaceID)
+}
+
+func listWorkspaceMembersTx(ctx context.Context, tx *sql.Tx, workspaceID string) ([]store.MemberModeration, error) {
 	rows, err := storedb.New(tx).ListWorkspaceMembersForModeration(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -377,21 +381,19 @@ func (s *Store) UpdateMemberModeration(ctx context.Context, input store.UpdateMe
 	if err != nil {
 		return store.MemberModeration{}, store.Event{}, err
 	}
-	event, err := insertEventWithRecipients(ctx, tx, input.WorkspaceID, "", "member.moderation_updated", nil, map[string]string{"user_id": input.TargetUserID, "role": targetRole}, recipients)
-	if err != nil {
-		return store.MemberModeration{}, store.Event{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return store.MemberModeration{}, store.Event{}, err
-	}
-	members, err := s.ListWorkspaceMembers(ctx, input.WorkspaceID, input.ActorUserID)
+	members, err := listWorkspaceMembersTx(ctx, tx, input.WorkspaceID)
 	if err != nil {
 		return store.MemberModeration{}, store.Event{}, err
 	}
 	for _, member := range members {
-		if member.User.ID == input.TargetUserID {
-			return member, event, nil
+		if member.User.ID != input.TargetUserID {
+			continue
 		}
+		event, err := insertEventWithRecipients(ctx, tx, input.WorkspaceID, "", "member.moderation_updated", nil, map[string]string{"user_id": input.TargetUserID, "role": targetRole}, recipients)
+		if err != nil {
+			return store.MemberModeration{}, store.Event{}, err
+		}
+		return member, event, tx.Commit()
 	}
 	return store.MemberModeration{}, store.Event{}, sql.ErrNoRows
 }

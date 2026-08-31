@@ -1630,7 +1630,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		EventSubscription store.EventSubscription `json:"event_subscription"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", map[string]any{
 		"app_installation_id": createdInstall.AppInstallation.ID,
-		"event_types":         []string{"message.created"},
+		"event_types":         []string{"message.created", "message.updated"},
 		"callback_url":        eventCallbackServer.URL,
 	})
 	eventSigningSecret = eventSubscription.EventSubscription.SigningSecret
@@ -1703,6 +1703,32 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		nil,
 		http.StatusBadRequest,
 	)
+	// Attachments use the same signed callback owner as other message updates.
+	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "callback.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: filepath.Join(dataDir, "callback.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+topicMessage.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	if eventPayload["event"].(map[string]any)["type"] != "message.updated" {
+		t.Fatalf("missing attachment callback: %#v", eventPayload)
+	}
+	// An idempotent attachment retry and a private DM attachment must not send callbacks.
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+topicMessage.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	privateDM, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{createdBot.Bot.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateMessage, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: privateDM.ID, AuthorID: owner.ID, Body: "private attachment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+privateMessage.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	attachmentDeliveries := getJSONAsUser[struct {
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
+	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
+	if len(attachmentDeliveries.Deliveries) != 4 || attachmentDeliveries.Deliveries[0].EventType != "message.updated" {
+		t.Fatalf("attachment callback count/privacy changed: %#v", attachmentDeliveries)
+	}
 	revokedSubscription := postJSONAsUser[struct {
 		EventSubscription store.EventSubscription `json:"event_subscription"`
 	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/revoke", map[string]any{})

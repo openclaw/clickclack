@@ -322,8 +322,15 @@ func TestDeletePinnedMessagePublishesPinRemovalBeforeDeletion(t *testing.T) {
 		Event         store.Event         `json:"event"`
 	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins", map[string]string{"message_id": message.ID})
 
-	events, unsubscribe := hub.Subscribe(workspaces[0].ID)
-	t.Cleanup(unsubscribe)
+	cursor, err := st.LatestEventCursor(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, _, err := websocket.Dial(ctx, strings.Replace(server.URL, "http://", "ws://", 1)+"/api/realtime/ws?workspace_id="+workspaces[0].ID+"&after_cursor="+cursor, &websocket.DialOptions{HTTPHeader: http.Header{"X-ClickClack-User": []string{owner.ID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
 	deleted := deleteJSONBody[struct {
 		Message store.Message `json:"message"`
 		Event   store.Event   `json:"event"`
@@ -331,16 +338,22 @@ func TestDeletePinnedMessagePublishesPinRemovalBeforeDeletion(t *testing.T) {
 	if deleted.Message.DeletedAt == nil || deleted.Event.Type != "message.deleted" {
 		t.Fatalf("unexpected delete response: %#v", deleted)
 	}
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	for index, want := range []string{"pin.removed", "message.deleted"} {
-		select {
-		case event := <-events:
-			if event.Type != want || event.Payload == nil {
-				t.Fatalf("event %d: expected %s with payload, got %#v", index, want, event)
-			}
-		case <-time.After(time.Second):
-			t.Fatalf("timed out waiting for event %d (%s)", index, want)
+		_, body, err := conn.Read(readCtx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var event store.Event
+		if err := json.Unmarshal(body, &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Type != want || event.Payload == nil {
+			t.Fatalf("event %d: expected %s with payload, got %#v", index, want, event)
 		}
 	}
+
 	pinned := getJSON[struct {
 		Messages []store.Message `json:"messages"`
 	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")

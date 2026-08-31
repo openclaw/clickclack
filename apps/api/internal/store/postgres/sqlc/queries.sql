@@ -1793,3 +1793,15 @@ LIMIT 1;
 SELECT workspace_id, COALESCE(channel_id, '') AS channel_id
 FROM topics
 WHERE id = sqlc.arg(topic_id) AND archived_at IS NULL;
+
+-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = sqlc.arg(workspace_id) ORDER BY cursor DESC LIMIT 1;
+
+-- name: LockEventWorkspace :one
+SELECT id FROM workspaces WHERE id = sqlc.arg(workspace_id) FOR KEY SHARE;
+
+-- name: LockEventRecipient :one
+SELECT id FROM users WHERE id = sqlc.arg(user_id) FOR KEY SHARE;
+
+-- name: LockWorkspaceEventLog :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.events'), hashtext(sqlc.arg(workspace_id)::text));

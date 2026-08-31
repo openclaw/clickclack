@@ -462,120 +462,135 @@ func TestRealtimeCursorAheadOfTailRequestsAuthoritativeResync(t *testing.T) {
 	}
 }
 
-func TestRealtimeOverflowClosesAndReconnectReplays(t *testing.T) {
-	t.Parallel()
-	fixture := newRealtimeWorkspaceFixture(t, "realtime-overflow-owner@example.com")
-	ctx, st, owner, workspace, channel := fixture.ctx, fixture.store, fixture.owner, fixture.workspace, fixture.channel
+func TestRealtimeLiveDrainAndOverflowRecovery(t *testing.T) {
+	for _, overflow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ephemeral_overflow=%t", overflow), func(t *testing.T) {
+			t.Parallel()
+			fixture := newRealtimeWorkspaceFixture(t, "realtime-overflow-owner@example.com")
+			ctx, st, owner, workspace, channel := fixture.ctx, fixture.store, fixture.owner, fixture.workspace, fixture.channel
 
-	hub := realtime.NewHub()
-	tailCaptured := make(chan struct{})
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
-	blockingStore := &blockingChannelStore{
-		Store:        st,
-		tailCaptured: tailCaptured,
-		entered:      entered,
-		release:      release,
-	}
-	server := httptest.NewServer(New(blockingStore, hub, Options{}).Handler())
-	t.Cleanup(server.Close)
+			hub := realtime.NewHub()
+			tailCaptured := make(chan struct{})
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+			blockingStore := &blockingChannelStore{
+				Store:        st,
+				tailCaptured: tailCaptured,
+				entered:      entered,
+				release:      release,
+			}
+			server := httptest.NewServer(New(blockingStore, hub, Options{}).Handler())
+			t.Cleanup(server.Close)
 
-	dial := func(afterCursor string) *websocket.Conn {
-		t.Helper()
-		dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		wsURL := strings.Replace(server.URL, "http://", "ws://", 1) +
-			"/api/realtime/ws?workspace_id=" + url.QueryEscape(workspace.ID) +
-			"&after_cursor=" + url.QueryEscape(afterCursor)
-		conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
-			HTTPHeader: http.Header{"X-ClickClack-User": []string{owner.ID}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return conn
-	}
+			dial := func(afterCursor string) *websocket.Conn {
+				t.Helper()
+				dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				wsURL := strings.Replace(server.URL, "http://", "ws://", 1) +
+					"/api/realtime/ws?workspace_id=" + url.QueryEscape(workspace.ID) +
+					"&after_cursor=" + url.QueryEscape(afterCursor)
+				conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+					HTTPHeader: http.Header{"X-ClickClack-User": []string{owner.ID}},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return conn
+			}
 
-	conn := dial("")
-	t.Cleanup(func() { conn.CloseNow() })
-	select {
-	case <-tailCaptured:
-	case <-time.After(5 * time.Second):
-		t.Fatal("websocket did not capture the replay tail")
-	}
-
-	published := make([]store.Event, 0, 34)
-	for i := 0; i < 34; i++ {
-		_, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
-			ChannelID: channel.ID,
-			AuthorID:  owner.ID,
-			Body:      fmt.Sprintf("overflow message %d", i),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		published = append(published, event)
-		hub.Publish(event)
-		if i == 0 {
+			conn := dial("")
+			t.Cleanup(func() { conn.CloseNow() })
 			select {
-			case <-entered:
+			case <-tailCaptured:
 			case <-time.After(5 * time.Second):
-				t.Fatal("websocket did not begin delivering the first live event")
+				t.Fatal("websocket did not capture the replay tail")
 			}
-		}
-	}
-	releaseOnce.Do(func() { close(release) })
 
-	readCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	received := make([]store.Event, 0, 33)
-	for {
-		_, body, err := conn.Read(readCtx)
-		if err != nil {
-			if got := websocket.CloseStatus(err); got != websocket.StatusTryAgainLater {
-				t.Fatalf("close status = %v, want %v: %v", got, websocket.StatusTryAgainLater, err)
+			published := make([]store.Event, 0, 34)
+			for i := 0; i < 34; i++ {
+				_, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+					ChannelID: channel.ID,
+					AuthorID:  owner.ID,
+					Body:      fmt.Sprintf("overflow message %d", i),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				published = append(published, event)
+				hub.Publish(event)
+				if i == 0 {
+					select {
+					case <-entered:
+					case <-time.After(5 * time.Second):
+						t.Fatal("websocket did not begin delivering the first live event")
+					}
+				}
 			}
-			var closeErr websocket.CloseError
-			if !errors.As(err, &closeErr) {
-				t.Fatalf("expected websocket close error, got %T: %v", err, err)
+			if overflow {
+				for i := 0; i < 34; i++ {
+					hub.Publish(store.Event{WorkspaceID: workspace.ID, Type: "presence.changed"})
+				}
 			}
-			if closeErr.Reason != realtimeOverflowCloseReason {
-				t.Fatalf("close reason = %q, want %q", closeErr.Reason, realtimeOverflowCloseReason)
-			}
-			break
-		}
-		var event store.Event
-		if err := json.Unmarshal(body, &event); err != nil {
-			t.Fatal(err)
-		}
-		received = append(received, event)
-	}
-	if len(received) == 0 || len(received) >= len(published) {
-		t.Fatalf("received %d of %d events before overflow close", len(received), len(published))
-	}
-	for i, event := range received {
-		if event.ID != published[i].ID {
-			t.Fatalf("live event %d = %q, want %q", i, event.ID, published[i].ID)
-		}
-	}
+			releaseOnce.Do(func() { close(release) })
 
-	reconnected := dial(received[len(received)-1].Cursor)
-	defer reconnected.CloseNow()
-	replayCtx, replayCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer replayCancel()
-	for i := len(received); i < len(published); i++ {
-		_, body, err := reconnected.Read(replayCtx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var replayed store.Event
-		if err := json.Unmarshal(body, &replayed); err != nil {
-			t.Fatal(err)
-		}
-		if replayed.ID != published[i].ID {
-			t.Fatalf("replayed event %d = %q, want %q", i, replayed.ID, published[i].ID)
-		}
+			readCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			received := make([]store.Event, 0, 33)
+			for overflow || len(received) < len(published) {
+				_, body, err := conn.Read(readCtx)
+				if err != nil {
+					if !overflow {
+						t.Fatalf("durable burst closed after %d of %d events: %v", len(received), len(published), err)
+					}
+					if got := websocket.CloseStatus(err); got != websocket.StatusTryAgainLater {
+						t.Fatalf("close status = %v, want %v: %v", got, websocket.StatusTryAgainLater, err)
+					}
+					var closeErr websocket.CloseError
+					if !errors.As(err, &closeErr) {
+						t.Fatalf("expected websocket close error, got %T: %v", err, err)
+					}
+					if closeErr.Reason != realtimeOverflowCloseReason {
+						t.Fatalf("close reason = %q, want %q", closeErr.Reason, realtimeOverflowCloseReason)
+					}
+					break
+				}
+				var event store.Event
+				if err := json.Unmarshal(body, &event); err != nil {
+					t.Fatal(err)
+				}
+				received = append(received, event)
+			}
+			if overflow && (len(received) == 0 || len(received) >= len(published)) {
+				t.Fatalf("received %d of %d events before overflow close", len(received), len(published))
+			}
+			for i, event := range received {
+				if event.ID != published[i].ID {
+					t.Fatalf("live event %d = %q, want %q", i, event.ID, published[i].ID)
+				}
+			}
+
+			if !overflow {
+				return
+			}
+			reconnected := dial(received[len(received)-1].Cursor)
+			defer reconnected.CloseNow()
+			replayCtx, replayCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer replayCancel()
+			for i := len(received); i < len(published); i++ {
+				_, body, err := reconnected.Read(replayCtx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var replayed store.Event
+				if err := json.Unmarshal(body, &replayed); err != nil {
+					t.Fatal(err)
+				}
+				if replayed.ID != published[i].ID {
+					t.Fatalf("replayed event %d = %q, want %q", i, replayed.ID, published[i].ID)
+				}
+			}
+		})
 	}
 }

@@ -3028,6 +3028,17 @@ func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorPa
 	return cursor, err
 }
 
+const latestWorkspaceEventCursor = `-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = ?1 ORDER BY cursor DESC LIMIT 1
+`
+
+func (q *Queries) LatestWorkspaceEventCursor(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestWorkspaceEventCursor, workspaceID)
+	var cursor string
+	err := row.Scan(&cursor)
+	return cursor, err
+}
+
 const listBotCommandsForBot = `-- name: ListBotCommandsForBot :many
 SELECT id, workspace_id, bot_user_id, command, description, args_hint, created_at, updated_at
 FROM bot_commands

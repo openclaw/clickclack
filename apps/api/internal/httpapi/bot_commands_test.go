@@ -76,7 +76,8 @@ func TestHTTPBotCommandAuthorizationAndRealtime(t *testing.T) {
 	}
 
 	hub := realtime.NewHub()
-	events, unsubscribe := hub.Subscribe(workspace.ID)
+	subscription, unsubscribe := hub.Subscribe(workspace.ID)
+	events := subscription.Events
 	t.Cleanup(unsubscribe)
 	server := httptest.NewServer(New(st, hub, Options{}).Handler())
 	t.Cleanup(server.Close)

@@ -1714,3 +1714,6 @@ LIMIT 1;
 SELECT workspace_id, COALESCE(channel_id, '') AS channel_id
 FROM topics
 WHERE id = sqlc.arg(topic_id) AND archived_at IS NULL;
+
+-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = sqlc.arg(workspace_id) ORDER BY cursor DESC LIMIT 1;

@@ -46,7 +46,7 @@ export class ThreadController {
 
   constructor(
     private readonly context: () => string,
-    private readonly committed: () => void,
+    private readonly committed: (freshMessages?: Message[]) => void,
   ) {}
 
   get draft(): ReplyDraft | undefined {
@@ -120,7 +120,8 @@ export class ThreadController {
     this.knownTail = Math.max(this.knownTail, page.newest_seq);
     this.reconcileState(page.thread_state);
     this.error = "";
-    this.committed();
+    // Retained replies may still await their refresh page; only this snapshot is fresh.
+    this.committed([page.root, ...page.replies]);
   }
   private reconcileState(incoming: ThreadState) {
     this.state = latestThreadState(this.state, incoming);

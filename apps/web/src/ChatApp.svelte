@@ -2754,10 +2754,10 @@
     }
   }
 
-  function reconcileThread() {
+  function reconcileThread(freshMessages: Message[] = []) {
     const root = thread.root;
     if (!root) return;
-    reactionController.seedMessages([root, ...thread.replies]);
+    reactionController.seedMessages(freshMessages);
     editController.reconcile(currentConversationKey(), [root, ...thread.replies]);
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
   }

@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, readableAPIError } from "./api";
 import { MAX_PROTECTED_MESSAGE_WINDOW, PAGE_MESSAGE_LIMIT } from "./chat/messageWindow";
 import type { Message, ReactionSummary, RealtimeEvent } from "./types";
 
@@ -8,7 +8,7 @@ type ReactionEntry = {
   confirmed: ReactionSummary[];
   displayed: ReactionSummary[];
   complete: boolean;
-  partialEmojis: Set<string>;
+  partialEmojis: Map<string, boolean | undefined>;
   revision: number;
   lastEventCursor: string;
   pendingIntent?: { emoji: string; intent: ReactionIntent };
@@ -54,7 +54,7 @@ export class ReactionController {
         confirmed,
         displayed: applyIntent(confirmed, existing.pendingIntent),
         complete: true,
-        partialEmojis: new Set(),
+        partialEmojis: new Map(),
         revision: ++this.revision,
       });
       changed = true;
@@ -86,6 +86,18 @@ export class ReactionController {
       return;
     }
     const currentUserActed = event.payload.user_id === this.currentUserID();
+    // Other actors establish counts; own events or zero counts establish our flag.
+    const partialEmojis = new Map(existing?.partialEmojis);
+    if (!existing?.complete) {
+      partialEmojis.set(
+        emoji,
+        count <= 0
+          ? false
+          : currentUserActed
+            ? event.type === "reaction.added"
+            : partialEmojis.get(emoji),
+      );
+    }
     const confirmed = applyReactionEvent(
       existing?.confirmed ?? [],
       emoji,
@@ -99,9 +111,7 @@ export class ReactionController {
       confirmed,
       displayed: eventResolvesPendingIntent ? confirmed : applyIntent(confirmed, pendingIntent),
       complete: existing?.complete ?? false,
-      partialEmojis: existing?.complete
-        ? new Set()
-        : new Set([...(existing?.partialEmojis ?? []), emoji]),
+      partialEmojis,
       revision: ++this.revision,
       lastEventCursor: event.cursor || existing?.lastEventCursor || "",
       pendingIntent,
@@ -152,7 +162,7 @@ export class ReactionController {
           confirmed,
           displayed: applyIntent(confirmed, current.pendingIntent),
           complete: true,
-          partialEmojis: new Set(),
+          partialEmojis: new Map(),
           revision: ++this.revision,
         });
       }
@@ -173,7 +183,7 @@ export class ReactionController {
               confirmed,
               displayed: applyIntent(confirmed, current.pendingIntent),
               complete: true,
-              partialEmojis: new Set(),
+              partialEmojis: new Map(),
               revision: ++this.revision,
             });
           }
@@ -185,7 +195,9 @@ export class ReactionController {
       if (generation === this.generation && current) {
         this.setEntry(message.id, {
           ...current,
-          error: intentSatisfied(current.confirmed, pendingIntent) ? "" : readableError(error),
+          error: intentSatisfied(current.confirmed, pendingIntent)
+            ? ""
+            : readableAPIError(error, "Could not update reaction"),
         });
       }
     } finally {
@@ -215,7 +227,7 @@ export class ReactionController {
       confirmed,
       displayed: confirmed,
       complete,
-      partialEmojis: new Set(),
+      partialEmojis: new Map(),
       revision: ++this.revision,
       lastEventCursor: "",
       error: "",
@@ -246,13 +258,17 @@ function normalizeReactions(reactions: ReactionSummary[]): ReactionSummary[] {
 function mergePartialReactions(
   complete: ReactionSummary[],
   partial: ReactionSummary[],
-  partialEmojis: Set<string>,
+  partialEmojis: Map<string, boolean | undefined>,
 ): ReactionSummary[] {
   const byEmoji = new Map(complete.map((reaction) => [reaction.emoji, reaction]));
   const partialByEmoji = new Map(partial.map((reaction) => [reaction.emoji, reaction]));
-  for (const emoji of partialEmojis) {
+  for (const [emoji, reactedByMe] of partialEmojis) {
     const reaction = partialByEmoji.get(emoji);
-    if (reaction) byEmoji.set(emoji, reaction);
+    if (reaction)
+      byEmoji.set(emoji, {
+        ...reaction,
+        reacted_by_me: reactedByMe ?? byEmoji.get(emoji)?.reacted_by_me ?? false,
+      });
     else byEmoji.delete(emoji);
   }
   return sortReactions([...byEmoji.values()]);
@@ -333,14 +349,4 @@ function trimEntries(entries: Map<string, ReactionEntry>): Map<string, ReactionE
     if (entry?.pendingIntent) entries.set(oldestMessageID, entry);
   }
   return entries;
-}
-
-function readableError(error: unknown): string {
-  if (!(error instanceof Error)) return "Could not update reaction";
-  try {
-    const body = JSON.parse(error.message) as { error?: string };
-    return body.error || "Could not update reaction";
-  } catch {
-    return error.message || "Could not update reaction";
-  }
 }

@@ -410,6 +410,7 @@
       onEvent: handleRealtimeEvent,
       onOpen: async (isCurrent, authoritativeResync) => {
         if (authoritativeResync) {
+          reactionController.clear();
           await reconcileChannelSnapshot(isCurrent);
         }
         if (!isCurrent()) return;

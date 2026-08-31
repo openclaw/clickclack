@@ -216,9 +216,9 @@
     }
   }
 
-  function reconcileThread() {
+  function reconcileThread(freshMessages: Message[] = []) {
     if (!root) return;
-    reactionController.seedMessages([root, ...replies]);
+    reactionController.seedMessages(freshMessages);
     editController.reconcile(route?.target_id || root.id, [root, ...replies]);
   }
   async function refreshThread(isCurrent: () => boolean = () => true) {
@@ -272,7 +272,10 @@
       workspaceID,
       onEvent: handleRealtimeEvent,
       onOpen: async (isCurrent, authoritativeResync) => {
-        if (authoritativeResync) await refreshThread(isCurrent);
+        if (authoritativeResync) {
+          reactionController.clear();
+          await refreshThread(isCurrent);
+        }
         if (!isCurrent()) return;
         realtimeError = "";
       },

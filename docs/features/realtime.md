@@ -167,7 +167,8 @@ progress while retaining targetless, workspace-wide presence events.
   processed and resume from there. If the 5,000-event work budget is exhausted,
   the server closes with code `4001`; the web client clears its stale cursor,
   captures a fresh tail, completes an authoritative projection resync, and then
-  resumes live delivery.
+  resumes live delivery. Chat and embedded views reset reaction projections
+  before hydrating fresh message pages, including every retained thread page.
 - A durable burst coalesces wakeups without losing log rows. If a subscriber's
   ephemeral queue overflows, or a socket write cannot finish within its timeout,
   the connection closes so the client can reconnect with its last processed

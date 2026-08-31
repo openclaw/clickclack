@@ -1,8 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+import { deferred } from "./thread-fixture";
 
-async function openReactionChannel(page: Page) {
+async function openReactionChannel(page: Page, open = true) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `Reaction Proof ${suffix}` },
@@ -19,9 +20,11 @@ async function openReactionChannel(page: Page) {
     channel: { id: string; route_id: string; name: string };
   };
 
-  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
-  await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+  if (open) {
+    await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+    await waitForAppReady(page);
+    await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+  }
   return { suffix, workspace, channel };
 }
 
@@ -663,57 +666,114 @@ test("ambiguous failures recover server state and preserve newer realtime reacti
   await expect(row.getByRole("status")).toContainText("failed");
 });
 
-test("a reaction event received during pagination survives the stale page response", async ({
-  page,
-}) => {
-  const { channel } = await openReactionChannel(page);
-  const created: Array<{ id: string }> = [];
-  for (let index = 0; index < 140; index++) {
-    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
-      data: { body: `reaction-history-${String(index).padStart(3, "0")}` },
+for (const scenario of [
+  { name: "own add", initialOwn: false, actions: ["add"], count: 1, own: true },
+  { name: "foreign add", initialOwn: true, actions: ["foreign add"], count: 2, own: true },
+  { name: "own remove", initialOwn: true, actions: ["remove"], count: 0, own: false },
+  {
+    name: "own remove then foreign add",
+    initialOwn: true,
+    actions: ["remove", "foreign add"],
+    count: 1,
+    own: false,
+  },
+] as const) {
+  test(`reaction ${scenario.name} before pagination retains the newer count and viewer fact`, async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const { workspace, channel } = await openReactionChannel(page, false);
+    const member = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+      data: { display_name: "Other reactor", initial_token: false },
     });
-    expect(response.ok()).toBe(true);
-    const data = (await response.json()) as { message: { id: string } };
-    created.push(data.message);
-  }
-  await page.reload();
-  await waitForAppReady(page);
-
-  await page.getByLabel("Search messages").fill("reaction-history-010");
-  await page.getByRole("button", { name: "Search", exact: true }).click();
-  const result = page
-    .getByLabel("Search results")
-    .locator(".search-result", { hasText: "reaction-history-010" });
-  await expect(result).toBeVisible();
-
-  let releasePage!: () => void;
-  let markPageCaptured!: () => void;
-  const pageGate = new Promise<void>((resolve) => {
-    releasePage = resolve;
+    expect(member.ok()).toBe(true);
+    const { bot } = await member.json();
+    const created: Array<{ id: string }> = [];
+    for (let index = 0; index < 140; index++) {
+      const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+        data: { body: `reaction-history-${String(index).padStart(3, "0")}` },
+      });
+      expect(response.ok()).toBe(true);
+      created.push((await response.json()).message);
+    }
+    const reactionPath = `/api/messages/${created[10].id}/reactions`;
+    if (scenario.initialOwn) {
+      expect((await page.request.post(reactionPath, { data: { emoji: "👀" } })).ok()).toBe(true);
+    }
+    expect(
+      (await page.request.post(`/api/channels/${channel.id}/read`, { data: { seq: 140 } })).ok(),
+    ).toBe(true);
+    await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+    await waitForAppReady(page);
+    const target = page.locator(`.message-row[data-message-id="${created[10].id}"]`);
+    await expect(target).toHaveCount(0);
+    await page.getByLabel("Search messages").fill("reaction-history-010");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const entered = deferred(),
+      release = deferred();
+    await page.route(`**/api/channels/${channel.id}/messages?around_seq=*`, async (route) => {
+      const response = await route.fetch();
+      entered.resolve();
+      await release.promise;
+      await route.fulfill({ response });
+    });
+    try {
+      await page
+        .getByLabel("Search results")
+        .locator(".search-result", { hasText: "reaction-history-010" })
+        .click();
+      await entered.promise;
+      for (const action of scenario.actions) {
+        const response =
+          action === "remove"
+            ? await page.request.delete(`${reactionPath}/${encodeURIComponent("👀")}`)
+            : await page.request.post(reactionPath, {
+                headers: action === "foreign add" ? { "X-ClickClack-User": bot.id } : {},
+                data: { emoji: "👀" },
+              });
+        expect(response.ok()).toBe(true);
+        const { event } = await response.json();
+        expect(event.cursor).toBeTruthy();
+        await expect
+          .poll(async () => {
+            const cursor = await page.evaluate(
+              (id) => localStorage.getItem(`clickclack:${id}:cursor`),
+              workspace.id,
+            );
+            return Boolean(cursor && cursor >= event.cursor);
+          })
+          .toBe(true);
+      }
+      release.resolve();
+      await expect(target).toBeInViewport();
+      if (scenario.count === 0) {
+        await expect(target.getByRole("button", { name: /👀 —/ })).toHaveCount(0);
+        return;
+      }
+      const reaction = target.getByRole("button", {
+        name: `👀 — ${scenario.count} reaction${scenario.count === 1 ? "" : "s"}`,
+        exact: true,
+      });
+      await expect(reaction).toHaveAttribute("aria-pressed", String(scenario.own));
+      const firstAction = page.waitForRequest((request) =>
+        new URL(request.url()).pathname.startsWith(reactionPath),
+      );
+      await reaction.press("Enter");
+      expect((await firstAction).method()).toBe(scenario.own ? "DELETE" : "POST");
+      const count = scenario.count + (scenario.own ? -1 : 1);
+      if (count === 0) await expect(target.getByRole("button", { name: /👀 —/ })).toHaveCount(0);
+      else
+        await expect(
+          target.getByRole("button", {
+            name: `👀 — ${count} reaction${count === 1 ? "" : "s"}`,
+            exact: true,
+          }),
+        ).toHaveAttribute("aria-pressed", String(!scenario.own));
+    } finally {
+      release.resolve();
+    }
   });
-  const pageCaptured = new Promise<void>((resolve) => {
-    markPageCaptured = resolve;
-  });
-  await page.route(`**/api/channels/${channel.id}/messages?around_seq=*`, async (route) => {
-    const response = await route.fetch();
-    markPageCaptured();
-    await pageGate;
-    await route.fulfill({ response });
-  });
-
-  await result.click();
-  await pageCaptured;
-  const reactionResponse = await page.request.post(`/api/messages/${created[10].id}/reactions`, {
-    data: { emoji: "👀" },
-  });
-  expect(reactionResponse.ok()).toBe(true);
-  releasePage();
-
-  const target = page.locator(`[data-message-id="${created[10].id}"]`);
-  const neighbor = page.locator(`[data-message-id="${created[11].id}"]`);
-  await expect(target.getByRole("button", { name: "👀 — 1 reaction" })).toBeVisible();
-  await expect(neighbor).toBeVisible();
-});
+}
 
 test("thread roots and replies share reaction controls and realtime state", async ({ page }) => {
   const { suffix } = await openReactionChannel(page);

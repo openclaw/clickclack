@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed reaction viewer state when realtime events arrive before history pages, and refreshed root and reply reactions after authoritative reconnects in chat and embeds.
+
 - Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, ignored topic filter changes during loading, and target scrolling within long same-author message groups.
 
 - Fixed delayed parent navigation dismissing a newly selected search reply or hiding its load error.

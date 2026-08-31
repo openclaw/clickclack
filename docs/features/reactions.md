@@ -39,6 +39,13 @@ The event payload contains `{message_id, emoji, user_id, count}` and inherits
 the message's `channel_seq`. `count` is the authoritative total for that emoji
 after the mutation, so realtime clients do not need to refetch the message.
 
+An event from another user establishes the count, but does not establish the
+viewer's own reaction flag. When an event arrives before a history page, the
+web client combines that newer count with the page's viewer flag unless an
+own-user event or a zero count has already established the flag. Authoritative
+reconnects discard cached reactions and hydrate roots and replies from each
+fresh snapshot page; ordinary pages preserve newer realtime state.
+
 ## Storage
 
 Reactions are stored verbatim — there's no allowlist or canonical shortcode

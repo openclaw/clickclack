@@ -11,8 +11,7 @@ import (
 )
 
 func TestUpsertIdentityUserConcurrentCreation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "identity.db")
 	const callers = 8
 	stores := make([]*Store, callers)
@@ -29,6 +28,8 @@ func TestUpsertIdentityUserConcurrentCreation(t *testing.T) {
 			}
 		}
 	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	type result struct {
 		user store.User
 		err  error

@@ -10,12 +10,13 @@ import (
 )
 
 func TestUpsertIdentityUserConcurrentCreation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	gate := mustBeginPostgresTx(t, ctx, st.db)
 	if _, err := gate.ExecContext(ctx, `LOCK TABLE users IN SHARE MODE`); err != nil {
 		t.Fatal(err)
@@ -92,8 +93,7 @@ func TestIdentityUserPolicies(t *testing.T) {
 }
 
 func TestUpsertIdentityUserWaitsForLateEmailFallback(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
@@ -103,6 +103,8 @@ func TestUpsertIdentityUserWaitsForLateEmailFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	// Hold an uncommitted email/fallback update, as another linked identity can do.
 	writer := mustBeginPostgresTx(t, ctx, st.db)
 	if _, err := writer.ExecContext(ctx, `UPDATE users SET avatar_url = $1 WHERE id = $2`, store.ResolveAvatarURL("", "late@example.com"), user.ID); err != nil {

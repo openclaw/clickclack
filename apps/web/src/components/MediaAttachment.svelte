@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { artifactKindLabel, classifyArtifact } from "../lib/artifacts";
+  import { artifactContentType, artifactKindLabel, artifactPreviewLimit, classifyArtifact } from "../lib/artifacts";
+  import { formatBytes } from "../lib/uploads";
   import type { Upload } from "../lib/types";
 
   type Props = {
@@ -19,20 +20,12 @@
   let loadedDurationLabel = $state("");
   let durationLabel = $derived(loadedDurationLabel || formatDuration(upload.duration_ms ?? 0));
 
-  let contentType = $derived((upload.content_type || "").split(";")[0].trim().toLowerCase());
+  let contentType = $derived(artifactContentType(upload));
   let artifactKind = $derived(classifyArtifact(upload));
   let isImage = $derived(artifactKind === "unsupported" && contentType.startsWith("image/"));
   let isVideo = $derived(artifactKind === "unsupported" && contentType.startsWith("video/"));
   let isAudio = $derived(artifactKind === "unsupported" && contentType.startsWith("audio/"));
-  let canPreviewDocument = $derived(
-    artifactKind === "code" ||
-      artifactKind === "text" ||
-      artifactKind === "markdown" ||
-      artifactKind === "pdf" ||
-      artifactKind === "spreadsheet" ||
-      artifactKind === "presentation" ||
-      artifactKind === "html",
-  );
+  let canPreviewDocument = $derived(artifactPreviewLimit(artifactKind) !== undefined);
   let documentLabel = $derived(artifactKindLabel(artifactKind));
 
   let mediaStyle = $derived.by(() => {
@@ -65,12 +58,6 @@
     if (!videoEl) return;
     started = true;
     void videoEl.play();
-  }
-
-  function formatBytes(size: number) {
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
 </script>

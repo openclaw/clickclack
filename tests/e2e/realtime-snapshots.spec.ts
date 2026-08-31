@@ -76,6 +76,15 @@ test("a channel snapshot cannot consume a live timeline event", async ({ page })
     const { message } = await response.json();
     release.resolve();
     await expect(page.locator(`.message-row[data-message-id="${message.id}"]`)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/workspaces/${workspace.id}/channels`);
+        const { channels }: { channels: Channel[] } = await response.json();
+        return channels.find((channel) => channel.id === active.id)?.last_read_seq;
+      })
+      .toBe(message.channel_seq);
+    await expect(page.getByRole("separator", { name: "New messages" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Jump to .*new message/ })).toHaveCount(0);
   } finally {
     release.resolve();
   }

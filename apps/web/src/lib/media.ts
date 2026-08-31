@@ -4,56 +4,47 @@ export type MediaProbe = {
   durationMS: number;
 };
 
-export async function probeMediaDimensions(file: File): Promise<MediaProbe> {
-  if (file.type.startsWith("image/")) {
-    return probeImage(file);
-  }
-  if (file.type.startsWith("video/")) {
-    return probeVideo(file);
-  }
-  return { width: 0, height: 0, durationMS: 0 };
-}
-
-function probeImage(file: File): Promise<MediaProbe> {
+export function probeMediaDimensions(file: File, signal: AbortSignal): Promise<MediaProbe> {
+  const empty = { width: 0, height: 0, durationMS: 0 };
+  const image = file.type.startsWith("image/");
+  if (signal.aborted || (!image && !file.type.startsWith("video/"))) return Promise.resolve(empty);
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const out = { width: img.naturalWidth, height: img.naturalHeight, durationMS: 0 };
+    const media = image ? new Image() : document.createElement("video");
+    const loadedEvent = image ? "load" : "loadedmetadata";
+    function finish(probe = empty) {
+      media.removeEventListener(loadedEvent, loaded);
+      media.removeEventListener("error", cancelled);
+      signal.removeEventListener("abort", cancelled);
+      media.removeAttribute("src");
+      if (media instanceof HTMLVideoElement) media.load();
       URL.revokeObjectURL(url);
-      resolve(out);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: 0, height: 0, durationMS: 0 });
-    };
-    img.src = url;
-  });
-}
-
-function probeVideo(file: File): Promise<MediaProbe> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.muted = true;
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      video.src = "";
-    };
-    video.onloadedmetadata = () => {
-      const durationMS =
-        Number.isFinite(video.duration) && video.duration > 0
-          ? Math.round(video.duration * 1000)
-          : 0;
-      const out = { width: video.videoWidth, height: video.videoHeight, durationMS };
-      cleanup();
-      resolve(out);
-    };
-    video.onerror = () => {
-      cleanup();
-      resolve({ width: 0, height: 0, durationMS: 0 });
-    };
-    video.src = url;
+      resolve(probe);
+    }
+    function cancelled() {
+      finish();
+    }
+    function loaded() {
+      finish(
+        media instanceof HTMLImageElement
+          ? { width: media.naturalWidth, height: media.naturalHeight, durationMS: 0 }
+          : {
+              width: media.videoWidth,
+              height: media.videoHeight,
+              durationMS:
+                Number.isFinite(media.duration) && media.duration > 0
+                  ? Math.round(media.duration * 1000)
+                  : 0,
+            },
+      );
+    }
+    if (media instanceof HTMLVideoElement) {
+      media.preload = "metadata";
+      media.muted = true;
+    }
+    media.addEventListener(loadedEvent, loaded);
+    media.addEventListener("error", cancelled);
+    signal.addEventListener("abort", cancelled, { once: true });
+    media.src = url;
   });
 }

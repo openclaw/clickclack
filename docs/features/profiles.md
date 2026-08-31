@@ -65,3 +65,5 @@ presence, user ID, and a Message action for starting or jumping to a DM.
 
 Message lists, search results, threads, DMs, and the profile control all hydrate
 avatars from the user attached to each message or conversation member.
+The member directory uses the same avatar fallback: an unavailable image shows
+the user's initial while retaining the member or bot styling.

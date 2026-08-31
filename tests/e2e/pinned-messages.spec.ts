@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+import { deferred } from "./thread-fixture";
+import type { Channel, Message } from "../../apps/web/src/lib/types";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
@@ -62,6 +64,80 @@ async function createDirectConversation(page: Page, label: string) {
   };
   return { workspace, conversation };
 }
+
+test("a delayed unpin receipt preserves the newly selected channel's pins", async ({ page }) => {
+  const { workspace, channel } = await openPinChannel(page);
+  const otherResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "other-pins" },
+  });
+  expect(otherResponse.ok()).toBe(true);
+  const { channel: other }: { channel: Channel } = await otherResponse.json();
+  const messages: Message[] = [];
+  for (const target of [channel, other]) {
+    const response = await page.request.post(`/api/channels/${target.id}/messages`, {
+      data: { body: `Pinned message in ${target.name}` },
+    });
+    expect(response.ok()).toBe(true);
+    const { message }: { message: Message } = await response.json();
+    messages.push(message);
+    expect(
+      (
+        await page.request.post(`/api/channels/${target.id}/pins`, {
+          data: { message_id: message.id },
+        })
+      ).ok(),
+    ).toBe(true);
+  }
+  await page.reload();
+  await waitForAppReady(page);
+  await page.getByRole("button", { name: "Pinned items" }).click();
+  const panel = page.getByRole("complementary", { name: "Pinned messages pane" });
+  await expect(panel.getByText(messages[0].body)).toBeVisible();
+  const unpinHeld = deferred(),
+    unpinRequested = deferred();
+  const pinsHeld = deferred(),
+    pinsRequested = deferred();
+  const unpinPath = `/api/channels/${channel.id}/pins/${messages[0].id}`;
+  await page.route(`**${unpinPath}`, async (route) => {
+    const response = await route.fetch();
+    unpinRequested.resolve();
+    await unpinHeld.promise;
+    await route.fulfill({ response });
+  });
+  await page.route(`**/api/channels/${other.id}/pins?*`, async (route) => {
+    const response = await route.fetch();
+    pinsRequested.resolve();
+    await pinsHeld.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await panel.getByRole("button", { name: "Unpin message" }).click();
+    await unpinRequested.promise;
+    await page.locator(`#sidebar-channels-list a[href$="/${other.route_id}"]`).click();
+    await pinsRequested.promise;
+    const received = page.waitForResponse((response) => response.url().endsWith(unpinPath));
+    unpinHeld.resolve();
+    await (await received).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    pinsHeld.resolve();
+    const persisted = await page.request.get(`/api/channels/${other.id}/pins`);
+    const { messages: pinned }: { messages: Message[] } = await persisted.json();
+    expect(pinned.map((message) => message.id)).toEqual([messages[1].id]);
+    const row = page.locator(`.message-row[data-message-id="${messages[1].id}"]`);
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "More actions" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(row.getByRole("menuitem", { name: "Unpin message" })).toBeVisible();
+  } finally {
+    unpinHeld.resolve();
+    pinsHeld.resolve();
+  }
+});
 
 test("pins are shared, persistent, and removable through ClickClack", async ({ page }) => {
   const { suffix, channel } = await openPinChannel(page);

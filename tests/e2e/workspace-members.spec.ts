@@ -400,3 +400,37 @@ test("embedded newer-message loads are scoped to the active recovery generation"
     for (const release of releases) release();
   }
 });
+
+test("member avatars fall back after image failure and retain bot images", async ({ page }) => {
+  const data = await fixture(page);
+  const botResponse = await page.request.post(`/api/workspaces/${data.workspace.id}/bots`, {
+    data: { display_name: "Avatar bot" },
+  });
+  expect(botResponse.ok()).toBe(true);
+  const { bot } = await botResponse.json();
+  await page.route(`**/api/workspaces/${data.workspace.id}/members?**`, async (route) => {
+    const response = await route.fetch();
+    const result = await response.json();
+    for (const member of result.members) {
+      member.user.avatar_url = new URL(
+        member.user.id === bot.id ? "/favicon.svg" : "/api/synthetic-missing-avatar",
+        route.request().url(),
+      ).href;
+      if (member.user.id !== bot.id) member.user.display_name = "Avatar proof";
+    }
+    await route.fulfill({ response, json: result });
+  });
+  await page.goto(`/app/${data.workspace.route_id}/settings/members`);
+  const human = page.locator(".ws-members__row", { hasText: "Avatar proof" });
+  await expect(human.locator(".ws-members__avatar")).toHaveText("A");
+  await expect(human.locator(".ws-members__avatar img")).toHaveCount(0);
+  await expect(human.locator('[aria-hidden="true"] .ws-members__avatar')).toBeVisible();
+  const botAvatar = page
+    .locator(".ws-members__row", { hasText: "Avatar bot" })
+    .locator(".ws-members__avatar");
+  await expect(botAvatar).toHaveClass(/ws-members__avatar--bot/);
+  await expect
+    .poll(() => botAvatar.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+  expect(await botAvatar.boundingBox()).toMatchObject({ width: 36, height: 36 });
+});

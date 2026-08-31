@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed stale pin and upload responses affecting newer selections, restored upload failure retries and member avatar fallbacks, and kept live messages read when a channel snapshot arrives before their events.
+
 - Fixed CLI status pairing a channel with the wrong workspace and silently treating discovery failures as empty selections.
 
 - Fixed channel-list refreshes hiding live messages and notifications, and prevented duplicate message alerts after realtime recovery.

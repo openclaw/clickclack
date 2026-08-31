@@ -38,6 +38,13 @@ POST /api/messages/{message_id}/attachments        # { upload_id }
 
 ## Attaching to a message
 
+The web composer keeps a ready attachment when switching channels within the
+same workspace. Switching workspaces abandons it and cancels pending uploads,
+including metadata probing. Selecting another file supersedes the older
+request; sending the visible draft or removing its attachment also cancels a
+pending replacement. Upload failures appear in the composer and can be retried
+with the same file.
+
 `POST /api/messages/{message_id}/attachments` records a row in
 `message_attachments`. The store hydrates attachments on
 `ListMessages`/`GetThread`, so subsequent reads include the attachment list

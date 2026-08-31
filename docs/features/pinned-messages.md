@@ -10,6 +10,9 @@ the whole channel's pins, even while the timeline is filtered to a topic. It pre
 and resolved-mention rendering so a pinned message reads the same as it does in the timeline. Pins
 are shared channel state, not a per-user bookmark. Direct messages do not support pins.
 
+Pin refreshes belong to the selected channel. A delayed pin or unpin response
+from a previous channel cannot replace the current channel's pin state.
+
 ## Endpoints
 
 ```http

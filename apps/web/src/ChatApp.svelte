@@ -157,6 +157,10 @@
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
   let pendingUpload: Upload | null = null;
+  let uploadWorkspaceID = "";
+  let uploadController: AbortController | null = null;
+
+  $: if (uploadWorkspaceID && uploadWorkspaceID !== selectedWorkspaceID) clearPendingUpload();
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
   let channelSettingsOpen = false;
@@ -489,6 +493,7 @@
   }
 
   onDestroy(() => {
+    clearPendingUpload();
     thread.close();
     routeApplySerial += 1;
     workspaceMembersLoadSerial += 1;
@@ -866,7 +871,7 @@
           return;
         }
         resetTopicStateForConversation(targetID);
-        await Promise.all([loadMessages(), loadPinnedMessages(targetID, "")]);
+        await Promise.all([loadMessages(), loadPinnedMessages()]);
         if (serial !== routeApplySerial) return;
         pinnedPanelOpen = shouldOpenPinnedPanel;
         appliedRouteKey = canonicalRouteKey;
@@ -990,7 +995,7 @@
     mobileNavOpen = false;
     if (!await selectThread(route.target_id, undefined, () => serial === routeApplySerial)) return false;
     const selection = thread.selection;
-    if (parentChannelID) await loadPinnedMessages(parentChannelID, "");
+    if (parentChannelID) await loadPinnedMessages();
     if (!thread.isCurrent(selection) || serial !== routeApplySerial) return false;
     if (
       !sameThread &&
@@ -2383,6 +2388,7 @@
       const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
       if (slash && registered) {
         messageBody = "";
+        clearPendingUpload();
         await dispatchRegisteredCommand(
           selectedChannelID,
           slash.command,
@@ -2408,7 +2414,7 @@
     };
     messageBody = "";
     if (quote) clearReplyTarget();
-    pendingUpload = null;
+    clearPendingUpload();
     await dispatchDraft(draft);
   }
 
@@ -3083,20 +3089,41 @@
     }
   }
 
+  function clearPendingUpload() {
+    uploadController?.abort();
+    uploadController = null;
+    uploadWorkspaceID = "";
+    pendingUpload = null;
+  }
+
   async function uploadFile(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file || !selectedWorkspaceID) return;
-    const probe = await probeMediaDimensions(file);
-    const form = new FormData();
-    form.set("workspace_id", selectedWorkspaceID);
-    form.set("file", file);
-    if (probe.width > 0) form.set("width", String(probe.width));
-    if (probe.height > 0) form.set("height", String(probe.height));
-    if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
-    const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
-    pendingUpload = data.upload;
+    const workspaceID = selectedWorkspaceID;
+    if (!file || !workspaceID) return;
     input.value = "";
+    uploadController?.abort();
+    const controller = new AbortController();
+    uploadController = controller;
+    uploadWorkspaceID = workspaceID;
+    composerNotice = null;
+    const isCurrent = () => uploadController === controller && !controller.signal.aborted && selectedWorkspaceID === workspaceID;
+    try {
+      const probe = await probeMediaDimensions(file, controller.signal);
+      if (!isCurrent()) return;
+      const form = new FormData();
+      form.set("workspace_id", workspaceID);
+      form.set("file", file);
+      if (probe.width > 0) form.set("width", String(probe.width));
+      if (probe.height > 0) form.set("height", String(probe.height));
+      if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
+      const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form, signal: controller.signal });
+      if (isCurrent()) pendingUpload = data.upload;
+    } catch (error) {
+      if (isCurrent()) composerNotice = { kind: "error", text: readableAPIError(error, "Could not upload file") };
+    } finally {
+      if (uploadController === controller) uploadController = null;
+    }
   }
 
   async function loadDirectConversations(workspaceID = selectedWorkspaceID) {
@@ -3453,7 +3480,7 @@
       }
       if (!isCurrent()) return;
       if (event.type === "message.created") {
-        handleUnreadBump(event, wasAtLiveEdge);
+        handleUnreadBump(event, wasAtLiveEdge, missingMessage);
       }
       // MessageList owns following and read receipts once layout settles.
       // Waiting for its frames here would stop durable ingestion in hidden tabs.
@@ -3554,7 +3581,7 @@
     }
   }
 
-  function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean) {
+  function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean, newToView = false) {
     const payload = event.payload as Record<string, unknown>;
     // Durable agent activity messages never bump unread counts, mirroring the
     // server-side accounting (their rows are excluded from unread subqueries).
@@ -3567,45 +3594,23 @@
     if (payload.parent_message_id) return;
     const seq = eventMessageSeq(event);
     const { channelID, dmID } = messageEventScope(event);
-    if (seq > 0 && seq <= (unreadStateForKey(channelID || dmID).last_seq || 0)) return;
-    if (channelID) {
-      const isActive = channelID === selectedChannelID && !selectedDirectID;
-      const activeAtBottom =
-        isActive && !activeTopicFilterID ? activeWasAtBottom ?? isAtLiveEdge() : false;
-      const channel = channels.find((c) => c.id === channelID);
-      const incomingSeq = seq > 0 ? seq : (channel?.last_seq || 0) + 1;
-      if (isActive && !activeAtBottom && (channel?.unread_count || 0) === 0) {
-        rememberUnreadMarkerFromEvent(channelID, channel?.last_read_seq || 0, event.created_at);
-      }
-      channels = channels.map((c) => {
-        if (c.id !== channelID) return c;
-        const lastSeq = Math.max(c.last_seq || 0, incomingSeq);
-        const lastReadSeq =
-          isActive && !activeAtBottom && (c.unread_count || 0) === 0
-            ? Math.max(c.last_read_seq || 0, incomingSeq - 1)
-            : c.last_read_seq || 0;
-        const unread = activeAtBottom ? 0 : (c.unread_count || 0) + 1;
-        return { ...c, last_seq: lastSeq, last_read_seq: lastReadSeq, unread_count: unread };
-      });
-    } else if (dmID) {
-      const isActive = dmID === selectedDirectID;
-      const activeAtBottom = isActive ? activeWasAtBottom ?? isAtLiveEdge() : false;
-      const dm = directConversations.find((c) => c.id === dmID);
-      const incomingSeq = seq > 0 ? seq : (dm?.last_seq || 0) + 1;
-      if (isActive && !activeAtBottom && (dm?.unread_count || 0) === 0) {
-        rememberUnreadMarkerFromEvent(dmID, dm?.last_read_seq || 0, event.created_at);
-      }
-      directConversations = directConversations.map((c) => {
-        if (c.id !== dmID) return c;
-        const lastSeq = Math.max(c.last_seq || 0, incomingSeq);
-        const lastReadSeq =
-          isActive && !activeAtBottom && (c.unread_count || 0) === 0
-            ? Math.max(c.last_read_seq || 0, incomingSeq - 1)
-            : c.last_read_seq || 0;
-        const unread = activeAtBottom ? 0 : (c.unread_count || 0) + 1;
-        return { ...c, last_seq: lastSeq, last_read_seq: lastReadSeq, unread_count: unread };
-      });
-    }
+    const key = channelID || dmID;
+    if (!key) return;
+    const state = unreadStateForKey(key);
+    const isActive = channelID ? channelID === selectedChannelID && !selectedDirectID : dmID === selectedDirectID;
+    const activeAtBottom = isActive && (!channelID || !activeTopicFilterID) && (activeWasAtBottom ?? isAtLiveEdge());
+    // A snapshot can count a live message before its row reaches the following view.
+    if (seq > 0 && seq <= (state.last_seq || 0) && !(newToView && activeAtBottom)) return;
+    const incomingSeq = seq > 0 ? seq : (state.last_seq || 0) + 1;
+    const startsUnread = isActive && !activeAtBottom && (state.unread_count || 0) === 0;
+    if (startsUnread) rememberUnreadMarkerFromEvent(key, state.last_read_seq || 0, event.created_at);
+    const next = {
+      last_seq: Math.max(state.last_seq || 0, incomingSeq),
+      last_read_seq: startsUnread ? Math.max(state.last_read_seq || 0, incomingSeq - 1) : state.last_read_seq || 0,
+      unread_count: activeAtBottom ? 0 : (state.unread_count || 0) + 1,
+    };
+    if (channelID) channels = channels.map((channel) => channel.id === key ? { ...channel, ...next } : channel);
+    else directConversations = directConversations.map((conversation) => conversation.id === key ? { ...conversation, ...next } : conversation);
   }
 
   function handleTypingEvent(event: RealtimeEvent) {
@@ -3897,9 +3902,11 @@
     status = "pick a message to open its thread";
   }
 
-  async function loadPinnedMessages(channelID = selectedChannelID, directID = selectedDirectID) {
+  async function loadPinnedMessages() {
+    const channelID = selectedChannelID;
     const serial = ++pinnedMessagesLoadSerial;
-    if (!channelID || directID) {
+    const isCurrent = () => serial === pinnedMessagesLoadSerial && channelID === selectedChannelID && !selectedDirectID;
+    if (!channelID || selectedDirectID) {
       pinnedMessages = [];
       pinnedMessagesError = "";
       pinnedMessagesLoading = false;
@@ -3909,13 +3916,13 @@
     pinnedMessagesError = "";
     try {
       const data = await api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`);
-      if (serial !== pinnedMessagesLoadSerial || channelID !== selectedChannelID || selectedDirectID) return;
+      if (!isCurrent()) return;
       pinnedMessages = data.messages;
     } catch (error) {
-      if (serial !== pinnedMessagesLoadSerial) return;
+      if (!isCurrent()) return;
       pinnedMessagesError = error instanceof Error ? error.message : "Could not load pinned messages";
     } finally {
-      if (serial === pinnedMessagesLoadSerial) pinnedMessagesLoading = false;
+      if (isCurrent()) pinnedMessagesLoading = false;
     }
   }
 
@@ -3930,7 +3937,7 @@
         body: JSON.stringify({ message_id: message.id }),
       });
     }
-    await loadPinnedMessages(channelID, "");
+    if (channelID === selectedChannelID && !selectedDirectID) await loadPinnedMessages();
   }
 
   async function togglePinnedPanel() {
@@ -4379,7 +4386,7 @@
       onFocus={activateMessageComposer}
       onInputRef={(node) => (messageInput = node)}
       onUploadFile={uploadFile}
-      onRemoveUpload={() => (pendingUpload = null)}
+      onRemoveUpload={clearPendingUpload}
       onClearReply={clearReplyTarget}
     />
     </div>

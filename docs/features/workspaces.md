@@ -83,6 +83,8 @@ external_managed, external_ref, external_url, sidebar_section}`. Setting
 `archived=true` fills
 `archived_at`; `archived=false` clears it. Sending an empty string for any of
 the nullable display, external, or sidebar fields clears that field.
+Omitted fields retain their current values, including changes committed by
+concurrent updates.
 
 Channel responses include `display_title` when set. Human-facing web labels use
 it and fall back to `name`; API selectors, links, and routing continue to use

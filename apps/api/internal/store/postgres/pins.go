@@ -38,7 +38,7 @@ func (s *Store) PinMessage(ctx context.Context, channelID, messageID, userID str
 		return store.PinnedMessage{}, store.Event{}, errors.New("deleted messages cannot be pinned")
 	}
 
-	if _, err := qtx.LockChannelForPinning(ctx, channelID); err != nil {
+	if _, err := qtx.LockChannelForUpdate(ctx, channelID); err != nil {
 		return store.PinnedMessage{}, store.Event{}, err
 	}
 	existingPinCount, err := qtx.CountPinnedMessage(ctx, storedb.CountPinnedMessageParams{

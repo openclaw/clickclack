@@ -131,6 +131,65 @@ func TestChannelDisplayTitleRoundTripPostgres(t *testing.T) {
 	}
 }
 
+func TestChannelUpdateSerializesPartialWrites(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Channel Owner", "channel-lock@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{WorkspaceID: workspace.ID, UserID: owner.ID, Name: "before-lock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	tx := mustBeginPostgresTx(t, ctx, st.db)
+	if _, err := tx.ExecContext(ctx, `UPDATE channels SET name = 'concurrent-name', archived_at = '2026-08-30T00:00:00Z', external_managed = 1, external_ref = 'concurrent-ref' WHERE id = $1`, channel.ID); err != nil {
+		t.Fatal(err)
+	}
+	nextTitle := "New display title"
+	type updateResult struct {
+		channel store.Channel
+		event   store.Event
+		err     error
+	}
+	result := make(chan updateResult, 1)
+	go func() {
+		updated, event, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &nextTitle})
+		result <- updateResult{updated, event, err}
+	}()
+	waitForBlockedPostgresQuery(t, ctx, st.db, "channels")
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	updated := <-result
+	if updated.err != nil {
+		t.Fatal(updated.err)
+	}
+	persisted, err := st.GetChannel(ctx, channel.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range []store.Channel{updated.channel, persisted} {
+		if got.Name != "concurrent-name" || got.DisplayTitle == nil || *got.DisplayTitle != nextTitle || got.ArchivedAt == nil || !got.ExternalManaged || got.ExternalRef == nil || *got.ExternalRef != "concurrent-ref" {
+			t.Fatalf("partial channel update lost a concurrent field: %#v", got)
+		}
+	}
+	payload, ok := updated.event.Payload.(map[string]any)
+	if !ok || payload["archived"] != true {
+		t.Fatalf("channel.updated lost concurrent archive state: %#v", updated.event.Payload)
+	}
+}
+
 func TestWorkspaceUpdateSerializesPartialWrites(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)

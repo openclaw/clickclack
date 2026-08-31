@@ -4851,12 +4851,12 @@ func (q *Queries) LockBotWorkspaceMembership(ctx context.Context, arg LockBotWor
 	return user_id, err
 }
 
-const lockChannelForPinning = `-- name: LockChannelForPinning :one
+const lockChannelForUpdate = `-- name: LockChannelForUpdate :one
 SELECT id FROM channels WHERE id = $1 FOR UPDATE
 `
 
-func (q *Queries) LockChannelForPinning(ctx context.Context, channelID string) (string, error) {
-	row := q.db.QueryRowContext(ctx, lockChannelForPinning, channelID)
+func (q *Queries) LockChannelForUpdate(ctx context.Context, channelID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockChannelForUpdate, channelID)
 	var id string
 	err := row.Scan(&id)
 	return id, err

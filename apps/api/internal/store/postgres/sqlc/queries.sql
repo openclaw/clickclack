@@ -1435,7 +1435,7 @@ INSERT INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(message_id), sqlc.arg(pinned_by), sqlc.arg(created_at))
 ON CONFLICT(channel_id, message_id) DO NOTHING;
 
--- name: LockChannelForPinning :one
+-- name: LockChannelForUpdate :one
 SELECT id FROM channels WHERE id = sqlc.arg(channel_id) FOR UPDATE;
 
 -- name: LockMessageForPinning :one

@@ -244,6 +244,10 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	// Merge omitted fields only after earlier channel writers have committed.
+	if _, err := qtx.LockChannelForUpdate(ctx, input.ChannelID); err != nil {
+		return store.Channel{}, store.Event{}, err
+	}
 	chRow, err := qtx.GetChannel(ctx, input.ChannelID)
 	if err != nil {
 		return store.Channel{}, store.Event{}, err

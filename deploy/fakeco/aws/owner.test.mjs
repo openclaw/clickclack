@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -1433,32 +1433,21 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
 
 test("sibling fixtures resolve from module directories containing spaces", async (t) => {
   const temporary = await temporaryDirectory(t, "clickclack fakeco spaces ");
-  assert.ok(temporary.includes(" "));
-  const probePath = path.join(temporary, "probe.mjs");
-  await writeFile(path.join(temporary, "template.json"), JSON.stringify({ ok: true }));
-  await writeFile(
-    probePath,
+  const copiedDirectory = path.join(temporary, "deploy/fakeco/aws");
+  await cp(directory, copiedDirectory, { recursive: true });
+  const result = spawnSync(
+    process.execPath,
     [
-      'import { readFile } from "node:fs/promises";',
-      'import path from "node:path";',
-      'import { fileURLToPath } from "node:url";',
-      "",
-      "const directory = path.dirname(fileURLToPath(import.meta.url));",
-      "const legacy = path.dirname(new URL(import.meta.url).pathname);",
-      "const template = await readFile(path.join(directory, `template.json`), `utf8`);",
-      "process.stdout.write(",
-      "  JSON.stringify({ template: JSON.parse(template), legacyEncoded: legacy.includes(`%20`) }),",
-      ");",
-      "",
-    ].join("\n"),
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=^profile and template lock the private ARM64 single-VM contract$",
+      path.join(copiedDirectory, "owner.test.mjs"),
+    ],
+    // A nested test runner otherwise skips its files inside a node:test child.
+    { encoding: "utf8", env: { ...process.env, NODE_TEST_CONTEXT: undefined } },
   );
-
-  const result = spawnSync(process.execPath, [probePath], { encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), {
-    template: { ok: true },
-    legacyEncoded: true,
-  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /# pass 1\b/u);
 });
 
 function fakecoEnvironment() {

@@ -334,8 +334,9 @@ test("embedded channel recovers newer messages from its message window", async (
     .toBeTruthy();
   await page.locator(".messages-scroll").dispatchEvent("wheel", { deltaY: 100 });
   await page.screenshot({ path: testInfo.outputPath("newer-messages.png") });
+  // Initial scroll and the bootstrap replacement can recover the same cursor.
   await expect
-    .poll(() => ({ newer, errors }))
+    .poll(() => ({ newer: [...new Set(newer)], errors }))
     .toEqual({ newer: [String(data.root.channel_seq)], errors: [] });
   await expect(page.locator(`[data-message-id="${next.id}"]`)).toContainText(
     "Newer synthetic message",

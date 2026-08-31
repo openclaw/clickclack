@@ -264,7 +264,7 @@ for (const switchWorkspace of [false, true]) {
       await dialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
       if (switchWorkspace) {
         await page.getByRole("link", { name: other.workspace.name, exact: true }).click();
-        await expect(page).toHaveURL(new RegExp(`/app/${other.workspace.route_id}(?:/|$)`));
+        await expect(page).toHaveURL(new RegExp(`/app/${other.workspace.route_id}/[^/]+$`));
       }
       await page.getByRole("button", { name: "Start direct message" }).click();
       await dialog(page).getByLabel("Find a person").fill("keep this new recipient");

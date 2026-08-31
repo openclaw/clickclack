@@ -922,7 +922,7 @@ func TestJSONBodiesAreSizeLimited(t *testing.T) {
 func TestHTTPDeadlinesSkipWebSocketUpgrades(t *testing.T) {
 	t.Parallel()
 	var normal deadlineRecorder
-	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", nil))
+	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", strings.NewReader("body")))
 	if len(normal.readDeadlines) != 2 || normal.readDeadlines[0].IsZero() || !normal.readDeadlines[1].IsZero() {
 		t.Fatalf("unexpected read deadlines: %#v", normal.readDeadlines)
 	}
@@ -3989,9 +3989,11 @@ func TestHomeLinkEndpoint(t *testing.T) {
 	}{
 		{name: "defaults to the landing page", wantURL: "/", wantLabel: "cc"},
 		{name: "configured product link", options: Options{HomeLink: HomeLinkConfig{URL: "https://mfs.example.com/", Label: "MFS"}}, wantURL: "https://mfs.example.com/", wantLabel: "MFS"},
-		{name: "partial config keeps the other default", options: Options{HomeLink: HomeLinkConfig{URL: " /app "}}, wantURL: "/app", wantLabel: "cc"},
+		{name: "URL only", options: Options{HomeLink: HomeLinkConfig{URL: "/portal"}}, wantURL: "/portal", wantLabel: "cc"},
+		{name: "label only", options: Options{HomeLink: HomeLinkConfig{Label: "Portal"}}, wantURL: "/", wantLabel: "Portal"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.options.DisableDevAuth = true
 			server := httptest.NewServer(New(nil, nil, tc.options).Handler())
 			t.Cleanup(server.Close)
 			// Public: no cookie, no bearer token.

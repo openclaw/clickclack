@@ -144,6 +144,22 @@ R2 keys are stored in the database as `r2://bucket/prefix/upload-...`.
 Download requests are still authenticated by ClickClack before the object is
 fetched from R2.
 
+The default R2 client delegates to the configured `http.DefaultTransport` and
+adds a 30-second wait for complete response headers after the request finishes
+writing. It has no total request timeout, so progressing uploads can take longer.
+This timing relies on Go's HTTP trace and cancellation lifecycle, including
+wrappers that forward it; opaque transports cannot provide the same guarantee.
+Applications supplying `R2Config.HTTPClient` retain that client unchanged and
+own its transport and timeout policy. The server uses the default client.
+
+The same default client bounds each upstream response-body read to 30 seconds,
+including error diagnostics for uploads and deletions (still capped at 512 bytes).
+The timer pauses between reads, so downstream backpressure and progressing
+streams can exceed 30 seconds overall. A failed download after headers are sent
+aborts the HTTP stream instead of appending JSON or reporting successful EOF.
+Bodyless downloads do not inherit the inbound request-body deadline; actual
+request bodies retain their existing read protection.
+
 ## What is intentionally missing
 
 - Server-side image thumbnailing/transcoding.

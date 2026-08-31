@@ -17,6 +17,12 @@ Authenticated users can edit their own thread roots, replies, and channel
 messages inline; the embeds use the same draft, error, and realtime
 reconciliation behavior as the full app.
 
+The channel composer shares the full app's formatting and GIF controls. Select
+text to apply bold, italic, inline code, a code block, or a link; without a
+selection, the control inserts a placeholder at the caret. The GIF picker
+searches the bundled reaction library and adds the selected GIF to the draft.
+Press Escape or click GIF again to close it.
+
 ## URL
 
 Use the public route IDs from a normal ClickClack thread URL:

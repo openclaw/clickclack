@@ -69,6 +69,14 @@
   transform: translateY(-1px);
 }
 
+.guild-rail .guild.home > span {
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Placed after (and as specific as) the home hover rule so the pressed
    position wins while the pointer is still over the key. */
 .guild-rail .guild.home:active {

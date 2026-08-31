@@ -22,7 +22,10 @@ The server resolves callers in this order (see
 `--dev-bootstrap=true`).
 
 `/healthz`, `/readyz`, and the opt-in `/metrics` operator endpoint do not use
-chat authentication. Keep metrics private. Every HTTP response carries
+chat authentication. `GET /api/home-link` is also public and returns the
+deployment's workspace home destination and label, with independent `/` and
+`cc` defaults; see [configuration](../configuration.md#workspace-home-link).
+Keep metrics private. Every HTTP response carries
 `X-Correlation-ID`; a caller-supplied value is accepted only when it uses the
 safe bounded character set. Durable `message.created` and
 `thread.reply_created` events copy that validated value to optional
@@ -34,6 +37,7 @@ The value is not stored on message rows or exported as a metrics label.
 | Group         | Endpoints | Doc |
 |---------------|-----------|-----|
 | Auth          | `/api/auth/magic/{request,consume}`, `/api/auth/github/{start,callback}` | [auth](../features/auth.md) |
+| Deployment navigation | `/api/home-link` (public) | [configuration](../configuration.md#workspace-home-link) |
 | Profile       | `/api/me`, `/api/me/bots` | [profiles](../features/profiles.md) |
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |

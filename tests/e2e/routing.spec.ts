@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { waitForAppReady } from "./app-ready";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
@@ -7,6 +8,67 @@ function clickclack(args: string[]): string {
     encoding: "utf8",
   }).trim();
 }
+
+test("an obsolete route failure cannot poison a newer visit to the same channel", async ({
+  page,
+}) => {
+  const response = await page.request.post("/api/workspaces", {
+    data: { name: `Route failure ${Date.now()}` },
+  });
+  expect(response.ok()).toBe(true);
+  const { workspace } = (await response.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const channels: { id: string; route_id: string; name: string }[] = [];
+  for (const name of ["route-a", "route-b", "route-c"]) {
+    const created = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name, kind: "public" },
+    });
+    expect(created.ok()).toBe(true);
+    channels.push((await created.json()).channel);
+  }
+  const [a, b, c] = channels;
+  await page.goto(`/app/${workspace.route_id}/${b.route_id}`);
+  await waitForAppReady(page);
+
+  let releaseFailure!: () => void;
+  const pendingFailure = new Promise<void>((resolve) => (releaseFailure = resolve));
+  let firstRequest!: () => void;
+  const firstHeld = new Promise<void>((resolve) => (firstRequest = resolve));
+  let requests = 0;
+  const routePath = `/api/routes/${workspace.route_id}/${a.route_id}`;
+  await page.route(`**${routePath}`, async (route) => {
+    if (++requests !== 1) {
+      await route.continue();
+      return;
+    }
+    firstRequest();
+    await pendingFailure;
+    await route.fulfill({ status: 503, json: { error: "Obsolete route failed" } });
+  });
+
+  await page.getByRole("link", { name: `# ${a.name}`, exact: true }).click();
+  await firstHeld;
+  await page.getByRole("link", { name: `# ${b.name}`, exact: true }).click();
+  await page.getByRole("link", { name: `# ${a.name}`, exact: true }).click();
+  await expect(page.getByRole("heading", { name: `#${a.name}`, exact: true })).toBeVisible();
+  const failedResponse = page.waitForResponse(
+    (result) => result.url().endsWith(routePath) && result.status() === 503,
+  );
+  releaseFailure();
+  await failedResponse;
+  // Let the rejected fetch and its reactive error handler settle before clicking.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${c.name}`, exact: true }).click();
+  await expect(page.getByRole("heading", { name: `#${c.name}`, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${c.route_id}$`));
+});
 
 test("app routes restore channels, DMs, threads, fallbacks, and history navigation", async ({
   page,

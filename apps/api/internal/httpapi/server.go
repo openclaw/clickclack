@@ -125,7 +125,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		openclawID:            options.OpenClawID.withDefaults(),
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
-		homeLinkConfig:        options.HomeLink,
+		homeLinkConfig:        options.HomeLink.withDefaults(),
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
 		cookies:               cookieNames,
@@ -1923,7 +1923,9 @@ func ListenAndServe(ctx context.Context, addr string, handler http.Handler) erro
 
 func withHTTPDeadlines(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		// Go uses the read side to detect disconnects on bodyless requests;
+		// a body deadline there would also cancel a progressing response.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") || r.Body == nil || r.Body == http.NoBody {
 			handler.ServeHTTP(w, r)
 			return
 		}

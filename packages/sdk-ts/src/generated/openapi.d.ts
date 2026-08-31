@@ -55,6 +55,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/home-link": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Workspace rail home destination and label
+     * @description Public deployment metadata, read once when the chat shell starts. Relative paths resolve on the frontend origin. Integrated desktop chrome uses /app when url is /; other non-app HTTP(S) destinations open in the system browser.
+     */
+    get: operations["getHomeLink"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/auth/magic/request": {
     parameters: {
       query?: never;
@@ -143,6 +163,38 @@ export interface paths {
       cookie?: never;
     };
     get: operations["finishGitHubOAuth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/openclaw/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["startOpenClawIDOAuth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/openclaw/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["finishOpenClawIDOAuth"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1154,6 +1206,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    HomeLink: {
+      /**
+       * @description Absolute HTTP(S) URL without credentials, or a path starting with a single slash on the frontend origin. Control characters, backslashes, and protocol-relative URLs are forbidden. Query strings and fragments are allowed.
+       * @default /
+       */
+      url: string;
+      /**
+       * @description Badge text, limited to 32 Unicode code points. Visually truncated to fit the tile; the accessible title retains the full label.
+       * @default cc
+       */
+      label: string;
+    };
     CreateWorkspaceRequest: {
       name: string;
       slug?: string;
@@ -2136,6 +2200,26 @@ export interface operations {
       };
     };
   };
+  getHomeLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Validated deployment settings with defaults applied independently */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HomeLink"];
+        };
+      };
+    };
+  };
   requestMagicLink: {
     parameters: {
       query?: never;
@@ -2423,6 +2507,115 @@ export interface operations {
         content?: never;
       };
       /** @description Desktop grant capacity exhausted or canonical callback origin unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  startOpenClawIDOAuth: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to OpenClaw ID OIDC authorization */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Ambiguous OAuth browser-binding cookies */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Deployment edge rate limit exceeded, when configured */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID sign-in not configured */
+      501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  finishOpenClawIDOAuth: {
+    parameters: {
+      query?: {
+        code?: string;
+        state?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Browser session created and redirected to the web app */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid OAuth callback */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID token invalid or account email not verified */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity, workspace, or session persistence failed */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID provider request failed */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Canonical callback origin unavailable */
       503: {
         headers: {
           [name: string]: unknown;

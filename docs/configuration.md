@@ -65,6 +65,8 @@ hook in `cmd/clickclack/main.go`.
   "dev_bootstrap": false,
   "public_url": "https://chat.example.com",
   "public_api_url": "https://api.example.com/services/clickclack",
+  "home_url": "/portal",
+  "home_label": "Portal",
   "embed_frame_ancestors": ["https://control.example.com"],
   "access_team_domain": "https://openclaw.cloudflareaccess.com",
   "access_aud": "<application-audience-tag>",
@@ -138,6 +140,33 @@ value before the app modules run:
 That value is browser routing only. The server remains authoritative for setup
 claim URLs and returns only URLs derived from validated administrator
 configuration.
+
+## Workspace home link
+
+Set `CLICKCLACK_HOME_URL` and `CLICKCLACK_HOME_LABEL` (or `home_url` and
+`home_label` in the JSON file) when the workspace rail's home button should
+return to a surrounding product. They are independent: an unset or empty URL
+defaults to `/`, and an unset or empty label defaults to `cc`. Ordinary spaces
+around values are trimmed. Environment values override the file as usual.
+
+The destination must be an absolute HTTP(S) URL without credentials or a path
+starting with a single `/`, such as `/portal?from=chat#latest`. Paths resolve
+on the frontend origin, even when the API is hosted separately. Protocol-relative
+URLs (`//host`), backslashes, and control characters are rejected at startup;
+explicit HTTP(S) destinations may point to another origin.
+
+Labels may contain up to 32 Unicode code points. Long labels are truncated in
+the 48-pixel badge, while the tooltip and accessible name retain the full label.
+The public `GET /api/home-link` endpoint returns only `{ "url": "/", "label": "cc" }`
+by default, with either value replaced when configured. Do not put private
+information in these deployment settings.
+
+The shell reads the endpoint once at startup. Changing settings requires a
+server restart and a page reload. A newer web shell connected to an older server
+without the endpoint retains the built-in defaults. With integrated desktop
+chrome, the default `/` destination stays inside the app as `/app`, even when
+only the label changes. Other non-app destinations use the desktop shell's
+existing system-browser navigation behavior.
 
 ## Cookie namespace
 

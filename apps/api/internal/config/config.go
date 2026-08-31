@@ -214,7 +214,7 @@ func (c *Config) ValidateServe() error {
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)
 	}
-	homeURL, homeLabel, err := NormalizeHomeLink(c.HomeURL, c.HomeLabel)
+	homeURL, homeLabel, err := normalizeHomeLink(c.HomeURL, c.HomeLabel)
 	if err != nil {
 		return err
 	}
@@ -293,25 +293,26 @@ func validatePublicURLPair(publicURL, publicAPIURL string) error {
 // button; it is a short badge, not a title.
 const MaxHomeLabelLength = 32
 
-// NormalizeHomeLink validates the optional deployment-specific home link that
-// replaces the ClickClack landing page behind the workspace rail's home
-// button. Empty values keep the built-in default. A URL must be either an
-// absolute http(s) URL or an absolute path on this deployment, so a
-// misconfiguration can never turn the button into a javascript: or
-// protocol-relative link.
-func NormalizeHomeLink(rawURL, rawLabel string) (string, string, error) {
+func normalizeHomeLink(rawURL, rawLabel string) (string, string, error) {
 	homeURL := strings.TrimSpace(rawURL)
+	// Browsers treat backslashes as slashes and strip tabs/newlines before
+	// parsing URLs. Reject them before trimming or parsing with net/url.
+	if strings.ContainsFunc(rawURL, func(r rune) bool { return r <= 0x1f || r == 0x7f || r == '\\' }) {
+		return "", "", errors.New("CLICKCLACK_HOME_URL must not contain control characters or backslashes")
+	}
 	if homeURL != "" {
-		switch {
-		case strings.HasPrefix(homeURL, "//"):
-			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
-		case strings.HasPrefix(homeURL, "/"):
-			// Absolute path on this deployment.
-		default:
-			parsed, err := url.Parse(homeURL)
-			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-				return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
+		parsed, err := url.Parse(homeURL)
+		if err != nil || parsed.User != nil {
+			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL without credentials or a path starting with /")
+		}
+		if strings.HasPrefix(homeURL, "/") {
+			base := &url.URL{Scheme: "https", Host: "clickclack.invalid"}
+			resolved := base.ResolveReference(parsed)
+			if strings.HasPrefix(homeURL, "//") || resolved.Scheme != base.Scheme || resolved.Host != base.Host {
+				return "", "", errors.New("CLICKCLACK_HOME_URL path must stay on the deployment origin")
 			}
+		} else if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
+			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
 		}
 	}
 	homeLabel := strings.TrimSpace(rawLabel)

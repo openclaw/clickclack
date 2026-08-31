@@ -148,8 +148,7 @@ func TestAgentProgressEphemeralAuthz(t *testing.T) {
 //     via server-derived recipients — the relay never names recipients).
 func TestAgentProgressDeliversOverRealtimeWithPrivateScoping(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	dataDir := t.TempDir()
 	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
 	if err != nil {
@@ -203,6 +202,10 @@ func TestAgentProgressDeliversOverRealtimeWithPrivateScoping(t *testing.T) {
 	ephemeralURL := server.URL + "/api/realtime/ephemeral"
 	wsURL := strings.Replace(server.URL, "http://", "ws://", 1) +
 		"/api/realtime/ws?workspace_id=" + url.QueryEscape(workspace.ID)
+
+	// Schema setup on busy runners must not consume the realtime deadline.
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 
 	// The viewer subscribes to the native realtime WS as a dev-auth user.
 	viewerConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{

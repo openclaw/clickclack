@@ -8,6 +8,7 @@ package storedb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 
 	"github.com/lib/pq"
 )
@@ -3702,6 +3703,68 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.PayloadJson,
 			&i.CreatedAt,
 			&i.MentionedUserIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdentitySyncUsers = `-- name: ListIdentitySyncUsers :many
+SELECT u.id, u.kind, u.display_name, u.handle, u.avatar_url,
+       i.provider, i.provider_subject, i.email
+FROM users u
+JOIN identities i ON i.user_id = u.id
+WHERE u.id IN (
+  SELECT candidate.user_id FROM identities candidate
+  WHERE candidate.provider = $1
+     OR lower(candidate.email) IN (SELECT jsonb_array_elements_text(CAST($2 AS jsonb)))
+)
+ORDER BY u.id, i.id
+FOR UPDATE OF u, i
+`
+
+type ListIdentitySyncUsersParams struct {
+	Source string          `json:"source"`
+	Emails json.RawMessage `json:"emails"`
+}
+
+type ListIdentitySyncUsersRow struct {
+	ID              string `json:"id"`
+	Kind            string `json:"kind"`
+	DisplayName     string `json:"display_name"`
+	Handle          string `json:"handle"`
+	AvatarUrl       string `json:"avatar_url"`
+	Provider        string `json:"provider"`
+	ProviderSubject string `json:"provider_subject"`
+	Email           string `json:"email"`
+}
+
+func (q *Queries) ListIdentitySyncUsers(ctx context.Context, arg ListIdentitySyncUsersParams) ([]ListIdentitySyncUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdentitySyncUsers, arg.Source, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentitySyncUsersRow
+	for rows.Next() {
+		var i ListIdentitySyncUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.Provider,
+			&i.ProviderSubject,
+			&i.Email,
 		); err != nil {
 			return nil, err
 		}

@@ -24,7 +24,7 @@ func TestHubSubscribePublishAndUnsubscribe(t *testing.T) {
 		t.Fatal("timed out waiting for event")
 	}
 
-	hub.PublishMany([]store.Event{{ID: "evt_2", WorkspaceID: "wsp_other"}})
+	hub.Publish(store.Event{ID: "evt_2", WorkspaceID: "wsp_other"})
 	select {
 	case got := <-events:
 		t.Fatalf("unexpected event for other workspace: %#v", got)

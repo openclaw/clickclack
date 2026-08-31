@@ -23,6 +23,10 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/bucket/prefix/upload-") {
 			t.Fatalf("unexpected object path %q", r.URL.Path)
 		}
+		if strings.HasSuffix(r.URL.Path, "upload-missing") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		switch r.Method {
 		case http.MethodPut:
 			if r.ContentLength != 8 {
@@ -101,6 +105,13 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 	if err := store.Delete(context.Background(), savedPath); err != nil {
 		t.Fatal(err)
 	}
+	recorder = httptest.NewRecorder()
+	if err := store.ServeHTTP(recorder, req, Object{Path: "prefix/upload-missing"}); !errors.Is(err, ErrNotFound) || recorder.Body.Len() != 0 {
+		t.Fatalf("missing object must fail before writing file bytes: %v", err)
+	}
+	if err := store.Delete(context.Background(), "prefix/upload-missing"); err != nil {
+		t.Fatalf("deleting a missing object must succeed: %v", err)
+	}
 }
 
 func TestR2ConfigValidation(t *testing.T) {
@@ -123,13 +134,6 @@ func TestR2ConfigValidation(t *testing.T) {
 	}
 	if store.httpClient == nil || store.httpClient.Timeout != 0 {
 		t.Fatalf("expected streaming-safe client timeout, got %#v", store.httpClient)
-	}
-	transport, ok := store.httpClient.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected default transport, got %#v", store.httpClient.Transport)
-	}
-	if transport.ResponseHeaderTimeout != defaultR2ResponseHeaderTimeout {
-		t.Fatalf("expected response header timeout %s, got %s", defaultR2ResponseHeaderTimeout, transport.ResponseHeaderTimeout)
 	}
 	customClient := &http.Client{}
 	store, err = NewR2(R2Config{AccountID: "account", AccessKeyID: "access", SecretAccessKey: "secret", Bucket: "bucket", HTTPClient: customClient})

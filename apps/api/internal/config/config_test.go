@@ -242,12 +242,26 @@ func TestNormalizeHomeLink(t *testing.T) {
 		{name: "label only", label: "MFS", wantLabel: "MFS"},
 		{name: "javascript scheme", url: "javascript:alert(1)", wantErr: true},
 		{name: "protocol relative", url: "//evil.example.com", wantErr: true},
+		{name: "slash backslash", url: "/\\evil.example.com", wantErr: true},
+		{name: "slash tab slash", url: "/\t/evil.example.com", wantErr: true},
+		{name: "slash newline slash", url: "/\n/evil.example.com", wantErr: true},
+		{name: "slash carriage return slash", url: "/\r/evil.example.com", wantErr: true},
+		{name: "absolute URL with backslash", url: "https://good.example.com\\@evil.example.com", wantErr: true},
+		{name: "control in query", url: "/portal?q=\x7f", wantErr: true},
+		{name: "credentials", url: "https://user:password@example.com/portal", wantErr: true},
+		{name: "leading control", url: "\n/portal", wantErr: true},
+		{name: "path query and fragment", url: "/portal?from=chat#latest", wantURL: "/portal?from=chat#latest"},
+		{name: "absolute http", url: "http://localhost:8080/portal", wantURL: "http://localhost:8080/portal"},
+		{name: "unicode label", label: strings.Repeat("🦞", 32), wantLabel: strings.Repeat("🦞", 32)},
 		{name: "relative path", url: "app", wantErr: true},
 		{name: "label too long", url: "/app", label: strings.Repeat("x", MaxHomeLabelLength+1), wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotURL, gotLabel, err := NormalizeHomeLink(tc.url, tc.label)
+			cfg := Defaults()
+			cfg.HomeURL, cfg.HomeLabel = tc.url, tc.label
+			err := cfg.ValidateServe()
+			gotURL, gotLabel := cfg.HomeURL, cfg.HomeLabel
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got url=%q label=%q", gotURL, gotLabel)

@@ -36,6 +36,10 @@ Owners and moderators can update the workspace name, slug, and icon. An icon
 must reference an upload from the same workspace. Owners can transfer ownership
 to a human member or moderator; the former owner becomes a moderator.
 
+The provisioned `clickclack` and `guests` slugs are reserved. Profile updates can
+retain the workspace's current normalized slug, but creating a workspace or
+changing its slug to a reserved value is rejected.
+
 Workspace deletion is owner-only and permanent. The metadata transaction first
 records every upload object in a durable cleanup queue, then deletes the
 workspace and its dependent rows. A successful response means metadata deletion
@@ -49,6 +53,13 @@ case-insensitive literal `q` search over display name and handle, and optional
 `{members, next_cursor, has_more, total_count}` on the first page. Cursor pages
 omit `total_count` so infinite scrolling does not repeat count work. The member
 directory does not include moderation state.
+
+Chat, embedded channels and threads, and ownership settings load the complete
+member directory across pages. Missing or repeated continuation cursors stop
+the load; chat shows a mentions-unavailable notice while messaging stays usable.
+Changing views cancels the old directory request, and each page retains its
+30-second timeout without requiring `AbortSignal.any`. The member directory and
+pickers still support manual paging.
 
 ## Channels
 
@@ -112,6 +123,10 @@ Old internal-ID links such as `/app/wsp_.../chn_...`, `/app/wsp_.../dm_...`,
 and `/app/wsp_.../msg_...` remain compatibility inputs. The app resolves them
 through `/api/routes/{workspace_route_id}/{target_route_id}` and replaces the
 URL with the canonical public route after permission checks.
+
+Channel clicks during startup use the same route owner as later navigation.
+Only the current route request can apply a result or error; an older failure
+cannot interrupt navigation after returning to the same channel.
 
 Message URLs resolve through the root message and inherit that message's
 channel or DM visibility. A channel citation highlights its root in the parent

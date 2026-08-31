@@ -4,7 +4,6 @@
   import {
     DEFAULT_HOME_LINK,
     homeLinkTitle,
-    isDefaultHomeLink,
     loadHomeLink,
     type HomeLink,
   } from "./lib/home-link";
@@ -12,7 +11,6 @@
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
-  import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
   import {
     INITIAL_MESSAGE_LIMIT,
@@ -60,7 +58,7 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
-  import { listWorkspaceMembersPage } from "./lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
@@ -144,7 +142,6 @@
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
   let pendingUpload: Upload | null = null;
-  let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
   let channelSettingsOpen = false;
@@ -152,7 +149,6 @@
   let channelSettingsError = "";
   let showCreateChannel = false;
   let showCreateDirect = false;
-  let gifQuery = "";
   let browserNotificationsEnabled = false;
   // Client-only preferences for agent activity. Consecutive same-turn
   // agent_commentary/agent_tool rows are coalesced into one preamble block;
@@ -174,7 +170,6 @@
   let realtimeInitializedWorkspaceID = "";
   let pendingRealtimeWorkspaceID = "";
   let socket: RealtimeConnection | null = null;
-  let realtimeMessageLoadQueue: Promise<void> = Promise.resolve();
   let messageList: MessageListHandle | null = null;
   let scrollMemory = new Map<string, MessageListState>();
   let messageWindows = new Map<string, MessageWindow>();
@@ -217,6 +212,8 @@
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let workspaceMembersLoadSerial = 0;
+  let workspaceMembersAbort: AbortController | null = null;
+  let workspaceMembersError = "";
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let channelNotifLoadSerial = 0;
@@ -363,12 +360,6 @@
   $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
-  $: filteredGifs = showGifPicker
-    ? gifLibrary.filter((gif) => {
-        const query = gifQuery.trim().toLowerCase();
-        return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
-      })
-    : [];
 
   onMount(() => {
     loadActivityPrefs();
@@ -484,6 +475,9 @@
   }
 
   onDestroy(() => {
+    routeApplySerial += 1;
+    workspaceMembersLoadSerial += 1;
+    workspaceMembersAbort?.abort();
     socket?.close();
     socket = null;
     connected = false;
@@ -505,16 +499,20 @@
         status = "create a workspace";
         return;
       }
-      await applyRoute(routeWorkspaceID, routeTargetID);
+      // The reactive route owner also handles clicks made during startup.
       status = "ready";
     } catch (error) {
-      if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
-        authRequired = true;
-        status = "auth";
-        return;
-      }
-      status = error instanceof Error ? error.message : "Could not load ClickClack";
+      handleAppLoadError(error);
     }
+  }
+
+  function handleAppLoadError(error: unknown) {
+    if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
+      authRequired = true;
+      status = "auth";
+      return;
+    }
+    status = error instanceof Error ? error.message : "Could not load ClickClack";
   }
 
   function openProfileSettings() {
@@ -763,152 +761,158 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
-    reactionController.clear();
-    const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
-    const routeTarget = targetIDParam.trim()
-      ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
-      : null;
-    if (serial !== routeApplySerial) return;
-    const workspace = routeTarget
-      ? workspaces.find((candidate) => candidate.id === routeTarget.workspace_id)
-      : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
-    if (!workspace) {
-      commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
-      appliedRouteKey = requestedRouteKey;
-      return;
-    }
-    const canonicalRouteKey = routeTarget
-      ? routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id)
-      : routeKey(workspace.route_id, "");
-
-    const workspaceChanged = selectedWorkspaceID !== workspace.id;
-    if (workspaceChanged) {
-      captureScrollMemory();
-      editController.clear();
-      selectedWorkspaceID = workspace.id;
-      topicsLoadSerial += 1;
-      slashCommandsLoadSerial += 1;
-      botCommandsLoadSerial += 1;
-      workspaceMembersLoadSerial += 1;
-      slashCommands = [];
-      botCommands = [];
-      topics = [];
-      workspaceMemberUsers = [];
-      selectedChannelID = "";
-      selectedDirectID = "";
-      selectedThread = null;
-      selectedThreadState = null;
-      selectedProfile = null;
-      activeComposerContext = "message";
-      replies = [];
-      resetSearch();
-      resetHistoryPaging();
-      messagesLoading = true;
-      pendingRealtimeWorkspaceID = workspace.id;
-    }
-
-    if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
-    if (serial !== routeApplySerial) return;
-    if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
-    if (workspaceChanged) {
-      await Promise.all([
-        loadModerationMembers(),
-        loadSlashCommands(workspace.id),
-        loadBotCommands(workspace.id),
-        loadTopics(workspace.id),
-      ]);
-      // Mention targets are progressively available; they must not block
-      // navigation while a large workspace is paginated in the background.
-      void loadWorkspaceMembers(workspace.id);
-    }
-    if (serial !== routeApplySerial) return;
-
-    if (routeTarget) {
-      const routeTargetAvailable = await ensureResolvedRouteTargetLoaded(routeTarget, serial);
+    try {
+      reactionController.clear();
+      const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
+      const routeTarget = targetIDParam.trim()
+        ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
+        : null;
       if (serial !== routeApplySerial) return;
-      if (!routeTargetAvailable) {
-        clearRoutePanelState();
-        await navigateToApp(workspace.id, defaultTargetID(), true);
+      const workspace = routeTarget
+        ? workspaces.find((candidate) => candidate.id === routeTarget.workspace_id)
+        : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
+      if (!workspace) {
+        commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
+        appliedRouteKey = requestedRouteKey;
         return;
       }
-    }
+      const canonicalRouteKey = routeTarget
+        ? routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id)
+        : routeKey(workspace.route_id, "");
 
-    if (routeTarget?.canonical_path && window.location.pathname !== routeTarget.canonical_path) {
-      appliedRouteKey = canonicalRouteKey;
-      await goto(routeTarget.canonical_path, { replaceState: true, noScroll: true, keepFocus: true });
+      const workspaceChanged = selectedWorkspaceID !== workspace.id;
+      if (workspaceChanged) {
+        captureScrollMemory();
+        editController.clear();
+        selectedWorkspaceID = workspace.id;
+        topicsLoadSerial += 1;
+        slashCommandsLoadSerial += 1;
+        botCommandsLoadSerial += 1;
+        workspaceMembersLoadSerial += 1;
+        workspaceMembersAbort?.abort();
+        workspaceMembersError = "";
+        slashCommands = [];
+        botCommands = [];
+        topics = [];
+        workspaceMemberUsers = [];
+        selectedChannelID = "";
+        selectedDirectID = "";
+        selectedThread = null;
+        selectedThreadState = null;
+        selectedProfile = null;
+        activeComposerContext = "message";
+        replies = [];
+        resetSearch();
+        resetHistoryPaging();
+        messagesLoading = true;
+        pendingRealtimeWorkspaceID = workspace.id;
+      }
+
+      if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
       if (serial !== routeApplySerial) return;
-    }
+      if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
+      if (workspaceChanged) {
+        await Promise.all([
+          loadModerationMembers(),
+          loadSlashCommands(workspace.id),
+          loadBotCommands(workspace.id),
+          loadTopics(workspace.id),
+        ]);
+        // Mention targets are progressively available; they must not block
+        // navigation while a large workspace is paginated in the background.
+        void loadWorkspaceMembers(workspace.id);
+      }
+      if (serial !== routeApplySerial) return;
 
-    if (routeTarget?.target_type === "channel" && channels.some((channel) => channel.id === routeTarget.target_id)) {
-      const targetID = routeTarget.target_id;
-      const sameConversation =
-        !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
-      selectedChannelID = targetID;
-      selectedDirectID = "";
-      rememberLastChannel(workspace.id, targetID);
-      clearRoutePanelState();
-      const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
-      openPinnedPanelAfterRoute = false;
-      if (sameConversation) {
+      if (routeTarget) {
+        const routeTargetAvailable = await ensureResolvedRouteTargetLoaded(routeTarget, serial);
+        if (serial !== routeApplySerial) return;
+        if (!routeTargetAvailable) {
+          clearRoutePanelState();
+          await navigateToApp(workspace.id, defaultTargetID(), true);
+          return;
+        }
+      }
+
+      if (routeTarget?.canonical_path && window.location.pathname !== routeTarget.canonical_path) {
+        appliedRouteKey = canonicalRouteKey;
+        await goto(routeTarget.canonical_path, { replaceState: true, noScroll: true, keepFocus: true });
+        if (serial !== routeApplySerial) return;
+      }
+
+      if (routeTarget?.target_type === "channel" && channels.some((channel) => channel.id === routeTarget.target_id)) {
+        const targetID = routeTarget.target_id;
+        const sameConversation =
+          !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
+        selectedChannelID = targetID;
+        selectedDirectID = "";
+        rememberLastChannel(workspace.id, targetID);
+        clearRoutePanelState();
+        const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
+        openPinnedPanelAfterRoute = false;
+        if (sameConversation) {
+          pinnedPanelOpen = shouldOpenPinnedPanel;
+          appliedRouteKey = canonicalRouteKey;
+          updateActiveMessageWindowFlags(targetID);
+          connectPendingRealtime(workspace.id);
+          return;
+        }
+        resetTopicStateForConversation(targetID);
+        await Promise.all([loadMessages(), loadPinnedMessages(targetID, "")]);
+        if (serial !== routeApplySerial) return;
         pinnedPanelOpen = shouldOpenPinnedPanel;
         appliedRouteKey = canonicalRouteKey;
-        updateActiveMessageWindowFlags(targetID);
         connectPendingRealtime(workspace.id);
         return;
       }
-      resetTopicStateForConversation(targetID);
-      await Promise.all([loadMessages(), loadPinnedMessages(targetID, "")]);
-      if (serial !== routeApplySerial) return;
-      pinnedPanelOpen = shouldOpenPinnedPanel;
-      appliedRouteKey = canonicalRouteKey;
-      connectPendingRealtime(workspace.id);
-      return;
-    }
 
-    if (routeTarget?.target_type === "direct" && directConversations.some((conversation) => conversation.id === routeTarget.target_id)) {
-      const targetID = routeTarget.target_id;
-      const sameConversation =
-        !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
-      selectedDirectID = targetID;
-      selectedChannelID = "";
+      if (routeTarget?.target_type === "direct" && directConversations.some((conversation) => conversation.id === routeTarget.target_id)) {
+        const targetID = routeTarget.target_id;
+        const sameConversation =
+          !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
+        selectedDirectID = targetID;
+        selectedChannelID = "";
+        clearRoutePanelState();
+        if (sameConversation) {
+          appliedRouteKey = canonicalRouteKey;
+          updateActiveMessageWindowFlags(targetID);
+          connectPendingRealtime(workspace.id);
+          return;
+        }
+        resetTopicStateForConversation(targetID);
+        await loadMessages();
+        if (serial !== routeApplySerial) return;
+        appliedRouteKey = canonicalRouteKey;
+        connectPendingRealtime(workspace.id);
+        return;
+      }
+
+      if (routeTarget?.target_type === "thread") {
+        const resolved = await applyThreadRoute(routeTarget);
+        if (serial !== routeApplySerial) return;
+        if (resolved) {
+          appliedRouteKey = canonicalRouteKey;
+          connectPendingRealtime(workspace.id);
+          return;
+        }
+      }
+
+      const fallbackTargetID = defaultTargetID();
       clearRoutePanelState();
-      if (sameConversation) {
-        appliedRouteKey = canonicalRouteKey;
-        updateActiveMessageWindowFlags(targetID);
+      if (!fallbackTargetID) {
+        selectedChannelID = "";
+        selectedDirectID = "";
+        resetTopicStateForConversation("");
+        await loadMessages();
+        appliedRouteKey = requestedRouteKey;
+        if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
         connectPendingRealtime(workspace.id);
         return;
       }
-      resetTopicStateForConversation(targetID);
-      await loadMessages();
-      if (serial !== routeApplySerial) return;
-      appliedRouteKey = canonicalRouteKey;
-      connectPendingRealtime(workspace.id);
-      return;
+      await navigateToApp(workspace.id, fallbackTargetID, true);
+    } catch (error) {
+      if (serial === routeApplySerial) handleAppLoadError(error);
     }
-
-    if (routeTarget?.target_type === "thread") {
-      const resolved = await applyThreadRoute(routeTarget);
-      if (serial !== routeApplySerial) return;
-      if (resolved) {
-        appliedRouteKey = canonicalRouteKey;
-        connectPendingRealtime(workspace.id);
-        return;
-      }
-    }
-
-    const fallbackTargetID = defaultTargetID();
-    clearRoutePanelState();
-    if (!fallbackTargetID) {
-      selectedChannelID = "";
-      selectedDirectID = "";
-      resetTopicStateForConversation("");
-      await loadMessages();
-      appliedRouteKey = requestedRouteKey;
-      if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
-      connectPendingRealtime(workspace.id);
-      return;
-    }
-    await navigateToApp(workspace.id, fallbackTargetID, true);
   }
 
   async function ensureResolvedRouteTargetLoaded(route: RouteTarget, serial: number): Promise<boolean> {
@@ -1113,27 +1117,22 @@
 
   async function loadWorkspaceMembers(workspaceID = selectedWorkspaceID) {
     const serial = ++workspaceMembersLoadSerial;
+    workspaceMembersAbort?.abort();
+    const controller = new AbortController();
+    workspaceMembersAbort = controller;
+    workspaceMembersError = "";
     if (!workspaceID) {
       workspaceMemberUsers = [];
       return;
     }
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({
-          workspaceID,
-          cursor,
-          limit: 100,
-        });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
       if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
-      workspaceMemberUsers = members;
-    } catch {
-      if (serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+      workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
         workspaceMemberUsers = [];
+        workspaceMembersError = memberLoadErrorMessage(error);
       }
     }
   }
@@ -1664,65 +1663,51 @@
     }
   }
 
-  function loadNewerMessagesFromRealtime(): Promise<void> {
+  async function loadNewerMessagesFromRealtime(isCurrent: () => boolean): Promise<void> {
     const targetWorkspaceID = selectedWorkspaceID;
     const targetKey = currentConversationKey();
     const targetScopeKey = activeMessageScopeKey();
-    if (!targetWorkspaceID || !targetKey) return Promise.resolve();
+    if (!targetWorkspaceID || !targetKey) return;
 
-    // Serialize only the active message-window fetch. Rendering and scrolling
-    // stay outside this queue because animation frames can pause while the app
-    // is unfocused.
-    const load = realtimeMessageLoadQueue
-      .catch(() => undefined)
-      .then(async () => {
-        if (
-          selectedWorkspaceID !== targetWorkspaceID ||
-          currentConversationKey() !== targetKey ||
-          activeMessageScopeKey() !== targetScopeKey
-        ) {
-          return;
-        }
-        const window = messageWindows.get(targetKey);
-        if (!window || window.newest_seq <= 0) {
-          await loadMessages();
-          return;
-        }
-        const data = await api<MessagePage>(
-          messagePagePath(
-            `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
-          ),
-        );
-        if (
-          selectedWorkspaceID !== targetWorkspaceID ||
-          currentConversationKey() !== targetKey ||
-          activeMessageScopeKey() !== targetScopeKey
-        ) {
-          return;
-        }
-        const currentWindow = messageWindows.get(targetKey);
-        if (!currentWindow) return;
-        const responseNewestSeq = data.newest_seq || window.newest_seq;
-        const hasNewer =
-          responseNewestSeq > currentWindow.newest_seq
-            ? data.has_newer
-            : responseNewestSeq < currentWindow.newest_seq
-              ? currentWindow.has_newer
-              : currentWindow.has_newer || data.has_newer;
-        commitMessageWindow(
-          targetKey,
-          {
-            messages: mergeMessageWindows(messages, data.messages),
-            oldest_seq: currentWindow.oldest_seq,
-            newest_seq: Math.max(currentWindow.newest_seq, responseNewestSeq),
-            has_older: currentWindow.has_older,
-            has_newer: hasNewer,
-          },
-          "append",
-        );
-      });
-    realtimeMessageLoadQueue = load;
-    return load;
+    // The durable event queue serializes these fetches, independently of frames.
+    const window = messageWindows.get(targetKey);
+    if (!window || window.newest_seq <= 0) {
+      await loadMessages();
+      return;
+    }
+    const data = await api<MessagePage>(
+      messagePagePath(
+        `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
+      ),
+    );
+    if (
+      !isCurrent() ||
+      selectedWorkspaceID !== targetWorkspaceID ||
+      currentConversationKey() !== targetKey ||
+      activeMessageScopeKey() !== targetScopeKey
+    ) {
+      return;
+    }
+    const currentWindow = messageWindows.get(targetKey);
+    if (!currentWindow) return;
+    const responseNewestSeq = data.newest_seq || window.newest_seq;
+    const hasNewer =
+      responseNewestSeq > currentWindow.newest_seq
+        ? data.has_newer
+        : responseNewestSeq < currentWindow.newest_seq
+          ? currentWindow.has_newer
+          : currentWindow.has_newer || data.has_newer;
+    commitMessageWindow(
+      targetKey,
+      {
+        messages: mergeMessageWindows(messages, data.messages),
+        oldest_seq: currentWindow.oldest_seq,
+        newest_seq: Math.max(currentWindow.newest_seq, responseNewestSeq),
+        has_older: currentWindow.has_older,
+        has_newer: hasNewer,
+      },
+      "append",
+    );
   }
 
   function handleHistorySettled(state: MessageListViewportState) {
@@ -2263,7 +2248,7 @@
   }
 
   function isAtLiveEdge(): boolean {
-    return messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
+    return messageList?.isFollowing() || messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
   }
 
   async function revealOwnSentMessage() {
@@ -3303,7 +3288,7 @@
     }
   }
 
-  async function handleEvent(event: RealtimeEvent) {
+  async function handleEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     if (
       (event.type === "pin.added" || event.type === "pin.removed") &&
       event.channel_id === selectedChannelID &&
@@ -3426,19 +3411,16 @@
         suppressAutoReadUntil = Date.now() + 1200;
         markMessageWindowHasNewer(currentConversationKey());
       } else if (event.type === "message.created") {
-        await loadNewerMessagesFromRealtime();
+        await loadNewerMessagesFromRealtime(isCurrent);
       } else {
         await loadMessages();
       }
+      if (!isCurrent()) return;
       if (event.type === "message.created") {
         handleUnreadBump(event, wasAtLiveEdge);
       }
-      // Drive the scroll explicitly from here rather than relying on the
-      // MessageList $effect: its cached atBottom may already have flipped.
-      if (event.type === "message.created" && wasAtLiveEdge) {
-        await scrollMessagesToBottom();
-        markActiveViewRead({ all: true, seq: eventMessageSeq(event) });
-      }
+      // MessageList owns following and read receipts once layout settles.
+      // Waiting for its frames here would stop durable ingestion in hidden tabs.
     }
     const rootID = event.payload.root_message_id || event.payload.message_id;
     if (
@@ -3857,22 +3839,6 @@
     openImageViewer(markdownImageViewerURL(target), target.alt || "Image");
   }
 
-  function appendToComposer(snippet: string) {
-    const prefix = messageBody && !messageBody.endsWith("\n") ? "\n" : "";
-    messageBody = `${messageBody}${prefix}${snippet}`;
-  }
-
-  function applyMarkdownWrap(before: string, after = before) {
-    const placeholder = before === "```" ? "\ncode\n" : "text";
-    appendToComposer(`${before}${placeholder}${after}`);
-  }
-
-  function pickGif(url: string, title: string) {
-    appendToComposer(`![${title}](${url})`);
-    showGifPicker = false;
-    gifQuery = "";
-  }
-
   function closeSidePanel() {
     if (selectedArtifact) {
       closeArtifactViewer();
@@ -4181,7 +4147,7 @@
 
   <GuildRail
     {workspaces}
-    homeHref={integratedTitleBar && isDefaultHomeLink(homeLink) ? "/app" : homeLink.url}
+    homeHref={integratedTitleBar && homeLink.url === "/" ? "/app" : homeLink.url}
     homeLabel={homeLink.label}
     homeTitle={homeLinkTitle(homeLink)}
     {selectedWorkspaceID}
@@ -4320,6 +4286,10 @@
       agentNames={activeRespondingAgentNames}
     />
 
+    {#if workspaceMembersError}
+      <p class="composer-notice composer-notice--error" role="status">Mentions unavailable: {workspaceMembersError}</p>
+    {/if}
+
     {#if composerNotice}
       <div
         class="composer-notice"
@@ -4366,9 +4336,6 @@
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
       showToolbar
-      showGifPicker={showGifPicker}
-      gifQuery={gifQuery}
-      filteredGifs={filteredGifs}
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
@@ -4385,11 +4352,6 @@
       onUploadFile={uploadFile}
       onRemoveUpload={() => (pendingUpload = null)}
       onClearReply={clearReplyTarget}
-      onApplyMarkdownWrap={applyMarkdownWrap}
-      onAppendToComposer={appendToComposer}
-      onToggleGif={() => (showGifPicker = !showGifPicker)}
-      onGifQuery={(value) => (gifQuery = value)}
-      onPickGif={pickGif}
     />
     </div>
   </main>

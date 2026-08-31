@@ -46,6 +46,13 @@ adds operating-system behavior around the existing web app and API.
 The desktop shell does not run ClickClack server code, read agent transcripts,
 or grant web content filesystem or Node.js access.
 
+Servers can [configure the workspace home button](configuration.md#workspace-home-link).
+With integrated chrome, a default `/` destination uses `/app` regardless of
+the label. Configured non-app HTTP(S) destinations, including same-origin
+paths such as `/portal`, open in the system browser through the existing
+navigation guard. Desktop clients using native window chrome retain their
+ordinary same-origin navigation behavior.
+
 ## Connect a server
 
 Open **ClickClack → Settings** on macOS or **File → Settings** on Windows/Linux.

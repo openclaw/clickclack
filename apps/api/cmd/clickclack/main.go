@@ -35,6 +35,7 @@ var (
 
 type databaseStore interface {
 	store.Store
+	SyncIdentities(ctx context.Context, input store.IdentitySyncInput) (store.IdentitySyncReport, error)
 	Backup(ctx context.Context, outPath string) error
 	ExportJSON(ctx context.Context, writer io.Writer) error
 	PruneEvents(ctx context.Context, workspaceID string, keepLatest int, before string) (int64, error)
@@ -198,6 +199,8 @@ func admin(args []string) error {
 		return fmt.Errorf("admin requires a subcommand")
 	}
 	switch args[0] {
+	case "identity":
+		return adminIdentity(args[1:])
 	case "bootstrap":
 		flags := flag.NewFlagSet("admin bootstrap", flag.ExitOnError)
 		data := flags.String("data", defaultData(), "data directory")

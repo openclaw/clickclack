@@ -16,7 +16,7 @@
     scrollToMessage: (id: string) => boolean;
     scrollToDivider: (fallbackToAround?: boolean) => boolean;
     captureState: () => MessageListState | null;
-    isAtBottom: () => boolean;
+    isFollowing: () => boolean;
     isNearBottom: (tolerancePx?: number) => boolean;
   };
 </script>
@@ -307,6 +307,7 @@
   let revealed = $state(false);
   let lastViewKey: string | undefined;
   let lastItemCount = 0;
+  let lastMessageID = "";
   let lastPreambleLayoutRevision = "";
   let lastRestoreState: MessageListState | undefined;
   let pendingRestore = false;
@@ -676,7 +677,7 @@
       scrollToMessage,
       scrollToDivider,
       captureState,
-      isAtBottom: () => checkAtBottom(),
+      isFollowing: () => shouldStickToBottom,
       isNearBottom: (tolerancePx?: number) => checkNearBottom(tolerancePx),
     });
     return () => onListRef(null);
@@ -689,6 +690,10 @@
     const key = viewKey;
     const count = items.length;
     const layoutRevision = preambleLayoutRevision;
+    // Ordinary messages can grow an existing group without adding a virtual item.
+    const newestMessageID = messages.at(-1)?.id || "";
+    const newestMessageChanged = newestMessageID !== lastMessageID;
+    lastMessageID = newestMessageID;
 
     if (key !== lastViewKey) {
       lastViewKey = key;
@@ -724,7 +729,7 @@
     }
 
     const dataChanged =
-      count !== lastItemCount || layoutRevision !== lastPreambleLayoutRevision;
+      count !== lastItemCount || newestMessageChanged || layoutRevision !== lastPreambleLayoutRevision;
     if (dataChanged && shouldStickToBottom && !hasNewer && !pendingRestore) {
       void scrollLastItemIntoView();
     } else if (dataChanged && !pendingRestore) {

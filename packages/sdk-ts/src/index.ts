@@ -2,6 +2,8 @@ import type { components } from "./generated/openapi";
 
 export type { components, paths } from "./generated/openapi";
 
+export type HomeLink = components["schemas"]["HomeLink"];
+
 export type User = {
   id: string;
   kind: "human" | "bot";
@@ -562,6 +564,10 @@ export class ClickClackClient {
       return `${this.baseUrl}/api/auth/github/start`;
     },
   };
+
+  homeLink(): Promise<HomeLink> {
+    return this.request<HomeLink>("/api/home-link");
+  }
 
   async me(): Promise<User> {
     const data = await this.request<{ user: User }>("/api/me");

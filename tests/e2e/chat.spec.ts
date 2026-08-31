@@ -803,7 +803,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expectScrollAtMessageEnd(page);
   await page.bringToFront();
   await otherPage.close();
-  await page.screenshot({ path: test.info().outputPath("agent-activity.png") });
+  await page.screenshot({ path: test.info().outputPath("agent-activity-resumed.png") });
 
   // Ignore any replayed events from the initial realtime subscription; this
   // assertion begins with the background activity posted below.

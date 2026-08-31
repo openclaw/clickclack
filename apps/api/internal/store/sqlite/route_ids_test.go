@@ -243,7 +243,8 @@ func TestRouteTargetEdgesAndThreadCreationPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootFromGetThread, replies, state, err := st.GetThread(ctx, rootFromGetThread.ID, owner.ID, 0)
+	threadResult1, err := st.GetThreadPage(ctx, rootFromGetThread.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 0}})
+	rootFromGetThread, replies, state := threadResult1.Root, threadResult1.Replies, threadResult1.ThreadState
 	if err != nil {
 		t.Fatal(err)
 	}

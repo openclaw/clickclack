@@ -6,6 +6,8 @@ export type MessageEditSurface = "timeline" | "thread";
 export type MessageEditSession = {
   messageID: string;
   surface: MessageEditSurface;
+  threadRootID?: string;
+  threadSeq?: number;
   originalBody: string;
   draft: string;
   error: string;
@@ -66,6 +68,8 @@ export class MessageEditController {
     const session: MessageEditSession = {
       messageID: message.id,
       surface,
+      threadRootID: surface === "thread" ? message.thread_root_id : undefined,
+      threadSeq: message.thread_seq,
       originalBody: message.body,
       draft: message.body,
       error: "",

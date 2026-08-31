@@ -222,7 +222,7 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 	if reply.DirectConversationID != dm.ID || reply.ChannelID != "" || state.ReplyCount != 1 || len(events) != 2 {
 		t.Fatalf("unexpected DM thread reply result: %#v %#v %#v", reply, state, events)
 	}
-	if _, _, _, err := st.GetThread(ctx, reply.ID, owner.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, reply.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected nested thread root read to be blocked")
 	}
 	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
@@ -265,14 +265,15 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 	if receipt.LastReadSeq != *quotedDM.ChannelSeq || len(readEvent.RecipientUserIDs) != 1 || readEvent.RecipientUserIDs[0] != owner.ID {
 		t.Fatalf("expected DM read to cap to root sequence and target the reader, got %#v %#v", receipt, readEvent)
 	}
-	_, replies, _, err := st.GetThread(ctx, dmMessage.ID, owner.ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, dmMessage.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+	replies := threadResult1.Replies
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(replies) != 1 || replies[0].ID != reply.ID || replies[0].DirectConversationID != dm.ID {
 		t.Fatalf("unexpected DM thread replies: %#v", replies)
 	}
-	if _, _, _, err := st.GetThread(ctx, dmMessage.ID, workspaceOnly.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, dmMessage.ID, workspaceOnly.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected non-DM member to be blocked from DM thread")
 	}
 
@@ -476,7 +477,7 @@ func TestMessagePrivacyScalingChannelAndUploadVisibilityCoverage(t *testing.T) {
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "bad nonce", Nonce: strings.Repeat("x", 129)}); err == nil {
 		t.Fatal("expected overlong message nonce to be blocked")
 	}
-	if _, _, _, err := st.GetThread(ctx, "msg_missing", owner.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, "msg_missing", owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected missing thread read to fail")
 	}
 	memberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: member.ID, Body: "member upload message"})

@@ -1,6 +1,6 @@
 import { api, readableAPIError } from "./api";
 import { latestThreadState, newNonce } from "./chat/messages";
-import type { Message, ThreadState, User } from "./types";
+import type { Message, RealtimeEvent, ThreadPage, ThreadState, User } from "./types";
 
 type ThreadSelection = { messageID: string; context: string };
 type Submission = { body: string; quotedMessageID?: string; nonce: string };
@@ -11,6 +11,14 @@ type ReplyDraft = {
   error: string;
   submission?: Submission;
 };
+type Edge = "older" | "newer";
+export type ThreadTarget = { messageID: string; threadSeq?: number };
+export type ThreadScrollIntent = "preserve" | "latest" | ThreadTarget;
+const THREAD_WINDOW_LIMIT = 300;
+const RETAIN_REPLIES = 200;
+const INITIAL_REPLIES = 100;
+const PAGE_REPLIES = 50;
+const seq = (message: Message) => message.thread_seq ?? 0;
 
 export class ThreadController {
   root = $state<Message | null>(null);
@@ -18,16 +26,32 @@ export class ThreadController {
   state = $state<ThreadState | null>(null);
   error = $state("");
   selection = $state.raw<ThreadSelection | null>(null);
+  hasOlder = $state(false);
+  hasNewer = $state(false);
+  loading = $state({ older: false, newer: false });
+  edgeError = $state({ older: "", newer: "" });
+  following = $state(true);
+  anchor: { messageID: string; offset: number } | null = null;
+  editingID = "";
+  beforeChange?: (intent: ThreadScrollIntent) => void;
   private drafts = $state<Map<string, ReplyDraft>>(new Map());
-  private loadSerial = 0;
-  private replyRevision = 0;
+  private window = 0;
+  private revision = 0;
+  private rowRevisions = new Map<string, number>();
+  private pageMutations = new Set<Map<string, Message>>();
+  private edgeOwners: Partial<Record<Edge, object>> = {};
+  private knownTail = 0;
+  private initialized = false;
+  private coveredStateEvent = false;
 
-  constructor(private readonly context: () => string) {}
+  constructor(
+    private readonly context: () => string,
+    private readonly committed: () => void,
+  ) {}
 
   get draft(): ReplyDraft | undefined {
     return this.selection ? this.drafts.get(this.selection.messageID) : undefined;
   }
-
   select(messageID: string, optimisticRoot?: Message): ThreadSelection {
     if (this.selection?.messageID === messageID && this.isCurrent(this.selection))
       return this.selection;
@@ -37,44 +61,159 @@ export class ThreadController {
     this.state = optimisticRoot?.thread_state ?? null;
     return this.selection;
   }
-
   isCurrent(selection: ThreadSelection | null): selection is ThreadSelection {
     return (
       selection !== null && this.selection === selection && selection.context === this.context()
     );
   }
-
   close() {
     this.selection = null;
-    this.loadSerial++;
+    this.window++;
+    this.rowRevisions.clear();
+    this.pageMutations.clear();
+    this.edgeOwners = {};
+    this.knownTail = 0;
     this.root = null;
     this.replies = [];
     this.state = null;
     this.error = "";
+    this.hasOlder = this.hasNewer = false;
+    this.loading = { older: false, newer: false };
+    this.edgeError = { older: "", newer: "" };
+    this.initialized = this.coveredStateEvent = false;
+    this.following = true;
+    this.anchor = null;
+    this.editingID = "";
   }
-
-  async refresh(shouldCommit: () => boolean = () => true): Promise<boolean> {
-    const selection = this.selection;
-    if (!this.isCurrent(selection)) return false;
-    const serial = ++this.loadSerial;
-    const replyRevision = this.replyRevision;
-    const current = () => this.isCurrent(selection) && serial === this.loadSerial && shouldCommit();
+  private owner(shouldCommit: () => boolean = () => true) {
+    const selection = this.selection,
+      window = this.window;
+    return {
+      selection,
+      current: () => this.isCurrent(selection) && this.window === window && shouldCommit(),
+    };
+  }
+  private async request(selection: ThreadSelection, options: Record<string, number | boolean>) {
+    const query = new URLSearchParams(
+      Object.entries(options).map(([key, value]) => [key, String(value)]),
+    );
+    // Receipts may arrive after a row was paged out but before this snapshot commits.
+    const mutations = new Map<string, Message>();
+    this.pageMutations.add(mutations);
     try {
-      const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
-        `/api/messages/${selection.messageID}/thread`,
-      );
-      if (!current()) return false;
-      const sentDuringLoad = replyRevision !== this.replyRevision;
-      const replies = new Map(data.replies.map((reply) => [reply.id, reply]));
-      if (sentDuringLoad) {
-        for (const reply of this.replies) if (!replies.has(reply.id)) replies.set(reply.id, reply);
+      const page = await api<ThreadPage>(`/api/messages/${selection.messageID}/thread?${query}`);
+      if (mutations.size > THREAD_WINDOW_LIMIT) {
+        throw new Error("Too many replies changed while loading. Please try again.");
       }
-      this.replies = [...replies.values()].sort(
-        (a, b) => (a.thread_seq ?? 0) - (b.thread_seq ?? 0),
+      page.root = mutations.get(page.root.id) ?? page.root;
+      page.replies = page.replies.map((reply) => mutations.get(reply.id) ?? reply);
+      return page;
+    } finally {
+      this.pageMutations.delete(mutations);
+    }
+  }
+  private metadata(page: ThreadPage, revision: number) {
+    if ((this.rowRevisions.get(page.root.id) ?? 0) <= revision || !this.root) {
+      this.root = page.root;
+      this.rowRevisions.set(page.root.id, ++this.revision);
+    }
+    this.knownTail = Math.max(this.knownTail, page.newest_seq);
+    this.reconcileState(page.thread_state);
+    this.error = "";
+    this.committed();
+  }
+  private reconcileState(incoming: ThreadState) {
+    this.state = latestThreadState(this.state, incoming);
+    if (this.root) this.root = { ...this.root, thread_state: this.state };
+  }
+  private merge(
+    incoming: Message[],
+    revision: number,
+    edge: Edge,
+    intent: ThreadScrollIntent = "preserve",
+  ) {
+    this.beforeChange?.(intent);
+    const rows = new Map(this.replies.map((reply) => [reply.id, reply]));
+    for (const reply of incoming) {
+      // A page captured before an acknowledged local mutation cannot undo it.
+      if ((this.rowRevisions.get(reply.id) ?? 0) <= revision || !rows.has(reply.id)) {
+        rows.set(reply.id, reply);
+        this.rowRevisions.set(reply.id, ++this.revision);
+      }
+    }
+    let replies = [...rows.values()].sort((a, b) => seq(a) - seq(b));
+    if (replies.length > THREAD_WINDOW_LIMIT) {
+      let start = edge === "older" ? 0 : replies.length - RETAIN_REPLIES;
+      let end = Math.min(replies.length, start + RETAIN_REPLIES);
+      const protectedIndices = [this.following ? "" : this.anchor?.messageID, this.editingID]
+        .map((id) => replies.findIndex((reply) => reply.id === id))
+        .filter((index) => index >= 0);
+      if (protectedIndices.length) {
+        start = Math.min(start, ...protectedIndices);
+        end = Math.max(end, ...protectedIndices.map((index) => index + 1));
+        if (end - start > THREAD_WINDOW_LIMIT) {
+          if (edge === "newer") end = start + THREAD_WINDOW_LIMIT;
+          else start = end - THREAD_WINDOW_LIMIT;
+        }
+      }
+      if (start > 0) this.hasOlder = true;
+      if (end < replies.length) this.hasNewer = true;
+      replies = replies.slice(start, end);
+    }
+    this.replies = replies;
+    this.pruneRevisions();
+    this.committed();
+  }
+  private pruneRevisions() {
+    const retained = new Set([this.root?.id, ...this.replies.map((reply) => reply.id)]);
+    for (const id of this.rowRevisions.keys()) if (!retained.has(id)) this.rowRevisions.delete(id);
+  }
+  private selectWindow() {
+    this.window++;
+    this.pageMutations.clear();
+    this.edgeOwners = {};
+    this.loading = { older: false, newer: false };
+    this.edgeError = { older: "", newer: "" };
+  }
+  async open(shouldCommit: () => boolean = () => true): Promise<boolean> {
+    if (this.initialized && this.isCurrent(this.selection)) return shouldCommit();
+    return this.latest(shouldCommit);
+  }
+  async latest(shouldCommit: () => boolean = () => true): Promise<boolean> {
+    this.selectWindow();
+    return this.replace({ latest: true, limit: INITIAL_REPLIES }, "latest", shouldCommit);
+  }
+  private async replace(
+    options: Record<string, number | boolean>,
+    intent: ThreadScrollIntent,
+    shouldCommit: () => boolean,
+  ) {
+    const { selection, current } = this.owner(shouldCommit),
+      revision = this.revision;
+    if (!selection || !current()) return false;
+    try {
+      const page = await this.request(selection, options);
+      if (!current()) return false;
+      this.beforeChange?.(intent);
+      const existing = new Map(this.replies.map((reply) => [reply.id, reply]));
+      let replies = page.replies.map((reply) =>
+        (this.rowRevisions.get(reply.id) ?? 0) > revision
+          ? (existing.get(reply.id) ?? reply)
+          : reply,
       );
-      this.root = data.root;
-      this.reconcileState(data.thread_state);
-      this.error = "";
+      // A delayed latest snapshot must retain a newer contiguous interval already observed.
+      if (intent === "latest" && page.replies.some((reply) => existing.has(reply.id))) {
+        replies = [...replies, ...this.replies.filter((reply) => seq(reply) > page.newest_seq)];
+      }
+      this.replies = replies.slice(-THREAD_WINDOW_LIMIT);
+      for (const reply of this.replies) this.rowRevisions.set(reply.id, ++this.revision);
+      this.pruneRevisions();
+      this.hasOlder = page.has_older || replies.length > this.replies.length;
+      this.hasNewer =
+        page.has_newer || seq(this.replies.at(-1) ?? ({} as Message)) < this.knownTail;
+      this.metadata(page, revision);
+      this.initialized = true;
+      if (intent === "latest") this.following = true;
       return true;
     } catch (error) {
       if (!current()) return false;
@@ -82,12 +221,179 @@ export class ThreadController {
       throw error;
     }
   }
-
-  private reconcileState(incoming: ThreadState) {
-    this.state = latestThreadState(this.state, incoming);
-    if (this.root) this.root = { ...this.root, thread_state: this.state };
+  async target(target: ThreadTarget, shouldCommit: () => boolean = () => true): Promise<boolean> {
+    this.selectWindow();
+    const owner = this.owner(shouldCommit);
+    if (!owner.selection || !owner.current()) return false;
+    try {
+      const loaded =
+        this.root?.id === target.messageID
+          ? this.root
+          : this.replies.find((reply) => reply.id === target.messageID);
+      if (loaded) {
+        if (loaded.deleted_at) throw new Error("This message was deleted.");
+        this.following = false;
+        this.beforeChange?.(target);
+        return true;
+      }
+      let threadSeq = target.threadSeq;
+      if (!threadSeq) {
+        const message = (await api<{ message: Message }>(`/api/messages/${target.messageID}`))
+          .message;
+        if (!owner.current()) return false;
+        if (
+          message.thread_root_id !== owner.selection.messageID ||
+          !message.thread_seq ||
+          message.deleted_at
+        )
+          throw new Error("This reply is no longer available in this thread.");
+        threadSeq = message.thread_seq;
+      }
+      if (!owner.current()) return false;
+      if (
+        !(await this.replace(
+          { around_seq: threadSeq, limit: INITIAL_REPLIES },
+          target,
+          owner.current,
+        ))
+      )
+        return false;
+      if (!this.replies.some((reply) => reply.id === target.messageID && !reply.deleted_at))
+        throw new Error("This reply is no longer available.");
+      this.following = false;
+      return true;
+    } catch (error) {
+      if (!owner.current()) return false;
+      this.error = readableAPIError(error, "Could not open this reply.");
+      return false;
+    }
   }
-
+  async loadEdge(
+    edge: Edge,
+    shouldCommit: () => boolean = () => true,
+    limit = PAGE_REPLIES,
+  ): Promise<boolean> {
+    if (this.loading[edge]) return false;
+    const { selection, current } = this.owner(shouldCommit),
+      revision = this.revision;
+    if (!selection || !current()) return false;
+    const pivot =
+      edge === "older"
+        ? seq(this.replies[0] ?? ({} as Message))
+        : seq(this.replies.at(-1) ?? ({} as Message));
+    const operation = {};
+    this.edgeOwners[edge] = operation;
+    this.loading[edge] = true;
+    this.edgeError[edge] = "";
+    try {
+      const page = await this.request(selection, {
+        [edge === "older" ? "before_seq" : "after_seq"]: pivot,
+        limit,
+      });
+      if (!current()) return false;
+      this.metadata(page, revision);
+      if (pivot && !this.replies.some((reply) => seq(reply) === pivot)) return false;
+      if (edge === "older") this.hasOlder = page.has_older;
+      else this.hasNewer = page.has_newer;
+      this.merge(page.replies, revision, edge);
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      this.edgeError[edge] = readableAPIError(error, `Could not load ${edge} replies.`);
+      throw error;
+    } finally {
+      if (this.edgeOwners[edge] === operation) {
+        delete this.edgeOwners[edge];
+        this.loading[edge] = false;
+      }
+    }
+  }
+  // Reconcile the captured retained interval. Layout never blocks durable ingestion.
+  async refresh(shouldCommit: () => boolean = () => true): Promise<boolean> {
+    if (!this.initialized) return this.open(shouldCommit);
+    const { selection, current } = this.owner(shouldCommit),
+      revision = this.revision;
+    if (!selection || !current()) return false;
+    if (!this.replies.length) return this.latest(shouldCommit);
+    const high = seq(this.replies.at(-1)!);
+    let cursor = seq(this.replies[0]) - 1;
+    try {
+      while (cursor < high) {
+        const page = await this.request(selection, { after_seq: cursor, limit: 200 });
+        if (!current()) return false;
+        this.metadata(page, revision);
+        this.merge(
+          page.replies.filter((reply) => seq(reply) <= high),
+          revision,
+          "newer",
+        );
+        if (page.newest_seq <= cursor) break;
+        cursor = page.newest_seq;
+        this.hasNewer = page.has_newer || page.newest_seq > high;
+      }
+      if (this.following) await this.catchUp(shouldCommit);
+      return current();
+    } catch (error) {
+      if (!current()) return false;
+      this.error = readableAPIError(error, "Could not refresh the thread.");
+      throw error;
+    }
+  }
+  private async catchUp(shouldCommit: () => boolean) {
+    const { selection, current } = this.owner(shouldCommit),
+      revision = this.revision;
+    if (!selection || !current()) return;
+    const tail = await this.request(selection, { latest: true, limit: 1 });
+    if (!current()) return;
+    this.metadata(tail, revision);
+    const newest = seq(this.replies.at(-1) ?? ({} as Message));
+    if (newest >= tail.newest_seq) {
+      this.hasNewer = false;
+      return;
+    }
+    if (this.hasNewer && !this.following) return;
+    // A fixed tail and row budget bound catch-up even under continuous publication.
+    for (
+      let fetched = 0;
+      current() &&
+      seq(this.replies.at(-1) ?? ({} as Message)) < tail.newest_seq &&
+      fetched < THREAD_WINDOW_LIMIT;
+      fetched += PAGE_REPLIES
+    ) {
+      if (!(await this.loadEdge("newer", current))) break;
+      if (this.hasNewer && !this.following && this.replies.length >= THREAD_WINDOW_LIMIT) break;
+    }
+    if (current() && seq(this.replies.at(-1) ?? ({} as Message)) < tail.newest_seq)
+      this.hasNewer = true;
+  }
+  async handleEvent(event: RealtimeEvent, shouldCommit: () => boolean): Promise<boolean> {
+    const id = event.payload.message_id;
+    const belongs =
+      event.payload.root_message_id === this.selection?.messageID ||
+      id === this.root?.id ||
+      this.replies.some((reply) => reply.id === id);
+    if (!belongs || !this.isCurrent(this.selection)) return false;
+    const operation = this.owner(shouldCommit);
+    try {
+      if (event.type === "thread.reply_created") {
+        await this.catchUp(shouldCommit);
+        if (operation.current()) this.coveredStateEvent = true;
+      } else if (event.type === "thread.state_updated") {
+        if (this.coveredStateEvent) this.coveredStateEvent = false;
+        else await this.catchUp(shouldCommit);
+      } else if ((event.type === "message.updated" || event.type === "message.deleted") && id) {
+        const { current } = this.owner(shouldCommit),
+          revision = this.revision;
+        const data = await api<{ message: Message }>(`/api/messages/${id}`);
+        if (current() && (this.rowRevisions.get(id) ?? 0) <= revision)
+          this.updateMessage(data.message);
+      } else return false;
+      return true;
+    } catch (error) {
+      if (operation.current()) throw error;
+      return false;
+    }
+  }
   updateDraft(body: string) {
     const id = this.selection?.messageID;
     if (!id || this.draft?.sending) return;
@@ -116,24 +422,30 @@ export class ThreadController {
   }
 
   updateAuthor(user: User) {
-    this.replies = this.replies.map((reply) =>
-      reply.author?.id === user.id ? { ...reply, author: user } : reply,
-    );
-    if (this.root?.author?.id === user.id) this.root = { ...this.root, author: user };
+    for (const message of this.root ? [this.root, ...this.replies] : this.replies) {
+      if (message.author?.id === user.id) this.updateMessage({ ...message, author: user });
+    }
   }
-
   updateMessage(message: Message) {
+    if (message.deleted_at && this.draft?.quote?.id === message.id) this.setQuote(null);
+    if (message.thread_root_id !== this.selection?.messageID) return;
+    for (const mutations of this.pageMutations) {
+      // One overflow sentinel bounds memory even when a page is held during a burst.
+      if (mutations.size <= THREAD_WINDOW_LIMIT) mutations.set(message.id, message);
+    }
+    this.beforeChange?.("preserve");
+    this.rowRevisions.set(message.id, ++this.revision);
     this.replies = this.replies.map((reply) =>
       reply.id === message.id ? { ...reply, ...message } : reply,
     );
     if (this.root?.id === message.id) this.root = { ...this.root, ...message };
-    if (message.deleted_at && this.draft?.quote?.id === message.id) this.setQuote(null);
+    this.pruneRevisions();
+    this.committed();
   }
-
-  async send(): Promise<void> {
-    const selection = this.selection;
-    const draft = this.draft;
-    const body = draft?.body.trim();
+  async send(onError?: (error: unknown) => void): Promise<void> {
+    const selection = this.selection,
+      draft = this.draft,
+      body = draft?.body.trim();
     if (!this.isCurrent(selection) || !this.root || !draft || !body || draft.sending) return;
     const quotedMessageID = draft.quote?.id;
     const submission =
@@ -154,18 +466,26 @@ export class ThreadController {
         },
       );
       this.patchDraft(selection.messageID, { body: "", quote: null, submission: undefined });
-      // A send belongs to its root even if the user has closed and reopened it.
       if (this.selection?.messageID !== selection.messageID || !this.isCurrent(this.selection))
         return;
-      this.replyRevision++;
-      if (!this.replies.some((reply) => reply.id === data.message.id)) {
-        this.replies = [...this.replies, data.message];
-      }
+      this.revision++;
       this.reconcileState(data.thread_state);
+      if (
+        !this.hasNewer &&
+        !this.replies.some((reply) => reply.id === data.message.id) &&
+        seq(data.message) === seq(this.replies.at(-1) ?? ({} as Message)) + 1
+      )
+        this.merge([data.message], this.revision, "newer", "latest");
+      try {
+        await this.latest();
+      } catch {
+        /* The send committed; the window error offers a separate retry. */
+      }
     } catch (error) {
       this.patchDraft(selection.messageID, {
         error: readableAPIError(error, "Could not post the reply."),
       });
+      if (this.isCurrent(selection)) onError?.(error);
     } finally {
       this.patchDraft(selection.messageID, { sending: false });
     }

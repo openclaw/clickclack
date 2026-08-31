@@ -120,7 +120,8 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 	if reply.ThreadSeq == nil || *reply.ThreadSeq != 1 || state.ReplyCount != 1 || len(events) != 2 {
 		t.Fatalf("unexpected reply result: %#v %#v %#v", reply, state, events)
 	}
-	threadRoot, replies, threadState, err := st.GetThread(ctx, root.ID, owner.ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, root.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+	threadRoot, replies, threadState := threadResult1.Root, threadResult1.Replies, threadResult1.ThreadState
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -582,7 +583,7 @@ func TestStoreAccessErrors(t *testing.T) {
 			return err
 		}},
 		{"thread denied", func() error {
-			_, _, _, err := st.GetThread(ctx, root.ID, outsider.ID, 10)
+			_, err := st.GetThreadPage(ctx, root.ID, outsider.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
 			return err
 		}},
 		{"reply denied", func() error {
@@ -874,7 +875,7 @@ func TestStoreBranchCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := st.GetThread(ctx, reply.ID, owner.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, reply.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected reply-as-root error")
 	}
 	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: reply.ID, AuthorID: owner.ID, Body: "nested"}); err == nil {

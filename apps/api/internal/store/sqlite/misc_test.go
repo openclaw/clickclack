@@ -275,11 +275,12 @@ func TestStoreMiscBranches(t *testing.T) {
 	if _, err := st.db.ExecContext(ctx, `UPDATE messages SET edited_at = created_at, deleted_at = created_at WHERE id = ?`, reply.ID); err != nil {
 		t.Fatal(err)
 	}
-	_, replies, threadState, err := st.GetThread(ctx, root.ID, owner.ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, root.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+	replies, threadState := threadResult1.Replies, threadResult1.ThreadState
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := st.GetThread(ctx, root.ID, owner.ID, 0); err != nil {
+	if _, err := st.GetThreadPage(ctx, root.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 0}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(replies) != 6 || len(threadState.LastReplyAuthorIDs) != 3 {

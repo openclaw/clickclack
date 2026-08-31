@@ -56,7 +56,9 @@ func TestGetThreadHydratesReactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	threadRoot, replies, _, err := st.GetThread(ctx, root.ID, owner.ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, root.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+
+	threadRoot, replies := threadResult1.Root, threadResult1.Replies
 	if err != nil {
 		t.Fatal(err)
 	}

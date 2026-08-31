@@ -1358,9 +1358,25 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: before_seq
+          in: query
+          description: Return the nearest replies before this exclusive thread sequence; mutually exclusive with after_seq, around_seq and latest=true.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: after_seq
+          in: query
+          description: Return the nearest replies after this exclusive thread sequence.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: around_seq
+          in: query
+          description: Return a balanced reply window around this thread sequence.
+          schema: { type: integer, format: int64, minimum: 0 }
       responses:
         "200":
-          description: Thread root and replies
+          description: Thread root, chronological replies and authoritative history edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadPage"
   /api/messages/{message_id}/thread/replies:
     post:
       operationId: createThreadReply
@@ -3055,6 +3071,30 @@ components:
         unread_count:
           type: integer
           format: int64
+    ThreadPage:
+      type: object
+      required: [root, replies, thread_state, oldest_seq, newest_seq, has_older, has_newer]
+      properties:
+        root:
+          $ref: "#/components/schemas/Message"
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        thread_state:
+          $ref: "#/components/schemas/ThreadState"
+        oldest_seq:
+          type: integer
+          format: int64
+          description: Oldest returned thread sequence, or zero for an empty page.
+        newest_seq:
+          type: integer
+          format: int64
+          description: Newest returned thread sequence, or zero for an empty page.
+        has_older:
+          type: boolean
+        has_newer:
+          type: boolean
     ThreadState:
       type: object
       required: [root_message_id, reply_count, last_reply_author_ids]

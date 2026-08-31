@@ -44,7 +44,8 @@ func TestSeedIsIdempotentAndCreatesSyntheticThreads(t *testing.T) {
 	}
 
 	rootID := first.MessageIDs["engineering-rollout"]
-	root, replies, state, err := st.GetThread(ctx, rootID, first.Users[0].ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, rootID, first.Users[0].ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+	root, replies, state := threadResult1.Root, threadResult1.Replies, threadResult1.ThreadState
 	if err != nil {
 		t.Fatal(err)
 	}

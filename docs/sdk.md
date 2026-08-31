@@ -82,6 +82,24 @@ See [features/auth.md](features/auth.md).
 | `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
 | `events`      | `list`, `publishEphemeral`, `subscribe` |
 
+## Thread history
+
+`threads.get` preserves the earliest-first default and supports bounded latest,
+before, after, and around windows. Sequences are local to the thread:
+
+```ts
+const latest = await client.threads.get(rootId, { latest: true, limit: 100 });
+if (latest.has_older) {
+  const older = await client.threads.get(rootId, { before_seq: latest.oldest_seq, limit: 50 });
+}
+const target = await client.threads.get(rootId, { around_seq: reply.thread_seq, limit: 100 });
+```
+
+Each response includes root, hydrated replies, the full thread summary, reply
+sequence bounds, and `has_older` / `has_newer`. See
+[threads](features/threads.md#ordering-and-pagination) for cursor validation and
+empty-page semantics.
+
 ## Realtime subscription
 
 Capture the current tail or drain a bounded backlog through the same client:

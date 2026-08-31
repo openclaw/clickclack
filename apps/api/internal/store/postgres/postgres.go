@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -813,70 +812,6 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		return store.Message{}, store.Event{}, err
 	}
 	return msg, event, tx.Commit()
-}
-
-func (s *Store) GetThread(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
-	return s.getThread(ctx, rootMessageID, userID, limit, false)
-}
-
-func (s *Store) GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
-	return s.getThread(ctx, rootMessageID, userID, limit, true)
-}
-
-func (s *Store) getThread(ctx context.Context, rootMessageID, userID string, limit int, latest bool) (store.Message, []store.Message, store.ThreadState, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 100
-	}
-	root, err := getMessage(ctx, s.db, rootMessageID)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	if root.ParentMessageID != nil {
-		return store.Message{}, nil, store.ThreadState{}, errors.New("thread root must be a root message")
-	}
-	if err := s.requireMessageAccess(ctx, root, userID); err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root, err = s.EnsureThreadRouteID(ctx, userID, root.ID)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	roots, err := s.hydrateAttachments(ctx, []store.Message{root})
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root = roots[0]
-	order := "ASC"
-	if latest {
-		order = "DESC"
-	}
-	rows, err := s.db.QueryContext(ctx, messageSelect()+`
-		WHERE m.thread_root_id = $1 AND m.parent_message_id = $2
-		ORDER BY m.thread_seq `+order+`
-		LIMIT $3`, rootMessageID, rootMessageID, limit)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	defer rows.Close()
-	replies, err := scanMessages(rows)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	if latest {
-		slices.Reverse(replies)
-	}
-	replies, err = s.hydrateAttachments(ctx, replies)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	threadMessages := append([]store.Message{root}, replies...)
-	threadMessages, err = s.hydrateReactions(ctx, userID, threadMessages)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root, replies = threadMessages[0], threadMessages[1:]
-	state, err := getThreadState(ctx, s.db, rootMessageID)
-	return root, replies, state, err
 }
 
 func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadReplyInput) (store.Message, store.ThreadState, []store.Event, error) {

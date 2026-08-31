@@ -266,6 +266,16 @@ export type WorkspaceBotCommand = {
   updated_at: string;
 };
 
+export type ThreadPage = {
+  root: Message;
+  replies: Message[];
+  thread_state: ThreadState;
+  oldest_seq: number;
+  newest_seq: number;
+  has_older: boolean;
+  has_newer: boolean;
+};
+
 export type ThreadState = {
   root_message_id: string;
   reply_count: number;

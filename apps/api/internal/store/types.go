@@ -331,6 +331,21 @@ type MessagePage struct {
 	HasNewer  bool      `json:"has_newer"`
 }
 
+type ThreadPageRequest struct {
+	MessagePageRequest
+	Latest bool
+}
+
+type ThreadPage struct {
+	Root        Message     `json:"root"`
+	Replies     []Message   `json:"replies"`
+	ThreadState ThreadState `json:"thread_state"`
+	OldestSeq   int64       `json:"oldest_seq"`
+	NewestSeq   int64       `json:"newest_seq"`
+	HasOlder    bool        `json:"has_older"`
+	HasNewer    bool        `json:"has_newer"`
+}
+
 type ThreadState struct {
 	RootMessageID          string   `json:"root_message_id"`
 	ReplyCount             int64    `json:"reply_count"`
@@ -1248,8 +1263,7 @@ type Store interface {
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
 	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
-	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
-	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
+	GetThreadPage(ctx context.Context, rootMessageID, userID string, req ThreadPageRequest) (ThreadPage, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)

@@ -97,7 +97,7 @@
   let selectedWorkspaceID = "";
   let selectedChannelID = "";
   let selectedDirectID = "";
-  const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`);
+  const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`, reconcileThread);
   // This legacy component consumes the rune-based owner through a reactive store.
   const threadView = toStore(() => ({
     root: thread.root,
@@ -135,7 +135,6 @@
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
   let artifactTrigger: HTMLElement | null = null;
-  let artifactThreadScrollTop: number | null = null;
   let artifactViewerElement: HTMLElement | null = null;
   let shellElement: HTMLElement | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
@@ -2673,19 +2672,34 @@
   }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
-    if (scope !== activeConversationKey) return;
-    if (session.surface === "timeline") messageList?.scrollToMessage(session.messageID);
-    const surfaceRoot = document.querySelector(
-      session.surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
-    );
+    let selection = thread.selection;
+    const current = () => scope === activeConversationKey &&
+      editController.session(scope)?.generation === session.generation &&
+      (session.surface !== "thread" || thread.selection === selection);
+    if (!current()) return;
+    if (session.surface === "thread") {
+      if (session.threadRootID && selection?.messageID !== session.threadRootID) {
+        pinnedPanelOpen = false;
+        thread.select(session.threadRootID);
+        selection = thread.selection;
+        if (!await selectThread(session.threadRootID, undefined, current)) return;
+      }
+      if (!await thread.target({ messageID: session.messageID, threadSeq: session.threadSeq }, current)) return;
+      if (!current()) return;
+      if (thread.root?.route_id) await navigateToApp(selectedWorkspaceID, thread.root.id);
+    } else {
+      messageList?.scrollToMessage(session.messageID);
+    }
     for (let attempt = 0; attempt < 16; attempt += 1) {
       await tick();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const editor = surfaceRoot
-        ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
+      if (!current()) return;
+      const editor = document.querySelector(
+        session.surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
+      )?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
         ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
       if (!editor) continue;
-      editor.focus();
+      editor.focus({ preventScroll: true });
       return;
     }
   }
@@ -2751,24 +2765,23 @@
     activeComposerContext = "thread";
     thread.select(messageID, optimisticRoot);
     try {
-      return await refreshThread(shouldCommit);
+      return await thread.open(shouldCommit);
     } catch {
       // The owner retains the load error for the pane; background refreshes still reject.
       return false;
     }
   }
 
-  async function refreshThread(shouldCommit: () => boolean = () => true): Promise<boolean> {
-    if (!await thread.refresh(shouldCommit) || !thread.root) return false;
+  function reconcileThread() {
     const root = thread.root;
+    if (!root) return;
     reactionController.seedMessages([root, ...thread.replies]);
     editController.reconcile(currentConversationKey(), [root, ...thread.replies]);
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
-    return true;
   }
 
   async function refreshThreadSummary(messageID: string) {
-    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
+    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread?latest=true&limit=1`);
     const root = { ...data.root, thread_state: data.thread_state };
     reactionController.seedMessages([root]);
     setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
@@ -2818,6 +2831,10 @@
   async function jumpToQuotedMessage(message: Message) {
     const targetID = message.quoted_message_id;
     if (!targetID) return;
+    if (message.parent_message_id && message.thread_root_id === thread.selection?.messageID) {
+      await thread.target({ messageID: targetID });
+      return;
+    }
     const scrolled = messageList?.scrollToMessage(targetID) ?? false;
     if (scrolled) {
       await highlightMessage(targetID);
@@ -2996,16 +3013,12 @@
           searchSession?.activeResultID === result.id,
       );
       if (!loaded) return;
-      if (thread.root?.route_id) {
-        await navigateToApp(selectedWorkspaceID, thread.root.id);
-      }
+      const targetCurrent = () => requestID === searchRequestID && searchThreadDetour && searchSession?.activeResultID === result.id;
+      if (!await thread.target({ messageID: result.id, threadSeq: result.thread_seq }, targetCurrent)) return;
+      if (!targetCurrent()) return;
+      if (thread.root?.route_id) await navigateToApp(selectedWorkspaceID, thread.root.id);
       await tick();
-      const reply = document.querySelector<HTMLElement>(
-        `.thread [data-message-id="${CSS.escape(result.id)}"]`,
-      );
-      reply?.scrollIntoView({ block: "center" });
-      document.querySelector<HTMLElement>(".thread .thread-back")?.focus();
-      await highlightMessage(result.id);
+      if (targetCurrent()) document.querySelector<HTMLElement>(".thread .thread-back")?.focus({ preventScroll: true });
       return;
     }
     if (result.channel_seq && result.channel_seq > 0) {
@@ -3301,7 +3314,7 @@
     await loadPinnedMessages();
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     if (selectedThreadID && thread.root?.id === selectedThreadID) {
-      await refreshThread(isCurrent);
+      await thread.refresh(isCurrent);
     }
     if (selectedBotProfileID && selectedProfile?.id === selectedBotProfileID) {
       const refreshed = lookupUser(selectedBotProfileID);
@@ -3443,19 +3456,12 @@
       // MessageList owns following and read receipts once layout settles.
       // Waiting for its frames here would stop durable ingestion in hidden tabs.
     }
+    if (await thread.handleEvent(event, isCurrent)) {
+      return;
+    }
     const rootID = event.payload.root_message_id || event.payload.message_id;
-    if (
-      rootID &&
-      event.type === "thread.state_updated" &&
-      shouldRefreshThreadSummary(rootID, event)
-    ) {
-      if (thread.root?.id === rootID) {
-        await refreshThread(isCurrent);
-      } else {
-        await refreshThreadSummary(rootID);
-      }
-    } else if (event.type !== "thread.reply_created" && thread.root && rootID === thread.root.id) {
-      await refreshThread(isCurrent);
+    if (rootID && event.type === "thread.state_updated" && shouldRefreshThreadSummary(rootID, event)) {
+      await refreshThreadSummary(rootID);
     }
   }
 
@@ -3502,7 +3508,7 @@
     ]);
     void loadWorkspaceMembers();
     await loadMessages();
-    if (thread.isCurrent(threadSelection)) await refreshThread();
+    if (thread.isCurrent(threadSelection)) await thread.refresh();
   }
 
   async function handleBotMembershipRemovedEvent(event: RealtimeEvent) {
@@ -3787,9 +3793,6 @@
 
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    artifactThreadScrollTop = thread.root
-      ? (document.querySelector<HTMLElement>(".thread-scroll")?.scrollTop ?? null)
-      : null;
     artifactConversationKey = activeConversationKey;
     selectedArtifact = upload;
     void tick().then(() => {
@@ -3804,11 +3807,6 @@
     artifactConversationKey = "";
     artifactTrigger = null;
     void tick().then(() => {
-      if (artifactThreadScrollTop !== null) {
-        const threadScroll = document.querySelector<HTMLElement>(".thread-scroll");
-        if (threadScroll) threadScroll.scrollTop = artifactThreadScrollTop;
-      }
-      artifactThreadScrollTop = null;
       if (trigger?.isConnected) {
         trigger.focus({ preventScroll: true });
         return;
@@ -4436,6 +4434,7 @@
       />
     {:else if $threadView.root}
       <ThreadPanel
+        history={thread}
         root={$threadView.root}
         {replies}
         threadState={$threadView.state}

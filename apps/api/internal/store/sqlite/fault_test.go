@@ -30,7 +30,7 @@ func TestStoreFaultBranches(t *testing.T) {
 		if _, err := st.db.ExecContext(ctx, `DROP TABLE thread_state`); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, _, err := st.GetThread(ctx, root.ID, owner.ID, 10); err == nil {
+		if _, err := st.GetThreadPage(ctx, root.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 			t.Fatal("expected get thread state failure")
 		}
 		if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{RootMessageID: root.ID, AuthorID: owner.ID, Body: "reply"}); err == nil {
@@ -165,7 +165,7 @@ func TestStoreFaultBranches(t *testing.T) {
 		if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "x"}); err == nil {
 			t.Fatal("expected create message sequence failure")
 		}
-		if _, _, _, err := st.GetThread(ctx, "msg_missing", owner.ID, 10); err == nil {
+		if _, err := st.GetThreadPage(ctx, "msg_missing", owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 			t.Fatal("expected get thread message failure")
 		}
 	})

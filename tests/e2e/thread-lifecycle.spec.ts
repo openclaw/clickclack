@@ -1,53 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { waitForAppReady } from "./app-ready";
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
-async function threadFixture(page: Page) {
-  const suffix = randomUUID().slice(0, 8);
-  const created = await page.request.post("/api/workspaces", {
-    data: { name: `Thread lifecycle ${suffix}` },
-  });
-  expect(created.ok()).toBe(true);
-  const { workspace } = await created.json();
-  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: `threads-${suffix}` },
-  });
-  expect(channelResponse.ok()).toBe(true);
-  const { channel } = await channelResponse.json();
-  const roots = [];
-  for (const label of ["First", "Second"]) {
-    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
-      data: { body: `${label} thread ${suffix}` },
-    });
-    expect(response.ok()).toBe(true);
-    const { message } = await response.json();
-    const reply = await page.request.post(`/api/messages/${message.id}/thread/replies`, {
-      data: { body: `${label} existing reply` },
-    });
-    expect(reply.ok()).toBe(true);
-    const route = await page.request.post(`/api/messages/${message.id}/route`);
-    expect(route.ok()).toBe(true);
-    const routed = await page.request.get(`/api/messages/${message.id}`);
-    roots.push((await routed.json()).message);
-  }
-  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
-  await waitForAppReady(page);
-  return { roots, channel, workspace };
-}
-
-async function openThread(page: Page, id: string) {
-  const row = page.locator(`.message-row[data-message-id="${id}"]`);
-  await row.hover();
-  await row.getByRole("button", { name: "Open thread", exact: true }).click();
-}
+import { expect, test } from "@playwright/test";
+import { deferred, threadFixture, openThread } from "./thread-fixture";
 
 for (const action of ["close", "switch"] as const) {
   test(`a late thread load cannot undo ${action}`, async ({ page }) => {
@@ -55,7 +7,7 @@ for (const action of ["close", "switch"] as const) {
     const held = deferred();
     const requested = deferred();
     const delivered = deferred();
-    await page.route(`**/api/messages/${roots[0].id}/thread`, async (route) => {
+    await page.route(`**/api/messages/${roots[0].id}/thread?*`, async (route) => {
       const response = await route.fetch();
       requested.resolve();
       await held.promise;

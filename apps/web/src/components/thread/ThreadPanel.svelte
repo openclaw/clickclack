@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
+  import type { ThreadController, ThreadScrollIntent } from "../../lib/thread.svelte";
+  import HistoryLoader from "../messages/HistoryLoader.svelte";
   import { readableAPIError } from "../../lib/api";
   import Avatar from "../avatar/Avatar.svelte";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
@@ -25,6 +27,7 @@
   import AgentResponding from "../messages/AgentResponding.svelte";
 
   type Props = {
+    history: ThreadController;
     root: Message;
     replies: Message[];
     threadState: ThreadState | null;
@@ -70,6 +73,7 @@
   };
 
   let {
+    history,
     root,
     replies,
     threadState,
@@ -115,7 +119,124 @@
   }: Props = $props();
 
   let threadScroll = $state<HTMLDivElement>();
+  let scrollGeneration = 0;
+  let programmaticTop = -1;
+  let pendingFrame = 0;
+  let pendingIntent: ThreadScrollIntent | null = null;
+  const viewportRootID = $derived(root.id);
+  let highlightedID = $state("");
+  function captureAnchor() {
+    if (!threadScroll) return;
+    const top = threadScroll.getBoundingClientRect().top;
+    const row = [...threadScroll.querySelectorAll<HTMLElement>("[data-message-id]")]
+      .find((node) => node.getBoundingClientRect().bottom > top);
+    if (row) {
+      history.anchor = {
+        messageID: row.dataset.messageId!,
+        offset: row.getBoundingClientRect().top - top,
+      };
+    }
+  }
+
+  function applyScroll(intent: ThreadScrollIntent) {
+    if (!threadScroll || !threadScroll.getClientRects().length) return;
+    if (intent === "latest" || (intent === "preserve" && history.following)) {
+      threadScroll.scrollTop = threadScroll.scrollHeight;
+    } else {
+      const target = intent === "preserve" ? history.anchor?.messageID : intent.messageID;
+      const row = target
+        ? threadScroll.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(target)}"]`)
+        : null;
+      if (row) {
+        const offset = row.getBoundingClientRect().top - threadScroll.getBoundingClientRect().top;
+        const desiredOffset = intent === "preserve"
+          ? history.anchor?.offset ?? 0
+          : (threadScroll.clientHeight - row.offsetHeight) / 2;
+        threadScroll.scrollTop += offset - desiredOffset;
+        if (intent !== "preserve") highlightedID = target!;
+      }
+    }
+    programmaticTop = threadScroll.scrollTop;
+    captureAnchor();
+  }
+
+  function scheduleScroll(intent: ThreadScrollIntent, capture = true) {
+    if (intent === "preserve" && pendingIntent && pendingIntent !== "preserve") return;
+    pendingIntent = intent;
+    if (capture) captureAnchor();
+    const generation = ++scrollGeneration;
+    void tick().then(() => {
+      if (generation !== scrollGeneration || destroyed) return;
+      cancelAnimationFrame(pendingFrame);
+      pendingFrame = requestAnimationFrame(() => {
+        if (generation === scrollGeneration && !destroyed) {
+          applyScroll(intent);
+          pendingIntent = null;
+        }
+      });
+    });
+  }
+
+  function onThreadScroll() {
+    // Layout can clamp scrollTop before the queued target/anchor restore runs.
+    // Only actual input may cancel that intent; a native clamp must not.
+    if (!threadScroll || pendingIntent) return;
+    if (Math.abs(threadScroll.scrollTop - programmaticTop) > 1) {
+      scrollGeneration++;
+      pendingIntent = null;
+      history.following = !history.hasNewer &&
+        threadScroll.scrollHeight - threadScroll.clientHeight - threadScroll.scrollTop < 48;
+    }
+    programmaticTop = -1;
+    captureAnchor();
+  }
+
+  function userScrollIntent() {
+    scrollGeneration++;
+    pendingIntent = null;
+    highlightedID = "";
+  }
+
+  async function loadHistory(edge: "older" | "newer") {
+    try {
+      await history.loadEdge(edge);
+    } catch {
+      // The edge owns its visible retry.
+    }
+  }
+
+  async function jumpLatest() {
+    try {
+      await history.latest();
+    } catch {
+      // The thread owns its visible load error.
+    }
+  }
+
+  $effect(() => {
+    const node = threadScroll, id = viewportRootID;
+    if (!node || !id) return;
+    history.beforeChange = (intent) => scheduleScroll(intent);
+    untrack(() => scheduleScroll(history.anchor ? "preserve" : "latest", false));
+    const observer = new ResizeObserver(() => scheduleScroll("preserve", false));
+    observer.observe(node);
+    for (const content of node.querySelectorAll(".reply-list, .thread-root")) observer.observe(content);
+    const visible = () => {
+      if (document.visibilityState === "visible") scheduleScroll("preserve", false);
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      history.beforeChange = undefined;
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", visible);
+      scrollGeneration++;
+      cancelAnimationFrame(pendingFrame);
+    };
+  });
   let editSession = $derived(editController?.session(editScope));
+  $effect(() => {
+    history.editingID = editSession?.surface === "thread" ? editSession.messageID : "";
+  });
   const editReturnFocus = new Map<string, HTMLElement>();
   const canDelete = (message: Message) =>
     canDeleteAnyMessage ||
@@ -432,7 +553,11 @@
   class="thread-scroll"
   role="region"
   aria-label="Thread messages"
-  onpointerdown={onActivateThreadComposer}
+  onscroll={onThreadScroll}
+  onwheel={userScrollIntent}
+  ontouchstart={userScrollIntent}
+  onkeydown={userScrollIntent}
+  onpointerdown={() => { userScrollIntent(); onActivateThreadComposer(); }}
   onpointerup={onInlineImagePointerUp}
 >
   <!-- svelte-ignore a11y_no_static_element_interactions (Long-press supplements the focusable More actions button.) -->
@@ -591,12 +716,28 @@
       {/if}
     </div>
   </article>
-  <div class="thread-divider"><span>{replies.length} {replies.length === 1 ? "reply" : "replies"}</span></div>
+  <div class="thread-divider"><span>{replies.length} of {threadState?.reply_count ?? replies.length} replies loaded</span></div>
+  {#if history.hasOlder || history.loading.older || history.edgeError.older}
+    <div class="thread-history">
+      {#if history.loading.older}
+        <HistoryLoader direction="older" rows={1} />
+      {/if}
+      {#if history.edgeError.older}
+        <p role="alert">{history.edgeError.older}</p>
+      {/if}
+      <button
+        class="ghost-action"
+        disabled={history.loading.older}
+        onclick={() => void loadHistory("older")}
+      >{history.edgeError.older ? "Retry older replies" : "Load older replies"}</button>
+    </div>
+  {/if}
   <div class="reply-list">
     {#each replies as reply (reply.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions (Long-press supplements the focusable More actions button.) -->
       <article
         class="reply"
+        class:thread-target={highlightedID === reply.id}
         data-message-id={reply.id}
         onpointerdown={(event) => handleMessagePointerDown(event, reply)}
         oncontextmenu={handleMessageContextMenu}
@@ -741,7 +882,25 @@
       </article>
     {/each}
   </div>
+  {#if history.hasNewer || history.loading.newer || history.edgeError.newer}
+    <div class="thread-history">
+      {#if history.loading.newer}
+        <HistoryLoader direction="newer" rows={1} />
+      {/if}
+      {#if history.edgeError.newer}
+        <p role="alert">{history.edgeError.newer}</p>
+      {/if}
+      <button
+        class="ghost-action"
+        disabled={history.loading.newer}
+        onclick={() => void loadHistory("newer")}
+      >{history.edgeError.newer ? "Retry newer replies" : "Load newer replies"}</button>
+    </div>
+  {/if}
 </div>
+{#if history.hasNewer || !history.following || history.error}
+  <div class="thread-history thread-history--latest"><button class="ghost-action" onclick={() => void jumpLatest()}>Jump to latest</button></div>
+{/if}
 {#if actionMessage}
   <MessageActionSheet
     id={actionSheetID(actionMessage)}

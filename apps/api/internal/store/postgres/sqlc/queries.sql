@@ -1805,3 +1805,37 @@ SELECT id FROM users WHERE id = sqlc.arg(user_id) FOR KEY SHARE;
 
 -- name: LockWorkspaceEventLog :exec
 SELECT pg_advisory_xact_lock(hashtext('clickclack.events'), hashtext(sqlc.arg(workspace_id)::text));
+
+-- name: ListThreadReplyPage :many
+WITH descending_page AS (
+ SELECT candidate.* FROM messages candidate
+ WHERE candidate.thread_root_id = sqlc.arg(root_id) AND candidate.parent_message_id = sqlc.arg(root_id)
+   AND candidate.thread_seq > sqlc.arg(lower_seq) AND candidate.thread_seq <= sqlc.arg(upper_seq)
+   AND CAST(sqlc.arg(descending_order) AS INTEGER) = 1
+ ORDER BY candidate.thread_seq DESC LIMIT sqlc.arg(page_limit)
+), ascending_page AS (
+ SELECT candidate.* FROM messages candidate
+ WHERE candidate.thread_root_id = sqlc.arg(root_id) AND candidate.parent_message_id = sqlc.arg(root_id)
+   AND candidate.thread_seq > sqlc.arg(lower_seq) AND candidate.thread_seq <= sqlc.arg(upper_seq)
+   AND CAST(sqlc.arg(descending_order) AS INTEGER) = 0
+ ORDER BY candidate.thread_seq ASC LIMIT sqlc.arg(page_limit)
+), page AS (
+ SELECT * FROM descending_page UNION ALL SELECT * FROM ascending_page
+)
+SELECT m.*,
+ u.kind AS author_kind, u.owner_user_id AS author_owner_id, u.display_name AS author_name,
+ u.handle AS author_handle, u.avatar_url AS author_avatar, u.created_at AS author_created,
+ at.former_handle AS author_former_handle, at.deleted_at AS author_deleted,
+ qu.kind AS quote_kind, qu.owner_user_id AS quote_owner_id, qu.display_name AS quote_name,
+ qu.handle AS quote_handle, qu.avatar_url AS quote_avatar, qu.created_at AS quote_created,
+ qt.former_handle AS quote_former_handle, qt.deleted_at AS quote_deleted
+FROM page m
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones at ON at.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones qt ON qt.bot_user_id = qu.id
+ORDER BY m.thread_seq ASC;
+
+-- name: ThreadReplyEdges :one
+SELECT EXISTS(SELECT 1 FROM messages older WHERE older.thread_root_id = sqlc.arg(root_id) AND older.parent_message_id = sqlc.arg(root_id) AND older.thread_seq < sqlc.arg(oldest_seq)) AS has_older,
+       EXISTS(SELECT 1 FROM messages newer WHERE newer.thread_root_id = sqlc.arg(root_id) AND newer.parent_message_id = sqlc.arg(root_id) AND newer.thread_seq > sqlc.arg(newest_seq)) AS has_newer;

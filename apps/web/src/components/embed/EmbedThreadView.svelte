@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { latestThreadState, newNonce } from "../../lib/chat/messages";
+  import { ThreadController } from "../../lib/thread.svelte";
   import { onDestroy, onMount, tick } from "svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
@@ -21,7 +21,6 @@
     Message,
     RealtimeEvent,
     RouteTarget,
-    ThreadState,
     Upload,
     User,
   } from "../../lib/types";
@@ -29,12 +28,6 @@
   type Props = {
     workspaceRouteID: string;
     messageRouteID: string;
-  };
-
-  type ReplySubmission = {
-    body: string;
-    nonce: string;
-    quotedMessageID?: string;
   };
 
   type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "error";
@@ -47,22 +40,25 @@
   const reactionController = new ReactionController(() => user?.id || "");
   const editController = new MessageEditController(revealEditSession);
   let route = $state<RouteTarget | null>(null);
-  let root = $state<Message | null>(null);
-  let replies = $state<Message[]>([]);
-  let threadState = $state<ThreadState | null>(null);
+  const thread = new ThreadController(
+    () => `${workspaceRouteID}:${messageRouteID}`,
+    reconcileThread,
+  );
+  const root = $derived(thread.root);
+  const replies = $derived(thread.replies);
+  const threadState = $derived(thread.state);
   let directConversation = $state<DirectConversation | null>(null);
   let parentLabel = $state("Thread");
-  let replyBody = $state("");
-  let replyTarget = $state<Message | null>(null);
+  const replyBody = $derived(thread.draft?.body ?? "");
+  const replyTarget = $derived(thread.draft?.quote ?? null);
   let replyInput = $state<HTMLTextAreaElement | null>(null);
-  let replyError = $state("");
+  const replyError = $derived(thread.draft?.error || thread.error || realtimeError);
   let realtimeError = $state("");
-  let replySending = $state(false);
+  const replySending = $derived(thread.draft?.sending ?? false);
   let selectedImage = $state<{ url: string; title: string } | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let failedSubmission: ReplySubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
   let memberLoadAbort: AbortController | null = null;
@@ -108,24 +104,26 @@
 
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
-    if (scope !== route?.target_id) return;
+    const selection = thread.selection;
+    const current = () => scope === route?.target_id && thread.isCurrent(selection) &&
+      editController.session(scope)?.generation === session.generation;
+    if (!current()) return;
+    if (!await thread.target({ messageID: session.messageID, threadSeq: session.threadSeq }, current)) return;
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await tick();
+      if (!current()) return;
       const editor = document
         .querySelector('[aria-label="Embedded thread"]')
         ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
         ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
       if (!editor) continue;
-      editor.focus();
+      editor.focus({ preventScroll: true });
       return;
     }
   }
 
   function applyEditedMessage(updated: Message) {
-    if (root?.id === updated.id) root = { ...root, ...updated };
-    replies = replies.map((reply) =>
-      reply.id === updated.id ? { ...reply, ...updated } : reply,
-    );
+    thread.updateMessage(updated);
   }
 
   function clearThread() {
@@ -134,13 +132,10 @@
     socket?.close();
     socket = null;
     route = null;
-    root = null;
+    thread.close();
     reactionController.clear();
     editController.clear();
-    replies = [];
-    threadState = null;
     directConversation = null;
-    replyTarget = null;
   }
 
   function handleLoadError(error: unknown) {
@@ -202,21 +197,16 @@
       if (resolved.route.target_type !== "thread") {
         throw new APIError(404, "Thread route not found");
       }
-      const [thread] = await Promise.all([
-        api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
-          `/api/messages/${encodeURIComponent(resolved.route.target_id)}/thread`,
-        ),
+      if (serial !== loadSerial) return;
+      thread.select(resolved.route.target_id);
+      const [loaded] = await Promise.all([
+        thread.open(() => serial === loadSerial),
         loadParent(resolved.route, me.user),
       ]);
-      if (serial !== loadSerial) return;
+      if (!loaded || serial !== loadSerial || !thread.root) return;
       user = me.user;
       route = resolved.route;
       void loadWorkspaceMembers(resolved.route.workspace_id);
-      threadState = latestThreadState(threadState, thread.thread_state);
-      root = { ...thread.root, thread_state: threadState };
-      replies = thread.replies;
-      reactionController.seedMessages([root, ...replies]);
-      editController.reconcile(resolved.route.target_id, [root, ...replies]);
       viewState = "ready";
       connectSocket(resolved.route.workspace_id);
     } catch (error) {
@@ -226,28 +216,18 @@
     }
   }
 
+  function reconcileThread() {
+    if (!root) return;
+    reactionController.seedMessages([root, ...replies]);
+    editController.reconcile(route?.target_id || root.id, [root, ...replies]);
+  }
   async function refreshThread(isCurrent: () => boolean = () => true) {
     if (!root || viewState !== "ready") return;
-    const rootID = root.id;
+    const selection = thread.selection;
     try {
-      const thread = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
-        `/api/messages/${encodeURIComponent(rootID)}/thread`,
-      );
-      if (!isCurrent() || !root || root.id !== rootID || viewState !== "ready") return;
-      threadState = latestThreadState(threadState, thread.thread_state);
-      root = { ...thread.root, thread_state: threadState };
-      replies = thread.replies;
-      reactionController.seedMessages([root, ...replies]);
-      editController.reconcile(route?.target_id || root.id, [root, ...replies]);
-      if (
-        replyTarget &&
-        replyTarget.id !== root.id &&
-        !replies.some((reply) => reply.id === replyTarget?.id)
-      ) {
-        replyTarget = null;
-      }
+      await thread.refresh(isCurrent);
     } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
+      if (thread.isCurrent(selection) && isCurrent() && error instanceof APIError && [401, 403, 404].includes(error.status)) {
         handleLoadError(error);
       }
       throw error;
@@ -269,27 +249,20 @@
       reactionController.applyEvent(event);
       return;
     }
-    if (
-      eventBelongsToThread(event) &&
-      (event.type === "thread.reply_created" ||
-        event.type === "message.updated" ||
-        event.type === "message.deleted")
-    ) {
-      if (
-        event.type === "thread.reply_created" &&
-        event.payload.message_id &&
-        replies.some((reply) => reply.id === event.payload.message_id)
-      ) {
-        return;
+    const selection = thread.selection;
+    try {
+      await thread.handleEvent(event, isCurrent);
+    } catch (error) {
+      if (thread.isCurrent(selection) && isCurrent() && error instanceof APIError && [401, 403, 404].includes(error.status)) {
+        handleLoadError(error);
       }
-      await refreshThread(isCurrent);
+      throw error;
     }
   }
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
       realtimeError = readableAPIError(error, "Could not process a realtime update.");
-      replyError = realtimeError;
     }
   }
 
@@ -301,7 +274,6 @@
       onOpen: async (isCurrent, authoritativeResync) => {
         if (authoritativeResync) await refreshThread(isCurrent);
         if (!isCurrent()) return;
-        if (replyError === realtimeError) replyError = "";
         realtimeError = "";
       },
       onError: reportRealtimeError,
@@ -309,49 +281,16 @@
   }
 
   async function sendReply() {
-    const body = replyBody.trim();
-    if (!body || !root || replyDisabled) return;
-    const threadRootID = root.id;
-    const quote = replyTarget;
-    const quotedMessageID = quote?.id;
-    const submission =
-      failedSubmission?.body === body && failedSubmission.quotedMessageID === quotedMessageID
-        ? failedSubmission
-        : { body, nonce: newNonce(), quotedMessageID };
-    failedSubmission = null;
-    replyError = "";
-    replySending = true;
-    const payload: Record<string, string> = { body, nonce: submission.nonce };
-    if (quotedMessageID) payload.quoted_message_id = quotedMessageID;
-    try {
-      const data = await api<{ message: Message; thread_state: ThreadState }>(
-        `/api/messages/${encodeURIComponent(threadRootID)}/thread/replies`,
-        { method: "POST", body: JSON.stringify(payload) },
-      );
-      if (!root || root.id !== threadRootID) return;
-      if (!replies.some((reply) => reply.id === data.message.id)) {
-        replies = [...replies, data.message];
-      }
-      threadState = latestThreadState(threadState, data.thread_state);
-      root = { ...root, thread_state: threadState };
-      if (replyBody.trim() === body) replyBody = "";
-      if (quotedMessageID && replyTarget?.id === quotedMessageID) replyTarget = null;
-    } catch (error) {
-      if (error instanceof APIError && error.status === 401) {
-        handleLoadError(error);
-        return;
-      }
-      failedSubmission = submission;
-      replyError = readableAPIError(error, "Could not post the reply.");
-    } finally {
-      replySending = false;
-    }
+    if (replyDisabled) return;
+    await thread.send((error) => {
+      if (error instanceof APIError && error.status === 401) handleLoadError(error);
+    });
   }
 
   function handleReplyKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && replyTarget) {
       event.preventDefault();
-      replyTarget = null;
+      thread.setQuote(null);
       return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -362,20 +301,16 @@
 
   function setReplyTarget(message: Message) {
     if (replySending) return;
-    replyTarget = message;
+    thread.setQuote(message);
     void tick().then(() => replyInput?.focus());
   }
 
   function clearReplyTarget() {
-    if (!replySending) replyTarget = null;
+    if (!replySending) thread.setQuote(null);
   }
 
   function jumpToQuote(message: Message) {
-    if (!message.quoted_message_id) return;
-    const target = document.querySelector<HTMLElement>(
-      `[data-message-id="${CSS.escape(message.quoted_message_id)}"]`,
-    );
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (message.quoted_message_id) void thread.target({ messageID: message.quoted_message_id });
   }
 
   function handleInlineImagePointerUp(event: PointerEvent) {
@@ -419,6 +354,7 @@
   <main class="embed-shell">
     <section class="thread open" aria-label="Embedded thread">
       <ThreadPanel
+        history={thread}
         {root}
         {replies}
         {threadState}
@@ -435,10 +371,10 @@
         editScope={route.target_id}
         onMessageEdited={applyEditedMessage}
         reactionsDisabled={Boolean(directConversation && !directConversation.can_send)}
-        onReplyBody={(value) => (replyBody = value)}
+        onReplyBody={(value) => thread.updateDraft(value)}
         onSubmitReply={() => void sendReply()}
         onReplyKeydown={handleReplyKeydown}
-        onReplyFocus={() => (replyError = "")}
+        onReplyFocus={() => {}}
         onReplyInputRef={(node) => (replyInput = node)}
         onSetReplyTarget={(message) => setReplyTarget(message)}
         onClearReply={clearReplyTarget}

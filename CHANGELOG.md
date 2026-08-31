@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed long threads hiding replies beyond the first 100: main and embedded views now open latest, page bounded history, preserve reading anchors and drafts, and load search/quote targets through shared thread paging in the API and SDK.
+
 - Fixed durable realtime events being skipped after delayed publication or concurrent PostgreSQL commits, restored idle WebSocket ping/disconnect handling, and kept attachment callbacks and moderation responses consistent with committed events.
 
 - Fixed person actions opening group DMs, preserved exact one-to-one reopening, and made failed workspace, channel, and DM creation visible and retryable without late responses taking over navigation.

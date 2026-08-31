@@ -1896,6 +1896,23 @@ export interface components {
       /** Format: int64 */
       unread_count?: number;
     };
+    ThreadPage: {
+      root: components["schemas"]["Message"];
+      replies: components["schemas"]["Message"][];
+      thread_state: components["schemas"]["ThreadState"];
+      /**
+       * Format: int64
+       * @description Oldest returned thread sequence, or zero for an empty page.
+       */
+      oldest_seq: number;
+      /**
+       * Format: int64
+       * @description Newest returned thread sequence, or zero for an empty page.
+       */
+      newest_seq: number;
+      has_older: boolean;
+      has_newer: boolean;
+    };
     ThreadState: {
       root_message_id: string;
       /** Format: int64 */
@@ -4339,6 +4356,12 @@ export interface operations {
         limit?: number;
         /** @description Return the latest bounded reply window in chronological order instead of the earliest window. */
         latest?: boolean;
+        /** @description Return the nearest replies before this exclusive thread sequence; mutually exclusive with after_seq, around_seq and latest=true. */
+        before_seq?: number;
+        /** @description Return the nearest replies after this exclusive thread sequence. */
+        after_seq?: number;
+        /** @description Return a balanced reply window around this thread sequence. */
+        around_seq?: number;
       };
       header?: never;
       path: {
@@ -4348,12 +4371,14 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Thread root and replies */
+      /** @description Thread root, chronological replies and authoritative history edges */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["ThreadPage"];
+        };
       };
     };
   };

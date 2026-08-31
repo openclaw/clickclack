@@ -561,3 +561,27 @@
     padding-left: calc(14px + var(--safe-area-left));
   }
 }
+
+.thread-scroll {
+  overflow-anchor: none;
+}
+
+.thread-history {
+  padding: 8px 16px;
+  text-align: center;
+}
+
+.thread-history p {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.thread-history--latest {
+  border-top: 1px solid var(--line);
+}
+
+.thread-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}

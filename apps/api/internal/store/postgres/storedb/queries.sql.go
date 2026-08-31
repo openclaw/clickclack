@@ -4086,6 +4086,154 @@ func (q *Queries) ListReactionsForMessages(ctx context.Context, arg ListReaction
 	return items, nil
 }
 
+const listThreadReplyPage = `-- name: ListThreadReplyPage :many
+WITH descending_page AS (
+ SELECT candidate.id, candidate.workspace_id, candidate.channel_id, candidate.direct_conversation_id, candidate.author_id, candidate.parent_message_id, candidate.thread_root_id, candidate.topic_id, candidate.channel_seq, candidate.thread_seq, candidate.body, candidate.body_format, candidate.created_at, candidate.edited_at, candidate.deleted_at, candidate.quoted_message_id, candidate.quoted_body_snapshot, candidate.quoted_author_id, candidate.client_nonce, candidate.route_id, candidate.kind, candidate.turn_id FROM messages candidate
+ WHERE candidate.thread_root_id = $1 AND candidate.parent_message_id = $1
+   AND candidate.thread_seq > $2 AND candidate.thread_seq <= $3
+   AND CAST($4 AS INTEGER) = 1
+ ORDER BY candidate.thread_seq DESC LIMIT $5
+), ascending_page AS (
+ SELECT candidate.id, candidate.workspace_id, candidate.channel_id, candidate.direct_conversation_id, candidate.author_id, candidate.parent_message_id, candidate.thread_root_id, candidate.topic_id, candidate.channel_seq, candidate.thread_seq, candidate.body, candidate.body_format, candidate.created_at, candidate.edited_at, candidate.deleted_at, candidate.quoted_message_id, candidate.quoted_body_snapshot, candidate.quoted_author_id, candidate.client_nonce, candidate.route_id, candidate.kind, candidate.turn_id FROM messages candidate
+ WHERE candidate.thread_root_id = $1 AND candidate.parent_message_id = $1
+   AND candidate.thread_seq > $2 AND candidate.thread_seq <= $3
+   AND CAST($4 AS INTEGER) = 0
+ ORDER BY candidate.thread_seq ASC LIMIT $5
+), page AS (
+ SELECT id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, edited_at, deleted_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, route_id, kind, turn_id FROM descending_page UNION ALL SELECT id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, edited_at, deleted_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, route_id, kind, turn_id FROM ascending_page
+)
+SELECT m.id, m.workspace_id, m.channel_id, m.direct_conversation_id, m.author_id, m.parent_message_id, m.thread_root_id, m.topic_id, m.channel_seq, m.thread_seq, m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at, m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id, m.client_nonce, m.route_id, m.kind, m.turn_id,
+ u.kind AS author_kind, u.owner_user_id AS author_owner_id, u.display_name AS author_name,
+ u.handle AS author_handle, u.avatar_url AS author_avatar, u.created_at AS author_created,
+ at.former_handle AS author_former_handle, at.deleted_at AS author_deleted,
+ qu.kind AS quote_kind, qu.owner_user_id AS quote_owner_id, qu.display_name AS quote_name,
+ qu.handle AS quote_handle, qu.avatar_url AS quote_avatar, qu.created_at AS quote_created,
+ qt.former_handle AS quote_former_handle, qt.deleted_at AS quote_deleted
+FROM page m
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones at ON at.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones qt ON qt.bot_user_id = qu.id
+ORDER BY m.thread_seq ASC
+`
+
+type ListThreadReplyPageParams struct {
+	RootID          string        `json:"root_id"`
+	LowerSeq        sql.NullInt64 `json:"lower_seq"`
+	UpperSeq        sql.NullInt64 `json:"upper_seq"`
+	DescendingOrder int32         `json:"descending_order"`
+	PageLimit       int32         `json:"page_limit"`
+}
+
+type ListThreadReplyPageRow struct {
+	ID                   string         `json:"id"`
+	WorkspaceID          string         `json:"workspace_id"`
+	ChannelID            sql.NullString `json:"channel_id"`
+	DirectConversationID sql.NullString `json:"direct_conversation_id"`
+	AuthorID             string         `json:"author_id"`
+	ParentMessageID      sql.NullString `json:"parent_message_id"`
+	ThreadRootID         string         `json:"thread_root_id"`
+	TopicID              sql.NullString `json:"topic_id"`
+	ChannelSeq           sql.NullInt64  `json:"channel_seq"`
+	ThreadSeq            sql.NullInt64  `json:"thread_seq"`
+	Body                 string         `json:"body"`
+	BodyFormat           string         `json:"body_format"`
+	CreatedAt            string         `json:"created_at"`
+	EditedAt             sql.NullString `json:"edited_at"`
+	DeletedAt            sql.NullString `json:"deleted_at"`
+	QuotedMessageID      sql.NullString `json:"quoted_message_id"`
+	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
+	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
+	ClientNonce          string         `json:"client_nonce"`
+	RouteID              sql.NullString `json:"route_id"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
+	AuthorKind           string         `json:"author_kind"`
+	AuthorOwnerID        sql.NullString `json:"author_owner_id"`
+	AuthorName           string         `json:"author_name"`
+	AuthorHandle         string         `json:"author_handle"`
+	AuthorAvatar         string         `json:"author_avatar"`
+	AuthorCreated        string         `json:"author_created"`
+	AuthorFormerHandle   sql.NullString `json:"author_former_handle"`
+	AuthorDeleted        sql.NullString `json:"author_deleted"`
+	QuoteKind            sql.NullString `json:"quote_kind"`
+	QuoteOwnerID         sql.NullString `json:"quote_owner_id"`
+	QuoteName            sql.NullString `json:"quote_name"`
+	QuoteHandle          sql.NullString `json:"quote_handle"`
+	QuoteAvatar          sql.NullString `json:"quote_avatar"`
+	QuoteCreated         sql.NullString `json:"quote_created"`
+	QuoteFormerHandle    sql.NullString `json:"quote_former_handle"`
+	QuoteDeleted         sql.NullString `json:"quote_deleted"`
+}
+
+func (q *Queries) ListThreadReplyPage(ctx context.Context, arg ListThreadReplyPageParams) ([]ListThreadReplyPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listThreadReplyPage,
+		arg.RootID,
+		arg.LowerSeq,
+		arg.UpperSeq,
+		arg.DescendingOrder,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListThreadReplyPageRow
+	for rows.Next() {
+		var i ListThreadReplyPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.AuthorID,
+			&i.ParentMessageID,
+			&i.ThreadRootID,
+			&i.TopicID,
+			&i.ChannelSeq,
+			&i.ThreadSeq,
+			&i.Body,
+			&i.BodyFormat,
+			&i.CreatedAt,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.QuotedMessageID,
+			&i.QuotedBodySnapshot,
+			&i.QuotedAuthorID,
+			&i.ClientNonce,
+			&i.RouteID,
+			&i.Kind,
+			&i.TurnID,
+			&i.AuthorKind,
+			&i.AuthorOwnerID,
+			&i.AuthorName,
+			&i.AuthorHandle,
+			&i.AuthorAvatar,
+			&i.AuthorCreated,
+			&i.AuthorFormerHandle,
+			&i.AuthorDeleted,
+			&i.QuoteKind,
+			&i.QuoteOwnerID,
+			&i.QuoteName,
+			&i.QuoteHandle,
+			&i.QuoteAvatar,
+			&i.QuoteCreated,
+			&i.QuoteFormerHandle,
+			&i.QuoteDeleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listThreadStates = `-- name: ListThreadStates :many
 SELECT root_message_id, reply_count, last_reply_at, last_reply_author_ids_json
 FROM thread_state
@@ -5496,6 +5644,29 @@ func (q *Queries) ThreadNextSeq(ctx context.Context, arg ThreadNextSeqParams) (i
 	var next_seq int64
 	err := row.Scan(&next_seq)
 	return next_seq, err
+}
+
+const threadReplyEdges = `-- name: ThreadReplyEdges :one
+SELECT EXISTS(SELECT 1 FROM messages older WHERE older.thread_root_id = $1 AND older.parent_message_id = $1 AND older.thread_seq < $2) AS has_older,
+       EXISTS(SELECT 1 FROM messages newer WHERE newer.thread_root_id = $1 AND newer.parent_message_id = $1 AND newer.thread_seq > $3) AS has_newer
+`
+
+type ThreadReplyEdgesParams struct {
+	RootID    string        `json:"root_id"`
+	OldestSeq sql.NullInt64 `json:"oldest_seq"`
+	NewestSeq sql.NullInt64 `json:"newest_seq"`
+}
+
+type ThreadReplyEdgesRow struct {
+	HasOlder bool `json:"has_older"`
+	HasNewer bool `json:"has_newer"`
+}
+
+func (q *Queries) ThreadReplyEdges(ctx context.Context, arg ThreadReplyEdgesParams) (ThreadReplyEdgesRow, error) {
+	row := q.db.QueryRowContext(ctx, threadReplyEdges, arg.RootID, arg.OldestSeq, arg.NewestSeq)
+	var i ThreadReplyEdgesRow
+	err := row.Scan(&i.HasOlder, &i.HasNewer)
+	return i, err
 }
 
 const touchBotToken = `-- name: TouchBotToken :exec

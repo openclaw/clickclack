@@ -504,17 +504,6 @@
     return items.findIndex((it) => it.kind === "divider");
   }
 
-  function firstUnreadMessageID(): string {
-    if (!canUseUnreadDivider) return "";
-    if (dividerUnreadCount <= 0) return "";
-    for (const message of messages) {
-      if (message.parent_message_id) continue;
-      if (message.author?.id === currentUserID || message.author_id === currentUserID) continue;
-      if ((message.channel_seq || 0) > unreadBoundarySeq) return message.id;
-    }
-    return "";
-  }
-
   function maxLoadedSeq(): number {
     let seq = 0;
     for (const message of messages) {
@@ -534,49 +523,6 @@
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  function alignRenderedTarget(selector: string): boolean {
-    if (!scrollEl || !virtualizer) return false;
-    const target = scrollEl.querySelector<HTMLElement>(selector);
-    if (!target) return false;
-    const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
-    if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
-    virtualizer.scrollBy(delta);
-    return false;
-  }
-
-  function visibleMessageBounds(): { first: number; last: number } | null {
-    if (!scrollEl) return null;
-    const viewport = scrollEl.getBoundingClientRect();
-    const byID = new Map(messages.map((message, index) => [message.id, index]));
-    let first = Number.POSITIVE_INFINITY;
-    let last = -1;
-    for (const row of scrollEl.querySelectorAll<HTMLElement>("[data-message-id]")) {
-      const rect = row.getBoundingClientRect();
-      if (rect.bottom < viewport.top || rect.top > viewport.bottom) continue;
-      const idx = byID.get(row.dataset.messageId || "");
-      if (idx === undefined) continue;
-      first = Math.min(first, idx);
-      last = Math.max(last, idx);
-    }
-    return last < 0 ? null : { first, last };
-  }
-
-  function nudgeTowardMessage(messageID: string): boolean {
-    if (!scrollEl || !virtualizer) return false;
-    const targetIndex = messages.findIndex((message) => message.id === messageID);
-    const visible = visibleMessageBounds();
-    if (targetIndex < 0 || !visible) return false;
-    if (visible.first > targetIndex) {
-      virtualizer.scrollBy(-Math.max(80, scrollEl.clientHeight * 0.85));
-      return true;
-    }
-    if (visible.last < targetIndex) {
-      virtualizer.scrollBy(Math.max(80, scrollEl.clientHeight * 0.85));
-      return true;
-    }
-    return false;
-  }
-
   function isCurrentView(key: string): boolean {
     return key === viewKey && key === lastViewKey;
   }
@@ -586,23 +532,25 @@
     generation: number,
     indexForTarget: () => number,
     selector: string,
-    targetMessageID = "",
   ): Promise<boolean> {
     suppressProgrammaticPagination(3);
     for (let attempt = 0; attempt < 24; attempt++) {
       if (!isCurrentScrollCommand(key, generation)) return false;
       if (!virtualizer || !scrollEl) return false;
-      if (alignRenderedTarget(selector)) return true;
-      const idx = indexForTarget();
-      if (idx < 0) return false;
-      virtualizer.scrollToIndex(idx, { align: "start" });
+      const target = scrollEl.querySelector<HTMLElement>(selector);
+      if (target) {
+        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
+        if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
+        virtualizer.scrollTo(scrollEl.scrollTop + delta);
+      } else {
+        const idx = indexForTarget();
+        if (idx < 0) return false;
+        // A group seek would cancel the precise row alignment queued above.
+        virtualizer.scrollToIndex(idx, { align: "start" });
+      }
       await nextFrame();
-      if (!isCurrentScrollCommand(key, generation)) return false;
-      if (alignRenderedTarget(selector)) return true;
-      if (targetMessageID && nudgeTowardMessage(targetMessageID)) await nextFrame();
     }
-    if (!isCurrentScrollCommand(key, generation)) return false;
-    return alignRenderedTarget(selector);
+    return false;
   }
 
   function scrollToMessage(messageID: string): boolean {
@@ -617,7 +565,6 @@
       generation,
       () => findMessageIndex(messageID),
       `[data-message-id="${CSS.escape(messageID)}"]`,
-      messageID,
     );
     return true;
   }
@@ -634,7 +581,6 @@
       generation,
       () => findDividerIndex(),
       "[data-unread-divider='true']",
-      firstUnreadMessageID(),
     ).then((settled) => {
       if (fallbackToAround && !settled && isCurrentScrollCommand(key, generation)) onJumpToUnread?.();
     });
@@ -770,7 +716,6 @@
           generation,
           () => findDividerIndex(),
           "[data-unread-divider='true']",
-          firstUnreadMessageID(),
         );
         shouldStickToBottom = false;
       } else {

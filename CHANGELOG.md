@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, and fixed target scrolling within long same-author message groups.
+
 - Fixed delayed parent navigation dismissing a newly selected search reply or hiding its load error.
 
 - Fixed stale pin and upload responses affecting newer selections, restored upload failure retries and member avatar fallbacks, and kept live messages read when a channel snapshot arrives before their events.

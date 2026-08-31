@@ -35,6 +35,14 @@ A cursor cannot be reused for a different search. Search uses stable
 rank/time/id ordering and fetches one extra row to determine whether another
 page exists; it does not run a total-count query.
 
+## Opening results
+
+Selecting a root result loads its surrounding channel or DM history. The most
+recent selection owns that message window and its scroll target, even when
+responses arrive out of order. Targets inside a long same-author message group
+scroll to the selected message. Jumping to a quote, unread messages, or the latest
+messages supersedes an older pending history request in the same conversation.
+
 ## Query behavior
 
 Whitespace-separated terms are matched together. Search operators and quoting

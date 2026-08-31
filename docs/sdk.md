@@ -95,8 +95,9 @@ if (latest.has_older) {
 const target = await client.threads.get(rootId, { around_seq: reply.thread_seq, limit: 100 });
 ```
 
-Each response includes root, hydrated replies, the full thread summary, reply
-sequence bounds, and `has_older` / `has_newer`. See
+Each response is a `ThreadPage`: the existing `Thread` shape (root, hydrated
+replies, and the full thread summary) plus required reply sequence bounds and
+`has_older` / `has_newer`. Existing values typed as `Thread` need no paging fields. See
 [threads](features/threads.md#ordering-and-pagination) for cursor validation and
 empty-page semantics.
 

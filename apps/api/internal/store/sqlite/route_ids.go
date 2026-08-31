@@ -96,7 +96,7 @@ func (s *Store) backfillTableRouteIDs(ctx context.Context, table, prefix, where 
 
 func (s *Store) assignRouteID(ctx context.Context, table, id string, prefix byte) error {
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID(prefix)
+		routeID, err := store.NewRouteID(prefix)
 		if err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func (s *Store) assignRouteID(ctx context.Context, table, id string, prefix byte
 
 func assignRouteIDTx(ctx context.Context, tx *sql.Tx, table, id string, prefix byte) error {
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID(prefix)
+		routeID, err := store.NewRouteID(prefix)
 		if err != nil {
 			return err
 		}

@@ -112,7 +112,7 @@ func (s *Store) CreateDirectConversation(ctx context.Context, input store.Create
 	dm := store.DirectConversation{ID: newID("dm"), WorkspaceID: input.WorkspaceID, CreatedAt: now()}
 	inserted := false
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID('D')
+		routeID, err := store.NewRouteID('D')
 		if err != nil {
 			return store.DirectConversation{}, err
 		}

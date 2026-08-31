@@ -469,7 +469,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, input store.CreateWorkspace
 	qtx := s.q.WithTx(tx)
 	inserted := false
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID('T')
+		routeID, err := store.NewRouteID('T')
 		if err != nil {
 			return store.Workspace{}, err
 		}
@@ -580,7 +580,7 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 	}
 	inserted := false
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID('C')
+		routeID, err := store.NewRouteID('C')
 		if err != nil {
 			return store.Channel{}, store.Event{}, err
 		}

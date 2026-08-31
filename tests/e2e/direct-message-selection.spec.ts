@@ -138,19 +138,48 @@ for (const existing of ["none", "open", "closed"] as const) {
   });
 }
 
+for (const queryKind of ["name", "handle", "ambiguous"] as const) {
+  test(`Start DM resolves ${queryKind} search to a selected recipient`, async ({ page }) => {
+    const data = await fixture(page);
+    await page.getByRole("button", { name: "Start direct message" }).click();
+    const scope = dialog(page);
+    const input = scope.getByLabel("Find a person");
+    const submit = scope.getByRole("button", { name: "Start DM", exact: true });
+    await input.fill(
+      queryKind === "name"
+        ? "Alice"
+        : queryKind === "handle"
+          ? `@${data.alice.handle}`
+          : data.alice.display_name.split(" ")[1],
+    );
+    if (queryKind === "ambiguous") {
+      await expect(submit).toBeDisabled();
+      await expect(scope.getByText("Choose a person from the results.")).toBeVisible();
+      await scope.getByRole("button").filter({ hasText: data.alice.display_name }).click();
+    } else {
+      await input.press("Enter");
+    }
+    await expect(
+      page
+        .locator(".timeline")
+        .getByRole("heading", { name: `@${data.alice.display_name}`, exact: true }),
+    ).toBeVisible();
+  });
+}
+
 for (const surface of ["dialog", "profile"] as const) {
   test(`failed ${surface} DM creation retains the recipient and retries a committed request`, async ({
     page,
   }) => {
     const data = await fixture(page, "none", false);
+    const message = await page.request.post(`/api/channels/${data.channel.id}/messages`, {
+      headers: { "X-ClickClack-User": data.alice.id },
+      data: { body: "A person available from channel history" },
+    });
+    expect(message.ok()).toBe(true);
+    await page.reload();
+    await waitForAppReady(page);
     if (surface === "profile") {
-      const message = await page.request.post(`/api/channels/${data.channel.id}/messages`, {
-        headers: { "X-ClickClack-User": data.alice.id },
-        data: { body: "A person available from channel history" },
-      });
-      expect(message.ok()).toBe(true);
-      await page.reload();
-      await waitForAppReady(page);
       await page
         .locator("#sidebar-people-list")
         .getByRole("link")
@@ -173,8 +202,11 @@ for (const surface of ["dialog", "profile"] as const) {
       name: surface === "dialog" ? "Start DM" : "Message",
       exact: true,
     });
-    if (surface === "dialog") await startFromDialog(page, data.alice.id);
-    else await retry.click();
+    if (surface === "dialog") {
+      await page.getByRole("button", { name: "Start direct message" }).click();
+      await scope.getByLabel("Find a person").fill("Alice");
+      await scope.getByRole("button").filter({ hasText: data.alice.display_name }).click();
+    } else await retry.click();
     await expect(scope.getByRole("alert")).toHaveText("DM response interrupted");
     if (surface === "dialog")
       await expect(scope.getByLabel("Find a person")).toHaveValue(data.alice.id);

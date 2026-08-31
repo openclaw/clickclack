@@ -16,7 +16,7 @@
 
   let { people, currentUserID, memberID, pending, error, onMemberID, onClose, onStart }: Props = $props();
 
-  let query = $derived(memberID.trim().toLowerCase());
+  let query = $derived(memberID.trim().toLowerCase().replace(/^@/, ""));
   let choices = $derived(people
     .filter((person) => person.id !== currentUserID)
     .filter((person) => {
@@ -27,6 +27,16 @@
         person.id.toLowerCase().includes(query)
       );
     }));
+  let recipientID = $derived(memberID.trim().startsWith("usr_")
+    ? memberID.trim()
+    : query && choices.length === 1 ? choices[0].id : "");
+
+  function startRecipient(id: string) {
+    if (pending || !id) return;
+    // Retry the selected identity, not the search text that found it.
+    onMemberID(id);
+    onStart(id);
+  }
 </script>
 
 <div class="modal-scrim" role="presentation">
@@ -43,7 +53,7 @@
       class="profile-form"
       onsubmit={(event) => {
         event.preventDefault();
-        onStart(memberID);
+        startRecipient(recipientID);
       }}
     >
       <label class="field">
@@ -60,7 +70,7 @@
 
       <div class="person-picker" aria-label="People">
         {#each choices as person (person.id)}
-          <button type="button" class="person-choice" disabled={pending} onclick={() => onStart(person.id)}>
+          <button type="button" class="person-choice" disabled={pending} onclick={() => startRecipient(person.id)}>
             <Avatar
               class="dm-avatar"
               id={person.id}
@@ -79,10 +89,13 @@
         {/if}
       </div>
 
+      {#if query && !recipientID}
+        <p class="profile-status">{choices.length > 1 ? "Choose a person from the results." : "Choose a person or enter a user ID."}</p>
+      {/if}
       {#if error}<p class="profile-status error" role="alert">{error}</p>{/if}
       <div class="profile-actions">
         <button type="button" class="ghost-action" onclick={onClose}>Cancel</button>
-        <button type="submit" class="primary-action" disabled={pending || !memberID.trim()}>{pending ? "Starting…" : "Start DM"}</button>
+        <button type="submit" class="primary-action" disabled={pending || !recipientID}>{pending ? "Starting…" : "Start DM"}</button>
       </div>
     </form>
   </section>

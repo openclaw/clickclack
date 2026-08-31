@@ -44,6 +44,8 @@ DELETE /api/messages/{message_id}
 - `GET /api/messages/by-nonce` lets the authenticated author reconcile a
   durable create after an interrupted request. It returns the matching message,
   including attachments, or a capability-marked 404 when no message exists.
+  Recovery requires current access to the message's channel or direct
+  conversation, just like reading by message ID.
   The `X-ClickClack-Message-Nonce: supported` response header distinguishes
   that result from an older server that does not implement the endpoint.
 - `POST /read` accepts `{seq}` and updates the caller's monotonic read pointer

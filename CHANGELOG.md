@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed message recovery by nonce returning hidden channel and direct messages after the sender loses access.
+
 - Fixed delayed thread loads reopening closed panes or replacing newer selections, and preserved failed reply drafts and quotes with duplicate-safe retries.
 
 - Added configurable workspace home destinations and labels, preserving desktop home navigation and keeping long labels within the badge. Thanks @sercada.

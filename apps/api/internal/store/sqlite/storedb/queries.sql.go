@@ -1581,6 +1581,24 @@ func (q *Queries) GetMemberModerationState(ctx context.Context, arg GetMemberMod
 	return i, err
 }
 
+const getMessageIDByAuthorNonce = `-- name: GetMessageIDByAuthorNonce :one
+SELECT id
+FROM messages
+WHERE author_id = ?1 AND client_nonce = ?2
+`
+
+type GetMessageIDByAuthorNonceParams struct {
+	AuthorID    string `json:"author_id"`
+	ClientNonce string `json:"client_nonce"`
+}
+
+func (q *Queries) GetMessageIDByAuthorNonce(ctx context.Context, arg GetMessageIDByAuthorNonceParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getMessageIDByAuthorNonce, arg.AuthorID, arg.ClientNonce)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getNotificationSettings = `-- name: GetNotificationSettings :one
 SELECT pushover_enabled, pushover_user_key
 FROM user_notification_settings

@@ -974,6 +974,11 @@ SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_si
 FROM uploads
 WHERE id = sqlc.arg(id);
 
+-- name: GetMessageIDByAuthorNonce :one
+SELECT id
+FROM messages
+WHERE author_id = sqlc.arg(author_id) AND client_nonce = sqlc.arg(client_nonce);
+
 -- name: GetUploadByOwnerNonce :one
 SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
 FROM uploads

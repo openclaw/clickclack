@@ -685,19 +685,14 @@ func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (
 	if normalized == "" {
 		return store.Message{}, sql.ErrNoRows
 	}
-	message, err := scanMessage(s.db.QueryRowContext(ctx, messageSelect()+` WHERE m.author_id = ? AND m.client_nonce = ?`, authorID, normalized))
+	messageID, err := storedb.New(s.db).GetMessageIDByAuthorNonce(ctx, storedb.GetMessageIDByAuthorNonceParams{
+		AuthorID:    authorID,
+		ClientNonce: normalized,
+	})
 	if err != nil {
 		return store.Message{}, err
 	}
-	messages, err := s.hydrateAttachments(ctx, []store.Message{message})
-	if err != nil {
-		return store.Message{}, err
-	}
-	messages, err = s.hydrateReactions(ctx, authorID, messages)
-	if err != nil {
-		return store.Message{}, err
-	}
-	return messages[0], nil
+	return s.GetMessage(ctx, messageID, authorID)
 }
 
 func (s *Store) requireMessageAccess(ctx context.Context, message store.Message, userID string) error {

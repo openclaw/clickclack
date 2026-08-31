@@ -1,5 +1,5 @@
 import { api, readableAPIError } from "./api";
-import { newNonce } from "./chat/messages";
+import { latestThreadState, newNonce } from "./chat/messages";
 import type { Message, ThreadState, User } from "./types";
 
 type ThreadSelection = { messageID: string; context: string };
@@ -84,8 +84,7 @@ export class ThreadController {
   }
 
   private reconcileState(incoming: ThreadState) {
-    // Reply counts only grow; a held POST receipt can arrive after a newer realtime GET.
-    if (!this.state || incoming.reply_count >= this.state.reply_count) this.state = incoming;
+    this.state = latestThreadState(this.state, incoming);
     if (this.root) this.root = { ...this.root, thread_state: this.state };
   }
 

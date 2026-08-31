@@ -165,39 +165,47 @@ test("a reply response stays with its thread after switching panes", async ({ pa
   }
 });
 
-test("a delayed reply receipt cannot lower a newer realtime thread summary", async ({ page }) => {
-  const { roots } = await threadFixture(page);
-  await openThread(page, roots[0].id);
-  await expect(page.locator(".reply-list")).toContainText("First existing reply");
-  const held = deferred();
-  const committed = deferred();
-  const delivered = deferred();
-  await page.route(`**/api/messages/${roots[0].id}/thread/replies`, async (route) => {
-    const response = await route.fetch();
-    committed.resolve();
-    await held.promise;
-    await route.fulfill({ response });
-    delivered.resolve();
-  });
-  try {
-    await page.getByLabel("Reply body").fill("Our held reply receipt");
-    await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
-    await committed.promise;
-    const later = await page.request.post(`/api/messages/${roots[0].id}/thread/replies`, {
-      data: { body: "A later reply from another session" },
+for (const surface of ["main", "embed"] as const) {
+  test(`a delayed reply receipt cannot lower a newer ${surface} thread summary`, async ({
+    page,
+  }) => {
+    const { roots, workspace } = await threadFixture(page);
+    if (surface === "embed") {
+      await page.goto(`/embed/thread/${workspace.route_id}/${roots[0].route_id}`);
+    } else {
+      await openThread(page, roots[0].id);
+    }
+    await expect(page.locator(".reply-list")).toContainText("First existing reply");
+    const held = deferred();
+    const committed = deferred();
+    const delivered = deferred();
+    await page.route(`**/api/messages/${roots[0].id}/thread/replies`, async (route) => {
+      const response = await route.fetch();
+      committed.resolve();
+      await held.promise;
+      await route.fulfill({ response });
+      delivered.resolve();
     });
-    expect(later.ok()).toBe(true);
-    await expect(page.locator(".reply-list")).toContainText("A later reply from another session");
-    const summary = page
-      .getByLabel("Thread pane", { exact: true })
-      .locator("header > div > strong")
-      .first();
-    await expect(summary).toHaveText("3 replies");
-    held.resolve();
-    await delivered.promise;
-    await page.waitForTimeout(300);
-    await expect(summary).toHaveText("3 replies");
-  } finally {
-    held.resolve();
-  }
-});
+    try {
+      await page.getByLabel("Reply body").fill("Our held reply receipt");
+      await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
+      await committed.promise;
+      const later = await page.request.post(`/api/messages/${roots[0].id}/thread/replies`, {
+        data: { body: "A later reply from another session" },
+      });
+      expect(later.ok()).toBe(true);
+      await expect(page.locator(".reply-list")).toContainText("A later reply from another session");
+      const summary = page
+        .getByLabel(surface === "main" ? "Thread pane" : "Embedded thread", { exact: true })
+        .locator("header > div > strong")
+        .first();
+      await expect(summary).toContainText("3 replies");
+      held.resolve();
+      await delivered.promise;
+      await page.waitForTimeout(300);
+      await expect(summary).toContainText("3 replies");
+    } finally {
+      held.resolve();
+    }
+  });
+}

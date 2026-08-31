@@ -76,7 +76,9 @@ reopening that thread restores it. Submitting disables duplicate sends while
 the request is pending. Failures show an error beside the reply composer and
 retain the text and quote. Retrying unchanged content reuses the original
 nonce, so a lost response does not create a duplicate reply. Drafts are kept in
-memory and are not persisted across page reloads.
+memory and are not persisted across page reloads. Main and embedded thread
+views keep the newest reply summary when HTTP receipts and realtime refreshes
+arrive out of order.
 
 ## Ordering and pagination
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { newNonce } from "../../lib/chat/messages";
+  import { latestThreadState, newNonce } from "../../lib/chat/messages";
   import { onDestroy, onMount, tick } from "svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
@@ -212,11 +212,11 @@
       user = me.user;
       route = resolved.route;
       void loadWorkspaceMembers(resolved.route.workspace_id);
-      root = { ...thread.root, thread_state: thread.thread_state };
+      threadState = latestThreadState(threadState, thread.thread_state);
+      root = { ...thread.root, thread_state: threadState };
       replies = thread.replies;
       reactionController.seedMessages([root, ...replies]);
       editController.reconcile(resolved.route.target_id, [root, ...replies]);
-      threadState = thread.thread_state;
       viewState = "ready";
       connectSocket(resolved.route.workspace_id);
     } catch (error) {
@@ -234,11 +234,11 @@
         `/api/messages/${encodeURIComponent(rootID)}/thread`,
       );
       if (!isCurrent() || !root || root.id !== rootID || viewState !== "ready") return;
-      root = { ...thread.root, thread_state: thread.thread_state };
+      threadState = latestThreadState(threadState, thread.thread_state);
+      root = { ...thread.root, thread_state: threadState };
       replies = thread.replies;
       reactionController.seedMessages([root, ...replies]);
       editController.reconcile(route?.target_id || root.id, [root, ...replies]);
-      threadState = thread.thread_state;
       if (
         replyTarget &&
         replyTarget.id !== root.id &&
@@ -332,7 +332,8 @@
       if (!replies.some((reply) => reply.id === data.message.id)) {
         replies = [...replies, data.message];
       }
-      threadState = data.thread_state;
+      threadState = latestThreadState(threadState, data.thread_state);
+      root = { ...root, thread_state: threadState };
       if (replyBody.trim() === body) replyBody = "";
       if (quotedMessageID && replyTarget?.id === quotedMessageID) replyTarget = null;
     } catch (error) {

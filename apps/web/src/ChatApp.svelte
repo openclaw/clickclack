@@ -90,6 +90,7 @@
   let topics: Topic[] = [];
   let channelNotifPreference: ChannelNotificationPreference | null = null;
   let channelNotifPreferences = new Map<string, ChannelNotificationPreference>();
+  let notificationMessageSeqs = new Map<string, number>();
   let channelNotifSaving = false;
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
@@ -2071,12 +2072,20 @@
 
   async function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
     if (event.type !== "message.created" && event.type !== "thread.reply_created") return;
+    const { channelID, dmID } = messageEventScope(event);
+    const seq = eventMessageSeq(event);
+    if (event.type === "message.created" && seq > 0) {
+      const key = channelID || dmID;
+      if (seq <= (notificationMessageSeqs.get(key) || 0)) return;
+      // Track received events independently of snapshots, before awaiting delivery,
+      // so a handler retry cannot repeat the alert.
+      notificationMessageSeqs.set(key, seq);
+    }
     const payload = event.payload as Record<string, unknown>;
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
-    const { channelID, dmID } = messageEventScope(event);
     if (channelID) {
       const preference = await notificationPreferenceForChannel(channelID);
       if (!preference || !browserNotificationsEnabled) return;
@@ -2151,22 +2160,6 @@
       .trim();
     if (!stripped) return "New message";
     return stripped.length > 180 ? `${stripped.slice(0, 177)}...` : stripped;
-  }
-
-  function messageEventAlreadyAccounted(event: RealtimeEvent): boolean {
-    if (event.type !== "message.created") return false;
-    const seq = eventMessageSeq(event);
-    if (seq <= 0) return false;
-    const { channelID, dmID } = messageEventScope(event);
-    if (channelID) {
-      const channel = channels.find((c) => c.id === channelID);
-      return seq <= (channel?.last_seq || 0);
-    }
-    if (dmID) {
-      const dm = directConversations.find((c) => c.id === dmID);
-      return seq <= (dm?.last_seq || 0);
-    }
-    return false;
   }
 
   async function loadUnknownDirectConversationFromEvent(event: RealtimeEvent): Promise<boolean> {
@@ -3246,6 +3239,12 @@
           authoritativeResync,
         );
         if (!isCurrent()) return;
+        if (!preserveScroll || authoritativeResync) {
+          // Initial snapshots suppress historical alerts; ordinary refreshes must not consume live events.
+          notificationMessageSeqs = new Map(
+            [...channels, ...directConversations].map((conversation) => [conversation.id, conversation.last_seq || 0]),
+          );
+        }
         realtimeInitializedWorkspaceID = workspaceID;
         if (workspaceID === selectedWorkspaceID && status === realtimeError) status = "ready";
         realtimeError = "";
@@ -3399,7 +3398,6 @@
     ) {
       await loadTopics(event.workspace_id);
     }
-    if (messageEventAlreadyAccounted(event)) return;
     if (
       (event.type === "message.updated" || event.type === "message.deleted") &&
       pinnedMessageIDs.has(event.payload.message_id || "")
@@ -3565,6 +3563,7 @@
     if (payload.parent_message_id) return;
     const seq = eventMessageSeq(event);
     const { channelID, dmID } = messageEventScope(event);
+    if (seq > 0 && seq <= (unreadStateForKey(channelID || dmID).last_seq || 0)) return;
     if (channelID) {
       const isActive = channelID === selectedChannelID && !selectedDirectID;
       const activeAtBottom =

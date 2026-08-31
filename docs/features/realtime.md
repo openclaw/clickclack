@@ -152,6 +152,10 @@ progress while retaining targetless, workspace-wide presence events.
   scrolling and read receipts settle independently, so suspended animation frames
   in a hidden tab do not block subsequent events. Live chat stays pinned as
   successive messages grow an existing group, including after the tab resumes.
+- Channel and DM list snapshots account for unread counts without consuming live
+  timeline events. Browser and desktop alerts track received message sequences
+  separately, so a list refresh cannot hide a new alert and a retried event does
+  not repeat it. Initial snapshots still suppress historical message alerts.
 - The client sends `after_cursor` on every connect/reconnect.
 - On WebSocket connect and each live wake, the server pages durable events with
   a higher `cursor` until it reaches the visible tail captured for that drain. If replay is

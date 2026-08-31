@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed channel-list refreshes hiding live messages and notifications, and prevented duplicate message alerts after realtime recovery.
+
 - Fixed profile and notification saves overwriting changes from another tab, and aligned SDK account updates with the API's partial settings contract.
 
 - Fixed long threads hiding replies beyond the first 100: main and embedded views now open latest, page bounded history, preserve reading anchors and drafts, and load search/quote targets through shared thread paging in the API and SDK.

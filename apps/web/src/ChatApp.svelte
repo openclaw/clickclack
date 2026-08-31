@@ -112,7 +112,6 @@
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
-  let topicFilterLoading = false;
   let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
@@ -322,7 +321,6 @@
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
     topicConversationKey = conversationKey;
-    topicFilterLoading = false;
     selectedComposerTopicID = "";
     updateActiveTopicFilter("");
   }
@@ -1402,13 +1400,12 @@
   }
 
   async function setTopicFilter(topicID: string) {
-    if (!selectedChannelID || topicID === activeTopicFilterID || topicFilterLoading) return;
+    if (!selectedChannelID || topicID === activeTopicFilterID) return;
     const conversationKey = currentConversationKey();
     const previousTopicID = activeTopicFilterID;
     const previousComposerTopicID = selectedComposerTopicID;
     const previousWindow = messageWindows.get(conversationKey);
     const previousScroll = scrollMemory.get(conversationKey);
-    topicFilterLoading = true;
     updateActiveTopicFilter(topicID);
     const generation = topicFilterGeneration;
     if (topicID) selectedComposerTopicID = topicID;
@@ -1416,12 +1413,6 @@
     messageWindows.delete(conversationKey);
     try {
       await loadLatestMessages();
-      if (
-        currentConversationKey() !== conversationKey ||
-        topicFilterGeneration !== generation
-      ) {
-        return;
-      }
     } catch (error) {
       if (
         currentConversationKey() !== conversationKey ||
@@ -1473,8 +1464,6 @@
             ? `Topic could not change: ${error.message}`
             : "Topic could not change",
       };
-    } finally {
-      topicFilterLoading = false;
     }
   }
 

@@ -134,6 +134,8 @@ used when posting to that channel. Message responses include `topic_id` when a
 topic was supplied. The web channel composer lists the active topics available
 to that channel. Root-message topic labels can be clicked to filter the
 timeline; clearing the visible filter returns to the unfiltered channel.
+Clearing or choosing another filter takes effect while history is loading;
+an older response cannot restore the previous filter or message window.
 
 ### Channel attention
 

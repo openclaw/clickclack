@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, and fixed target scrolling within long same-author message groups.
+- Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, ignored topic filter changes during loading, and target scrolling within long same-author message groups.
 
 - Fixed delayed parent navigation dismissing a newly selected search reply or hiding its load error.
 

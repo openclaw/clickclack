@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+import { deferred } from "./thread-fixture";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
@@ -173,22 +174,42 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
 
   await originalChannelLink.click();
   await expect(page.getByRole("heading", { name: "#topic-lab" })).toBeVisible();
-  const filteredPageRequest = page.waitForRequest((request) => {
-    const url = new URL(request.url());
-    return (
-      url.pathname === `/api/channels/${channel.id}/messages` &&
-      url.searchParams.get("topic_id") === topic.id
-    );
+  const captured = deferred(),
+    release = deferred(),
+    delivered = deferred();
+  let held = false;
+  await page.route(`**/api/channels/${channel.id}/messages?*`, async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (held || query.get("topic_id") !== topic.id) return route.continue();
+    held = true;
+    expect(query.has("around_seq")).toBe(false);
+    const response = await route.fetch();
+    captured.resolve();
+    await release.promise;
+    await route.fulfill({ response });
+    delivered.resolve();
   });
-  await page.getByRole("button", { name: "Filter by topic Release" }).first().click();
-  const filteredPageURL = new URL((await filteredPageRequest).url());
-  expect(filteredPageURL.searchParams.has("around_seq")).toBe(false);
-  await expect(page.getByText("Showing topic")).toContainText("Release");
-
-  await page.getByRole("button", { name: "Clear filter" }).click();
-  await expect(page.getByText("Showing topic")).toHaveCount(0);
-  await expect(page.getByText("untagged baseline")).toBeVisible();
-  await expect(page.getByText("design realtime")).toBeVisible();
+  try {
+    await page.getByRole("button", { name: "Filter by topic Release" }).first().click();
+    await captured.promise;
+    await expect(page.getByText("Showing topic")).toContainText("Release");
+    await page.getByRole("button", { name: "Clear filter" }).click();
+    await expect(page.getByText("Showing topic")).toHaveCount(0);
+    await expect(page.getByText("untagged baseline")).toBeVisible();
+    release.resolve();
+    await delivered.promise;
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByText("Showing topic")).toHaveCount(0);
+    await expect(page.getByText("untagged baseline")).toBeVisible();
+    await expect(page.getByText("design realtime")).toBeVisible();
+  } finally {
+    release.resolve();
+  }
 
   await page.setViewportSize({ width: 390, height: 760 });
   const closeNavigation = page.getByLabel("Close navigation");

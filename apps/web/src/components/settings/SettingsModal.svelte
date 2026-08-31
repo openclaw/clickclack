@@ -6,7 +6,7 @@
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
   import MyBotsSection from "./MyBotsSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
-  import { APIError } from "../../lib/api";
+  import { APIError, api } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import {
     ACCOUNT_SETTINGS_SECTIONS,
@@ -54,6 +54,7 @@
     onBrowserNotificationsChanged,
   }: Props = $props();
 
+  let signingOut = $state(false);
   let activeSection = $state<AccountSettingsSectionId>(DEFAULT_ACCOUNT_SETTINGS_SECTION);
   let refreshedUser = $state<User | null>(null);
   const user = $derived(refreshedUser?.id === initialUser.id ? refreshedUser : initialUser);
@@ -69,6 +70,19 @@
   onMount(() => {
     void refreshUser();
   });
+
+  // Reload rather than clearing state in place: the session cookie is gone, so
+  // every open subscription and cached workspace has to be rebuilt anyway.
+  async function signOut() {
+    if (signingOut) return;
+    signingOut = true;
+    try {
+      await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+    } catch {
+      // The session may already be invalid; the reload still lands signed out.
+    }
+    window.location.reload();
+  }
 
   async function refreshUser() {
     userStatus = "loading";
@@ -239,6 +253,17 @@
           {onOtherAlign}
           {onBrowserNotificationsChanged}
         />
+        <div class="settings-signout">
+          <div>
+            <strong>Sign out</strong>
+            <p>End this session on this device.</p>
+          </div>
+          <div class="profile-actions">
+            <button class="ghost-action" disabled={signingOut} onclick={signOut} type="button">
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
+          </div>
+        </div>
       {:else if activeSection === "appearance"}
         <AppearanceSection {user} />
       {:else if activeSection === "notifications"}

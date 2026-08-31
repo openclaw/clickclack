@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"mime"
 	"net"
@@ -8,6 +9,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/openclaw/clickclack/apps/api/internal/passwordauth"
+	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
 type magicLinkResponse struct {
@@ -67,6 +71,87 @@ func (s *Server) consumeMagicLink(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setSessionCookie(w, r, session)
 	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "token": session.Token})
+}
+
+// errPasswordLoginRejected is deliberately the same message for a wrong
+// password, an unknown identifier, and an account with no password on file, so
+// the response never discloses which accounts can sign in this way.
+var errPasswordLoginRejected = errors.New("invalid identifier or password")
+
+func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.passwordAuthEnabled {
+		writeError(w, http.StatusNotImplemented, errors.New("password login is not configured"))
+		return
+	}
+	if !s.requireSameOriginJSON(w, r) {
+		return
+	}
+	var body struct {
+		Identifier string `json:"identifier"`
+		Password   string `json:"password"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	identifier := strings.ToLower(strings.TrimSpace(body.Identifier))
+	if identifier == "" || body.Password == "" {
+		writeError(w, http.StatusBadRequest, errors.New("identifier and password are required"))
+		return
+	}
+	// Every attempt costs the caller's address budget, but only failures cost
+	// the account's, so a correct password never contributes to the account
+	// owner's own lockout.
+	if !s.passwordIPLimiter.allow(clientIPKey(r)) || s.passwordIDLimiter.blocked(identifier) {
+		writeError(w, http.StatusTooManyRequests, errors.New("too many sign-in attempts, retry later"))
+		return
+	}
+	user, ok := s.verifyPasswordLogin(r.Context(), identifier, body.Password)
+	if !ok {
+		s.passwordIDLimiter.record(identifier)
+		writeError(w, http.StatusUnauthorized, errPasswordLoginRejected)
+		return
+	}
+	session, err := s.store.CreateSession(r.Context(), user.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.setSessionCookie(w, r, session)
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "token": session.Token})
+}
+
+// verifyPasswordLogin resolves an identifier and checks the secret. Accounts
+// that do not exist, are ambiguous, or have no password set still pay for one
+// key derivation so that failures cost comparable wall time.
+func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password string) (store.User, bool) {
+	login, err := s.store.GetPasswordLogin(ctx, identifier)
+	if err != nil || login.PasswordHash == "" {
+		passwordauth.VerifyDecoy(password)
+		return store.User{}, false
+	}
+	matched, err := passwordauth.Verify(login.PasswordHash, password)
+	if err != nil || !matched {
+		return store.User{}, false
+	}
+	return login.User, true
+}
+
+// logout revokes the caller's session and expires the cookie. It succeeds even
+// without a valid session so that a stale browser can always return to a
+// signed-out state.
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSameOriginJSON(w, r) {
+		return
+	}
+	if cookie, err := requestCookie(r, s.cookies.Session); err == nil && cookie.Value != "" {
+		if err := s.store.RevokeSession(r.Context(), cookie.Value); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+	}
+	s.clearSessionCookie(w, r)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) requireSameOriginJSON(w http.ResponseWriter, r *http.Request) bool {

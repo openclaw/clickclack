@@ -136,6 +136,84 @@
   transform: translateY(-1px);
 }
 
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-submit {
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--text-strong));
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 80ms ease,
+    background 120ms ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.auth-submit:disabled {
+  cursor: default;
+  opacity: 0.58;
+  transform: none;
+}
+
+.auth-submit-quiet {
+  min-height: 38px;
+  border-color: var(--line-strong);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.auth-submit-quiet:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+/* A hairline rule with the label sitting in the gap. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.auth-magic summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-magic[open] summary {
+  margin-bottom: 12px;
+}
+
 .auth-foot {
   margin: 0;
   color: var(--muted-2);

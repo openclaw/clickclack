@@ -13,7 +13,8 @@ resolver lives in `apps/api/internal/httpapi/server.go` (`currentActor`).
 1. `Authorization: Bearer <token>` — bearer session token or `ccb_...` bot
    token. Bot tokens resolve to the bot user plus token workspace/scopes.
 2. Session cookie — `cc_session` by default, or the configured namespaced
-   cookie. It is HTTP-only and set by magic-link consume and GitHub OAuth.
+   cookie. It is HTTP-only and set by magic-link consume, password login, and
+   GitHub OAuth.
 3. Cloudflare Access assertion — when trusted-proxy authentication is
    configured, a valid `Cf-Access-Jwt-Assertion` provisions or resolves the
    asserted email and creates a normal ClickClack session.
@@ -293,6 +294,55 @@ button only in the browser. Register the exact redirect URI
 When metrics are enabled, `clickclack_openclaw_id_oauth_events_total` exposes
 the same bounded event categories as the GitHub counter.
 
+## Local passwords (optional)
+
+Password login exists for fully offline or self-hosted deployments that cannot
+reach GitHub and do not want to hand out magic-link tokens by hand. It is
+opt-in and off by default:
+
+```sh
+CLICKCLACK_PASSWORD_AUTH_ENABLED=true
+# or: clickclack serve --password-auth
+# or: {"password_auth_enabled": true} in the config file
+```
+
+With the flag off, `POST /api/auth/password/login` returns `501` and the web
+sign-in screen does not render the form.
+
+There is no registration endpoint. An operator enables password sign-in for one
+account at a time, and the command reads the secret from a prompt or piped
+stdin so it never lands in a process listing or a shell history file:
+
+```sh
+clickclack admin user set-password --email maggie@example.com
+printf '%s' "$PASSWORD" | clickclack admin user set-password --email maggie@example.com
+clickclack admin user set-password --email maggie@example.com --clear
+```
+
+Setting a password on an account that has none enables password login for it.
+`--clear` disables it again. `--user usr_...` selects an account by ID when an
+email is ambiguous or absent.
+
+Flow and guarantees:
+
+1. `POST /api/auth/password/login` takes `identifier` (an identity email or a
+   handle, matched case-insensitively) and `password`.
+2. It enforces the same `Origin`/`Sec-Fetch-Site` rejections as magic-link
+   consume, then mints a session through the same `Store.CreateSession` path,
+   so the resulting cookie and session are identical to every other method.
+3. Hashes are argon2id in PHC string format (`apps/api/internal/passwordauth`).
+   Verification is constant time.
+4. A wrong password, an unknown identifier, and an account with no password on
+   file all return the same `401` body, and all three pay for one key
+   derivation, so the endpoint does not disclose which accounts are enrolled.
+5. Attempts are rate limited per client address and per identifier. The
+   per-identifier budget is the narrow one and its window is long, which is
+   what makes online guessing impractical.
+6. Bot users are never reachable through this endpoint.
+
+`POST /api/auth/logout` revokes the caller's session and expires the cookie. It
+is idempotent, so a stale browser can always return to a signed-out state.
+
 ## Authorization
 
 Every store mutation that touches a workspace runs `requireMembership` (or the
@@ -316,7 +366,7 @@ expires.
 
 ## What is intentionally missing
 
-- Email/password login.
-- Password reset.
+- Self-service registration and password reset. Passwords are administered
+  entirely through `clickclack admin user set-password`.
 - SMTP delivery for magic links (V0 prints the token; V1 will add delivery).
 - Per-channel ACLs and a historical moderation audit log.

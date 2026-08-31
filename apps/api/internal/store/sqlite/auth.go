@@ -106,6 +106,66 @@ func (s *Store) CreateSession(ctx context.Context, userID string) (store.Session
 	return session, tx.Commit()
 }
 
+// GetPasswordLogin resolves a password login identifier, which may be an
+// identity email or a handle, to its account and stored hash.
+func (s *Store) GetPasswordLogin(ctx context.Context, identifier string) (store.PasswordLogin, error) {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return store.PasswordLogin{}, sql.ErrNoRows
+	}
+	rows, err := s.q.ListPasswordLoginsByIdentifier(ctx, identifier)
+	if err != nil {
+		return store.PasswordLogin{}, err
+	}
+	if len(rows) == 0 {
+		return store.PasswordLogin{}, sql.ErrNoRows
+	}
+	if len(rows) > 1 {
+		return store.PasswordLogin{}, store.ErrAmbiguousUserIdentifier
+	}
+	row := rows[0]
+	return store.PasswordLogin{
+		User:         storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt),
+		PasswordHash: row.PasswordHash,
+	}, nil
+}
+
+// SetUserPassword enables password login for an account, or replaces the hash
+// already on file.
+func (s *Store) SetUserPassword(ctx context.Context, userID, passwordHash string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || strings.TrimSpace(passwordHash) == "" {
+		return errors.New("user id and password hash are required")
+	}
+	return s.q.UpsertUserPassword(ctx, storedb.UpsertUserPasswordParams{
+		UserID:       userID,
+		PasswordHash: passwordHash,
+		UpdatedAt:    now(),
+	})
+}
+
+// ClearUserPassword disables password login for an account.
+func (s *Store) ClearUserPassword(ctx context.Context, userID string) error {
+	rows, err := s.q.DeleteUserPassword(ctx, strings.TrimSpace(userID))
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// RevokeSession ends a session by token. Revoking an unknown or already
+// revoked session is not an error so that sign-out stays idempotent.
+func (s *Store) RevokeSession(ctx context.Context, token string) error {
+	_, err := s.q.RevokeSessionByTokenHash(ctx, storedb.RevokeSessionByTokenHashParams{
+		RevokedAt: sqlText(now()),
+		TokenHash: tokenHash(strings.TrimSpace(token)),
+	})
+	return err
+}
+
 func (s *Store) GetOrCreateUserByEmail(ctx context.Context, provider, email, displayName string) (store.User, error) {
 	provider = strings.TrimSpace(provider)
 	email = strings.ToLower(strings.TrimSpace(email))

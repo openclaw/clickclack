@@ -151,6 +151,11 @@ var ErrWorkspaceOwnerRequired = errors.New("workspace owner permission required"
 // ID rather than guessing which account should receive access.
 var ErrAmbiguousUserEmail = errors.New("multiple users have this identity email")
 
+// ErrAmbiguousUserIdentifier is returned when a password login identifier
+// matches more than one account. Signing in would have to guess which account
+// the caller meant, so the lookup fails instead.
+var ErrAmbiguousUserIdentifier = errors.New("multiple users match this identifier")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
@@ -1088,6 +1093,15 @@ type Session struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+// PasswordLogin carries the account a password identifier resolved to together
+// with its stored hash. PasswordHash is empty when the account exists but has
+// no password set, which callers must reject the same way they reject a wrong
+// password so the response does not disclose which accounts are enrolled.
+type PasswordLogin struct {
+	User         User
+	PasswordHash string
+}
+
 const (
 	OAuthModeBrowser = "browser"
 	OAuthModeDesktop = "desktop"
@@ -1277,6 +1291,10 @@ type Store interface {
 	GetOrCreateUserByEmail(ctx context.Context, provider, email, displayName string) (User, error)
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
+	RevokeSession(ctx context.Context, token string) error
+	GetPasswordLogin(ctx context.Context, identifier string) (PasswordLogin, error)
+	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+	ClearUserPassword(ctx context.Context, userID string) error
 	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error
 	ConsumeOAuthTransaction(ctx context.Context, stateHash, browserBindingHash string, now time.Time) (OAuthTransaction, error)
 	CreateDesktopOAuthGrant(ctx context.Context, grant DesktopOAuthGrant) error

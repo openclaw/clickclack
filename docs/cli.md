@@ -116,6 +116,27 @@ clickclack admin user create --name "Ari" --email ari@example.com [--workspace w
 Creates a user. With `--workspace`, also adds them to that workspace as a
 `member`. Prints the new user ID.
 
+### `admin user set-password`
+
+```sh
+clickclack admin user set-password (--email EMAIL | --user usr_...) [--clear]
+```
+
+Enables, replaces, or clears local password sign-in for one account. Setting a
+password on an account that has none enables password login for it; `--clear`
+disables it again. `--email` also accepts a handle.
+
+The secret is read from an echo-free prompt, or from stdin when the command is
+not attached to a terminal:
+
+```sh
+printf '%s' "$PASSWORD" | clickclack admin user set-password --email ari@example.com
+```
+
+The password is never accepted as a flag, because process arguments are visible
+to other processes on the host. Password sign-in also has to be enabled on the
+server with `--password-auth`; see [Auth](features/auth.md).
+
 ### `admin member add`
 
 ```sh

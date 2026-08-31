@@ -21,8 +21,21 @@ export function readableAPIError(error: unknown, fallback: string): string {
 
 declare global {
   interface Window {
-    __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string; frontendBaseUrl?: string };
+    __CLICKCLACK_CONFIG__?: {
+      apiBaseUrl?: string;
+      frontendBaseUrl?: string;
+      authMethods?: string[];
+    };
   }
+}
+
+// Sign-in surfaces the server has enabled. A server that predates the field
+// omits it entirely, so an absent list falls back to GitHub, which was then
+// the only browser method.
+export function authMethods(): string[] {
+  if (typeof window === "undefined") return [];
+  const methods = window.__CLICKCLACK_CONFIG__?.authMethods;
+  return Array.isArray(methods) ? methods : ["github"];
 }
 
 export function apiBaseURL(): string {

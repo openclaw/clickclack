@@ -585,3 +585,9 @@ CREATE TABLE bot_setup_codes (
 CREATE INDEX idx_bot_setup_codes_workspace_bot ON bot_setup_codes(workspace_id, bot_user_id);
 CREATE INDEX idx_bot_setup_codes_bot ON bot_setup_codes(bot_user_id);
 CREATE INDEX idx_bot_setup_codes_pending_expiry ON bot_setup_codes(expires_at) WHERE claimed_at IS NULL;
+
+CREATE TABLE user_passwords (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  password_hash TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

@@ -42,10 +42,13 @@ type Server struct {
 	cookies               authpolicy.CookieNames
 	cookieSameSite        http.SameSite
 	disableDevAuth        bool
+	passwordAuthEnabled   bool
 	pushNotifier          PushNotifier
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
+	passwordIPLimiter     *slidingWindowLimiter
+	passwordIDLimiter     *slidingWindowLimiter
 	realtimeReplayLimit   int
 	callbackClient        *http.Client
 }
@@ -68,6 +71,14 @@ const (
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
 	setupCodeClaimWindow = time.Minute
+	// passwordLoginIPLimit/Window bound password attempts from one client, and
+	// passwordLoginIDLimit/Window bound attempts against one account no matter
+	// how many addresses they come from. The account window is deliberately
+	// long: it is the lockout that makes online guessing impractical.
+	passwordLoginIPLimit  = 20
+	passwordLoginIPWindow = time.Minute
+	passwordLoginIDLimit  = 5
+	passwordLoginIDWindow = 15 * time.Minute
 )
 
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
@@ -91,6 +102,7 @@ type Options struct {
 	EmbedFrameAncestors []string
 	CookieNames         authpolicy.CookieNames
 	DisableDevAuth      bool
+	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
 	MetricsEnabled      bool
 	Environment         string
@@ -131,9 +143,12 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		cookies:               cookieNames,
 		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
 		disableDevAuth:        options.DisableDevAuth,
+		passwordAuthEnabled:   options.PasswordAuthEnabled,
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
+		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
 		callbackClient:        callbackClient,
 		build: buildMetadata{
@@ -163,6 +178,8 @@ func (s *Server) Handler() http.Handler {
 		r.Use(bindAccessResponseWriter)
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
+		r.Post("/auth/password/login", s.passwordLogin)
+		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/github/start", s.githubStart)
 		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
 		r.Post("/auth/github/desktop/consume", s.githubDesktopConsume)
@@ -1695,6 +1712,20 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(index)
 }
 
+// enabledAuthMethods tells the frontend which sign-in surfaces to render. It
+// is always a non-nil slice so the SPA can distinguish "no method configured"
+// from an older server that omitted the field.
+func (s *Server) enabledAuthMethods() []string {
+	methods := []string{}
+	if s.githubOAuth.ClientID != "" && s.githubOAuth.ClientSecret != "" {
+		methods = append(methods, "github")
+	}
+	if s.passwordAuthEnabled {
+		methods = append(methods, "password")
+	}
+	return methods
+}
+
 func isMissingBrowserAssetPath(urlPath string) bool {
 	if strings.HasPrefix(urlPath, "/_app/") || strings.HasPrefix(urlPath, "/assets/") {
 		return true
@@ -1710,9 +1741,14 @@ func isMissingBrowserAssetPath(urlPath string) bool {
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {
-	config, err := json.Marshal(map[string]string{
-		"apiBaseUrl":      s.publicAPIURL,
-		"frontendBaseUrl": s.frontendURL,
+	config, err := json.Marshal(struct {
+		APIBaseURL      string   `json:"apiBaseUrl"`
+		FrontendBaseURL string   `json:"frontendBaseUrl"`
+		AuthMethods     []string `json:"authMethods"`
+	}{
+		APIBaseURL:      s.publicAPIURL,
+		FrontendBaseURL: s.frontendURL,
+		AuthMethods:     s.enabledAuthMethods(),
 	})
 	if err != nil {
 		return index

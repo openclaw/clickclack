@@ -112,6 +112,40 @@ paths:
       responses:
         "200":
           description: Created session
+  /api/auth/password/login:
+    post:
+      operationId: passwordLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "200":
+          description: Created session
+        "400":
+          description: Missing identifier or password
+        "401":
+          description: Unknown identifier, wrong password, or an account without a password set
+        "403":
+          description: Cross-site login requests are not allowed
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this client address or identifier
+        "501":
+          description: Password login is not configured
+  /api/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "200":
+          description: Session revoked and cookie expired
+        "403":
+          description: Cross-site sign-out requests are not allowed
+        "415":
+          description: Content-Type must be application/json
   /api/auth/github/start:
     get:
       operationId: startGitHubOAuth
@@ -1873,6 +1907,15 @@ components:
       required: [token]
       properties:
         token:
+          type: string
+    PasswordLoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          description: Account email address or handle
+        password:
           type: string
     ConsumeDesktopGitHubOAuthRequest:
       type: object

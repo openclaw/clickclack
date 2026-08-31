@@ -34,6 +34,7 @@ hook in `cmd/clickclack/main.go`.
 | `--metrics-enabled`   | `CLICKCLACK_METRICS_ENABLED`     | `false`     | Expose metadata-only Prometheus metrics at `/metrics`; keep private. |
 | `--config`            | —                                | unset       | JSON config file. |
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
+| `--password-auth`     | `CLICKCLACK_PASSWORD_AUTH_ENABLED` | `false`   | `serve` only. Enables local email/handle and password sign-in; passwords are set with `clickclack admin user set-password`. See [Auth](features/auth.md). |
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
 | —                     | `CLICKCLACK_PUBLIC_API_URL`      | public URL  | Canonical external API base. May use a different origin and a normalized base path. |
 | —                     | `CLICKCLACK_HOME_URL`            | `/`         | Destination of the workspace rail's home button (`home_url` in the config file). An absolute `http(s)` URL or a path starting with `/`; use it when ClickClack lives inside a larger product. |
@@ -63,6 +64,7 @@ hook in `cmd/clickclack/main.go`.
   "environment": "staging",
   "metrics_enabled": false,
   "dev_bootstrap": false,
+  "password_auth_enabled": false,
   "public_url": "https://chat.example.com",
   "public_api_url": "https://api.example.com/services/clickclack",
   "home_url": "/portal",

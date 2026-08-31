@@ -638,6 +638,19 @@ func (q *Queries) DeleteUploadQuotaReservation(ctx context.Context, arg DeleteUp
 	return result.RowsAffected()
 }
 
+const deleteUserPassword = `-- name: DeleteUserPassword :execrows
+DELETE FROM user_passwords
+WHERE user_id = ?1
+`
+
+func (q *Queries) DeleteUserPassword(ctx context.Context, userID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserPassword, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteWorkspace = `-- name: DeleteWorkspace :execrows
 DELETE FROM workspaces
 WHERE id = ?1
@@ -3842,6 +3855,69 @@ func (q *Queries) ListMentionedUserIDs(ctx context.Context, arg ListMentionedUse
 	return items, nil
 }
 
+const listPasswordLoginsByIdentifier = `-- name: ListPasswordLoginsByIdentifier :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(p.password_hash, '') AS password_hash
+FROM users u
+LEFT JOIN user_passwords p ON p.user_id = u.id
+WHERE u.kind = 'human'
+  AND (
+    (u.handle <> '' AND lower(u.handle) = lower(?1))
+    OR EXISTS (
+      SELECT 1 FROM identities i
+      WHERE i.user_id = u.id AND lower(i.email) = lower(?1)
+    )
+  )
+ORDER BY u.created_at, u.id
+LIMIT 2
+`
+
+type ListPasswordLoginsByIdentifierRow struct {
+	ID           string         `json:"id"`
+	Kind         string         `json:"kind"`
+	OwnerUserID  sql.NullString `json:"owner_user_id"`
+	DisplayName  string         `json:"display_name"`
+	Handle       string         `json:"handle"`
+	AvatarUrl    string         `json:"avatar_url"`
+	CreatedAt    string         `json:"created_at"`
+	PasswordHash string         `json:"password_hash"`
+}
+
+// Password login accepts either an identity email or a handle. Both sides are
+// folded because identity rows keep the casing they were created with, and two
+// rows are read so an ambiguous identifier can be rejected rather than guessed.
+func (q *Queries) ListPasswordLoginsByIdentifier(ctx context.Context, identifier string) ([]ListPasswordLoginsByIdentifierRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPasswordLoginsByIdentifier, identifier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPasswordLoginsByIdentifierRow
+	for rows.Next() {
+		var i ListPasswordLoginsByIdentifierRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.PasswordHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingUploadCleanups = `-- name: ListPendingUploadCleanups :many
 SELECT id, workspace_id, storage_path, attempts, last_error, created_at, updated_at
 FROM pending_upload_cleanups
@@ -5345,6 +5421,26 @@ func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokens
 	return result.RowsAffected()
 }
 
+const revokeSessionByTokenHash = `-- name: RevokeSessionByTokenHash :execrows
+UPDATE sessions
+SET revoked_at = ?1
+WHERE token_hash = ?2
+  AND revoked_at IS NULL
+`
+
+type RevokeSessionByTokenHashParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	TokenHash string         `json:"token_hash"`
+}
+
+func (q *Queries) RevokeSessionByTokenHash(ctx context.Context, arg RevokeSessionByTokenHashParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeSessionByTokenHash, arg.RevokedAt, arg.TokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = ?1
@@ -6050,6 +6146,25 @@ type UpsertNotificationSettingsParams struct {
 
 func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNotificationSettingsParams) error {
 	_, err := q.db.ExecContext(ctx, upsertNotificationSettings, arg.UserID, arg.PushoverEnabled, arg.PushoverUserKey)
+	return err
+}
+
+const upsertUserPassword = `-- name: UpsertUserPassword :exec
+INSERT INTO user_passwords (user_id, password_hash, updated_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT(user_id) DO UPDATE SET
+  password_hash = excluded.password_hash,
+  updated_at = excluded.updated_at
+`
+
+type UpsertUserPasswordParams struct {
+	UserID       string `json:"user_id"`
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+func (q *Queries) UpsertUserPassword(ctx context.Context, arg UpsertUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserPassword, arg.UserID, arg.PasswordHash, arg.UpdatedAt)
 	return err
 }
 

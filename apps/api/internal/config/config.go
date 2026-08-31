@@ -27,6 +27,7 @@ type Config struct {
 	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
 	CookieNamespace        string   `json:"cookie_namespace"`
 	DevBootstrap           bool     `json:"dev_bootstrap"`
+	PasswordAuthEnabled    bool     `json:"password_auth_enabled"`
 	GitHubClientID         string   `json:"github_client_id"`
 	GitHubClientSecret     string   `json:"github_client_secret"`
 	GitHubAllowedOrg       string   `json:"github_allowed_org"`
@@ -110,6 +111,13 @@ func Load(path string) (Config, error) {
 			return Config{}, err
 		}
 		cfg.DevBootstrap = value
+	}
+	if env := os.Getenv("CLICKCLACK_PASSWORD_AUTH_ENABLED"); env != "" {
+		value, err := strconv.ParseBool(env)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.PasswordAuthEnabled = value
 	}
 	if env := os.Getenv("CLICKCLACK_GITHUB_CLIENT_ID"); env != "" {
 		cfg.GitHubClientID = env

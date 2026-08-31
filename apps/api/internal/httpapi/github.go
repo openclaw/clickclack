@@ -558,6 +558,10 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 	http.SetCookie(w, &http.Cookie{Name: s.cookies.Session, Value: session.Token, Path: s.cookiePath(), Expires: expires, HttpOnly: true, Secure: s.secureCookies(r), SameSite: s.cookieSameSite})
 }
 
+func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: s.cookies.Session, Value: "", Path: s.cookiePath(), MaxAge: -1, HttpOnly: true, Secure: s.secureCookies(r), SameSite: s.cookieSameSite})
+}
+
 func (s *Server) cookiePath() string {
 	if publicAPIURL, err := url.Parse(strings.TrimSpace(s.publicAPIURL)); err == nil {
 		if basePath := strings.TrimSuffix(publicAPIURL.Path, "/"); basePath != "" {

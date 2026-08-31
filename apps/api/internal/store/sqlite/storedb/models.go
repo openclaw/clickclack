@@ -419,6 +419,12 @@ type UserNotificationSetting struct {
 	PushoverUserKey string `json:"pushover_user_key"`
 }
 
+type UserPassword struct {
+	UserID       string `json:"user_id"`
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`

@@ -37,6 +37,33 @@ func (l *slidingWindowLimiter) allow(key string) bool {
 	cutoff := now.Add(-l.window)
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.allowLocked(key, now, cutoff)
+}
+
+// blocked reports whether a key has already spent its budget without charging
+// an attempt against it, and record charges one. Callers that should only
+// count failures use the pair; everything else uses allow.
+func (l *slidingWindowLimiter) blocked(key string) bool {
+	now := l.nowFn()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := pruneAfter(l.hits[key], now.Add(-l.window))
+	if len(kept) == 0 {
+		delete(l.hits, key)
+		return false
+	}
+	l.hits[key] = kept
+	return len(kept) >= l.limit
+}
+
+func (l *slidingWindowLimiter) record(key string) {
+	now := l.nowFn()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.allowLocked(key, now, now.Add(-l.window))
+}
+
+func (l *slidingWindowLimiter) allowLocked(key string, now, cutoff time.Time) bool {
 	if l.nextGC.IsZero() || !now.Before(l.nextGC) {
 		l.sweep(cutoff)
 		l.nextGC = now.Add(l.window)

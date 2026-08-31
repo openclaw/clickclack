@@ -294,3 +294,26 @@ func TestValidateServeRejectsBadHomeLink(t *testing.T) {
 		t.Fatalf("expected trimmed home link, got url=%q label=%q", cfg.HomeURL, cfg.HomeLabel)
 	}
 }
+
+func TestLoadPasswordAuthFlag(t *testing.T) {
+	if cfg, err := Load(""); err != nil || cfg.PasswordAuthEnabled {
+		t.Fatalf("expected password auth to default off, got %#v err=%v", cfg, err)
+	}
+	t.Setenv("CLICKCLACK_PASSWORD_AUTH_ENABLED", "true")
+	cfg, err := Load("")
+	if err != nil || !cfg.PasswordAuthEnabled {
+		t.Fatalf("expected the environment to enable password auth, got %#v err=%v", cfg, err)
+	}
+	t.Setenv("CLICKCLACK_PASSWORD_AUTH_ENABLED", "not-bool")
+	if _, err := Load(""); err == nil {
+		t.Fatal("expected an invalid password auth bool to be rejected")
+	}
+	t.Setenv("CLICKCLACK_PASSWORD_AUTH_ENABLED", "")
+	configPath := filepath.Join(t.TempDir(), "password-auth.json")
+	if err := os.WriteFile(configPath, []byte(`{"password_auth_enabled":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err := Load(configPath); err != nil || !cfg.PasswordAuthEnabled {
+		t.Fatalf("expected the config file to enable password auth, got %#v err=%v", cfg, err)
+	}
+}

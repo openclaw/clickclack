@@ -88,6 +88,7 @@ func serve(args []string) error {
 	flags.String("environment", "", "deployment environment label")
 	configPath := flags.String("config", "", "config file")
 	flags.Bool("dev-bootstrap", false, "create a local owner/workspace/channel if no user exists")
+	flags.Bool("password-auth", false, "enable local email/handle and password sign-in")
 	flags.Bool("metrics-enabled", false, "expose metadata-only Prometheus metrics at /metrics")
 	flags.String("embed-frame-ancestors", "", "comma-separated origins allowed to embed /embed/* pages")
 	flags.String("access-team-domain", "", "Cloudflare Access team HTTPS origin")
@@ -140,6 +141,7 @@ func serve(args []string) error {
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadStorage:       uploads,
 		DisableDevAuth:      !cfg.DevBootstrap,
+		PasswordAuthEnabled: cfg.PasswordAuthEnabled,
 		CookieNames:         cookieNames,
 		FrontendURL:         cfg.PublicURL,
 		PublicAPIURL:        cfg.PublicAPIURL,
@@ -260,8 +262,11 @@ func admin(args []string) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(manifest)
 	case "user":
+		if len(args) >= 2 && args[1] == "set-password" {
+			return adminUserSetPassword(args[2:])
+		}
 		if len(args) < 2 || args[1] != "create" {
-			return fmt.Errorf("usage: clickclack admin user create --name NAME --email EMAIL")
+			return fmt.Errorf("usage: clickclack admin user (create --name NAME --email EMAIL | set-password --email EMAIL)")
 		}
 		flags := flag.NewFlagSet("admin user create", flag.ExitOnError)
 		data := flags.String("data", defaultData(), "data directory")
@@ -675,6 +680,8 @@ func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {
 			cfg.Environment = f.Value.String()
 		case "dev-bootstrap":
 			cfg.DevBootstrap = f.Value.String() == "true"
+		case "password-auth":
+			cfg.PasswordAuthEnabled = f.Value.String() == "true"
 		case "metrics-enabled":
 			cfg.MetricsEnabled = f.Value.String() == "true"
 		case "embed-frame-ancestors":

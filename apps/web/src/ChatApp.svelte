@@ -3439,12 +3439,16 @@
       // reload completes, virtua's scrollSize grows while offset is unchanged
       // and the cached atBottom flag flips to false — we'd lose the signal.
       const wasAtLiveEdge = isAtLiveEdge();
-      if (event.type === "message.created" && !wasAtLiveEdge) {
+      const seq = eventMessageSeq(event);
+      const missingMessage = event.type === "message.created" && (
+        seq <= 0 || seq > (messageWindows.get(currentConversationKey())?.newest_seq || 0)
+      );
+      if (missingMessage && !wasAtLiveEdge) {
         suppressAutoReadUntil = Date.now() + 1200;
         markMessageWindowHasNewer(currentConversationKey());
-      } else if (event.type === "message.created") {
+      } else if (missingMessage) {
         await loadNewerMessagesFromRealtime(isCurrent);
-      } else {
+      } else if (event.type !== "message.created") {
         await loadMessages();
       }
       if (!isCurrent()) return;

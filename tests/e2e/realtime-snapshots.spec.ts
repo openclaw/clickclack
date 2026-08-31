@@ -4,7 +4,7 @@ import type { Channel, User, Workspace } from "../../apps/web/src/lib/types";
 import { waitForAppReady } from "./app-ready";
 import { deferred } from "./thread-fixture";
 
-async function fixture(page: Page) {
+async function fixture(page: Page, open = true) {
   const created = await page.request.post("/api/workspaces", {
     data: { name: `Realtime snapshots ${randomUUID()}` },
   });
@@ -24,8 +24,10 @@ async function fixture(page: Page) {
   expect(response.ok()).toBe(true);
   const { bot }: { bot: User } = await response.json();
   const [active, background] = channels;
-  await page.goto(`/app/${workspace.route_id}/${active.route_id}`);
-  await waitForAppReady(page);
+  if (open) {
+    await page.goto(`/app/${workspace.route_id}/${active.route_id}`);
+    await waitForAppReady(page);
+  }
   return { workspace, active, background, bot };
 }
 
@@ -76,6 +78,83 @@ test("a channel snapshot cannot consume a live timeline event", async ({ page })
     await expect(page.locator(`.message-row[data-message-id="${message.id}"]`)).toBeVisible();
   } finally {
     release.resolve();
+  }
+});
+
+test("replaying a loaded message while scrolled up does not invent a newer page", async ({
+  page,
+}) => {
+  const { workspace, active } = await fixture(page, false);
+  for (let index = 0; index < 30; index++) {
+    const response = await page.request.post(`/api/channels/${active.id}/messages`, {
+      data: { body: `History ${index}: ${"Scrollable retained history. ".repeat(12)}` },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  const tail = await page.request.get(
+    `/api/realtime/events?workspace_id=${workspace.id}&include_tail=true&limit=1`,
+  );
+  const { tail_cursor } = await tail.json();
+  const response = await page.request.post(`/api/channels/${active.id}/messages`, {
+    data: { body: "Already loaded final row" },
+  });
+  expect(response.ok()).toBe(true);
+  const { message } = await response.json();
+  const cursorKey = `clickclack:${workspace.id}:cursor`;
+  await page.addInitScript(({ key, cursor }) => localStorage.setItem(key, cursor), {
+    key: cursorKey,
+    cursor: tail_cursor,
+  });
+  const entered = deferred(),
+    release = deferred(),
+    releaseNewer = deferred();
+  await page.routeWebSocket("**/api/realtime/ws?*", (socket) => {
+    const server = socket.connectToServer();
+    let delivery = Promise.resolve();
+    server.onMessage((data) => {
+      delivery = delivery.then(async () => {
+        const event = JSON.parse(String(data));
+        if (event.type === "message.created" && event.payload.message_id === message.id) {
+          entered.resolve();
+          await release.promise;
+        }
+        socket.send(data);
+      });
+    });
+  });
+  try {
+    await page.goto(`/app/${workspace.route_id}/${active.route_id}`);
+    await waitForAppReady(page);
+    await expect(page.getByText("Already loaded final row", { exact: true })).toBeVisible();
+    await entered.promise;
+    const scroll = page.locator(".messages-scroll");
+    await scroll.evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await expect(page.getByText(/^History 0:/)).toBeVisible();
+    release.resolve();
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), cursorKey))
+      .not.toBe(tail_cursor);
+    let newerRequests = 0;
+    await page.route(`**/api/channels/${active.id}/messages?*`, async (route) => {
+      if (!new URL(route.request().url()).searchParams.has("after_seq")) return route.continue();
+      newerRequests++;
+      await releaseNewer.promise;
+      await route.continue();
+    });
+    await scroll.evaluate(async (element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+    });
+    await expect(page.getByRole("status", { name: "Loading newer messages" })).toHaveCount(0);
+    expect(newerRequests).toBe(0);
+  } finally {
+    release.resolve();
+    releaseNewer.resolve();
   }
 });
 

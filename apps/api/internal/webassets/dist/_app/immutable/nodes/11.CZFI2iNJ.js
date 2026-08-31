@@ -1,1 +1,0 @@
-import{Tt as e,wt as t}from"../chunks/CCD6-UKV.js";import"../chunks/xihTtKlq.js";import{t as n}from"../chunks/CLK-AT7J.js";function r(r,i){e(i,!0),n(r,{get routeWorkspaceID(){return i.params.workspaceID},get routeTargetID(){return i.params.targetID}}),t()}export{r as component};

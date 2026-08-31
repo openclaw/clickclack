@@ -184,29 +184,39 @@ test.describe("type-to-focus composer", () => {
     expect(Math.abs(afterClearHeight - initialHeight)).toBeLessThan(2);
   });
 
-  test("global Escape clears the reply target even when composer is not focused", async ({
-    page,
-  }) => {
-    const composer = page.getByLabel("Message body");
-    const body = `the original draft ${Date.now()}`;
-    await composer.fill(body);
-    await page.getByRole("button", { name: "Send" }).click();
+  for (const context of ["channel", "thread"] as const) {
+    test(`global Escape clears the ${context} reply target even when its composer is not focused`, async ({
+      page,
+    }) => {
+      const composer = page.getByLabel("Message body");
+      const body = `the original draft ${Date.now()}`;
+      await composer.fill(body);
+      await page.getByRole("button", { name: "Send" }).click();
 
-    const originalRow = page.locator(".message-row:not(.is-pending)", {
-      has: page.locator(".markdown").filter({ hasText: body }),
+      const originalRow = page.locator(".message-row:not(.is-pending)", {
+        has: page.locator(".markdown").filter({ hasText: body }),
+      });
+      if (context === "thread") {
+        await originalRow.getByRole("button", { name: "Open thread" }).focus();
+        await originalRow.getByRole("button", { name: "Open thread" }).press("Enter");
+        await expect(page.getByLabel("Reply body")).toBeVisible();
+      }
+      const replyButton = (
+        context === "thread" ? page.locator(".thread-root") : originalRow
+      ).getByRole("button", { name: "Reply", exact: true });
+      await replyButton.focus();
+      await replyButton.press("Enter");
+
+      const activeComposer = context === "thread" ? page.getByLabel("Reply body") : composer;
+      await activeComposer.fill("Keep this draft after clearing the quote");
+      const chip = page.getByLabel("Replying to message");
+      await expect(chip).toBeVisible();
+      await page.getByRole("heading", { name: "#general", exact: true }).click();
+      await expect(activeComposer).not.toBeFocused();
+
+      await page.keyboard.press("Escape");
+      await expect(chip).toHaveCount(0);
+      await expect(activeComposer).toHaveValue("Keep this draft after clearing the quote");
     });
-    const replyButton = originalRow.getByRole("button", { name: "Reply" });
-    await replyButton.focus();
-    await replyButton.press("Enter");
-
-    const chip = page.getByLabel("Replying to message");
-    await expect(chip).toBeVisible();
-
-    // Move focus away from the composer.
-    await page.locator("body").click({ position: { x: 5, y: 5 } });
-    await expect(composer).not.toBeFocused();
-
-    await page.keyboard.press("Escape");
-    await expect(chip).toHaveCount(0);
-  });
+  }
 });

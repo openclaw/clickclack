@@ -3944,9 +3944,13 @@
         event.preventDefault();
         resetSearch();
         return;
-      } else if (replyTarget) {
+      } else if (replyTarget || thread.draft?.quote) {
         event.preventDefault();
-        clearReplyTarget();
+        if (thread.draft?.quote && (activeComposerContext === "thread" || !replyTarget)) {
+          thread.setQuote(null);
+        } else {
+          clearReplyTarget();
+        }
         return;
       } else {
         // Esc with no modal/reply jumps you to live chat.

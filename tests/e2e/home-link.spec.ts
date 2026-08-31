@@ -13,7 +13,7 @@ test.beforeAll(() => {
   testDir = mkdtempSync(join(tmpdir(), "clickclack-home-link-"));
   binary = process.env.CLICKCLACK_HOME_LINK_TEST_BINARY || join(testDir, "clickclack");
   if (!process.env.CLICKCLACK_HOME_LINK_TEST_BINARY) {
-    execFileSync("go", ["build", "-o", binary, "./apps/api/cmd/clickclack"]);
+    execFileSync("go", ["build", "-buildvcs=false", "-o", binary, "./apps/api/cmd/clickclack"]);
   }
 });
 test.afterAll(() => rmSync(testDir, { recursive: true, force: true }));

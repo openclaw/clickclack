@@ -6,7 +6,7 @@
   type Props = {
     user: User;
     isDesktop?: boolean;
-    onUserUpdated?: (user: User) => void;
+    onUserUpdated: (user: User) => void;
     onBrowserNotificationsChanged?: (enabled: boolean) => void;
   };
 
@@ -17,8 +17,6 @@
     onBrowserNotificationsChanged,
   }: Props = $props();
 
-  let savedUser = $state<User | null>(null);
-  const currentUser = $derived(savedUser ?? user);
   let pushoverEnabled = $state(false);
   let pushoverUserKey = $state("");
 
@@ -27,8 +25,8 @@
   let saving = $state(false);
 
   $effect(() => {
-    pushoverEnabled = currentUser.notification_settings?.pushover_enabled ?? false;
-    pushoverUserKey = currentUser.notification_settings?.pushover_user_key ?? "";
+    pushoverEnabled = user.notification_settings?.pushover_enabled ?? false;
+    pushoverUserKey = user.notification_settings?.pushover_user_key ?? "";
   });
 
   async function savePushover() {
@@ -40,17 +38,13 @@
       const data = await requestCurrentUser({
         method: "PATCH",
         body: JSON.stringify({
-          display_name: currentUser.display_name,
-          handle: currentUser.handle ? `@${currentUser.handle}` : "",
-          avatar_url: currentUser.avatar_url,
           notification_settings: {
             pushover_enabled: pushoverEnabled,
             pushover_user_key: pushoverUserKey,
           },
         }),
       });
-      savedUser = data.user;
-      onUserUpdated?.(data.user);
+      onUserUpdated(data.user);
       status = "Saved";
     } catch (error) {
       status = error instanceof Error ? error.message : "Could not save notifications";
@@ -72,7 +66,7 @@
     <h3 class="settings-rows__head">Desktop</h3>
 
     <BrowserNotificationSetting
-      user={currentUser}
+      {user}
       {isDesktop}
       onChanged={onBrowserNotificationsChanged}
     />

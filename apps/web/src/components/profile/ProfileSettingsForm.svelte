@@ -11,7 +11,7 @@
     userAlign: "left" | "right";
     otherAlign: "left" | "right";
     isDesktop?: boolean;
-    onUserUpdated?: (user: User) => void;
+    onUserUpdated: (user: User) => void;
     onSaved?: () => void;
     onHideCommentary: (value: boolean) => void;
     onHideToolCalls: (value: boolean) => void;
@@ -36,8 +36,6 @@
     onBrowserNotificationsChanged,
   }: Props = $props();
 
-  let savedUser = $state<User | null>(null);
-  const currentUser = $derived(savedUser ?? user);
   let displayName = $state("");
   let handle = $state("");
   let avatarURL = $state("");
@@ -45,13 +43,13 @@
   let statusError = $state(false);
   let saving = $state(false);
 
-  const previewName = $derived(displayName.trim() || currentUser.display_name || "Your name");
-  const previewHandle = $derived(handle.trim().replace(/^@+/, "") || currentUser.handle || "");
+  const previewName = $derived(displayName.trim() || user.display_name || "Your name");
+  const previewHandle = $derived(handle.trim().replace(/^@+/, "") || user.handle || "");
 
   $effect(() => {
-    displayName = currentUser.display_name;
-    handle = currentUser.handle ?? "";
-    avatarURL = currentUser.avatar_url;
+    displayName = user.display_name;
+    handle = user.handle ?? "";
+    avatarURL = user.avatar_url;
   });
 
   function normalizedHandleForSave(): string {
@@ -71,11 +69,9 @@
           display_name: displayName,
           handle: normalizedHandleForSave(),
           avatar_url: avatarURL,
-          notification_settings: currentUser.notification_settings,
         }),
       });
-      savedUser = data.user;
-      onUserUpdated?.(data.user);
+      onUserUpdated(data.user);
       status = "Saved";
       onSaved?.();
     } catch (error) {
@@ -100,7 +96,7 @@
 >
   <section class="settings-identity" aria-label="Profile preview">
     <Avatar
-      id={currentUser.id}
+      id={user.id}
       name={previewName}
       src={avatarURL}
       size={52}
@@ -254,7 +250,7 @@
     <h3 class="settings-rows__head">Notifications</h3>
 
     <BrowserNotificationSetting
-      user={currentUser}
+      {user}
       {isDesktop}
       onChanged={onBrowserNotificationsChanged}
     />

@@ -22,9 +22,7 @@
   outline: 0;
 }
 
-/* Shared dialog card (create channel, start DM, account profile). These
-   dialogs previously had no surface of their own and floated bare on the
-   scrim; they now sit on a proper keycap card. */
+/* Shared card for create, channel settings, and delete dialogs. */
 .profile-modal {
   position: relative;
   z-index: 1;
@@ -93,31 +91,6 @@
   padding: 20px;
 }
 
-.profile-preview {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel-2);
-}
-
-.profile-preview strong,
-.profile-preview span {
-  display: block;
-}
-
-.profile-preview strong {
-  color: var(--text-strong);
-  font-size: 15px;
-}
-
-.profile-preview span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .field {
   display: grid;
   gap: 6px;
@@ -149,18 +122,6 @@
   border-color: var(--accent);
   outline: 0;
   box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.check-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.check-field input {
-  width: 16px;
-  height: 16px;
-  padding: 0;
 }
 
 .profile-status {

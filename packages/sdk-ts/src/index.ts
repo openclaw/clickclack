@@ -4,17 +4,7 @@ export type { components, paths } from "./generated/openapi";
 
 export type HomeLink = components["schemas"]["HomeLink"];
 
-export type User = {
-  id: string;
-  kind: "human" | "bot";
-  owner_user_id?: string;
-  display_name: string;
-  handle: string;
-  former_handle?: string;
-  deleted_at?: string;
-  avatar_url: string;
-  created_at: string;
-};
+export type User = components["schemas"]["User"];
 
 export type DeletedBot = {
   id: string;
@@ -581,11 +571,7 @@ export class ClickClackClient {
     return data.user;
   }
 
-  async updateMe(input: {
-    display_name: string;
-    handle?: string;
-    avatar_url?: string;
-  }): Promise<User> {
+  async updateMe(input: components["schemas"]["UpdateMeRequest"]): Promise<User> {
     const data = await this.request<{ user: User }>("/api/me", {
       method: "PATCH",
       body: JSON.stringify(input),

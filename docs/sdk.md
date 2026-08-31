@@ -31,6 +31,7 @@ const client = new ClickClackClient({
 
 const me = await client.me();
 await client.updateMe({ display_name: "Peter Steinberger", handle: "@steipete" });
+await client.updateMe({ appearance_preferences: { board_theme: "iris" } });
 const workspaces = await client.workspaces.list();
 const channels = await client.channels.list(workspaces[0].id);
 const message = await client.channels.sendMessage(channels[0].id, {

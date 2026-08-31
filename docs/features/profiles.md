@@ -30,8 +30,10 @@ PATCH /api/me
 }
 ```
 
-`PATCH /api/me` returns `{ "user": ... }`. Handles must be unique when set and
-must be 2-32 characters using letters, numbers, `_`, or `-`. Avatar URLs can be
+`PATCH /api/me` returns `{ "user": ... }`. Omitted fields are unchanged, so a
+client can update a profile field, notifications, or appearance independently.
+Handles must be unique when set and must be 2-32 characters using letters,
+numbers, `_`, or `-`. Avatar URLs can be
 blank or an `http`/`https` URL. An explicit URL takes precedence over Gravatar;
 clearing it restores the email-backed Gravatar fallback. Gravatar requests are
 served by `gravatar.com`, so clients loading those images contact that external
@@ -48,6 +50,9 @@ except the author.
 The current user's profile control sits at the bottom of the channel sidebar.
 Click or right-click it to open account settings and edit display name, handle,
 avatar URL, conversation display preferences, and notification settings.
+
+Profile and notification saves update only their respective sections. Saving
+one section preserves changes to another section made in another tab or device.
 
 Conversation display preferences can hide agent commentary or tool calls and
 independently place the current user's messages and other human or agent

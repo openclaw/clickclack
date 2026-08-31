@@ -2538,8 +2538,9 @@ test("channel preferences filter browser notifications outside the active conver
   );
   expect(failureChannelResponse.ok()).toBe(true);
   const failureChannel = (await failureChannelResponse.json()) as {
-    channel: { id: string };
+    channel: { id: string; name: string };
   };
+  await expect(page.getByRole("link", { name: `# ${failureChannel.channel.name}` })).toBeVisible();
   await page.route(`**/api/channels/${failureChannel.channel.id}/notification-settings`, (route) =>
     route.fulfill({
       status: 503,

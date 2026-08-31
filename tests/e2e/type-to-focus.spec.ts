@@ -188,14 +188,16 @@ test.describe("type-to-focus composer", () => {
     page,
   }) => {
     const composer = page.getByLabel("Message body");
-    await composer.fill("the original draft");
+    const body = `the original draft ${Date.now()}`;
+    await composer.fill(body);
     await page.getByRole("button", { name: "Send" }).click();
 
-    const originalRow = page.locator(".message-row", {
-      has: page.locator(".markdown").filter({ hasText: "the original draft" }),
+    const originalRow = page.locator(".message-row:not(.is-pending)", {
+      has: page.locator(".markdown").filter({ hasText: body }),
     });
-    await originalRow.hover();
-    await originalRow.getByRole("button", { name: "Reply" }).click();
+    const replyButton = originalRow.getByRole("button", { name: "Reply" });
+    await replyButton.focus();
+    await replyButton.press("Enter");
 
     const chip = page.getByLabel("Replying to message");
     await expect(chip).toBeVisible();

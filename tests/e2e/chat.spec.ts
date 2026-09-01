@@ -1864,6 +1864,13 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   const { channel } = (await channelResponse.json()) as {
     channel: { id: string; name: string };
   };
+  const alternateResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `after-delete-${Date.now()}`, kind: "public" },
+  });
+  expect(alternateResponse.ok()).toBe(true);
+  const { channel: alternate } = (await alternateResponse.json()) as {
+    channel: { name: string; route_id: string };
+  };
   const body = `delete modal message ${Date.now()}`;
 
   await page.goto("/app");
@@ -1900,6 +1907,11 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(page.getByText("This message was deleted.", { exact: true })).toBeVisible();
   await expect(page.getByText(body, { exact: true })).toBeHidden();
+  await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+  await expect(
+    page.getByRole("heading", { name: `#${alternate.name}`, exact: true }),
+  ).toBeVisible();
 });
 
 test("closes direct messages without deleting history", async ({ page }) => {

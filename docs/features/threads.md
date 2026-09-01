@@ -68,6 +68,9 @@ subscribers via the realtime hub.
 
 ## Web thread lifecycle
 
+The topbar thread control shows guidance above the composer when no thread is
+selected. This guidance and recoverable action errors leave navigation active.
+
 Selecting a thread clears the previous thread's replies immediately. Closing
 or replacing the pane invalidates its pending loads, including route, search,
 pin, and realtime refreshes. A delayed response cannot reopen a closed pane or

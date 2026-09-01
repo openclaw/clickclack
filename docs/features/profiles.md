@@ -62,6 +62,9 @@ device, not in the user profile returned by `/api/me`.
 Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,
 presence, user ID, and a Message action for starting or jumping to a DM.
+Opening or closing a profile keeps the URL on the visible conversation and
+supersedes an older navigation that is still loading. Opening a profile from
+a thread returns to that thread's parent conversation.
 
 Message lists, search results, threads, DMs, and the profile control all hydrate
 avatars from the user attached to each message or conversation member.

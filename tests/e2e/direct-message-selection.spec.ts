@@ -2,14 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import type { Channel, DirectConversation, User, Workspace } from "../../apps/web/src/lib/types";
 import { waitForAppReady } from "./app-ready";
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
+import { deferred, openThread } from "./thread-fixture";
 
 async function workspaceFixture(page: Page, name: string) {
   const response = await page.request.post("/api/workspaces", { data: { name } });
@@ -171,20 +164,27 @@ for (const surface of ["dialog", "profile"] as const) {
   test(`failed ${surface} DM creation retains the recipient and retries a committed request`, async ({
     page,
   }) => {
-    const data = await fixture(page, "none", false);
-    const message = await page.request.post(`/api/channels/${data.channel.id}/messages`, {
+    const data = await fixture(page, surface === "profile" ? "open" : "none", false);
+    const source = data.direct ? `/api/dms/${data.direct.id}` : `/api/channels/${data.channel.id}`;
+    const message = await page.request.post(`${source}/messages`, {
       headers: { "X-ClickClack-User": data.alice.id },
-      data: { body: "A person available from channel history" },
+      data: { body: "A person available from conversation history" },
     });
     expect(message.ok()).toBe(true);
-    await page.reload();
-    await waitForAppReady(page);
-    if (surface === "profile") {
+    if (data.direct) {
+      const { message: root } = await message.json();
+      await page.goto(`/app/${data.workspace.route_id}/${data.direct.route_id}`);
+      await waitForAppReady(page);
+      await openThread(page, root.id);
+      await expect(page.getByLabel("Thread pane", { exact: true })).toBeVisible();
       await page
-        .locator("#sidebar-people-list")
-        .getByRole("link")
-        .filter({ hasText: data.alice.display_name })
+        .locator("main.timeline")
+        .getByRole("button", { name: `View profile for ${data.alice.display_name}`, exact: true })
         .click();
+      await expect(page).toHaveURL(new RegExp(`/${data.direct.route_id}$`));
+    } else {
+      await page.reload();
+      await waitForAppReady(page);
     }
     const created: string[] = [];
     await page.route("**/api/dms", async (route) => {

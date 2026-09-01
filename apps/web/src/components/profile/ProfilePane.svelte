@@ -18,7 +18,6 @@
     onTimeout?: (memberID: string) => void;
     onBlock?: (memberID: string) => void;
     onUnblock?: (memberID: string) => void;
-    onSetStatus?: () => void;
   };
 
   let {
@@ -36,7 +35,6 @@
     onTimeout,
     onBlock,
     onUnblock,
-    onSetStatus,
   }: Props = $props();
 
   const botLabel = $derived(
@@ -89,16 +87,11 @@
       <span class="presence-dot active" aria-hidden="true"></span>
       <span>Active</span>
     </div>
-    {#if (currentUser?.id !== profile.id && onMessage) || onSetStatus}
+    {#if currentUser?.id !== profile.id && onMessage}
     <div class="profile-actions-row">
-      {#if currentUser?.id !== profile.id && onMessage}
-        <button type="button" class="primary-action" disabled={messagePending} onclick={() => onMessage?.(profile.id)}>
-          {messagePending ? "Starting…" : "Message"}
-        </button>
-      {/if}
-      {#if onSetStatus}<button type="button" class="ghost-action" onclick={onSetStatus}>
-        Set a status
-      </button>{/if}
+      <button type="button" class="primary-action" disabled={messagePending} onclick={() => onMessage?.(profile.id)}>
+        {messagePending ? "Starting…" : "Message"}
+      </button>
     </div>
     {/if}
     {#if messageError}<p class="profile-status error" role="alert">{messageError}</p>{/if}

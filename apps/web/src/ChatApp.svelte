@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
   import { toStore } from "svelte/store";
   import {
@@ -115,7 +115,6 @@
   let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
-  let openPinnedPanelAfterRoute = false;
   let pinnedMessages: Message[] = [];
   let pinnedMessagesLoading = false;
   let pinnedMessagesError = "";
@@ -180,7 +179,7 @@
   // messages.css mirror rules can flip the self group without prop drilling.
   let userAlign: "left" | "right" = "left";
   let otherAlign: "left" | "right" = "left";
-  let status = "loading";
+  let appReady = false;
   let authRequired = false;
   let desktopAuthStatus = "";
   const enabledAuthMethods = authMethods();
@@ -310,14 +309,11 @@
       ? channels.find((channel) => channel.id === selectedChannelID) || {}
       : {};
   $: activeUnreadCount = unreadCountForKey(activeConversationKey, activeUnreadState);
-  $: desktopUnreadCount = status === "ready"
+  $: desktopUnreadCount = appReady
     ? channels.reduce((total, channel) => total + (channel.unread_count || 0), 0) +
       directConversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0)
     : 0;
   $: desktop?.setUnreadCount(desktopUnreadCount);
-  $: if (desktop && activeRouteKey && typeof window !== "undefined") {
-    desktop.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
-  }
   $: activeUnreadBoundarySeq = activeUnreadCount > 0 ? activeUnreadState.last_read_seq || 0 : 0;
   $: activeUnreadBoundaryLoaded = activeUnreadCount > 0
     ? unreadBoundaryLoadedForKey(activeConversationKey, activeUnreadBoundarySeq, messageWindows)
@@ -389,9 +385,14 @@
       : "";
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
-  $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== activeRouteKey) {
-    void applyRoute(routeWorkspaceID, routeTargetID);
+  // Observe route inputs, not bookkeeping changed by a local pane selection.
+  $: if (appReady) {
+    followRoute(routeWorkspaceID, routeTargetID);
   }
+
+  afterNavigate(() => {
+    desktop?.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+  });
 
   onMount(() => {
     loadActivityPrefs();
@@ -557,12 +558,8 @@
       user = me.user;
       syncBrowserNotificationState();
       await loadWorkspaces();
-      if (workspaces.length === 0) {
-        status = "create a workspace";
-        return;
-      }
-      // The reactive route owner also handles clicks made during startup.
-      status = "ready";
+      // Let workspace projections settle before admitting routes in a later flush.
+      appReady = true;
     } catch (error) {
       handleAppLoadError(error);
     }
@@ -574,10 +571,10 @@
       socket = null;
       settingsModalOpen = false;
       authRequired = true;
-      status = "auth";
+      appReady = false;
       return;
     }
-    status = error instanceof Error ? error.message : "Could not load ClickClack";
+    composerNotice = { kind: "error", text: readableAPIError(error, "Could not load ClickClack") };
   }
 
   function openProfileSettings() {
@@ -732,6 +729,17 @@
     const path = appHref(workspaceID, targetID);
     if (window.location.pathname === path) return;
     await goto(path, { replaceState, noScroll: true, keepFocus: true });
+  }
+
+  function followRoute(workspaceID: string, targetID: string) {
+    if (routeKey(workspaceID, targetID) !== activeRouteKey) void applyRoute(workspaceID, targetID);
+  }
+
+  function commitSelectedRoute() {
+    routeApplySerial++;
+    // The conversation is already selected; replaying it would clear the new pane.
+    activeRouteKey = routeKey(routeWorkspaceIDFor(), routeTargetIDFor(currentConversationKey()));
+    void navigateToApp(selectedWorkspaceID, currentConversationKey());
   }
 
   function clearRoutePanelState() {
@@ -902,10 +910,7 @@
         selectedDirectID = "";
         rememberLastChannel(workspace.id, targetID);
         clearRoutePanelState();
-        const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
-        openPinnedPanelAfterRoute = false;
         if (sameConversation) {
-          pinnedPanelOpen = shouldOpenPinnedPanel;
           updateActiveMessageWindowFlags(targetID);
           connectPendingRealtime(workspace.id);
           return;
@@ -913,7 +918,6 @@
         resetTopicStateForConversation(targetID);
         await Promise.all([loadMessages(), loadPinnedMessages()]);
         if (serial !== routeApplySerial) return;
-        pinnedPanelOpen = shouldOpenPinnedPanel;
         connectPendingRealtime(workspace.id);
         return;
       }
@@ -1276,7 +1280,6 @@
       data.member,
     ];
     await loadChannels(false, false, false);
-    status = "ready";
   }
 
   async function createChannel() {
@@ -1686,7 +1689,7 @@
       setHistoryEdgeState("older", "settling");
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
-        status = error instanceof Error ? error.message : "Could not load older messages";
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not load older messages") };
       }
     } finally {
       loadingMessagePages.delete(loadKey);
@@ -1737,7 +1740,7 @@
       setHistoryEdgeState("newer", "settling");
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
-        status = error instanceof Error ? error.message : "Could not load newer messages";
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not load newer messages") };
       }
     } finally {
       loadingMessagePages.delete(loadKey);
@@ -2342,7 +2345,7 @@
       markActiveViewRead({ all: true });
       await scrollMessagesToBottom(isCurrent);
     } catch (error) {
-      if (isCurrent()) status = error instanceof Error ? error.message : "Could not jump to latest messages";
+      if (isCurrent()) composerNotice = { kind: "error", text: readableAPIError(error, "Could not jump to latest messages") };
     }
   }
 
@@ -2387,11 +2390,11 @@
     const body = messageBody.trim();
     if (!body) return;
     if (selectedDirect && !selectedDirectWritable) {
-      status = "This conversation has no active recipient";
+      composerNotice = { kind: "error", text: "This conversation has no active recipient" };
       return;
     }
     if (!selectedChannelID && !selectedDirectID) {
-      status = "pick or create a channel";
+      composerNotice = { kind: "ephemeral", text: "Pick or create a channel to send a message." };
       return;
     }
     stopTyping();
@@ -2755,7 +2758,6 @@
       thread.updateMessage(deleted);
       pinnedMessages = pinnedMessages.filter((current) => current.id !== deleted.id);
       if (replyTarget?.id === deleted.id) clearReplyTarget();
-      status = "";
       pendingDeleteMessage = null;
     } catch (error) {
       deleteMessageError = error instanceof Error ? error.message : "Could not delete message";
@@ -3202,7 +3204,7 @@
       if (!isCurrent()) return;
       directMemberID = "";
       showCreateDirect = false;
-      mobileNavOpen = false;
+      clearRoutePanelState();
       await navigateToApp(workspaceID, data.conversation.id);
     } catch (error) {
       if (isCurrent()) directCreateError = readableAPIError(error, "Could not start direct message");
@@ -3242,9 +3244,8 @@
       if (undo.restoreRoute) {
         await navigateToApp(undo.conversation.workspace_id, data.conversation.id);
       }
-      status = "direct message restored";
     } catch (error) {
-      status = error instanceof Error ? error.message : "Could not restore direct message";
+      composerNotice = { kind: "error", text: readableAPIError(error, "Could not restore direct message") };
     }
   }
 
@@ -3292,7 +3293,6 @@
           );
         }
         realtimeInitializedWorkspaceID = workspaceID;
-        if (workspaceID === selectedWorkspaceID && status === realtimeError) status = "ready";
         realtimeError = "";
       },
       onError: (error) => {
@@ -3301,8 +3301,7 @@
             handleAppLoadError(error);
             return;
           }
-          realtimeError = error instanceof Error ? error.message : "Could not process realtime event";
-          status = realtimeError;
+          realtimeError = readableAPIError(error, "Could not process realtime event");
         }
       },
       onStatusChange: (next) => {
@@ -3399,7 +3398,7 @@
       if (event.workspace_id === selectedWorkspaceID) {
         void loadBotCommands(event.workspace_id, true).catch((error) => {
           if (event.workspace_id !== selectedWorkspaceID) return;
-          status = error instanceof Error ? error.message : "Could not refresh bot commands";
+          realtimeError = readableAPIError(error, "Could not refresh bot commands");
           connectRealtimeSocket();
         });
       }
@@ -3776,15 +3775,14 @@
   }
 
   function openUserProfile(profile?: User | null) {
-    routeApplySerial++;
     if (!profile || profile.deleted_at) return;
     resetCreateActions();
     resetSearch();
     selectedArtifact = null;
     artifactConversationKey = "";
-    thread.close();
-    pinnedPanelOpen = false;
+    clearRoutePanelState();
     selectedProfile = profile;
+    commitSelectedRoute();
     if (
       (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator") &&
       !moderationMembers.some((member) => member.user.id === profile.id)
@@ -3898,22 +3896,13 @@
     }
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
+      commitSelectedRoute();
       return;
     }
-    routeApplySerial++;
     resetCreateActions();
-    const threadWasOpen = thread.selection !== null;
-    const searchDetourWasOpen = searchThreadDetour;
-    const parentTargetID = currentConversationKey();
-    editController.cancel(parentTargetID, "thread");
-    thread.close();
-    selectedProfile = null;
-    activeComposerContext = "message";
-    // Closing a thread opened from search closes the whole pane, session included.
-    if (searchDetourWasOpen) resetSearch();
-    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
-      void navigateToApp(selectedWorkspaceID, parentTargetID);
-    }
+    editController.cancel(currentConversationKey(), "thread");
+    clearRoutePanelState();
+    commitSelectedRoute();
   }
 
   function toggleSidePanelFromTopbar() {
@@ -3922,7 +3911,7 @@
       return;
     }
     if (sidePanelOpen) closeSidePanel();
-    status = "pick a message to open its thread";
+    composerNotice = { kind: "ephemeral", text: "Pick a message to open its thread." };
   }
 
   async function loadPinnedMessages() {
@@ -3963,20 +3952,13 @@
     if (channelID === selectedChannelID && !selectedDirectID) await loadPinnedMessages();
   }
 
-  async function togglePinnedPanel() {
+  function togglePinnedPanel() {
     if (!selectedChannelID || selectedDirectID) return;
-    routeApplySerial++;
     const opening = !pinnedPanelOpen;
-    const parentTargetID = currentConversationKey();
     resetSearch();
-    thread.close();
-    selectedProfile = null;
-    if (window.location.pathname !== appHref(selectedWorkspaceID, parentTargetID)) {
-      openPinnedPanelAfterRoute = opening;
-      await navigateToApp(selectedWorkspaceID, parentTargetID);
-      return;
-    }
+    clearRoutePanelState();
     pinnedPanelOpen = opening;
+    commitSelectedRoute();
     if (opening) void loadPinnedMessages();
   }
 
@@ -4199,7 +4181,7 @@
   class:search-open={searchPaneVisible}
   class:artifact-open={selectedArtifact !== null}
   data-connected={connected}
-  data-app-ready={connected && status === "ready"}
+  data-app-ready={connected && appReady}
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
@@ -4395,6 +4377,10 @@
       agentNames={activeRespondingAgentNames}
     />
 
+    {#if realtimeError}
+      <p class="composer-notice composer-notice--error" role="status">Live updates: {realtimeError}</p>
+    {/if}
+
     {#if workspaceMembersError}
       <p class="composer-notice composer-notice--error" role="status">Mentions unavailable: {workspaceMembersError}</p>
     {/if}
@@ -4407,7 +4393,7 @@
         aria-live="polite"
       >
         <span class="composer-notice__label">
-          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Command failed"}
+          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Action failed"}
         </span>
         <span class="composer-notice__text">{composerNotice.text}</span>
         <button
@@ -4585,7 +4571,6 @@
         onTimeout={(memberID) => void updateMemberModeration(memberID, { timeout_minutes: 60 })}
         onBlock={(memberID) => void updateMemberModeration(memberID, { blocked: true })}
         onUnblock={(memberID) => void updateMemberModeration(memberID, { blocked: false, clear_timeout: true })}
-        onSetStatus={() => (status = "status messages are coming soon")}
       />
     {:else}
       <ThreadEmptyState />

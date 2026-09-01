@@ -15,7 +15,7 @@ test("recognizes the server resync close code", () => {
   assert.equal(requiresRealtimeResync(1013), false);
 });
 
-test("uses an existing cursor without bootstrapping a fresh client", async () => {
+test("validates access without replacing an existing replay cursor", async () => {
   let fetches = 0;
   const result = await prepareRealtimeCursor({
     readCursor: () => "stored-cursor",
@@ -31,7 +31,7 @@ test("uses an existing cursor without bootstrapping a fresh client", async () =>
     cursor: "stored-cursor",
     persistAfterOpen: false,
   });
-  assert.equal(fetches, 0);
+  assert.equal(fetches, 1);
 });
 
 test("captures a fresh tail as a pending post-open checkpoint", async () => {
@@ -105,14 +105,16 @@ test("propagates storage reads and bootstrap failures for reporting and retry", 
   );
 
   const fetchError = new Error("tail request failed");
-  await assert.rejects(
-    prepareRealtimeCursor({
-      readCursor: () => null,
-      async fetchTailCursor() {
-        throw fetchError;
-      },
-      isActive: () => true,
-    }),
-    fetchError,
-  );
+  for (const cursor of [null, "stored-cursor"]) {
+    await assert.rejects(
+      prepareRealtimeCursor({
+        readCursor: () => cursor,
+        async fetchTailCursor() {
+          throw fetchError;
+        },
+        isActive: () => true,
+      }),
+      fetchError,
+    );
+  }
 });

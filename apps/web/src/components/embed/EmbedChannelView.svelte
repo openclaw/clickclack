@@ -271,106 +271,73 @@
     if (!route || !channel || viewState !== "ready") return;
     const workspaceID = route.workspace_id;
     const channelID = channel.id;
-    try {
-      const [channelData, page] = await Promise.all([
-        api<{ channels: Channel[] }>(
-          `/api/workspaces/${encodeURIComponent(workspaceID)}/channels`,
-        ),
-        api<MessagePage>(`/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`),
-      ]);
-      if (
-        !isCurrent() ||
-        route?.workspace_id !== workspaceID ||
-        channel?.id !== channelID ||
-        viewState !== "ready"
-      ) {
-        return;
-      }
-      const refreshed = channelData.channels.find((candidate) => candidate.id === channelID);
-      if (!refreshed) throw new APIError(404, "Channel not found");
-      channel = refreshed;
-      applyPage(page, "replace");
-    } catch (error) {
-      const stillCurrent =
-        isCurrent() &&
-        route?.workspace_id === workspaceID &&
-        channel?.id === channelID &&
-        viewState === "ready";
-      if (stillCurrent && error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      if (stillCurrent) throw error;
+    const [channelData, page] = await Promise.all([
+      api<{ channels: Channel[] }>(
+        `/api/workspaces/${encodeURIComponent(workspaceID)}/channels`,
+      ),
+      api<MessagePage>(`/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`),
+    ]);
+    if (
+      !isCurrent() ||
+      route?.workspace_id !== workspaceID ||
+      channel?.id !== channelID ||
+      viewState !== "ready"
+    ) {
+      return;
     }
+    const refreshed = channelData.channels.find((candidate) => candidate.id === channelID);
+    if (!refreshed) throw new APIError(404, "Channel not found");
+    channel = refreshed;
+    applyPage(page, "replace");
   }
 
   async function syncNewMessages(isCurrent: () => boolean = () => true) {
     if (!channel || viewState !== "ready") return;
     const channelID = channel.id;
-    try {
-      if (newestSeq <= 0) {
-        const latest = await api<MessagePage>(
-          `/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`,
-        );
-        if (isCurrent() && channel?.id === channelID && viewState === "ready") {
-          applyPage(latest, "replace");
-        }
-        return;
+    if (newestSeq <= 0) {
+      const latest = await api<MessagePage>(
+        `/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`,
+      );
+      if (isCurrent() && channel?.id === channelID && viewState === "ready") {
+        applyPage(latest, "replace");
       }
-      let cursor = newestSeq;
-      for (let pageCount = 0; pageCount < 20; pageCount++) {
-        const page = await api<MessagePage>(
-          `/api/channels/${encodeURIComponent(channelID)}/messages?after_seq=${encodeURIComponent(String(cursor))}&limit=100`,
-        );
-        if (!isCurrent() || channel?.id !== channelID || viewState !== "ready") return;
-        applyPage(page, "append");
-        const nextCursor = page.newest_seq || cursor;
-        if (!page.has_newer || nextCursor <= cursor) return;
-        cursor = nextCursor;
-      }
-      throw new Error("Realtime message recovery exceeded its page limit");
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
+      return;
     }
+    let cursor = newestSeq;
+    for (let pageCount = 0; pageCount < 20; pageCount++) {
+      const page = await api<MessagePage>(
+        `/api/channels/${encodeURIComponent(channelID)}/messages?after_seq=${encodeURIComponent(String(cursor))}&limit=100`,
+      );
+      if (!isCurrent() || channel?.id !== channelID || viewState !== "ready") return;
+      applyPage(page, "append");
+      const nextCursor = page.newest_seq || cursor;
+      if (!page.has_newer || nextCursor <= cursor) return;
+      cursor = nextCursor;
+    }
+    throw new Error("Realtime message recovery exceeded its page limit");
   }
 
   async function refreshMessage(messageID: string, isCurrent: () => boolean = () => true) {
     if (!messages.some((message) => message.id === messageID)) return;
-    try {
-      const data = await api<{ message: Message }>(
-        `/api/messages/${encodeURIComponent(messageID)}`,
-      );
-      if (!isCurrent()) return;
-      messages = messages.map((message) =>
-        message.id === data.message.id ? data.message : message,
-      );
-      editController.reconcile(channel?.id || "", messages);
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+    const data = await api<{ message: Message }>(
+      `/api/messages/${encodeURIComponent(messageID)}`,
+    );
+    if (!isCurrent()) return;
+    messages = messages.map((message) =>
+      message.id === data.message.id ? data.message : message,
+    );
+    editController.reconcile(channel?.id || "", messages);
   }
 
   async function refreshChannelMetadata(isCurrent: () => boolean = () => true) {
     if (!route || !channel) return;
-    try {
-      const data = await api<{ channels: Channel[] }>(
-        `/api/workspaces/${encodeURIComponent(route.workspace_id)}/channels`,
-      );
-      if (!isCurrent()) return;
-      const refreshed = data.channels.find((candidate) => candidate.id === channel?.id);
-      if (!refreshed) throw new APIError(404, "Channel not found");
-      channel = refreshed;
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+    const data = await api<{ channels: Channel[] }>(
+      `/api/workspaces/${encodeURIComponent(route.workspace_id)}/channels`,
+    );
+    if (!isCurrent()) return;
+    const refreshed = data.channels.find((candidate) => candidate.id === channel?.id);
+    if (!refreshed) throw new APIError(404, "Channel not found");
+    channel = refreshed;
   }
 
   function eventChannelID(event: RealtimeEvent): string {
@@ -398,6 +365,10 @@
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
+      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
+        handleLoadError(error);
+        return;
+      }
       realtimeError = readableAPIError(error, "Could not process a realtime update.");
       sendError = realtimeError;
     }

@@ -1,5 +1,5 @@
 import type { RealtimeEvent } from "./types";
-import { api, apiURL } from "./api";
+import { api, apiURL, DEFAULT_FETCH_TIMEOUT_MS } from "./api";
 import { prepareRealtimeCursor, requiresRealtimeResync } from "./realtime-bootstrap";
 import { createRealtimeQueue } from "./realtime-queue";
 
@@ -92,20 +92,19 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
   }
 
   async function fetchTailCursor(signal: AbortSignal): Promise<string> {
-    if (forceBootstrap && pendingResyncCursor !== null) return pendingResyncCursor;
     const params = new URLSearchParams({
       workspace_id: workspaceID,
       limit: "1",
       include_tail: "true",
     });
     const data = await api<RealtimeTailResponse>(`/api/realtime/events?${params.toString()}`, {
-      signal,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS)]),
     });
     if (typeof data.tail_cursor !== "string") {
       throw new Error("Realtime bootstrap response did not include a tail cursor");
     }
-    if (forceBootstrap) pendingResyncCursor = data.tail_cursor;
-    return data.tail_cursor;
+    // Retries revalidate access but retain the tail captured before the pending resync.
+    return forceBootstrap ? (pendingResyncCursor ??= data.tail_cursor) : data.tail_cursor;
   }
 
   async function openAttempt(currentGeneration: number, signal: AbortSignal) {

@@ -19,11 +19,8 @@ export async function prepareRealtimeCursor(
 ): Promise<RealtimeCursorBootstrapResult> {
   const storedCursor = options.readCursor();
   if (!options.isActive()) return { active: false };
-  if (storedCursor !== null && storedCursor !== "") {
-    return { active: true, cursor: storedCursor, persistAfterOpen: false };
-  }
-
+  // HTTP exposes auth/access failures that browsers hide during a WebSocket handshake.
   const tailCursor = await options.fetchTailCursor();
   if (!options.isActive()) return { active: false };
-  return { active: true, cursor: tailCursor, persistAfterOpen: true };
+  return { active: true, cursor: storedCursor || tailCursor, persistAfterOpen: !storedCursor };
 }

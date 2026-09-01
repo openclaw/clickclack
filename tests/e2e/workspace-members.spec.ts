@@ -351,6 +351,16 @@ test("embedded newer-message loads are scoped to the active recovery generation"
     data: { body: "Recovered after authentication" },
   });
   const { message: next } = await nextResponse.json();
+  const tail = await page.request.get(
+    `/api/realtime/events?workspace_id=${data.workspace.id}&include_tail=true&limit=1`,
+  );
+  expect(tail.ok()).toBe(true);
+  const { tail_cursor } = await tail.json();
+  // Isolate authentication recovery: cold bootstrap also replaces the initial window.
+  await page.addInitScript(({ key, cursor }) => localStorage.setItem(key, cursor), {
+    key: `clickclack:${data.workspace.id}:cursor`,
+    cursor: tail_cursor,
+  });
   const releases: (() => void)[] = [];
   let newerRequests = 0;
   await page.route(`**/api/channels/${data.channel.id}/messages**`, async (route) => {
@@ -376,7 +386,8 @@ test("embedded newer-message loads are scoped to the active recovery generation"
   try {
     await page.goto(destination("channel", data));
     await expect(page.getByLabel("Message body")).toBeVisible();
-    await page.locator(".messages-scroll").dispatchEvent("wheel", { deltaY: 100 });
+    await page.locator(".messages-scroll").hover();
+    await page.mouse.wheel(0, 100);
     await expect.poll(() => newerRequests).toBe(1);
     await page.getByLabel("Message body").fill("Trigger synthetic authentication expiry");
     await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -384,12 +395,14 @@ test("embedded newer-message loads are scoped to the active recovery generation"
     // Returning to the tab retries authentication without remounting the embed.
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.getByLabel("Message body")).toBeVisible();
-    await page.locator(".messages-scroll").dispatchEvent("wheel", { deltaY: 100 });
+    await page.locator(".messages-scroll").hover();
+    await page.mouse.wheel(0, 100);
     await expect.poll(() => newerRequests).toBe(2);
     const oldResponse = page.waitForResponse((response) => response.url().includes("after_seq="));
     releases[0]();
     await oldResponse;
-    await page.locator(".messages-scroll").dispatchEvent("wheel", { deltaY: 100 });
+    await page.locator(".messages-scroll").hover();
+    await page.mouse.wheel(0, 100);
     await page.waitForTimeout(250);
     expect(newerRequests).toBe(2);
     releases[1]();

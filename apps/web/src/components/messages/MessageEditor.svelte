@@ -26,32 +26,29 @@
     textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
   });
 
-  async function save() {
-    await onSave();
-  }
-
   function handleKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       onCancel();
       return;
     }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.target === textarea && event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void save();
+      void onSave();
     }
   }
 </script>
 
-<div class="message-edit" aria-busy={saving}>
+<!-- svelte-ignore a11y_no_static_element_interactions (Delegates keys from descendant controls.) -->
+<div class="message-edit" aria-busy={saving} data-handles-escape onkeydown={handleKeydown}>
   <textarea
     bind:this={textarea}
     class="message-edit__textarea"
     value={body}
     rows="3"
     oninput={(event) => onBody(event.currentTarget.value)}
-    onkeydown={handleKeydown}
     disabled={saving}
     aria-label="Edit message"
     aria-keyshortcuts="Control+Enter Meta+Enter Escape"
@@ -62,7 +59,7 @@
     <button
       type="button"
       class="message-edit__save"
-      onclick={save}
+      onclick={onSave}
       disabled={saving || !normalizeMessageBodyForServer(body)}
     >
       {#if saving}Saving…{:else}Save{/if}

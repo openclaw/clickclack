@@ -45,6 +45,64 @@ async function createOwnedMessage(page: Page, label: string) {
   return { body, row };
 }
 
+test("message editing leaves composing shortcuts with the input method", async ({ page }) => {
+  const { body, row: sentRow } = await createOwnedMessage(page, "Composing edit");
+  const messageID = await sentRow.getAttribute("data-message-id");
+  const row = page.locator(`.message-row[data-message-id="${messageID}"]`);
+  await row.hover();
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+  const quote = page.getByLabel("Replying to message");
+  const composer = page.getByLabel("Message body");
+  await composer.fill("Keep this quoted draft");
+  await openTimelineEditor(row);
+  const editor = row.getByLabel("Edit message");
+  const draft = `${body} unfinished`;
+  await editor.fill(draft);
+  let patches = 0;
+  page.on("request", (request) => {
+    if (request.method() === "PATCH" && request.url().endsWith(`/api/messages/${messageID}`)) {
+      patches += 1;
+    }
+  });
+  for (const composing of [{ isComposing: true }, { keyCode: 229 }]) {
+    for (const shortcut of [
+      { key: "Escape" },
+      { key: "Enter", ctrlKey: true },
+      { key: "Enter", metaKey: true },
+    ]) {
+      await editor.dispatchEvent("keydown", { ...shortcut, ...composing });
+      await expect(editor).toHaveValue(draft);
+    }
+  }
+  const response = await page.request.get(`/api/messages/${messageID}`);
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).message.body).toBe(body);
+  expect(patches).toBe(0);
+
+  await editor.press("Meta+Enter");
+  await expect(row.locator(".markdown")).toHaveText(draft);
+  for (const target of [editor, row.getByRole("button", { name: "Save", exact: true })]) {
+    await openTimelineEditor(row);
+    await editor.fill("Discarded edit");
+    await target.press("Escape");
+    await expect(editor).not.toBeVisible();
+    await expect(row.locator(".markdown")).toHaveText(draft);
+    await expect(quote).toBeVisible();
+    await expect(composer).toHaveValue("Keep this quoted draft");
+  }
+  await openTimelineEditor(row);
+  await editor.fill("Discarded edit");
+  await row.getByRole("button", { name: "Cancel", exact: true }).press("Control+Enter");
+  await expect(editor).toHaveValue("Discarded edit");
+  expect(patches).toBe(1);
+  await row.getByRole("button", { name: "Cancel", exact: true }).press("Enter");
+  await expect(editor).not.toBeVisible();
+  await expect(row.locator(".markdown")).toHaveText(draft);
+  await expect(quote).toBeVisible();
+  await composer.press("Escape");
+  await expect(quote).not.toBeVisible();
+});
+
 test("message action menu supports standard keyboard navigation", async ({ page }) => {
   const { row } = await createOwnedMessage(page, "Keyboard menu");
   const trigger = row.getByRole("button", { name: "More actions" });

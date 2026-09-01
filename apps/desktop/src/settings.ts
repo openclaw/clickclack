@@ -48,7 +48,7 @@ form.addEventListener("submit", (event) => {
 
 async function testConnection() {
   setBusy(true);
-  setStatus("Knocking on the server…", "working");
+  setStatus("Testing connection…", "working");
   try {
     const result = await window.clickclackSettings.testServer(serverInput.value);
     showProbe(result);

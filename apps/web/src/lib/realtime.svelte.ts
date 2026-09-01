@@ -1,5 +1,5 @@
-import type { RealtimeEvent } from "./types";
-import { apiWithTimeout, apiURL } from "./api";
+import type { RealtimeEvent, Workspace } from "./types";
+import { APIError, apiWithTimeout, apiURL } from "./api";
 import { prepareRealtimeCursor, requiresRealtimeResync } from "./realtime-bootstrap";
 import { createRealtimeQueue } from "./realtime-queue";
 
@@ -16,6 +16,8 @@ export type RealtimeConnection = {
   readonly connected: boolean;
   close(): void;
 };
+
+export class WorkspaceUnavailableError extends Error {}
 
 type RealtimeTailResponse = {
   tail_cursor?: string;
@@ -100,7 +102,19 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     const data = await apiWithTimeout<RealtimeTailResponse>(
       `/api/realtime/events?${params.toString()}`,
       signal,
-    );
+    ).catch(async (error: unknown) => {
+      if (error instanceof APIError && [400, 403].includes(error.status)) {
+        // A denied realtime scope alone does not revoke workspace membership.
+        const { workspaces } = await apiWithTimeout<{ workspaces: Workspace[] }>(
+          "/api/workspaces",
+          signal,
+        );
+        if (!workspaces.some((workspace) => workspace.id === workspaceID)) {
+          throw new WorkspaceUnavailableError("You no longer have access to this workspace.");
+        }
+      }
+      throw error;
+    });
     if (typeof data.tail_cursor !== "string") {
       throw new Error("Realtime bootstrap response did not include a tail cursor");
     }
@@ -195,7 +209,12 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     void openAttempt(currentGeneration, controller.signal)
       .catch((error) => {
         if (!isCurrentGeneration(currentGeneration)) return;
-        reportError(error);
+        // Preflight permission failures concern live updates, not message access.
+        reportError(
+          error instanceof APIError && error.status !== 401
+            ? new Error(error.message, { cause: error })
+            : error,
+        );
         scheduleReconnect(currentGeneration);
       })
       .finally(() => {

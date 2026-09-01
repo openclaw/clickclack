@@ -12,57 +12,56 @@
   </head>
   <body>
     <main class="settings-shell">
-      <header class="signal-header">
-        <div class="brand-lockup">
-          <img src="../assets/icon.png" alt="" width="74" height="74" />
-          <div>
-            <p class="eyebrow">Native signal desk</p>
-            <h1>ClickClack</h1>
-          </div>
+      <header class="shell-header">
+        <div class="brand">
+          <img src="../assets/icon.png" alt="" width="30" height="30" />
+          <span class="brand-name">ClickClack</span>
+          <span class="brand-sep" aria-hidden="true"></span>
+          <span class="brand-context">Desktop settings</span>
         </div>
-        <div class="platform-chip">
-          <span class="live-dot"></span>
-          <span id="platform-name">Desktop</span>
-        </div>
+        <span class="platform-chip" id="platform-name">Desktop</span>
       </header>
 
-      <section class="connection-card">
-        <div class="card-number">01</div>
-        <div class="card-copy">
-          <p class="eyebrow">Connection</p>
-          <h2>Your server, in a real window.</h2>
-          <p>
-            Hosted ClickClack works out of the box. Self-hosted servers need HTTPS; local development
-            may use loopback HTTP.
-          </p>
-        </div>
+      <form id="settings-form">
+        <section class="group" aria-labelledby="server-group-title">
+          <div class="group-head">
+            <h2 id="server-group-title">Server</h2>
+            <p>
+              Hosted ClickClack works out of the box. Self-hosted servers need HTTPS; loopback
+              HTTP is fine for local development.
+            </p>
+          </div>
 
-        <form id="settings-form">
-          <label class="server-field" for="server-url">
-            <span>ClickClack server</span>
-            <div class="url-row">
-              <input
-                id="server-url"
-                name="server-url"
-                type="url"
-                autocomplete="url"
-                placeholder="https://app.clickclack.chat"
-                required
-              />
-              <button id="test-server" type="button" class="secondary-button">Test</button>
-            </div>
-          </label>
+          <label class="field-label" for="server-url">Server address</label>
+          <div class="url-row">
+            <input
+              id="server-url"
+              name="server-url"
+              type="url"
+              autocomplete="url"
+              spellcheck="false"
+              placeholder="https://app.clickclack.chat"
+              required
+            />
+            <button id="test-server" type="button" class="key-button">Test</button>
+          </div>
 
-          <div class="status-rail">
-            <span class="status-light"></span>
+          <div class="status-rail" role="status">
+            <span class="status-light" aria-hidden="true"></span>
             <span id="connection-status" data-state="idle">Loading settings…</span>
+          </div>
+        </section>
+
+        <section class="group" aria-labelledby="behavior-group-title">
+          <div class="group-head">
+            <h2 id="behavior-group-title">Desktop behavior</h2>
           </div>
 
           <div class="switch-stack">
             <label class="switch-row">
               <span>
-                <strong>Keep the signal alive</strong>
-                <small>Close hides the window; tray notifications and realtime continue.</small>
+                <strong>Keep running in the tray</strong>
+                <small>Closing the window hides it; notifications and realtime stay live.</small>
               </span>
               <input id="close-to-tray" type="checkbox" />
               <span class="switch" aria-hidden="true"></span>
@@ -71,24 +70,23 @@
             <label class="switch-row">
               <span>
                 <strong>Launch at login</strong>
-                <small>Supported by the native macOS and Windows installers.</small>
+                <small>Available with the native macOS and Windows installers.</small>
               </span>
               <input id="start-at-login" type="checkbox" />
               <span class="switch" aria-hidden="true"></span>
             </label>
           </div>
+        </section>
 
-          <button id="save-settings" type="submit" class="primary-button">
-            <span>Save &amp; reconnect</span>
-            <span aria-hidden="true">↗</span>
+        <footer class="action-bar">
+          <span class="action-hint">Changes apply after reconnecting.</span>
+          <button id="save-settings" type="submit" class="key-button primary">
+            Save &amp; reconnect
           </button>
-        </form>
-      </section>
+        </footer>
+      </form>
 
-      <footer>
-        <span id="app-version">Desktop</span>
-        <span>Native notifications · deep links · unread badges · quick compose</span>
-      </footer>
+      <p class="version-line" id="app-version">Desktop</p>
     </main>
     <script src="../dist/settings.js"></script>
   </body>

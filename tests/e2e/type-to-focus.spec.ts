@@ -139,7 +139,7 @@ test.describe("type-to-focus composer", () => {
     await clickThreadRootReplyButton(page);
     await threadComposer.fill("quoted reply");
     await page
-      .locator("form.reply-composer")
+      .locator(".reply-composer")
       .getByRole("button", { name: "Reply", exact: true })
       .click();
 

@@ -30,7 +30,7 @@
     MessageEditController,
     type MessageEditSession,
   } from "./lib/messageEditing.svelte";
-  import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "./lib/realtime.svelte";
   import { ThreadController } from "./lib/thread.svelte";
   import { ReactionController } from "./lib/reactions.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
@@ -3297,6 +3297,13 @@
       },
       onError: (error) => {
         if (workspaceID === selectedWorkspaceID) {
+          if (error instanceof WorkspaceUnavailableError) {
+            // A newer workspace route may still be waiting for resolution.
+            if (routeWorkspaceID && routeWorkspaceID !== workspaceID && routeWorkspaceID !== routeWorkspaceIDFor(workspaceID)) return;
+            socket?.close();
+            void goto("/app", { invalidateAll: true, replaceState: true }).catch(handleAppLoadError);
+            return;
+          }
           if (error instanceof APIError && error.status === 401) {
             handleAppLoadError(error);
             return;
@@ -3792,11 +3799,6 @@
   }
 
   function handleComposerKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget) {
-      event.preventDefault();
-      clearReplyTarget();
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -3804,11 +3806,6 @@
   }
 
   function handleReplyKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && thread.draft?.quote) {
-      event.preventDefault();
-      thread.setQuote(null);
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();
@@ -3976,6 +3973,7 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
     if (event.key === "Escape") {
@@ -4024,8 +4022,7 @@
       event.key.length === 1 &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.altKey &&
-      !event.isComposing
+      !event.altKey
     ) {
       const active = document.activeElement;
       if (

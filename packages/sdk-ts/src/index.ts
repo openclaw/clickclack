@@ -1079,13 +1079,13 @@ export class ClickClackBot {
     if (this.socket && isActiveSocket(this.socket)) {
       return this.socket;
     }
-    let socket: WebSocket;
-    socket = this.client.events.subscribe({
+    const socket = this.client.events.subscribe({
       workspaceId: this.workspaceId,
       afterCursor: this.afterCursor,
       onEvent: (event) => void this.onEvent(event, this.client),
       onClose: () => {
-        if (this.socket === socket) this.socket = undefined;
+        if (this.socket !== socket) return;
+        this.socket = undefined;
         this.onClose?.();
       },
     });

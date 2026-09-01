@@ -112,8 +112,7 @@
   });
 
   function detectActiveToken(text: string, position: number): ActiveToken | null {
-    const safePosition = Math.max(0, Math.min(position || text.length, text.length));
-    const before = text.slice(0, safePosition);
+    const before = text.slice(0, position);
     const match = /(^|\s)([/@][^\s]*)$/.exec(before);
     if (!match) return null;
     const raw = match[2];
@@ -122,7 +121,7 @@
     return {
       kind: raw.startsWith("/") ? "slash" : "mention",
       start,
-      end: safePosition,
+      end: before.length,
       query: raw.slice(1).toLowerCase(),
       raw,
     };
@@ -264,15 +263,19 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (activeSuggestions.length > 0) {
-      if (event.key === "ArrowDown") {
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+    if (event.key === "Escape" && activeSuggestions.length > 0 && activeToken) {
+      event.preventDefault();
+      dismissedToken = tokenKey(activeToken);
+      input?.focus();
+      return;
+    }
+    if (event.target !== input) return;
+    if (activeSuggestions.length > 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        selectedSuggestionIndex = (selectedSuggestionIndex + 1) % activeSuggestions.length;
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        selectedSuggestionIndex = (selectedSuggestionIndex - 1 + activeSuggestions.length) % activeSuggestions.length;
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        selectedSuggestionIndex = (selectedSuggestionIndex + direction + activeSuggestions.length) % activeSuggestions.length;
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
@@ -280,25 +283,13 @@
         pickSuggestion(activeSuggestions[selectedSuggestionIndex]);
         return;
       }
-      if (event.key === "Escape" && activeToken) {
-        event.preventDefault();
-        dismissedToken = tokenKey(activeToken);
-        return;
-      }
     }
     onKeydown(event);
   }
 </script>
 
-<form
-  class={formClass}
-  onsubmit={(event) => {
-    event.preventDefault();
-    if (disabled) return;
-    closeGifPicker();
-    onSubmit();
-  }}
->
+<!-- svelte-ignore a11y_no_static_element_interactions (Delegates keys from descendant controls.) -->
+<div class={formClass} data-handles-escape={activeSuggestions.length > 0 ? "" : undefined} onkeydown={handleKeydown}>
   {#if showToolbar && showGifPicker && !disabled}
     <GifPicker
       gifs={filteredGifs}
@@ -335,7 +326,15 @@
       {/each}
     </div>
   {/if}
-  <div class="composer-card">
+  <form
+    class="composer-card"
+    onsubmit={(event) => {
+      event.preventDefault();
+      if (disabled) return;
+      closeGifPicker();
+      onSubmit();
+    }}
+  >
     {#if pendingUpload}
       <div class="composer-attachment">
         <span class="attachment-icon" aria-hidden="true">
@@ -370,7 +369,6 @@
         {disabled}
         oninput={handleInput}
         onfocus={handleFocus}
-        onkeydown={handleKeydown}
         onkeyup={() => updateCaret()}
         onmouseup={() => updateCaret()}
         onselect={() => updateCaret()}
@@ -392,5 +390,5 @@
         }}
       />
     {/if}
-  </div>
-</form>
+  </form>
+</div>

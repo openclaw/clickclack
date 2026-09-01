@@ -86,6 +86,9 @@ direct-message view is temporarily unmounted, including virtualized timeline
 rows, while closing a thread explicitly discards an unsaved thread-surface
 draft.
 
+While an input method is composing text, its keys do not save or cancel the
+edit. Cancelling an edit preserves any reply quote in the composer.
+
 Each conversation can have one active editor. Starting another edit in the same
 conversation reveals and focuses the existing editor instead of discarding its
 draft. Reopening that editor keeps it selected and its URL in sync even if an
@@ -182,6 +185,9 @@ The web composer is a Slack-like message well with a format bar for bold,
 italic, inline code, code blocks, links, attachments, and GIF insertion. The GIF
 picker inserts standard Markdown image syntax, so no provider-specific durable
 schema is required for V1.
+Searching for a GIF never submits the message draft.
+`Escape` closes the active GIF picker or suggestion menu while preserving the
+draft and reply quote. Once both are closed, `Escape` clears the quote.
 
 ## Attachments
 

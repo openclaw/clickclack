@@ -10,6 +10,11 @@ ClickClack ships as one Go binary that embeds the Svelte SPA and the SQL
 migrations. The deployment story is "drop a binary on a box, point it at a
 data directory, run it behind a reverse proxy."
 
+On interrupt or `SIGTERM`, the server stops accepting new HTTP connections and
+keeps its database open while active requests finish. Requests have up to five
+seconds to drain before their connections close and the process exits. A drain
+timeout is reported as an error.
+
 Public surfaces:
 
 - `clickclack.chat` — product website.

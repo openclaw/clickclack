@@ -14,7 +14,7 @@
     type MessageEditSession,
   } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
-  import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
     Message,
@@ -174,10 +174,15 @@
     hasNewer = false;
     replyTarget = null;
     selectedProfile = null;
+    selectedImage = null;
   }
 
   function handleLoadError(error: unknown) {
     clearChannel();
+    if (error instanceof WorkspaceUnavailableError) {
+      viewState = "forbidden";
+      return;
+    }
     if (error instanceof APIError) {
       if (error.status === 401) {
         viewState = "auth";
@@ -365,7 +370,7 @@
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
+      if (error instanceof WorkspaceUnavailableError || (error instanceof APIError && [401, 403, 404].includes(error.status))) {
         handleLoadError(error);
         return;
       }
@@ -438,7 +443,7 @@
       replyTarget = null;
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
     }

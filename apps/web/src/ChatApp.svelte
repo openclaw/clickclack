@@ -3792,11 +3792,6 @@
   }
 
   function handleComposerKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget) {
-      event.preventDefault();
-      clearReplyTarget();
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -3804,11 +3799,6 @@
   }
 
   function handleReplyKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && thread.draft?.quote) {
-      event.preventDefault();
-      thread.setQuote(null);
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();

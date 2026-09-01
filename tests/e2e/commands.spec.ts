@@ -189,6 +189,12 @@ test("composer completions follow the caret and preserve modified keys", async (
   await composer.press("Enter");
   await expect(composer).toHaveValue("/start ");
   await composer.fill("/sta");
+  await suggestions.getByRole("option").filter({ hasText: "/status" }).press("Enter");
+  await expect(composer).toHaveValue("/status ");
+  await composer.fill("/sta");
+  await page.getByRole("button", { name: "Bold", exact: true }).press("Enter");
+  await expect(composer).toHaveValue("/sta**text**");
+  await composer.fill("/sta");
   await composer.press("Control+Enter");
   await expect(page.locator(".markdown").filter({ hasText: "/sta" })).toBeVisible();
 });
@@ -368,9 +374,28 @@ test("quoted registered slash text falls through to a quoted plain message", asy
       await expect(quote).toBeVisible();
       await expect(composer).toHaveValue("unfinished quoted draft");
     }
+
+    const suggestions = page.getByRole("listbox", { name: "Slash command suggestions" });
+    await composer.fill("/dep");
+    await expect(suggestions).toBeVisible();
+    await page.getByRole("button", { name: "GIF picker", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "GIF picker panel" });
+    await picker.getByLabel("Search GIFs").press("Escape");
+    await expect(picker).not.toBeVisible();
+    await expect(suggestions).toBeVisible();
+    await expect(quote).toBeVisible();
+    await composer.press("Escape");
+    await expect(suggestions).not.toBeVisible();
+    await expect(quote).toBeVisible();
+    await composer.fill("/depl");
+    await suggestions.getByRole("option").press("Escape");
+    await expect(suggestions).not.toBeVisible();
+    await expect(quote).toBeVisible();
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveValue("/depl");
     await composer.press("Escape");
     await expect(quote).not.toBeVisible();
-    await expect(composer).toHaveValue("unfinished quoted draft");
+    await expect(composer).toHaveValue("/depl");
     await sourceRow.hover();
     await sourceRow.getByRole("button", { name: "Reply" }).click();
 

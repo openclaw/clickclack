@@ -34,21 +34,21 @@
       onCancel();
       return;
     }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.target === textarea && event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       void onSave();
     }
   }
 </script>
 
-<div class="message-edit" aria-busy={saving}>
+<!-- svelte-ignore a11y_no_static_element_interactions (Delegates keys from descendant controls.) -->
+<div class="message-edit" aria-busy={saving} data-handles-escape onkeydown={handleKeydown}>
   <textarea
     bind:this={textarea}
     class="message-edit__textarea"
     value={body}
     rows="3"
     oninput={(event) => onBody(event.currentTarget.value)}
-    onkeydown={handleKeydown}
     disabled={saving}
     aria-label="Edit message"
     aria-keyshortcuts="Control+Enter Meta+Enter Escape"

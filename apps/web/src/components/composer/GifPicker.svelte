@@ -15,7 +15,7 @@
   onMount(() => search?.focus());
 </script>
 
-<section class="gif-picker" role="dialog" tabindex="-1" aria-label="GIF picker panel"
+<section class="gif-picker" role="dialog" tabindex="-1" aria-label="GIF picker panel" data-handles-escape
   onkeydown={(event) => {
     if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape") {

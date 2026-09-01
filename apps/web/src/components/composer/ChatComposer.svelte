@@ -263,7 +263,14 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.isComposing || event.keyCode === 229) return;
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+    if (event.key === "Escape" && activeSuggestions.length > 0 && activeToken) {
+      event.preventDefault();
+      dismissedToken = tokenKey(activeToken);
+      input?.focus();
+      return;
+    }
+    if (event.target !== input) return;
     if (activeSuggestions.length > 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -276,17 +283,13 @@
         pickSuggestion(activeSuggestions[selectedSuggestionIndex]);
         return;
       }
-      if (event.key === "Escape" && activeToken) {
-        event.preventDefault();
-        dismissedToken = tokenKey(activeToken);
-        return;
-      }
     }
     onKeydown(event);
   }
 </script>
 
-<div class={formClass}>
+<!-- svelte-ignore a11y_no_static_element_interactions (Delegates keys from descendant controls.) -->
+<div class={formClass} data-handles-escape={activeSuggestions.length > 0 ? "" : undefined} onkeydown={handleKeydown}>
   {#if showToolbar && showGifPicker && !disabled}
     <GifPicker
       gifs={filteredGifs}
@@ -366,7 +369,6 @@
         {disabled}
         oninput={handleInput}
         onfocus={handleFocus}
-        onkeydown={handleKeydown}
         onkeyup={() => updateCaret()}
         onmouseup={() => updateCaret()}
         onselect={() => updateCaret()}

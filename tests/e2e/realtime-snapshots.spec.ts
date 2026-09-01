@@ -1,8 +1,62 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { ClickClackBot, ClickClackClient } from "../../packages/sdk-ts/src";
 import type { Channel, User, Workspace } from "../../apps/web/src/lib/types";
 import { waitForAppReady } from "./app-ready";
 import { deferred } from "./thread-fixture";
+
+for (const action of ["remote close", "stop", "restart"] as const) {
+  test(`SDK bot only reports its current connection closing: ${action}`, async ({ baseURL }) => {
+    const client = new ClickClackClient({ baseUrl: baseURL! });
+    const workspace = await client.workspaces.create({ name: `SDK lifecycle ${randomUUID()}` });
+    const { bot, bot_token } = await client.bots.create(workspace.id, {
+      display_name: "Lifecycle bot",
+      scopes: ["bot:write"],
+    });
+    expect(Boolean(bot_token?.token)).toBe(true);
+    let closes = 0;
+    const runner = new ClickClackBot({
+      baseUrl: baseURL!,
+      workspaceId: workspace.id,
+      token: bot_token!.token,
+      onEvent() {},
+      onClose() {
+        closes++;
+      },
+    });
+    try {
+      const first = runner.start();
+      expect(runner.start() === first).toBe(true);
+      await once(first, "open");
+      const firstClosed = once(first, "close");
+      if (action === "remote close") {
+        await client.bots.removeMembership(workspace.id, bot.id);
+        await firstClosed;
+        expect(closes).toBe(1);
+      } else {
+        runner.stop();
+        if (action === "restart") {
+          const replacement = runner.start();
+          await Promise.all([firstClosed, once(replacement, "open")]);
+          expect(closes).toBe(0);
+          expect(runner.start() === replacement).toBe(true);
+          const replacementClosed = once(replacement, "close");
+          await client.bots.removeMembership(workspace.id, bot.id);
+          await replacementClosed;
+          expect(closes).toBe(1);
+        } else {
+          await firstClosed;
+          expect(closes).toBe(0);
+        }
+      }
+    } finally {
+      runner.stop();
+      await client.bots.delete(bot.id);
+      await client.workspaces.delete(workspace.id);
+    }
+  });
+}
 
 async function fixture(page: Page, open = true) {
   const created = await page.request.post("/api/workspaces", {

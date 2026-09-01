@@ -272,6 +272,10 @@ const bot = new ClickClackBot({
 bot.start();
 ```
 
+`start()` reuses a connecting or open socket. `stop()` disconnects without
+calling `onClose`. Other closes of the active socket still call `onClose`;
+delayed closes from stopped connections do not notify a replacement.
+
 Persist `event.cursor` after each handled event and reconnect with
 `afterCursor` for exactly-once-ish processing. Ignore events whose
 `payload.author_id` matches the bot's own user ID to avoid loops.

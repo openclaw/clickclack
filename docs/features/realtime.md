@@ -43,9 +43,13 @@ POST /api/realtime/ephemeral
   authenticated with: a password change or a sign-out that revokes it closes
   the socket with `1008` rather than letting an already-open connection keep
   receiving. That check reads the store, so it holds across replicas, and an
-  idle connection repeats it on a timer. A temporary session-store failure closes
-  with retryable code `1013`; HTTP session checks return `503`, preserving the
-  session so clients can reconnect after recovery. The output-only socket handles ping,
+  idle connection repeats it on a timer. Bot connections revalidate their exact
+  bearer credential through the same delivery and idle checks. Revoking a token
+  or replacing its secret during setup closes the old socket with `1008`; the
+  replacement credential can reconnect normally, even when its token ID is unchanged.
+  Temporary credential-store failures close the socket with retryable code `1013`;
+  HTTP session checks return `503`, preserving the session so clients can reconnect
+  after recovery. The output-only socket handles ping,
   pong, and close frames and releases its subscription on peer disconnect;
   clients send ephemeral input through HTTP.
 - `GET /events` exposes durable replay in pull form. User-private durable

@@ -58,6 +58,40 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
   await page.getByLabel("Search GIFs").fill("not a matching reaction");
   await expect(picker.getByText("No GIFs found")).toBeVisible();
   await page.getByLabel("Search GIFs").fill("ship");
+  for (const composing of [{ isComposing: true }, { keyCode: 229 }]) {
+    const prevented = await page.getByLabel("Search GIFs").evaluate((node, init) => {
+      const event = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      node.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, composing);
+    expect(prevented).toBe(false);
+    await page.getByLabel("Search GIFs").dispatchEvent("keydown", { key: "Escape", ...composing });
+    await expect(picker).toBeVisible();
+    await expect(page.getByLabel("Search GIFs")).toHaveValue("ship");
+    await expect(composer).toHaveValue("ship it");
+  }
+  const composition = await page.context().newCDPSession(page);
+  await page.getByLabel("Search GIFs").fill("s");
+  await composition.send("Input.imeSetComposition", {
+    text: "hip",
+    selectionStart: 3,
+    selectionEnd: 3,
+  });
+  await page.getByLabel("Search GIFs").press("Enter");
+  await expect(picker).toBeVisible();
+  await expect(composer).toHaveValue("ship it");
+  await composition.send("Input.imeSetComposition", {
+    text: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+  });
+  await composition.detach();
+  await page.getByLabel("Search GIFs").fill("ship");
   await page.getByLabel("Search GIFs").press("Enter");
   await expect(composer).toHaveValue("ship it");
   await picker.getByRole("button", { name: /Ship it/ }).click();

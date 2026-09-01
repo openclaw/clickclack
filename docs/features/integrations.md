@@ -159,6 +159,10 @@ uniqueness constraint.
 The same composer menu supports `@` mentions for workspace people and bots.
 Mention suggestions work in channel, DM, and thread composers; selection uses
 the same mouse, arrow-key, `Enter`, and `Tab` controls as slash commands.
+Suggestions follow the caret, so moving before a token closes its menu.
+Modified keys retain their usual behavior: `Shift+Enter` inserts a newline and
+`Shift+Tab` moves focus backward. While an input method is composing text,
+its keys do not send messages, accept suggestions, or dismiss replies.
 
 ## Outgoing event subscriptions
 

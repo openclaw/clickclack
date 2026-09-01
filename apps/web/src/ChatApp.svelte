@@ -3976,6 +3976,7 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
     if (event.key === "Escape") {
@@ -4024,8 +4025,7 @@
       event.key.length === 1 &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.altKey &&
-      !event.isComposing
+      !event.altKey
     ) {
       const active = document.activeElement;
       if (

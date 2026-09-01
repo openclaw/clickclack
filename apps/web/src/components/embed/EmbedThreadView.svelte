@@ -296,7 +296,7 @@
       thread.setQuote(null);
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();
     }

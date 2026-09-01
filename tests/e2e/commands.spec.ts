@@ -22,7 +22,8 @@ async function createChannel(page: Page, workspaceID: string, name = "general") 
     data: { name, kind: "public" },
   });
   expect(response.ok()).toBe(true);
-  return ((await response.json()) as { channel: { id: string; name: string } }).channel;
+  return ((await response.json()) as { channel: { id: string; route_id: string; name: string } })
+    .channel;
 }
 
 async function createBot(page: Page, workspaceID: string, stamp: number, suffix: string) {
@@ -129,6 +130,144 @@ async function openChannel(page: Page, routeID: string, channelName: string) {
   await expect(page.getByRole("heading", { name: `#${channelName}` })).toBeVisible();
 }
 
+test("composer completions follow the caret and preserve modified keys", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Caret", stamp);
+  const channel = await createChannel(page, workspace.id);
+  const { bot, bot_token } = await createBot(page, workspace.id, stamp, "caret");
+  await setBotCommands(page, bot_token.token, [
+    { command: "start", description: "Start the bot" },
+    { command: "status", description: "Show bot status" },
+  ]);
+  await openChannel(page, workspace.route_id, channel.name);
+  const composer = page.getByLabel("Message body");
+  const suggestions = page.locator(".composer-suggestions");
+
+  for (const [draft, completion] of [
+    ["before @cmd-bot-caret", `before @${bot.handle} `],
+    ["/sta", "/start "],
+  ]) {
+    await composer.fill(draft);
+    await expect(suggestions).toBeVisible();
+    await composer.press("Home");
+    await expect(suggestions).not.toBeVisible();
+    await composer.press("Tab");
+    await expect(composer).toHaveValue(draft);
+    await expect(composer).not.toBeFocused();
+
+    await composer.fill(draft);
+    await expect(suggestions).toBeVisible();
+    await composer.press("Shift+Enter");
+    await expect(composer).toHaveValue(`${draft}\n`);
+    await expect(suggestions).not.toBeVisible();
+
+    await composer.fill(draft);
+    await composer.press("Shift+ArrowUp");
+    expect(
+      await composer.evaluate((node: HTMLTextAreaElement) =>
+        node.value.slice(node.selectionStart, node.selectionEnd),
+      ),
+    ).toBe(draft);
+
+    await composer.fill(draft);
+    await expect(suggestions).toBeVisible();
+    await composer.press("Shift+Tab");
+    await expect(composer).toHaveValue(draft);
+    await expect(composer).not.toBeFocused();
+
+    await composer.fill(draft);
+    await expect(suggestions).toBeVisible();
+    await composer.press("Tab");
+    await expect(composer).toHaveValue(completion);
+  }
+
+  await composer.fill("/sta");
+  await composer.press("ArrowUp");
+  await expect(suggestions.getByRole("option", { selected: true })).toContainText("/status");
+  await composer.press("ArrowDown");
+  await expect(suggestions.getByRole("option", { selected: true })).toContainText("/start");
+  await composer.press("Enter");
+  await expect(composer).toHaveValue("/start ");
+  await composer.fill("/sta");
+  await composer.press("Control+Enter");
+  await expect(page.locator(".markdown").filter({ hasText: "/sta" })).toBeVisible();
+});
+
+for (const surface of ["channel", "direct", "thread", "embed-channel", "embed-thread"]) {
+  test(`${surface} composer leaves composing keys with the input method`, async ({ page }) => {
+    const stamp = Date.now();
+    const workspace = await createWorkspace(page, `IME-${surface}`, stamp);
+    const channel = await createChannel(page, workspace.id);
+    const { bot } = await createBot(page, workspace.id, stamp, "ime");
+    let path = `/app/${workspace.route_id}/${channel.route_id}`;
+    let inputLabel = "Message body";
+    if (surface === "direct") {
+      const response = await page.request.post("/api/dms", {
+        data: { workspace_id: workspace.id, member_ids: [bot.id] },
+      });
+      expect(response.ok()).toBe(true);
+      const { conversation } = (await response.json()) as {
+        conversation: { route_id: string };
+      };
+      path = `/app/${workspace.route_id}/${conversation.route_id}`;
+    } else if (surface.endsWith("thread")) {
+      const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+        data: { body: `Keyboard root ${stamp}` },
+      });
+      expect(response.ok()).toBe(true);
+      const { message } = (await response.json()) as { message: { id: string } };
+      const replyResponse = await page.request.post(`/api/messages/${message.id}/thread/replies`, {
+        data: { body: "Existing keyboard reply" },
+      });
+      expect(replyResponse.ok()).toBe(true);
+      const threadResponse = await page.request.get(`/api/messages/${message.id}/thread`);
+      expect(threadResponse.ok()).toBe(true);
+      const { root } = (await threadResponse.json()) as { root: { route_id: string } };
+      path = `/${surface === "thread" ? "app" : "embed/thread"}/${workspace.route_id}/${root.route_id}`;
+      inputLabel = "Reply body";
+    } else if (surface === "embed-channel") {
+      path = `/embed/channel/${workspace.route_id}/${channel.route_id}`;
+    }
+
+    await page.goto(path);
+    if (!surface.startsWith("embed-")) await waitForAppReady(page);
+    const composer = page.getByLabel(inputLabel);
+    const sentBodies: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/(messages|thread\/replies)$/.test(request.url())) {
+        sentBodies.push(request.postDataJSON().body);
+      }
+    });
+
+    for (const composing of [{ isComposing: true }, { keyCode: 229 }]) {
+      for (const draft of [`Unfinished ${surface}`, "@cmd-bot-ime"]) {
+        await composer.fill(draft);
+        if (draft.startsWith("@")) {
+          await expect(page.getByRole("listbox", { name: "Mention suggestions" })).toBeVisible();
+        }
+        await composer.dispatchEvent("keydown", { key: "Enter", ...composing });
+        await expect(composer).toHaveValue(draft);
+      }
+    }
+    expect(sentBodies).toEqual([]);
+
+    const committed = `Committed ${surface} ${stamp}`;
+    await composer.fill(committed);
+    await composer.press("Enter");
+    await expect(page.locator(".markdown").filter({ hasText: committed })).toBeVisible();
+    await expect(composer).toHaveValue("");
+    const buttonBody = `${committed} with button`;
+    await composer.fill(buttonBody);
+    await page
+      .locator(inputLabel === "Reply body" ? ".reply-composer" : ".composer:not(.reply-composer)")
+      .getByRole("button", { name: inputLabel === "Reply body" ? "Reply" : "Send", exact: true })
+      .click();
+    await expect(page.locator(".markdown").filter({ hasText: buttonBody })).toBeVisible();
+    await expect(composer).toHaveValue("");
+    expect(sentBodies).toEqual([committed, buttonBody]);
+  });
+}
+
 test("dispatches a registered slash command through the hook without posting the invocation", async ({
   page,
 }) => {
@@ -218,6 +357,20 @@ test("quoted registered slash text falls through to a quoted plain message", asy
       has: page.locator(".markdown").filter({ hasText: "quoted source" }),
     });
     await expect(sourceRow).toBeVisible();
+    await sourceRow.hover();
+    await sourceRow.getByRole("button", { name: "Reply" }).click();
+
+    const composer = page.getByLabel("Message body");
+    const quote = page.getByLabel("Replying to message");
+    await composer.fill("unfinished quoted draft");
+    for (const composing of [{ isComposing: true }, { keyCode: 229 }]) {
+      await composer.dispatchEvent("keydown", { key: "Escape", ...composing });
+      await expect(quote).toBeVisible();
+      await expect(composer).toHaveValue("unfinished quoted draft");
+    }
+    await composer.press("Escape");
+    await expect(quote).not.toBeVisible();
+    await expect(composer).toHaveValue("unfinished quoted draft");
     await sourceRow.hover();
     await sourceRow.getByRole("button", { name: "Reply" }).click();
 

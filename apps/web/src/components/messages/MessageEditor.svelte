@@ -26,11 +26,8 @@
     textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
   });
 
-  async function save() {
-    await onSave();
-  }
-
   function handleKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -39,7 +36,7 @@
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void save();
+      void onSave();
     }
   }
 </script>
@@ -62,7 +59,7 @@
     <button
       type="button"
       class="message-edit__save"
-      onclick={save}
+      onclick={onSave}
       disabled={saving || !normalizeMessageBodyForServer(body)}
     >
       {#if saving}Saving…{:else}Save{/if}

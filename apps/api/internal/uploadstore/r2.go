@@ -212,7 +212,7 @@ func (s *R2) newRequest(ctx context.Context, method, key string, body io.Reader)
 }
 
 func (s *R2) objectPath(key string) string {
-	return "r2://" + s.bucket + "/" + strings.TrimLeft(key, "/")
+	return (&url.URL{Scheme: "r2", Host: s.bucket, Path: "/" + strings.TrimLeft(key, "/")}).String()
 }
 
 func (s *R2) keyFromPath(objectPath string) (string, error) {

@@ -148,6 +148,10 @@ CLICKCLACK_R2_SECRET_ACCESS_KEY=...
 ```
 
 R2 keys are stored in the database as `r2://bucket/prefix/upload-...`.
+URL-encode reserved characters in the configured prefix, such as
+`r2://bucket/team%23files` for `team#files`. Newly stored upload addresses also
+escape these characters so downloads and cleanup retain the complete key.
+Existing stored addresses and physical object keys are not migrated.
 Download requests are still authenticated by ClickClack before the object is
 fetched from R2.
 

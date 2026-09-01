@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+import { deferred } from "./thread-fixture";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
@@ -345,7 +346,7 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
   );
   expect(alternateChannelResponse.ok()).toBe(true);
   const { channel: alternateChannel } = (await alternateChannelResponse.json()) as {
-    channel: { name: string };
+    channel: { name: string; route_id: string };
   };
   const firstBody = `First edit ${suffix}`;
   const secondBody = `Second edit ${suffix}`;
@@ -366,21 +367,85 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
 
   await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
   await waitForAppReady(page);
-  const firstRow = page.locator(`[data-message-id="${firstMessage.id}"]`);
-  const secondRow = page.locator(`[data-message-id="${secondMessage.id}"]`);
+  const firstRow = page.locator(`main.timeline [data-message-id="${firstMessage.id}"]`);
+  const secondRow = page.locator(`main.timeline [data-message-id="${secondMessage.id}"]`);
 
   await openTimelineEditor(firstRow);
   const unsavedDraft = `Unsaved first edit ${suffix}`;
   await firstRow.getByLabel("Edit message").fill(unsavedDraft);
+  const alternateRoute = `/api/routes/${workspace.route_id}/${alternateChannel.route_id}`;
+  const routeEntered = deferred(),
+    routeRelease = deferred(),
+    routeDelivered = deferred();
+  await page.route(
+    `**${alternateRoute}`,
+    async (route) => {
+      const response = await route.fetch();
+      routeEntered.resolve();
+      await routeRelease.promise;
+      await route.fulfill({ response });
+      routeDelivered.resolve();
+    },
+    { times: 1 },
+  );
+  try {
+    await page.getByRole("link", { name: `# ${alternateChannel.name}` }).click();
+    await routeEntered.promise;
+    await expect(page).toHaveURL(new RegExp(`/${alternateChannel.route_id}$`));
+    await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+    await openTimelineEditor(secondRow);
+    await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
+    await expect(firstRow.getByLabel("Edit message")).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+  } finally {
+    routeRelease.resolve();
+    await routeDelivered.promise;
+  }
   await page.getByRole("link", { name: `# ${alternateChannel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${alternateChannel.name}` })).toBeVisible();
   await expect(page.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
   await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
-  await openTimelineEditor(secondRow);
-  await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
-  await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
+  const threadRouteResponse = await page.request.post(`/api/messages/${secondMessage.id}/route`);
+  expect(threadRouteResponse.ok()).toBe(true);
+  const { message: routedMessage } = (await threadRouteResponse.json()) as {
+    message: { route_id: string };
+  };
+  const threadEntered = deferred(),
+    threadRelease = deferred(),
+    threadDelivered = deferred();
+  await page.route(
+    `**/api/routes/${workspace.route_id}/${routedMessage.route_id}`,
+    async (route) => {
+      const response = await route.fetch();
+      threadEntered.resolve();
+      await threadRelease.promise;
+      await route.fulfill({ response });
+      threadDelivered.resolve();
+    },
+    { times: 1 },
+  );
+  const threadPane = page.getByLabel("Thread pane", { exact: true });
+  try {
+    await secondRow.hover();
+    await secondRow.getByRole("button", { name: "Open thread" }).click();
+    await threadEntered.promise;
+    await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${routedMessage.route_id}$`));
+    await openTimelineEditor(secondRow);
+    await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
+    await expect(firstRow.getByLabel("Edit message")).toBeFocused();
+    await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
+    await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${routedMessage.route_id}$`));
+  } finally {
+    threadRelease.resolve();
+    await threadDelivered.promise;
+  }
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+  await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+  await expect(threadPane.getByRole("button", { name: "Close thread" })).toHaveCount(0);
   await firstRow.getByLabel("Edit message").press("Escape");
   await expect(firstRow.getByRole("button", { name: "More actions" })).toBeFocused();
 

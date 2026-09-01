@@ -88,11 +88,11 @@ draft.
 
 Each conversation can have one active editor. Starting another edit in the same
 conversation reveals and focuses the existing editor instead of discarding its
-draft. Reopening that editor keeps it selected even if an earlier navigation
-finishes later. Drafts in other conversations are retained for a bounded number of
-recent views. Realtime updates refresh an untouched draft; if the user already
-changed it, the editor keeps that draft and warns that the message changed
-elsewhere.
+draft. Reopening that editor keeps it selected and its URL in sync even if an
+earlier navigation finishes later. Drafts in other conversations are retained for
+a bounded number of recent views. Realtime updates refresh an untouched draft;
+if the user already changed it, the editor keeps that draft and warns that the
+message changed elsewhere.
 
 ## Durable agent activity
 

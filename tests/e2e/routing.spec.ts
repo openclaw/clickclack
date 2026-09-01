@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { waitForAppReady } from "./app-ready";
+import { deferred, threadFixture } from "./thread-fixture";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
@@ -69,6 +70,78 @@ test("an obsolete route failure cannot poison a newer visit to the same channel"
   await expect(page.getByRole("heading", { name: `#${c.name}`, exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${c.route_id}$`));
 });
+
+for (const action of ["search", "open pins", "close pins"] as const) {
+  test(`${action} restores its channel after interrupting a pending route`, async ({ page }) => {
+    const { workspace, channel, roots } = await threadFixture(page);
+    const created = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name: "alternate-route", kind: "public" },
+    });
+    expect(created.ok()).toBe(true);
+    const { channel: alternate } = (await created.json()) as {
+      channel: { name: string; route_id: string };
+    };
+    const result = page.locator(`.search-result[data-result-id="${roots[0].id}"]`);
+    if (action === "search") {
+      await page.getByLabel("Search messages").fill(`"${roots[0].body}"`);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      await expect(result).toBeVisible();
+    } else if (action === "close pins") {
+      await page.getByRole("button", { name: "Pinned items", exact: true }).click();
+      await expect(page.getByLabel("Pinned messages pane", { exact: true })).toBeVisible();
+    }
+    const routePath = `/api/routes/${workspace.route_id}/${alternate.route_id}`;
+    const entered = deferred(),
+      release = deferred(),
+      delivered = deferred();
+    await page.route(
+      `**${routePath}`,
+      async (route) => {
+        const response = await route.fetch();
+        entered.resolve();
+        await release.promise;
+        await route.fulfill({ response });
+        delivered.resolve();
+      },
+      { times: 1 },
+    );
+    try {
+      await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+      await entered.promise;
+      await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+      await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+      if (action === "search") {
+        await result.click();
+        await expect(result).toHaveClass(/is-active/);
+      } else {
+        await page
+          .getByRole("button", {
+            name: action === "open pins" ? "Pinned items" : "Close pinned items",
+            exact: true,
+          })
+          .click();
+        await expect(page.getByLabel("Pinned messages pane", { exact: true })).toHaveCount(
+          action === "open pins" ? 1 : 0,
+        );
+      }
+      await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+    } finally {
+      release.resolve();
+      await delivered.promise;
+    }
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+    await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+    await expect(page.getByRole("heading", { name: `#${alternate.name}` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+  });
+}
 
 test("app routes restore channels, DMs, threads, fallbacks, and history navigation", async ({
   page,

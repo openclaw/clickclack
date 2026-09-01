@@ -168,6 +168,8 @@ test("desktop message actions overlay without reflowing message text", async ({ 
   const restingRects = await textRects();
   expect(restingRects.length).toBeGreaterThan(1);
 
+  // Browser centering, including hover retries, must not scroll the app shell.
+  await row.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
   await row.hover();
   await expect(toolbar).toHaveCSS("opacity", "1");
   await expect(toolbar).toHaveCSS("pointer-events", "auto");

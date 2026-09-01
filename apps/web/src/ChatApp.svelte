@@ -237,7 +237,7 @@
   let agentProgressSweeper: number | undefined;
   let activityClock = Date.now();
   let activityClockSweeper: number | undefined;
-  let appliedRouteKey = "";
+  let activeRouteKey = "";
   let routeApplySerial = 0;
   let messageLoadGeneration = 0;
   let workspacesLoadSerial = 0;
@@ -315,7 +315,7 @@
       directConversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0)
     : 0;
   $: desktop?.setUnreadCount(desktopUnreadCount);
-  $: if (desktop && appliedRouteKey && typeof window !== "undefined") {
+  $: if (desktop && activeRouteKey && typeof window !== "undefined") {
     desktop.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
   }
   $: activeUnreadBoundarySeq = activeUnreadCount > 0 ? activeUnreadState.last_read_seq || 0 : 0;
@@ -389,7 +389,7 @@
       : "";
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
-  $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
+  $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== activeRouteKey) {
     void applyRoute(routeWorkspaceID, routeTargetID);
   }
 
@@ -819,10 +819,11 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
+    // Record admission, not completion: cancelled routes must not suppress a later visit.
+    activeRouteKey = routeKey(workspaceIDParam, targetIDParam);
     if (targetIDParam !== thread.selection?.messageID && targetIDParam !== thread.root?.route_id) thread.close();
     try {
       reactionController.clear();
-      const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
       const routeTarget = targetIDParam.trim()
         ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
         : null;
@@ -832,13 +833,8 @@
         : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
       if (!workspace) {
         commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
-        appliedRouteKey = requestedRouteKey;
         return;
       }
-      const canonicalRouteKey = routeTarget
-        ? routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id)
-        : routeKey(workspace.route_id, "");
-
       const workspaceChanged = selectedWorkspaceID !== workspace.id;
       if (workspaceChanged) {
         captureScrollMemory();
@@ -893,7 +889,7 @@
       }
 
       if (routeTarget?.canonical_path && window.location.pathname !== routeTarget.canonical_path) {
-        appliedRouteKey = canonicalRouteKey;
+        activeRouteKey = routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id);
         await goto(routeTarget.canonical_path, { replaceState: true, noScroll: true, keepFocus: true });
         if (serial !== routeApplySerial) return;
       }
@@ -910,7 +906,6 @@
         openPinnedPanelAfterRoute = false;
         if (sameConversation) {
           pinnedPanelOpen = shouldOpenPinnedPanel;
-          appliedRouteKey = canonicalRouteKey;
           updateActiveMessageWindowFlags(targetID);
           connectPendingRealtime(workspace.id);
           return;
@@ -919,7 +914,6 @@
         await Promise.all([loadMessages(), loadPinnedMessages()]);
         if (serial !== routeApplySerial) return;
         pinnedPanelOpen = shouldOpenPinnedPanel;
-        appliedRouteKey = canonicalRouteKey;
         connectPendingRealtime(workspace.id);
         return;
       }
@@ -932,7 +926,6 @@
         selectedChannelID = "";
         clearRoutePanelState();
         if (sameConversation) {
-          appliedRouteKey = canonicalRouteKey;
           updateActiveMessageWindowFlags(targetID);
           connectPendingRealtime(workspace.id);
           return;
@@ -940,7 +933,6 @@
         resetTopicStateForConversation(targetID);
         await loadMessages();
         if (serial !== routeApplySerial) return;
-        appliedRouteKey = canonicalRouteKey;
         connectPendingRealtime(workspace.id);
         return;
       }
@@ -948,10 +940,7 @@
       if (routeTarget?.target_type === "thread") {
         const resolved = await applyThreadRoute(routeTarget, serial);
         if (serial !== routeApplySerial) return;
-        if (resolved) {
-          appliedRouteKey = canonicalRouteKey;
-          connectPendingRealtime(workspace.id);
-        }
+        if (resolved) connectPendingRealtime(workspace.id);
         return;
       }
 
@@ -962,7 +951,6 @@
         selectedDirectID = "";
         resetTopicStateForConversation("");
         await loadMessages();
-        appliedRouteKey = requestedRouteKey;
         if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
         connectPendingRealtime(workspace.id);
         return;
@@ -2722,6 +2710,7 @@
       if (thread.root?.route_id) await navigateToApp(selectedWorkspaceID, thread.root.id);
     } else {
       messageList?.scrollToMessage(session.messageID);
+      await navigateToApp(selectedWorkspaceID, thread.root?.id || currentConversationKey());
     }
     for (let attempt = 0; attempt < 16; attempt += 1) {
       await tick();
@@ -3030,7 +3019,7 @@
     searchSession = { ...session, activeResultID: result.id };
     if (currentConversationKey() !== targetID) {
       await navigateToApp(selectedWorkspaceID, targetID);
-      await applyRoute(selectedWorkspaceID, targetID);
+      await applyRoute(routeWorkspaceIDFor(selectedWorkspaceID), routeTargetIDFor(targetID));
     }
     if (currentConversationKey() !== targetID) return;
     if (result.parent_message_id) {
@@ -3057,6 +3046,7 @@
       if (targetCurrent()) document.querySelector<HTMLElement>(".thread .thread-back")?.focus({ preventScroll: true });
       return;
     }
+    await navigateToApp(selectedWorkspaceID, targetID);
     if (result.channel_seq && result.channel_seq > 0) {
       await loadMessagesAroundSeq(result.channel_seq, result.id);
       return;
@@ -3974,25 +3964,20 @@
   }
 
   async function togglePinnedPanel() {
-    routeApplySerial++;
-    if (pinnedPanelOpen) {
-      pinnedPanelOpen = false;
-      return;
-    }
     if (!selectedChannelID || selectedDirectID) return;
-    const threadWasOpen = thread.selection !== null;
-    const searchDetourWasOpen = searchThreadDetour;
+    routeApplySerial++;
+    const opening = !pinnedPanelOpen;
     const parentTargetID = currentConversationKey();
     resetSearch();
     thread.close();
     selectedProfile = null;
-    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
-      openPinnedPanelAfterRoute = true;
+    if (window.location.pathname !== appHref(selectedWorkspaceID, parentTargetID)) {
+      openPinnedPanelAfterRoute = opening;
       await navigateToApp(selectedWorkspaceID, parentTargetID);
       return;
     }
-    pinnedPanelOpen = true;
-    void loadPinnedMessages();
+    pinnedPanelOpen = opening;
+    if (opening) void loadPinnedMessages();
   }
 
   async function openPinnedMessageThread(message: Message) {

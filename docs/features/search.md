@@ -38,7 +38,7 @@ page exists; it does not run a total-count query.
 ## Opening results
 
 Selecting a root result loads its surrounding channel or DM history. The most
-recent selection owns that message window and its scroll target, even when
+recent selection owns the URL, message window, and scroll target, even when
 responses arrive out of order. Targets inside a long same-author message group
 scroll to the selected message. Jumping to a quote, unread messages, or the latest
 messages supersedes an older pending history request in the same conversation.

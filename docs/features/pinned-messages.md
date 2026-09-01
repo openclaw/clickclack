@@ -12,6 +12,8 @@ are shared channel state, not a per-user bookmark. Direct messages do not suppor
 
 Pin refreshes belong to the selected channel. A delayed pin or unpin response
 from a previous channel cannot replace the current channel's pin state.
+Opening or closing the panel keeps that channel selected and restores its URL
+if an earlier navigation is still loading.
 
 ## Endpoints
 

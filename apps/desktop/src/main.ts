@@ -321,12 +321,12 @@ function createSettingsWindow() {
     return;
   }
   const window = new BrowserWindow({
-    backgroundColor: "#17110f",
-    height: 720,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0e1219" : "#edeff2",
+    height: 580,
     icon: assetPath("icon.png"),
     maximizable: false,
-    minHeight: 640,
-    minWidth: 620,
+    minHeight: 560,
+    minWidth: 600,
     parent: mainWindow ?? undefined,
     resizable: true,
     show: false,

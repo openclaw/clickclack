@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
@@ -121,7 +122,7 @@ func serve(args []string) error {
 		return err
 	}
 	defer st.Close()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := st.Migrate(ctx); err != nil {
 		return err

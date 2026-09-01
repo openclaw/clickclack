@@ -2045,15 +2045,19 @@ func writeMessagePage(w http.ResponseWriter, page store.MessagePage, err error) 
 
 func ListenAndServe(ctx context.Context, addr string, handler http.Handler) error {
 	server := newHTTPServer(addr, handler)
-	go func() {
-		<-ctx.Done()
+	defer server.Close()
+	shutdownDone := make(chan error, 1)
+	stopShutdown := context.AfterFunc(ctx, func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
-	}()
+		shutdownDone <- server.Shutdown(shutdownCtx)
+	})
+	defer stopShutdown()
 	err := server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+		// Closing the listener returns before active requests finish. Keep the
+		// caller and its store alive until draining completes or times out.
+		return <-shutdownDone
 	}
 	return fmt.Errorf("serve %s: %w", addr, err)
 }

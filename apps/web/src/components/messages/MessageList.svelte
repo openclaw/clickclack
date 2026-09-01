@@ -403,16 +403,15 @@
     const key = viewKey;
     if (document.activeElement === scrollEl) scrollEl.blur();
     let previousScrollSize = -1;
-    // A keyed virtual item can resize after its Svelte update, when virtua's
-    // ResizeObserver publishes the new measurement. Re-pin until that size is
-    // stable. Write the viewport directly so virtua does not retain a separate
-    // resize-driven scrollToIndex command after the user cancels following.
+    // Re-pin until virtua measures the keyed item's final size. All seeks write
+    // the viewport directly: virtua's imperative API retains resize callbacks
+    // that outlive this owner's command generation.
     for (let attempt = 0; attempt < 6; attempt += 1) {
+      await tick();
       if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return;
       shouldStickToBottom = !hasNewer;
       suppressProgrammaticPagination(2);
       scrollEl.scrollTop = scrollEl.scrollHeight;
-      await tick();
       await nextFrame();
       if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
       const scrollSize = virtualizer.getScrollSize();
@@ -433,15 +432,47 @@
   $effect(() => {
     if (!scrollEl) return;
     const el = scrollEl;
+    const interruptScroll = () => {
+      beginScrollCommand();
+      suppressPagination = false;
+    };
     const onWheel = (event: WheelEvent) => {
-      if (event.deltaY > 0 && !pendingRestore && !suppressPagination && hasNewer && checkAtBottom()) {
+      if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0) return;
+      interruptScroll();
+      if (event.deltaY > 0 && hasNewer && checkAtBottom()) {
         newerEdgeConsumed = true;
         onLoadNewer?.("wheel");
       }
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        event.defaultPrevented ||
+        !(target instanceof HTMLElement) ||
+        target.isContentEditable ||
+        target.closest("input, textarea, select") ||
+        (event.key === " " && target.closest("button, [role=button]"))
+      ) return;
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+        interruptScroll();
+      }
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!event.defaultPrevented && event.touches.length === 1) interruptScroll();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      // Native scrollbar presses target the scrollport, not a message child.
+      if (event.target === el && event.button === 0) interruptScroll();
+    };
     el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("keydown", onKeyDown);
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown);
     return () => {
       el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("keydown", onKeyDown);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("pointerdown", onPointerDown);
     };
   });
 
@@ -488,7 +519,7 @@
       // Skip the first measurement; initial mount is handled by restoration.
       if (prev > 0 && next !== prev) {
         const delta = next - prev;
-        if (virtualizer && virtualizer.getScrollOffset() > 0) virtualizer.scrollBy(delta);
+        if (scrollEl && scrollEl.scrollTop > 0) scrollEl.scrollTop += delta;
       }
     };
     apply();
@@ -542,12 +573,11 @@
       if (target) {
         const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
         if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
-        virtualizer.scrollTo(scrollEl.scrollTop + delta);
+        scrollEl.scrollTop += delta;
       } else {
         const idx = indexForTarget();
         if (idx < 0) return false;
-        // A group seek would cancel the precise row alignment queued above.
-        virtualizer.scrollToIndex(idx, { align: "start" });
+        scrollEl.scrollTop = historyLoaderHeight + virtualizer.getItemOffset(idx);
       }
       await nextFrame();
     }
@@ -746,10 +776,10 @@
     const idx = findMessageIndex(messageID);
     if (idx < 0) return false;
     for (let attempt = 0; attempt < 8; attempt++) {
-      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return false;
+      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return false;
       const desired = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
       suppressProgrammaticPagination();
-      virtualizer.scrollTo(desired);
+      scrollEl.scrollTop = desired;
       await new Promise((r) => requestAnimationFrame(r));
       if (!isCurrentScrollCommand(key, generation)) return false;
       const recheck = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
@@ -764,7 +794,6 @@
     const distance = virtuaBottomDistance();
     const sticky = checkAtBottom();
     const nearNewer = sticky || distance <= NEWER_LOAD_THRESHOLD_PX;
-    if (shouldStickToBottom && !sticky) beginScrollCommand();
     shouldStickToBottom = sticky && !hasNewer;
     atBottom = sticky;
     if (!hasNewer) newerEdgeConsumed = false;

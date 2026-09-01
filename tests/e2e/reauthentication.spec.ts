@@ -2,10 +2,13 @@ import { expect, test, type WebSocketRoute } from "@playwright/test";
 import { waitForAppReady } from "./app-ready";
 
 for (const surface of ["chat", "channel embed", "thread embed"] as const) {
-  test(`${surface} returns to sign in when an open session is revoked`, async ({
+  test(`${surface} returns to sign in when an open session is revoked without AbortSignal.any`, async ({
     page,
     request,
   }) => {
+    await page.addInitScript(() => {
+      delete (AbortSignal as Partial<typeof AbortSignal>).any;
+    });
     const magic = await page.request.post("/api/auth/magic/request", {
       data: { email: `realtime-expiry-${surface.replaceAll(" ", "-")}-${Date.now()}@example.com` },
     });

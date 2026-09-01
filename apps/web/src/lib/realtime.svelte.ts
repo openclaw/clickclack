@@ -1,5 +1,5 @@
 import type { RealtimeEvent } from "./types";
-import { api, apiURL, DEFAULT_FETCH_TIMEOUT_MS } from "./api";
+import { apiWithTimeout, apiURL } from "./api";
 import { prepareRealtimeCursor, requiresRealtimeResync } from "./realtime-bootstrap";
 import { createRealtimeQueue } from "./realtime-queue";
 
@@ -97,9 +97,10 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
       limit: "1",
       include_tail: "true",
     });
-    const data = await api<RealtimeTailResponse>(`/api/realtime/events?${params.toString()}`, {
-      signal: AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS)]),
-    });
+    const data = await apiWithTimeout<RealtimeTailResponse>(
+      `/api/realtime/events?${params.toString()}`,
+      signal,
+    );
     if (typeof data.tail_cursor !== "string") {
       throw new Error("Realtime bootstrap response did not include a tail cursor");
     }

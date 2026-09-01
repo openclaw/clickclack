@@ -1677,6 +1677,8 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 		if botAuth, err := s.store.GetBotTokenAuth(r.Context(), token); err == nil {
+			// Record ingress use once; realtime revalidation stays read-only.
+			_ = s.store.RecordBotTokenUse(r.Context(), botAuth.TokenID)
 			return actor{
 				user:        botAuth.User,
 				botTokenID:  botAuth.TokenID,

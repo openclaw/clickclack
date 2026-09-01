@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
@@ -160,5 +161,58 @@ func TestRealtimeBotTokenLookupFailureRemainsRetryable(t *testing.T) {
 	hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
 	if _, ok := readEventTypeWithin(t, current, "presence.changed", 5*time.Second); !ok {
 		t.Fatal("credential could not recover after the store recovered")
+	}
+}
+
+func TestRealtimeCredentialChecksDoNotRecordNewTokenUsage(t *testing.T) {
+	fixture := newRealtimeWorkspaceFixture(t, "usage-token@example.com")
+	token, _ := createRealtimeBot(t, fixture)
+	hub := realtime.NewHub()
+	httpServer := httptest.NewServer(New(fixture.store, hub, Options{}).Handler())
+	defer httpServer.Close()
+	lastUsed := func() string {
+		t.Helper()
+		bots, err := fixture.store.ListBots(fixture.ctx, fixture.workspace.ID, fixture.owner.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, bot := range bots {
+			for _, candidate := range bot.Tokens {
+				if candidate.ID == token.ID && candidate.LastUsedAt != nil {
+					return *candidate.LastUsedAt
+				}
+			}
+		}
+		return ""
+	}
+	conn := dialRealtimeWithSession(t, httpServer.URL, fixture.workspace.ID, token.Token)
+	defer conn.CloseNow()
+	hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
+	if _, ok := readEventTypeWithin(t, conn, "presence.changed", 5*time.Second); !ok {
+		t.Fatal("bot did not receive the positive control")
+	}
+	connectedAt := lastUsed()
+	if connectedAt == "" {
+		t.Fatal("WebSocket authentication did not record credential usage")
+	}
+	hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
+	if _, ok := readEventTypeWithin(t, conn, "presence.changed", 5*time.Second); !ok {
+		t.Fatal("bot did not receive the next event")
+	}
+	if lastUsed() != connectedAt {
+		t.Fatal("delivery revalidation recorded another token use")
+	}
+	req, err := http.NewRequest(http.MethodGet, httpServer.URL+"/api/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token.Token)
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || lastUsed() == connectedAt {
+		t.Fatal("fresh HTTP authentication did not advance credential usage")
 	}
 }

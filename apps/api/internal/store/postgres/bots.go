@@ -347,8 +347,11 @@ func (s *Store) GetBotTokenAuth(ctx context.Context, token string) (store.BotTok
 	if err := s.requireMembership(ctx, auth.WorkspaceID, auth.User.ID); err != nil {
 		return store.BotTokenAuth{}, err
 	}
-	_ = s.q.TouchBotToken(ctx, storedb.TouchBotTokenParams{LastUsedAt: sqlText(now()), ID: auth.TokenID})
 	return auth, nil
+}
+
+func (s *Store) RecordBotTokenUse(ctx context.Context, tokenID string) error {
+	return s.q.TouchBotToken(ctx, storedb.TouchBotTokenParams{LastUsedAt: sqlText(now()), ID: tokenID})
 }
 
 func (s *Store) ListBots(ctx context.Context, workspaceID, requesterID string) ([]store.BotWithTokens, error) {

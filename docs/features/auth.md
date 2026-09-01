@@ -425,6 +425,15 @@ workspace check. See [bots.md](bots.md).
 token to a `User`. There is no refresh flow — issue a new session when one
 expires.
 
+Revocation reaches connections that are already open, not just the next request.
+A realtime WebSocket captures its actor at accept, so it revalidates that
+session against the store before delivering, and on an idle timer for quiet
+workspaces; a revoked session closes with `1008`. The check reads the database
+rather than an in-process signal because a deployment runs replicas, and the
+request that revokes a session is routinely in a different process from the
+socket holding it. Connections that authenticated some other way, such as a bot
+token or a trusted-proxy assertion, have no session to revalidate.
+
 ## What is intentionally missing
 
 - Self-service registration, and password reset for someone who has forgotten

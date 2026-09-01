@@ -51,6 +51,7 @@ type Server struct {
 	passwordIDLimiter     *slidingWindowLimiter
 	passwordChangeLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
+	realtimeSessionCheck  time.Duration
 	callbackClient        *http.Client
 }
 
@@ -68,6 +69,11 @@ const (
 	realtimeOverflowCloseReason       = "realtime buffer overflow; reconnect with after_cursor to replay"
 	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
 	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
+	realtimeSessionRevokedCloseReason = "session revoked; sign in again"
+	// realtimeSessionRecheckInterval bounds how long a connection whose session
+	// was revoked can sit open while its workspace is quiet. Delivery revalidates
+	// the session regardless, so this only shortens the idle case.
+	realtimeSessionRecheckInterval = 30 * time.Second
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
@@ -90,10 +96,15 @@ const (
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
 
 type actor struct {
-	user        store.User
-	botTokenID  string
-	workspaceID string
-	scopes      []string
+	user store.User
+	// sessionToken is the session this caller authenticated with, empty for
+	// every other way of resolving an actor: bot tokens, a trusted-proxy
+	// assertion, and the local development fallbacks. Handlers that revoke or
+	// revalidate the caller's own session key on it.
+	sessionToken string
+	botTokenID   string
+	workspaceID  string
+	scopes       []string
 }
 
 type Options struct {
@@ -157,6 +168,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
 		passwordChangeLimiter: newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
+		realtimeSessionCheck:  realtimeSessionRecheckInterval,
 		callbackClient:        callbackClient,
 		build: buildMetadata{
 			Environment: options.Environment,
@@ -1381,9 +1393,32 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
+	// Authentication is captured once, at accept, but a session can be revoked
+	// while the socket is open: a password change signs other devices out, and so
+	// does sign-out. The socket is a live authenticated channel, so revocation
+	// has to reach it. The check reads the store rather than an in-process
+	// signal, because the hub is per process and a deployment runs replicas: the
+	// session that gets revoked and the socket holding it are routinely in
+	// different processes. Connections that authenticated some other way, such as
+	// a bot token or a trusted-proxy assertion, have no session to revalidate.
+	sessionAuthorityLive := func() bool {
+		if act.sessionToken == "" {
+			return true
+		}
+		if _, err := s.store.GetSessionUser(ctx, act.sessionToken); err != nil {
+			_ = conn.Close(websocket.StatusPolicyViolation, realtimeSessionRevokedCloseReason)
+			return false
+		}
+		return true
+	}
+	sessionRecheck := time.NewTicker(s.realtimeSessionCheck)
+	defer sessionRecheck.Stop()
 	// Startup and live delivery share one ordered, authorized durable-log drain.
 	// Capture a finite tail each time; a wake received during this drain stays queued.
 	drain := func() bool {
+		if !sessionAuthorityLive() {
+			return false
+		}
 		replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 		if err != nil {
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
@@ -1477,6 +1512,12 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		case <-subscription.Done:
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
 			return
+		case <-sessionRecheck.C:
+			// An idle socket delivers nothing to revalidate against, so revocation
+			// reaches it here instead of waiting for the workspace's next event.
+			if !sessionAuthorityLive() {
+				return
+			}
 		case _, ok := <-subscription.Wake:
 			if !ok {
 				continue
@@ -1491,6 +1532,9 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			// Revocations and other cursorless events are intentionally ephemeral.
 			if eventRevokesWorkspaceAccess(event, act.user.ID) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
+				return
+			}
+			if !sessionAuthorityLive() {
 				return
 			}
 			if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
@@ -1625,7 +1669,10 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 			}, nil
 		}
 		user, err := s.store.GetSessionUser(r.Context(), token)
-		return actor{user: user}, err
+		if err != nil {
+			return actor{}, err
+		}
+		return actor{user: user, sessionToken: token}, nil
 	}
 	cookie, err := requestCookie(r, s.cookies.Session)
 	if errors.Is(err, errAmbiguousCookie) {
@@ -1634,7 +1681,7 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if err == nil && cookie.Value != "" {
 		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
 		if err == nil {
-			return actor{user: user}, nil
+			return actor{user: user, sessionToken: cookie.Value}, nil
 		}
 		if s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
 			return actor{}, err

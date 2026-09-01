@@ -244,7 +244,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		UserID:           act.user.ID,
 		VerifiedHash:     stored,
 		NewHash:          hash,
-		KeepSessionToken: requestSessionToken(r, s.cookies.Session),
+		KeepSessionToken: act.sessionToken,
 	}); err != nil {
 		switch {
 		case errors.Is(err, store.ErrPasswordVerificationStale):

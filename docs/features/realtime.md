@@ -39,7 +39,11 @@ POST /api/realtime/ephemeral
   a wake arriving during a drain stays pending. Each drain is capped at 5,000 events; larger
   gaps close with application code `4001` so the client can perform an
   authoritative HTTP resync. Membership is checked on connect and current
-  access is rechecked before delivery. The output-only socket handles ping,
+  access is rechecked before delivery, as is the session the connection
+  authenticated with: a password change or a sign-out that revokes it closes
+  the socket with `1008` rather than letting an already-open connection keep
+  receiving. That check reads the store, so it holds across replicas, and an
+  idle connection repeats it on a timer. The output-only socket handles ping,
   pong, and close frames and releases its subscription on peer disconnect;
   clients send ephemeral input through HTTP.
 - `GET /events` exposes durable replay in pull form. User-private durable

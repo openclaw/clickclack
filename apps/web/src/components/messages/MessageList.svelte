@@ -433,8 +433,10 @@
     if (!scrollEl) return;
     const el = scrollEl;
     const interruptScroll = () => {
-      beginScrollCommand();
+      const generation = beginScrollCommand();
       suppressPagination = false;
+      // Cancellation still releases pagination after the browser applies user input.
+      void emitSettledAfterFrames(viewKey, generation);
     };
     const onWheel = (event: WheelEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0) return;
@@ -584,38 +586,40 @@
     return false;
   }
 
-  function scrollToMessage(messageID: string): boolean {
-    if (!virtualizer) return false;
-    const idx = findMessageIndex(messageID);
-    if (idx < 0) return false;
+  function scrollToTarget(
+    indexForTarget: () => number,
+    selector: string,
+    onUnsettled?: () => void,
+  ): boolean {
+    if (!virtualizer || indexForTarget() < 0) return false;
     shouldStickToBottom = false;
     const key = viewKey;
     const generation = beginScrollCommand();
-    void settleVirtualTarget(
-      key,
-      generation,
-      () => findMessageIndex(messageID),
-      `[data-message-id="${CSS.escape(messageID)}"]`,
-    );
+    void settleVirtualTarget(key, generation, indexForTarget, selector).then(async (settled) => {
+      if (!isCurrentScrollCommand(key, generation)) return;
+      emitHistorySettled();
+      // Settling can remove the history loader above the target.
+      await tick();
+      if (!isCurrentScrollCommand(key, generation)) return;
+      if (settled) settled = await settleVirtualTarget(key, generation, indexForTarget, selector);
+      if (!settled && isCurrentScrollCommand(key, generation)) onUnsettled?.();
+    });
     return true;
   }
 
+  function scrollToMessage(messageID: string): boolean {
+    return scrollToTarget(
+      () => findMessageIndex(messageID),
+      `[data-message-id="${CSS.escape(messageID)}"]`,
+    );
+  }
+
   function scrollToDivider(fallbackToAround = true): boolean {
-    if (!virtualizer) return false;
-    const idx = findDividerIndex();
-    if (idx < 0) return false;
-    shouldStickToBottom = false;
-    const key = viewKey;
-    const generation = beginScrollCommand();
-    void settleVirtualTarget(
-      key,
-      generation,
-      () => findDividerIndex(),
+    return scrollToTarget(
+      findDividerIndex,
       "[data-unread-divider='true']",
-    ).then((settled) => {
-      if (fallbackToAround && !settled && isCurrentScrollCommand(key, generation)) onJumpToUnread?.();
-    });
-    return true;
+      fallbackToAround ? onJumpToUnread : undefined,
+    );
   }
 
   function jumpToUnreadBoundary() {
@@ -716,17 +720,17 @@
     lastPreambleLayoutRevision = layoutRevision;
   });
 
-  async function emitSettledAfterFrames(key: string) {
+  async function emitSettledAfterFrames(key: string, generation = scrollCommandGeneration) {
     await tick();
     await nextFrame();
-    if (key === lastViewKey) emitHistorySettled();
+    if (isCurrentScrollCommand(key, generation)) emitHistorySettled();
   }
 
   async function runRestore(key: string, target: MessageListState | undefined, fallbackToBottom: boolean) {
     const generation = beginScrollCommand(false);
     let restoredToUnreadDivider = false;
     await tick();
-    await new Promise((r) => requestAnimationFrame(r));
+    await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
     if (target && !target.atBottom && target.anchorMessageID) {
       const restored = await restoreToAnchor(
@@ -753,7 +757,7 @@
         await scrollLastItemIntoView(generation);
       }
     }
-    await new Promise((r) => requestAnimationFrame(r));
+    await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
     pendingRestore = false;
     revealed = true;
@@ -780,7 +784,7 @@
       const desired = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
       suppressProgrammaticPagination();
       scrollEl.scrollTop = desired;
-      await new Promise((r) => requestAnimationFrame(r));
+      await nextFrame();
       if (!isCurrentScrollCommand(key, generation)) return false;
       const recheck = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
       const current = virtualizer.getScrollOffset();

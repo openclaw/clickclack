@@ -220,17 +220,55 @@ for (const surface of ["main", "embed"] as const) {
     if (surface === "main") {
       // Conversation-scoped editing must also reveal the original root after a thread switch.
       const secondRoot = page.locator(`.message-row[data-message-id="${roots[1].id}"]`);
-      await secondRoot.hover();
-      await secondRoot.getByRole("button", { name: "Open thread", exact: true }).click();
-      await page
-        .locator(".reply")
-        .getByRole("button", { name: "Edit message", exact: true })
-        .click();
-      await expect(first.getByLabel("Edit message", { exact: true })).toHaveValue(
-        "Retained historical draft",
-      );
-      await expectInsideThread(first, page);
-      await expect(page).toHaveURL(new RegExp(`/${root.route_id}$`));
+      const secondRoutePath = `/api/routes/${workspace.route_id}/${roots[1].route_id}`;
+      const routeEntered = deferred(),
+        routeRelease = deferred();
+      const revealEntered = deferred(),
+        revealRelease = deferred();
+      await page.route(`**${secondRoutePath}`, async (route) => {
+        const response = await route.fetch();
+        routeEntered.resolve();
+        await routeRelease.promise;
+        await route.fulfill({ response });
+      });
+      await page.route(`**/api/messages/${root.id}/thread?*`, async (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        if (query.get("latest") !== "true" || query.get("limit") !== "100") return route.continue();
+        const response = await route.fetch();
+        revealEntered.resolve();
+        await revealRelease.promise;
+        await route.fulfill({ response });
+      });
+      try {
+        await secondRoot.hover();
+        await secondRoot.getByRole("button", { name: "Open thread", exact: true }).click();
+        await routeEntered.promise;
+        await page
+          .locator(".reply")
+          .getByRole("button", { name: "Edit message", exact: true })
+          .click();
+        await revealEntered.promise;
+        const oldRoute = page.waitForResponse((response) =>
+          response.url().endsWith(secondRoutePath),
+        );
+        routeRelease.resolve();
+        await (await oldRoute).finished();
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        revealRelease.resolve();
+        await expect(first.getByLabel("Edit message", { exact: true })).toHaveValue(
+          "Retained historical draft",
+        );
+        await expectInsideThread(first, page);
+        await expect(page).toHaveURL(new RegExp(`/${root.route_id}$`));
+      } finally {
+        routeRelease.resolve();
+        revealRelease.resolve();
+      }
     }
   });
 }

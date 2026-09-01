@@ -1810,11 +1810,14 @@
     const shouldLoadNewer =
       newerPageState === "settling" && pendingNewerPageIntent && state.nearNewer && activeHasNewer;
 
-    if (olderPageState === "settling") setHistoryEdgeState("older", "idle");
-    if (newerPageState === "settling") setHistoryEdgeState("newer", "idle");
-
-    pendingOlderPageIntent = false;
-    pendingNewerPageIntent = false;
+    if (olderPageState === "settling") {
+      setHistoryEdgeState("older", "idle");
+      pendingOlderPageIntent = false;
+    }
+    if (newerPageState === "settling") {
+      setHistoryEdgeState("newer", "idle");
+      pendingNewerPageIntent = false;
+    }
 
     if (shouldLoadOlder) requestOlderMessages();
     if (shouldLoadNewer) requestNewerMessages();
@@ -2705,6 +2708,8 @@
       editController.session(scope)?.generation === session.generation &&
       (session.surface !== "thread" || thread.selection === selection);
     if (!current()) return;
+    // Revealing an existing edit supersedes any route still resolving.
+    routeApplySerial++;
     if (session.surface === "thread") {
       if (session.threadRootID && selection?.messageID !== session.threadRootID) {
         pinnedPanelOpen = false;

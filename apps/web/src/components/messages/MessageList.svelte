@@ -376,9 +376,9 @@
     onHistorySettled?.(viewportState());
   }
 
-  function notifyReachedBottom() {
-    if (hasNewer) return;
-    if (targetUnreadCount > 0) return;
+  function notifyReachedBottom(settledFollow = false) {
+    // A late list snapshot can add unread UI while following awaits layout.
+    if (hasNewer || (!settledFollow && targetUnreadCount > 0)) return;
     onReachedBottom?.();
   }
 
@@ -424,7 +424,7 @@
     shouldStickToBottom = !hasNewer;
     if (checkAtBottom()) {
       atBottom = true;
-      notifyReachedBottom();
+      notifyReachedBottom(true);
     }
     emitHistorySettled();
   }

@@ -166,8 +166,8 @@ progress while retaining targetless, workspace-wide presence events.
   timeline events. Browser and desktop alerts track received message sequences
   separately, so a list refresh cannot hide a new alert and a retried event does
   not repeat it. Initial snapshots still suppress historical message alerts.
-- When following live chat, a snapshot that already counts a newly arriving
-  message does not leave it unread after its row and scroll position settle.
+- When following live chat, a snapshot arriving before or after a live message
+  does not leave it unread after its row and scroll position settle.
   Replayed loaded rows and history viewed away from the live edge retain their
   existing unread boundaries.
 - The client sends `after_cursor` on every connect/reconnect.

@@ -2197,6 +2197,13 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
       // Do not let one fetch containing both messages mask blocked ingestion.
       await expect(page.getByText(body, { exact: true })).toBeVisible();
     }
+    // A list refresh can arrive after the final append, before following settles.
+    const displayTitle = `${channel.channel.name} refreshed`;
+    const refreshed = await page.request.patch(`/api/channels/${channel.channel.id}`, {
+      data: { display_title: displayTitle },
+    });
+    expect(refreshed.ok()).toBe(true);
+    await expect(page.getByRole("heading", { name: `#${displayTitle}` })).toBeVisible();
   } finally {
     await page.evaluate(() => Reflect.get(window, "resumeMessageFrames")());
   }

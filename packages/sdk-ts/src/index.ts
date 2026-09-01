@@ -119,21 +119,10 @@ export type ReadReceipt = components["schemas"]["ReadReceipt"];
 
 export type RouteTarget = components["schemas"]["RouteTarget"];
 
-export type RealtimeEventPayload = {
-  correlation_id?: string;
-  [key: string]: unknown;
-};
+export type RealtimeEventPayload = NonNullable<components["schemas"]["Event"]["payload"]>;
 
-export type RealtimeEvent = {
-  id: string;
-  cursor: string;
-  type: string;
-  workspace_id: string;
-  channel_id?: string;
-  seq?: number;
-  created_at: string;
+export type RealtimeEvent = Omit<components["schemas"]["Event"], "payload"> & {
   payload: RealtimeEventPayload;
-  mentioned_user_ids?: string[];
 };
 
 export type ChannelNotificationPreference = "all" | "mentions" | "muted";

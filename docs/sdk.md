@@ -138,6 +138,12 @@ const socket = client.events.subscribe({
 `subscribe` returns a raw `WebSocket`. Call `.close()` to disconnect. See
 [features/realtime.md](features/realtime.md) for cursor recovery rules.
 
+Realtime payload keys are `unknown`: ephemeral publishers can supply arbitrary
+metadata, including a non-string `correlation_id`. Check a value's type before
+using it, for example `typeof event.payload.correlation_id === "string"`.
+Emitted events have object payloads; successful no-op mutation receipts can
+instead contain an empty event with a `null` payload.
+
 Bot tokens can publish typed, target-scoped agent progress:
 
 ```ts

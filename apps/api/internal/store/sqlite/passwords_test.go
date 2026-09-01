@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
@@ -176,7 +177,56 @@ func TestGetUserPasswordHash(t *testing.T) {
 	}
 }
 
-func TestRevokeOtherUserSessions(t *testing.T) {
+func TestCreateSessionForVerifiedPassword(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Maggie", Email: "maggie@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserPassword(ctx, user.ID, "$argon2id$stored"); err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := st.CreateSessionForVerifiedPassword(ctx, user.ID, "$argon2id$stored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetSessionUser(ctx, session.Token); err != nil {
+		t.Fatalf("expected the minted session to resolve, got %v", err)
+	}
+
+	// A password change that lands between verification and this commit must
+	// leave the caller holding nothing, however good its secret used to be.
+	if err := st.SetUserPassword(ctx, user.ID, "$argon2id$rotated"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateSessionForVerifiedPassword(ctx, user.ID, "$argon2id$stored"); !errors.Is(err, store.ErrPasswordVerificationStale) {
+		t.Fatalf("expected a stale verification to be refused, got %v", err)
+	}
+	if got := countUserSessions(t, st, user.ID); got != 1 {
+		t.Fatalf("expected the refused login to write no session, got %d sessions", got)
+	}
+
+	// An account with no password on file has nothing to compare against.
+	unenrolled, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Ari", Email: "ari@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateSessionForVerifiedPassword(ctx, unenrolled.ID, "$argon2id$stored"); !errors.Is(err, store.ErrPasswordVerificationStale) {
+		t.Fatalf("expected an unenrolled account to be refused, got %v", err)
+	}
+	if _, err := st.CreateSessionForVerifiedPassword(ctx, "  ", "$argon2id$stored"); err == nil {
+		t.Fatal("expected a missing user id to be rejected")
+	}
+	if _, err := st.CreateSessionForVerifiedPassword(ctx, user.ID, "  "); err == nil {
+		t.Fatal("expected a missing verified hash to be rejected")
+	}
+}
+
+func TestChangeUserPasswordReplacesAndRevokesInOneCommit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -189,31 +239,42 @@ func TestRevokeOtherUserSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SetUserPassword(ctx, user.ID, "$argon2id$stored"); err != nil {
+		t.Fatal(err)
+	}
 	kept, err := st.CreateSession(ctx, user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var revoked []store.Session
+	var elsewhere []store.Session
 	for i := 0; i < 2; i++ {
 		session, err := st.CreateSession(ctx, user.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		revoked = append(revoked, session)
+		elsewhere = append(elsewhere, session)
 	}
 	bystander, err := st.CreateSession(ctx, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	count, err := st.RevokeOtherUserSessions(ctx, user.ID, kept.Token)
+	count, err := st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:           user.ID,
+		VerifiedHash:     "$argon2id$stored",
+		NewHash:          "$argon2id$replaced",
+		KeepSessionToken: kept.Token,
+	})
 	if err != nil || count != 2 {
 		t.Fatalf("expected two sessions revoked, got %d err=%v", count, err)
+	}
+	if hash, err := st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "$argon2id$replaced" {
+		t.Fatalf("expected the replacement hash, got %q err=%v", hash, err)
 	}
 	if _, err := st.GetSessionUser(ctx, kept.Token); err != nil {
 		t.Fatalf("expected the kept session to survive, got %v", err)
 	}
-	for _, session := range revoked {
+	for _, session := range elsewhere {
 		if _, err := st.GetSessionUser(ctx, session.Token); err == nil {
 			t.Fatal("expected the other sessions to stop resolving")
 		}
@@ -223,19 +284,115 @@ func TestRevokeOtherUserSessions(t *testing.T) {
 		t.Fatalf("expected another account's session to be untouched, got %v", err)
 	}
 
-	// Already-revoked sessions are not counted twice.
-	if count, err = st.RevokeOtherUserSessions(ctx, user.ID, kept.Token); err != nil || count != 0 {
-		t.Fatalf("expected a repeat revocation to touch nothing, got %d err=%v", count, err)
-	}
 	// A caller that cannot name its own session revokes every session, which is
 	// the safe direction.
-	if count, err = st.RevokeOtherUserSessions(ctx, user.ID, ""); err != nil || count != 1 {
+	count, err = st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:           user.ID,
+		VerifiedHash:     "$argon2id$replaced",
+		NewHash:          "$argon2id$third",
+		KeepSessionToken: "",
+	})
+	if err != nil || count != 1 {
 		t.Fatalf("expected an empty keep token to revoke the last session, got %d err=%v", count, err)
 	}
 	if _, err := st.GetSessionUser(ctx, kept.Token); err == nil {
 		t.Fatal("expected an empty keep token to revoke every session")
 	}
-	if _, err := st.RevokeOtherUserSessions(ctx, "  ", kept.Token); err == nil {
+	if _, err := st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:       "  ",
+		VerifiedHash: "$argon2id$third",
+		NewHash:      "$argon2id$fourth",
+	}); err == nil {
 		t.Fatal("expected a missing user id to be rejected")
 	}
+}
+
+func TestChangeUserPasswordRefusesStaleVerificationsAndDeadSessions(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Maggie", Email: "maggie@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserPassword(ctx, user.ID, "$argon2id$stored"); err != nil {
+		t.Fatal(err)
+	}
+	caller, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The hash moved on since it was verified: the rotation loses the race, and
+	// loses all of it. Nothing is written, so the winner's password stands and
+	// the winner's other sessions are still live.
+	if _, err := st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:           user.ID,
+		VerifiedHash:     "$argon2id$verified-a-while-ago",
+		NewHash:          "$argon2id$replaced",
+		KeepSessionToken: caller.Token,
+	}); !errors.Is(err, store.ErrPasswordVerificationStale) {
+		t.Fatalf("expected a stale verification to be refused, got %v", err)
+	}
+	if hash, err := st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "$argon2id$stored" {
+		t.Fatalf("expected the stored hash to be untouched, got %q err=%v", hash, err)
+	}
+	if _, err := st.GetSessionUser(ctx, elsewhere.Token); err != nil {
+		t.Fatalf("expected a refused change to revoke nothing, got %v", err)
+	}
+
+	// The caller's own session died while it was working: a change it can no
+	// longer authenticate must not commit either.
+	if err := st.RevokeSession(ctx, caller.Token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:           user.ID,
+		VerifiedHash:     "$argon2id$stored",
+		NewHash:          "$argon2id$replaced",
+		KeepSessionToken: caller.Token,
+	}); !errors.Is(err, store.ErrSessionRevoked) {
+		t.Fatalf("expected a revoked session to be refused, got %v", err)
+	}
+	if hash, err := st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "$argon2id$stored" {
+		t.Fatalf("expected the stored hash to be untouched, got %q err=%v", hash, err)
+	}
+	if _, err := st.GetSessionUser(ctx, elsewhere.Token); err != nil {
+		t.Fatalf("expected a refused change to revoke nothing, got %v", err)
+	}
+
+	// An expired session is no more usable than a revoked one.
+	expired, err := st.CreateSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE sessions SET expires_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano), expired.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ChangeUserPassword(ctx, store.ChangeUserPasswordInput{
+		UserID:           user.ID,
+		VerifiedHash:     "$argon2id$stored",
+		NewHash:          "$argon2id$replaced",
+		KeepSessionToken: expired.Token,
+	}); !errors.Is(err, store.ErrSessionRevoked) {
+		t.Fatalf("expected an expired session to be refused, got %v", err)
+	}
+	if hash, err := st.GetUserPasswordHash(ctx, user.ID); err != nil || hash != "$argon2id$stored" {
+		t.Fatalf("expected the stored hash to be untouched, got %q err=%v", hash, err)
+	}
+}
+
+func countUserSessions(t *testing.T, st *Store, userID string) int {
+	t.Helper()
+	var count int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE user_id = ?`, userID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
 }

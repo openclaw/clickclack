@@ -156,6 +156,19 @@ var ErrAmbiguousUserEmail = errors.New("multiple users have this identity email"
 // the caller meant, so the lookup fails instead.
 var ErrAmbiguousUserIdentifier = errors.New("multiple users match this identifier")
 
+// ErrPasswordVerificationStale is returned when a password operation reaches
+// its commit and finds the stored hash is no longer the one it verified. The
+// expensive key derivation runs outside the transaction, so another change can
+// land in between; the write is refused rather than applied to a credential the
+// caller never proved.
+var ErrPasswordVerificationStale = errors.New("stored password changed while this request was verifying it")
+
+// ErrSessionRevoked is returned when a request that authenticated with a
+// session reaches its commit and finds that session is no longer live. A
+// password change that revoked it must not be overwritten by the request it
+// signed out.
+var ErrSessionRevoked = errors.New("this session is no longer valid")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
@@ -1102,6 +1115,20 @@ type PasswordLogin struct {
 	PasswordHash string
 }
 
+// ChangeUserPasswordInput describes one password rotation. VerifiedHash is the
+// stored hash the caller checked the current password against, and the store
+// commits nothing unless that is still the hash on file. KeepSessionToken is
+// the caller's own session token: the account's other sessions are revoked, and
+// the write is refused if that session has itself been revoked in the meantime.
+// An empty KeepSessionToken belongs to a caller the server cannot place in a
+// session, such as a trusted-proxy assertion, and revokes every session.
+type ChangeUserPasswordInput struct {
+	UserID           string
+	VerifiedHash     string
+	NewHash          string
+	KeepSessionToken string
+}
+
 const (
 	OAuthModeBrowser = "browser"
 	OAuthModeDesktop = "desktop"
@@ -1292,10 +1319,11 @@ type Store interface {
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
 	RevokeSession(ctx context.Context, token string) error
-	RevokeOtherUserSessions(ctx context.Context, userID, keepToken string) (int64, error)
 	GetPasswordLogin(ctx context.Context, identifier string) (PasswordLogin, error)
+	CreateSessionForVerifiedPassword(ctx context.Context, userID, verifiedHash string) (Session, error)
 	GetUserPasswordHash(ctx context.Context, userID string) (string, error)
 	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+	ChangeUserPassword(ctx context.Context, input ChangeUserPasswordInput) (int64, error)
 	ClearUserPassword(ctx context.Context, userID string) error
 	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error
 	ConsumeOAuthTransaction(ctx context.Context, stateHash, browserBindingHash string, now time.Time) (OAuthTransaction, error)

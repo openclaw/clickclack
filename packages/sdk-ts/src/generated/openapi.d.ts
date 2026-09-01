@@ -2382,7 +2382,7 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description Unknown identifier, wrong password, or an account without a password set */
+      /** @description Unknown identifier, wrong password, an account without a password set, or a password replaced while this request verified it */
       401: {
         headers: {
           [name: string]: unknown;
@@ -2446,7 +2446,7 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description Not signed in, or the current password is wrong */
+      /** @description Not signed in, the current password is wrong, or the calling session was revoked before the change committed */
       401: {
         headers: {
           [name: string]: unknown;
@@ -2460,7 +2460,7 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description The account has no password set; an administrator enrolls it first */
+      /** @description The account has no password set and an administrator enrolls it first, or another change replaced the password first and nothing was written */
       409: {
         headers: {
           [name: string]: unknown;
@@ -2499,7 +2499,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Session revoked and cookie expired */
+      /** @description The bearer or cookie session that authenticated the call was revoked and the cookie expired */
       200: {
         headers: {
           [name: string]: unknown;

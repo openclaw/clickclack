@@ -48,12 +48,19 @@ func newPasswordTestServer(t *testing.T, passwordAuthEnabled bool) (*httptest.Se
 	if err != nil {
 		t.Fatal(err)
 	}
+	return newPasswordTestServerForStore(t, st, passwordAuthEnabled), st, enrolled, unenrolled
+}
+
+// newPasswordTestServerForStore serves a caller-supplied store, so a test can
+// wrap one and hold a handler at a chosen read.
+func newPasswordTestServerForStore(t *testing.T, st store.Store, passwordAuthEnabled bool) *httptest.Server {
+	t.Helper()
 	server := httptest.NewServer(New(st, realtime.NewHub(), Options{
-		UploadDir:           filepath.Join(dataDir, "uploads"),
+		UploadDir:           filepath.Join(t.TempDir(), "uploads"),
 		PasswordAuthEnabled: passwordAuthEnabled,
 	}).Handler())
 	t.Cleanup(server.Close)
-	return server, st, enrolled, unenrolled
+	return server
 }
 
 func passwordLogin(t *testing.T, serverURL, identifier, password string) (*http.Response, string) {
@@ -320,6 +327,86 @@ func TestLogoutRevokesTheSession(t *testing.T) {
 	defer repeatResp.Body.Close()
 	if repeatResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected sign-out to be idempotent, got %d", repeatResp.StatusCode)
+	}
+}
+
+// logoutRequest signs out with whatever authentication auth applies, which is
+// how a bearer-only caller and a cookie caller are compared side by side.
+func logoutRequest(t *testing.T, serverURL string, auth func(*http.Request)) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, serverURL+"/api/auth/logout", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(csrfHeaderName, "1")
+	if auth != nil {
+		auth(req)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	return resp
+}
+
+func TestLogoutRevokesABearerSession(t *testing.T) {
+	t.Parallel()
+	server, st, enrolled, _ := newPasswordTestServer(t, true)
+	ctx := context.Background()
+	session, err := st.CreateSession(ctx, enrolled.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Login hands back a bearer-usable token and the API accepts it, so a caller
+	// that never holds a cookie has to be able to sign out too. Reading only the
+	// cookie made this a successful no-op.
+	if resp := logoutRequest(t, server.URL, withBearer(session.Token)); resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from a bearer sign-out, got %d", resp.StatusCode)
+	}
+	if _, err := st.GetSessionUser(ctx, session.Token); err == nil {
+		t.Fatal("expected the bearer session to stop resolving")
+	}
+	// Signing out twice must not fail: the client may retry.
+	if resp := logoutRequest(t, server.URL, withBearer(session.Token)); resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected a repeat bearer sign-out to succeed, got %d", resp.StatusCode)
+	}
+	if resp := logoutRequest(t, server.URL, withBearer("sst_never_issued")); resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected an unknown bearer sign-out to succeed, got %d", resp.StatusCode)
+	}
+}
+
+func TestLogoutFollowsBearerBeforeCookiePrecedence(t *testing.T) {
+	t.Parallel()
+	server, st, _, _ := newPasswordTestServer(t, true)
+	ctx := context.Background()
+	cookie := signInForCookie(t, server.URL)
+	bearerResp, body := passwordLogin(t, server.URL, "enrolled@example.com", passwordTestSecret)
+	if bearerResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected the second sign-in to succeed, got %d %s", bearerResp.StatusCode, body)
+	}
+	bearerCookie := sessionCookieFrom(bearerResp)
+	if bearerCookie == nil {
+		t.Fatal("expected a session cookie")
+	}
+
+	// currentActor resolves a bearer token ahead of a cookie, and sign-out ends
+	// the session that authenticated the call, not whichever one is easier to
+	// read.
+	resp := logoutRequest(t, server.URL, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+bearerCookie.Value)
+		r.AddCookie(cookie)
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from sign-out, got %d", resp.StatusCode)
+	}
+	if _, err := st.GetSessionUser(ctx, bearerCookie.Value); err == nil {
+		t.Fatal("expected the bearer session to be revoked")
+	}
+	if _, err := st.GetSessionUser(ctx, cookie.Value); err != nil {
+		t.Fatalf("expected the cookie session to be untouched, got %v", err)
 	}
 }
 

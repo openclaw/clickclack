@@ -1556,6 +1556,28 @@ func (q *Queries) GetIdentityEmailForUser(ctx context.Context, userID string) (s
 	return email, err
 }
 
+const getLiveUserSessionExpiry = `-- name: GetLiveUserSessionExpiry :one
+SELECT expires_at
+FROM sessions
+WHERE user_id = $1
+  AND token_hash = $2
+  AND revoked_at IS NULL
+`
+
+type GetLiveUserSessionExpiryParams struct {
+	UserID    string `json:"user_id"`
+	TokenHash string `json:"token_hash"`
+}
+
+// Read inside the rotation transaction to confirm the caller still holds the
+// session it authenticated with. A revoked or unknown token returns no row.
+func (q *Queries) GetLiveUserSessionExpiry(ctx context.Context, arg GetLiveUserSessionExpiryParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLiveUserSessionExpiry, arg.UserID, arg.TokenHash)
+	var expires_at string
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const getMagicLinkByToken = `-- name: GetMagicLinkByToken :one
 SELECT id, token, token_hash, email, display_name, created_at, expires_at, used_at
 FROM auth_magic_links
@@ -2802,6 +2824,44 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 		arg.ExpiresAt,
 	)
 	return err
+}
+
+const insertSessionForVerifiedPassword = `-- name: InsertSessionForVerifiedPassword :execrows
+INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
+SELECT $1, $2, $3, p.user_id, $4, $5
+FROM user_passwords p
+WHERE p.user_id = $6
+  AND p.password_hash = $7
+`
+
+type InsertSessionForVerifiedPasswordParams struct {
+	ID           string `json:"id"`
+	Token        string `json:"token"`
+	TokenHash    string `json:"token_hash"`
+	CreatedAt    string `json:"created_at"`
+	ExpiresAt    string `json:"expires_at"`
+	UserID       string `json:"user_id"`
+	VerifiedHash string `json:"verified_hash"`
+}
+
+// Password login commits its session only while the stored hash is still the
+// one this request verified. A password change that lands during the argon2
+// verification cannot then be followed by a session minted for the secret it
+// replaced.
+func (q *Queries) InsertSessionForVerifiedPassword(ctx context.Context, arg InsertSessionForVerifiedPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSessionForVerifiedPassword,
+		arg.ID,
+		arg.Token,
+		arg.TokenHash,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+		arg.UserID,
+		arg.VerifiedHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertThreadReply = `-- name: InsertThreadReply :exec
@@ -5445,6 +5505,37 @@ type RemoveReactionParams struct {
 
 func (q *Queries) RemoveReaction(ctx context.Context, arg RemoveReactionParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, removeReaction, arg.MessageID, arg.UserID, arg.Emoji)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const replaceVerifiedUserPassword = `-- name: ReplaceVerifiedUserPassword :execrows
+UPDATE user_passwords
+SET password_hash = $1,
+    updated_at = $2
+WHERE user_id = $3
+  AND password_hash = $4
+`
+
+type ReplaceVerifiedUserPasswordParams struct {
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    string `json:"updated_at"`
+	UserID       string `json:"user_id"`
+	VerifiedHash string `json:"verified_hash"`
+}
+
+// A rotation writes its replacement only while the stored hash is still the
+// snapshot its current-password check verified, so two changes racing on one
+// account cannot both report success.
+func (q *Queries) ReplaceVerifiedUserPassword(ctx context.Context, arg ReplaceVerifiedUserPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, replaceVerifiedUserPassword,
+		arg.PasswordHash,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.VerifiedHash,
+	)
 	if err != nil {
 		return 0, err
 	}

@@ -127,7 +127,7 @@ paths:
         "400":
           description: Missing identifier or password
         "401":
-          description: Unknown identifier, wrong password, or an account without a password set
+          description: Unknown identifier, wrong password, an account without a password set, or a password replaced while this request verified it
         "403":
           description: Cross-site login requests are not allowed
         "415":
@@ -151,11 +151,11 @@ paths:
         "400":
           description: Missing or unacceptable password
         "401":
-          description: Not signed in, or the current password is wrong
+          description: Not signed in, the current password is wrong, or the calling session was revoked before the change committed
         "403":
           description: Cross-site requests are not allowed, and bot tokens cannot change passwords
         "409":
-          description: The account has no password set; an administrator enrolls it first
+          description: The account has no password set and an administrator enrolls it first, or another change replaced the password first and nothing was written
         "415":
           description: Content-Type must be application/json
         "429":
@@ -167,7 +167,7 @@ paths:
       operationId: logout
       responses:
         "200":
-          description: Session revoked and cookie expired
+          description: The bearer or cookie session that authenticated the call was revoked and the cookie expired
         "403":
           description: Cross-site sign-out requests are not allowed
         "415":

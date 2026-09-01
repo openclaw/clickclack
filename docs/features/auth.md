@@ -333,8 +333,13 @@ Flow and guarantees:
 1. `POST /api/auth/password/login` takes `identifier` (an identity email or a
    handle, matched case-insensitively) and `password`.
 2. It enforces the same `Origin`/`Sec-Fetch-Site` rejections as magic-link
-   consume, then mints a session through the same `Store.CreateSession` path,
-   so the resulting cookie and session are identical to every other method.
+   consume, then mints a session that is identical to the one every other
+   method produces. The insert is conditional on the stored hash still being
+   the one this request verified: argon2 verification is slow on purpose and
+   runs outside the write, so a password change can commit in between, and a
+   login that loses that race returns the same `401` as any other bad password
+   instead of a live session for a replaced secret. A lost race does not spend
+   the account's rate-limit budget.
 3. Hashes are argon2id in PHC string format (`apps/api/internal/passwordauth`).
    Verification is constant time.
 4. A wrong password, an unknown identifier, and an account with no password on
@@ -372,10 +377,17 @@ POST /api/auth/password/change
   password. The account owner stays signed in where they made the change. There
   was no prior house precedent for revoking sessions on a credential change
   (`admin user set-password` does not), so this endpoint sets it, matching the
-  conventional safe default. Revocation is issued before the new hash is
-  stored: the two writes are not one transaction, and this order keeps the only
-  reachable partial state recoverable, with the old password still working on
-  the device the owner is holding.
+  conventional safe default.
+- **The replacement and the revocations commit together, or not at all**
+  (`Store.ChangeUserPassword`). The transaction is conditional on the state the
+  handler checked before it started: the stored hash must still be the snapshot
+  the current-password check verified, and the caller's own session must still
+  be live. Argon2 runs outside the transaction, which leaves a wide window, and
+  without those conditions the loser of two concurrent changes would overwrite
+  the winner's password and revoke the session the winner kept, while reporting
+  success. A stale snapshot returns `409` and a revoked calling session returns
+  `401`; both mean nothing was written, and the account is exactly as the
+  winning change left it.
 - The `501` behaviour matches login: with `CLICKCLACK_PASSWORD_AUTH_ENABLED`
   off, the endpoint is not available and the settings form does not render.
 
@@ -385,8 +397,12 @@ the runtime config advertises `password` among the enabled auth methods. The
 flag describes the account, never the deployment, and is reported only to the
 account itself, so it discloses nothing about who else is enrolled.
 
-`POST /api/auth/logout` revokes the caller's session and expires the cookie. It
-is idempotent, so a stale browser can always return to a signed-out state.
+`POST /api/auth/logout` revokes the session the caller authenticated with,
+bearer token or cookie, in the precedence `currentActor` uses, and expires the
+cookie. Login returns a bearer-usable session token and the API accepts bearer
+authentication, so a bearer-only caller signs out through the same endpoint. It
+is idempotent, so a stale browser can always return to a signed-out state. A bot
+token revokes nothing here: bot tokens are not sessions.
 
 ## Authorization
 

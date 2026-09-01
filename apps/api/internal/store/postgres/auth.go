@@ -130,6 +130,36 @@ func (s *Store) GetPasswordLogin(ctx context.Context, identifier string) (store.
 	}, nil
 }
 
+// CreateSessionForVerifiedPassword mints a session for a caller that has just
+// verified a password, and only while the stored hash is still the one it
+// verified. The argon2 comparison runs outside this call, so a password change
+// can commit in between; that race ends here with
+// store.ErrPasswordVerificationStale and no session, rather than a live session
+// minted for a replaced secret.
+func (s *Store) CreateSessionForVerifiedPassword(ctx context.Context, userID, verifiedHash string) (store.Session, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || strings.TrimSpace(verifiedHash) == "" {
+		return store.Session{}, errors.New("user id and verified password hash are required")
+	}
+	session := newSession(userID)
+	rows, err := s.q.InsertSessionForVerifiedPassword(ctx, storedb.InsertSessionForVerifiedPasswordParams{
+		ID:           session.ID,
+		Token:        session.ID,
+		TokenHash:    tokenHash(session.Token),
+		CreatedAt:    session.CreatedAt,
+		ExpiresAt:    session.ExpiresAt,
+		UserID:       userID,
+		VerifiedHash: verifiedHash,
+	})
+	if err != nil {
+		return store.Session{}, err
+	}
+	if rows != 1 {
+		return store.Session{}, store.ErrPasswordVerificationStale
+	}
+	return session, nil
+}
+
 // SetUserPassword enables password login for an account, or replaces the hash
 // already on file.
 func (s *Store) SetUserPassword(ctx context.Context, userID, passwordHash string) error {
@@ -177,20 +207,63 @@ func (s *Store) GetUserPasswordHash(ctx context.Context, userID string) (string,
 	return hash, err
 }
 
-// RevokeOtherUserSessions ends every live session for a user except the one
-// holding keepToken, and reports how many it ended. An empty keepToken revokes
-// all of them, which is the safe direction for a caller that cannot identify
-// its own session.
-func (s *Store) RevokeOtherUserSessions(ctx context.Context, userID, keepToken string) (int64, error) {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
-		return 0, errors.New("user id is required")
+// ChangeUserPassword replaces a password and ends the account's other sessions
+// in one transaction, and reports how many sessions it ended. Both writes are
+// conditional on the state the caller checked before it got here: the stored
+// hash must still be input.VerifiedHash, and a caller that named a session must
+// still hold a live one. Either condition failing rolls the whole change back,
+// so a rotation that lost a race neither overwrites the winner's password nor
+// signs the winner out.
+func (s *Store) ChangeUserPassword(ctx context.Context, input store.ChangeUserPasswordInput) (int64, error) {
+	userID := strings.TrimSpace(input.UserID)
+	verifiedHash := strings.TrimSpace(input.VerifiedHash)
+	newHash := strings.TrimSpace(input.NewHash)
+	if userID == "" || verifiedHash == "" || newHash == "" {
+		return 0, errors.New("user id, verified password hash, and new password hash are required")
 	}
-	return s.q.RevokeUserSessionsExceptTokenHash(ctx, storedb.RevokeUserSessionsExceptTokenHashParams{
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	qtx := s.q.WithTx(tx)
+	keepToken := strings.TrimSpace(input.KeepSessionToken)
+	if keepToken != "" {
+		expiresAt, err := qtx.GetLiveUserSessionExpiry(ctx, storedb.GetLiveUserSessionExpiryParams{
+			UserID:    userID,
+			TokenHash: tokenHash(keepToken),
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, store.ErrSessionRevoked
+		}
+		if err != nil {
+			return 0, err
+		}
+		if authTimestampExpired(expiresAt, time.Now()) {
+			return 0, store.ErrSessionRevoked
+		}
+	}
+	changed, err := qtx.ReplaceVerifiedUserPassword(ctx, storedb.ReplaceVerifiedUserPasswordParams{
+		PasswordHash: newHash,
+		UpdatedAt:    now(),
+		UserID:       userID,
+		VerifiedHash: verifiedHash,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if changed != 1 {
+		return 0, store.ErrPasswordVerificationStale
+	}
+	revoked, err := qtx.RevokeUserSessionsExceptTokenHash(ctx, storedb.RevokeUserSessionsExceptTokenHashParams{
 		RevokedAt:     sqlText(now()),
 		UserID:        userID,
-		KeepTokenHash: tokenHash(strings.TrimSpace(keepToken)),
+		KeepTokenHash: tokenHash(keepToken),
 	})
+	if err != nil {
+		return 0, err
+	}
+	return revoked, tx.Commit()
 }
 
 func (s *Store) GetOrCreateUserByEmail(ctx context.Context, provider, email, displayName string) (store.User, error) {
@@ -268,14 +341,18 @@ func ensureUserAvatarForEmail(ctx context.Context, q *storedb.Queries, user stor
 	return storeUserFromIdentityEmail(row), nil
 }
 
-func createSessionTx(ctx context.Context, q *storedb.Queries, userID string) (store.Session, error) {
-	session := store.Session{
+func newSession(userID string) store.Session {
+	return store.Session{
 		ID:        newID("ses"),
 		Token:     newID("sst"),
 		UserID:    userID,
 		CreatedAt: now(),
 		ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano),
 	}
+}
+
+func createSessionTx(ctx context.Context, q *storedb.Queries, userID string) (store.Session, error) {
+	session := newSession(userID)
 	return session, q.InsertSession(ctx, storedb.InsertSessionParams{
 		ID:        session.ID,
 		Token:     session.ID,

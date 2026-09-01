@@ -106,41 +106,63 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, errors.New("too many sign-in attempts, retry later"))
 		return
 	}
-	user, ok := s.verifyPasswordLogin(r.Context(), identifier, body.Password)
+	login, ok := s.verifyPasswordLogin(r.Context(), identifier, body.Password)
 	if !ok {
 		s.passwordIDLimiter.record(identifier)
 		writeError(w, http.StatusUnauthorized, errPasswordLoginRejected)
 		return
 	}
-	session, err := s.store.CreateSession(r.Context(), user.ID)
+	// The session is created against the hash this request verified, not just
+	// against the account. Key derivation is expensive and deliberately runs
+	// outside the write, so a password change can commit while it runs; without
+	// the compare the replaced secret would still mint a live session here. A
+	// lost race is rejected like any other bad login, but it does not spend the
+	// account's budget: the caller proved a secret that was current when it was
+	// checked, and the owner's own rotation is what invalidated it.
+	session, err := s.store.CreateSessionForVerifiedPassword(r.Context(), login.User.ID, login.PasswordHash)
+	if errors.Is(err, store.ErrPasswordVerificationStale) {
+		writeError(w, http.StatusUnauthorized, errPasswordLoginRejected)
+		return
+	}
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	s.setSessionCookie(w, r, session)
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "token": session.Token})
+	writeJSON(w, http.StatusOK, map[string]any{"user": login.User, "session": session, "token": session.Token})
 }
 
-// verifyPasswordLogin resolves an identifier and checks the secret. Accounts
-// that do not exist, are ambiguous, or have no password set still pay for one
-// key derivation so that failures cost comparable wall time.
-func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password string) (store.User, bool) {
+// verifyPasswordLogin resolves an identifier and checks the secret, returning
+// the account together with the exact stored hash the check passed against, so
+// the caller can commit against that same hash. Accounts that do not exist, are
+// ambiguous, or have no password set still pay for one key derivation so that
+// failures cost comparable wall time.
+func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password string) (store.PasswordLogin, bool) {
 	login, err := s.store.GetPasswordLogin(ctx, identifier)
 	if err != nil || login.PasswordHash == "" {
 		passwordauth.VerifyDecoy(password)
-		return store.User{}, false
+		return store.PasswordLogin{}, false
 	}
 	matched, err := passwordauth.Verify(login.PasswordHash, password)
 	if err != nil || !matched {
-		return store.User{}, false
+		return store.PasswordLogin{}, false
 	}
-	return login.User, true
+	return login, true
 }
 
 // errPasswordChangeUnenrolled is returned when the caller has no password on
 // file. This endpoint deliberately never creates the first one: enabling
 // password sign-in for an account stays an administrator action.
 var errPasswordChangeUnenrolled = errors.New("this account has no password set; ask an administrator to enable password sign-in first")
+
+// errPasswordChangeRaced and errPasswordChangeSessionRevoked report the two
+// ways a verified change can still lose at commit time. Both mean another
+// change or a sign-out landed first and nothing was written; the caller can
+// retry with the password that won.
+var (
+	errPasswordChangeRaced          = errors.New("the password changed while this request was running; nothing was saved, sign in again with the current password")
+	errPasswordChangeSessionRevoked = errors.New("this session was signed out while the request was running; nothing was saved")
+)
 
 // changePassword replaces the caller's own password after checking the current
 // one. It is the self-service half of clickclack admin user set-password: an
@@ -211,18 +233,27 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	// in. A caller the server cannot place in a session, such as a trusted-proxy
 	// assertion, revokes all of them instead.
 	//
-	// Revocation runs before the new hash is stored, deliberately. These are two
-	// statements rather than one transaction, and this order makes the only
-	// reachable partial state a recoverable one: a failure here changes nothing,
-	// and a failure below leaves the old password working on a signed-in device
-	// the owner still holds. The reverse order could report failure after the
-	// password had already changed.
-	if _, err := s.store.RevokeOtherUserSessions(r.Context(), act.user.ID, requestSessionToken(r, s.cookies.Session)); err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	if err := s.store.SetUserPassword(r.Context(), act.user.ID, hash); err != nil {
-		writeStoreError(w, err)
+	// Both writes commit in one transaction, conditional on the state this
+	// handler checked above: the stored hash must still be the snapshot the
+	// current-password check verified, and the caller's own session must still
+	// be live. Argon2 is slow by design and runs outside that transaction, which
+	// leaves a wide window for a competing change; without the compare, the
+	// loser of that race would overwrite the winner's password and revoke the
+	// winner's retained session while reporting success.
+	if _, err := s.store.ChangeUserPassword(r.Context(), store.ChangeUserPasswordInput{
+		UserID:           act.user.ID,
+		VerifiedHash:     stored,
+		NewHash:          hash,
+		KeepSessionToken: requestSessionToken(r, s.cookies.Session),
+	}); err != nil {
+		switch {
+		case errors.Is(err, store.ErrPasswordVerificationStale):
+			writeError(w, http.StatusConflict, errPasswordChangeRaced)
+		case errors.Is(err, store.ErrSessionRevoked):
+			writeError(w, http.StatusUnauthorized, errPasswordChangeSessionRevoked)
+		default:
+			writeStoreError(w, err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -240,15 +271,20 @@ func requestSessionToken(r *http.Request, cookieName string) string {
 	return ""
 }
 
-// logout revokes the caller's session and expires the cookie. It succeeds even
-// without a valid session so that a stale browser can always return to a
-// signed-out state.
+// logout revokes the session the caller authenticated with and expires the
+// cookie. It succeeds even without a valid session so that a stale browser can
+// always return to a signed-out state.
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSameOriginJSON(w, r) {
 		return
 	}
-	if cookie, err := requestCookie(r, s.cookies.Session); err == nil && cookie.Value != "" {
-		if err := s.store.RevokeSession(r.Context(), cookie.Value); err != nil {
+	// Bearer before cookie, the precedence currentActor resolves callers with.
+	// Login hands back a bearer-usable session token and the API accepts it, so
+	// reading only the cookie made sign-out a successful no-op for every
+	// bearer-only caller. A bot token revokes nothing, which is correct: bot
+	// tokens are not sessions and are revoked through their own endpoint.
+	if token := requestSessionToken(r, s.cookies.Session); token != "" {
+		if err := s.store.RevokeSession(r.Context(), token); err != nil {
 			writeStoreError(w, err)
 			return
 		}

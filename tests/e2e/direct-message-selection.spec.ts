@@ -131,32 +131,78 @@ for (const existing of ["none", "open", "closed"] as const) {
   });
 }
 
-for (const queryKind of ["name", "handle", "ambiguous"] as const) {
-  test(`Start DM resolves ${queryKind} search to a selected recipient`, async ({ page }) => {
-    const data = await fixture(page);
+for (const queryKind of ["name", "handle", "ambiguous", "late join"] as const) {
+  test(`Start DM resolves ${queryKind} search to a selected recipient`, async ({
+    page,
+  }, testInfo) => {
+    const data = await fixture(page, "none", false);
+    if (queryKind === "late join") {
+      const composer = page.getByLabel("Message body");
+      await composer.fill(`@${data.alice.handle}`);
+      await expect(
+        page.getByRole("option", { name: new RegExp(data.alice.display_name) }),
+      ).toBeVisible();
+      await composer.fill("");
+      const suffix = randomUUID().slice(0, 8);
+      const joined = await page.request.post(`/api/workspaces/${data.workspace.id}/bots`, {
+        data: { display_name: `Latecomer ${suffix}`, handle: `latecomer-${suffix}` },
+      });
+      expect(joined.ok()).toBe(true);
+      data.alice = (await joined.json()).bot;
+    }
+    await expect(
+      page.locator("#sidebar-people-list").getByText(data.alice.display_name),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Start direct message" }).click();
     const scope = dialog(page);
     const input = scope.getByLabel("Find a person");
     const submit = scope.getByRole("button", { name: "Start DM", exact: true });
     await input.fill(
-      queryKind === "name"
-        ? "Alice"
-        : queryKind === "handle"
-          ? `@${data.alice.handle}`
-          : data.alice.display_name.split(" ")[1],
+      queryKind === "late join"
+        ? "Latecomer"
+        : queryKind === "name"
+          ? "Alice"
+          : queryKind === "handle"
+            ? `@${data.alice.handle}`
+            : data.alice.display_name.split(" ")[1],
+    );
+    await page.screenshot({ path: testInfo.outputPath("newcomer-dm-search.png") });
+    const recipient = scope.getByRole("button").filter({ hasText: data.alice.display_name });
+    await expect(recipient).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("newcomer-dm-choice.png") });
+    const created = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && new URL(response.url()).pathname === "/api/dms",
     );
     if (queryKind === "ambiguous") {
       await expect(submit).toBeDisabled();
       await expect(scope.getByText("Choose a person from the results.")).toBeVisible();
-      await scope.getByRole("button").filter({ hasText: data.alice.display_name }).click();
+      await recipient.click();
     } else {
       await input.press("Enter");
     }
+    const response = await created;
+    expect(response.ok()).toBe(true);
+    const { conversation }: { conversation: DirectConversation } = await response.json();
+    expect(conversation.members.map((member) => member.id).sort()).toEqual(
+      [data.user.id, data.alice.id].sort(),
+    );
     await expect(
       page
         .locator(".timeline")
         .getByRole("heading", { name: `@${data.alice.display_name}`, exact: true }),
     ).toBeVisible();
+    const body = "Hello to a new workspace member";
+    const sent = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === `/api/dms/${conversation.id}/messages`,
+    );
+    await page.getByLabel("Message body").fill(body);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    expect((await sent).ok()).toBe(true);
+    await expect(page.locator(".message-row .markdown")).toHaveText(body);
+    await page.screenshot({ path: testInfo.outputPath("newcomer-dm-message.png") });
   });
 }
 

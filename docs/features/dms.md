@@ -35,9 +35,11 @@ exists with exactly that person and the current user, otherwise it opens the
 profile pane with a Message action. Groups containing the person do not match.
 Explicit Message and Start DM actions use the server to create or reopen that
 exact one-to-one conversation. Failed starts show an error and retain the
-selected recipient ID for retry. The Start DM form resolves an unambiguous
-name or handle match, asks you to select a result when multiple people match,
-and also accepts an explicit `usr_...` user ID.
+selected recipient ID for retry. The Start DM form searches the full workspace
+member directory, including people who have not posted or joined a DM. Opening
+it refreshes the directory so newly joined members can be found without reloading.
+It resolves an unambiguous name or handle match, asks you to select a result when
+multiple people match, and also accepts an explicit `usr_...` user ID.
 Closing the dialog or changing the current view prevents
 a late response from taking over navigation. Self-DMs remain unsupported and
 show the server's validation error.

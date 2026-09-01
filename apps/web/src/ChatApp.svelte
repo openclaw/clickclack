@@ -1076,6 +1076,7 @@
   function openCreateDirect() {
     resetCreateActions();
     showCreateDirect = true;
+    void loadWorkspaceMembers();
   }
 
   async function createWorkspace() {
@@ -4549,11 +4550,11 @@
 {/if}
 {#if showCreateDirect}
   <CreateDirectModal
-    people={recentPeople}
+    people={mentionPeople}
     currentUserID={user?.id}
     memberID={directMemberID}
     pending={createPending === "direct"}
-    error={directCreateError}
+    error={directCreateError || workspaceMembersError}
     onMemberID={(value) => (directMemberID = value)}
     onClose={closeModal}
     onStart={(memberID) => void startDirectWithUser(memberID)}

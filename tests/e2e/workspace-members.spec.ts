@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { waitForAppReady } from "./app-ready";
 
 async function fixture(page: Page) {
   const workspaceResponse = await page.request.post("/api/workspaces", {
@@ -140,6 +141,19 @@ for (const surface of surfaces) {
       await expect(page.getByRole("option", { name: /Second Page Person/ })).toBeVisible();
     }
     expect(requests).toEqual(["", "second"]);
+    if (surface === "chat") {
+      await waitForAppReady(page);
+      await page.getByLabel("Message body").fill("");
+      await expect(
+        page.locator("#sidebar-people-list").getByText("Second Page Person"),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "Start direct message" }).click();
+      const modal = page.locator(".profile-modal", {
+        has: page.getByRole("heading", { name: "Start a DM" }),
+      });
+      await modal.getByLabel("Find a person").fill("@second-page");
+      await expect(modal.getByRole("button", { name: /Second Page Person/ })).toBeVisible();
+    }
   });
 
   test(`${surface} cancels member traversal when navigating away without AbortSignal.any`, async ({

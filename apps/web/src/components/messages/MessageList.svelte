@@ -399,18 +399,19 @@
   }
 
   async function scrollLastItemIntoView(generation = beginScrollCommand()) {
-    if (!virtualizer || items.length === 0) return;
+    if (!virtualizer || !scrollEl || items.length === 0) return;
     const key = viewKey;
     if (document.activeElement === scrollEl) scrollEl.blur();
     let previousScrollSize = -1;
     // A keyed virtual item can resize after its Svelte update, when virtua's
     // ResizeObserver publishes the new measurement. Re-pin until that size is
-    // stable instead of trusting the first scrollToIndex calculation.
+    // stable. Write the viewport directly so virtua does not retain a separate
+    // resize-driven scrollToIndex command after the user cancels following.
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
+      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return;
       shouldStickToBottom = !hasNewer;
       suppressProgrammaticPagination(2);
-      virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+      scrollEl.scrollTop = scrollEl.scrollHeight;
       await tick();
       await nextFrame();
       if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
@@ -763,6 +764,7 @@
     const distance = virtuaBottomDistance();
     const sticky = checkAtBottom();
     const nearNewer = sticky || distance <= NEWER_LOAD_THRESHOLD_PX;
+    if (shouldStickToBottom && !sticky) beginScrollCommand();
     shouldStickToBottom = sticky && !hasNewer;
     atBottom = sticky;
     if (!hasNewer) newerEdgeConsumed = false;

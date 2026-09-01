@@ -169,6 +169,8 @@ var ErrPasswordVerificationStale = errors.New("stored password changed while thi
 // signed out.
 var ErrSessionRevoked = errors.New("this session is no longer valid")
 
+var ErrSessionExpired = errors.New("session expired")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")

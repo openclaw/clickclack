@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,7 +84,7 @@ func TestAdminUserSetPasswordFromPipedStdin(t *testing.T) {
 	}
 	// The trailing newline from a piped value must not become part of the
 	// secret, or the password typed at the browser would never match.
-	matched, err := passwordauth.Verify(hash, "a good long password")
+	matched, err := passwordauth.Verify(t.Context(), hash, "a good long password")
 	if err != nil || !matched {
 		t.Fatalf("expected the piped password to verify, got matched=%v err=%v", matched, err)
 	}
@@ -91,6 +93,53 @@ func TestAdminUserSetPasswordFromPipedStdin(t *testing.T) {
 	}
 	if login := readPasswordHash(t, dbURL, "MAGGIE@example.com"); login != hash {
 		t.Fatal("expected the identifier lookup to fold casing")
+	}
+}
+
+func TestAdminUserSetPasswordPreservesPipedUnicode(t *testing.T) {
+	dataDir, dbURL, _ := newPasswordCLIFixture(t)
+	for _, count := range []int{100, passwordauth.MaxPasswordLength} {
+		for _, ending := range []string{"", "\n", "\r\n"} {
+			t.Run(fmt.Sprintf("runes=%d/ending=%q", count, ending), func(t *testing.T) {
+				secret := strings.Repeat("🔐", count)
+				pipeStdin(t, secret+ending)
+				if err := adminUserSetPassword([]string{"--data", dataDir, "--db", dbURL, "--email", "maggie@example.com"}); err != nil {
+					t.Fatal(err)
+				}
+				hash := readPasswordHash(t, dbURL, "maggie@example.com")
+				if matched, err := passwordauth.Verify(t.Context(), hash, secret); err != nil || !matched {
+					t.Fatalf("stored hash does not match the complete piped Unicode password: matched=%v err=%v", matched, err)
+				}
+			})
+		}
+	}
+}
+
+func TestAdminUserSetPasswordRejectsPipedOverflowWithoutChangingPassword(t *testing.T) {
+	dataDir, dbURL, _ := newPasswordCLIFixture(t)
+	args := []string{"--data", dataDir, "--db", dbURL, "--email", "maggie@example.com"}
+	pipeStdin(t, "the original synthetic password")
+	if err := adminUserSetPassword(args); err != nil {
+		t.Fatal(err)
+	}
+	for name, input := range map[string]string{
+		"ascii":             strings.Repeat("a", passwordauth.MaxPasswordLength+1),
+		"unicode":           strings.Repeat("🔐", passwordauth.MaxPasswordLength+1),
+		"unicode CRLF":      strings.Repeat("🔐", passwordauth.MaxPasswordLength+1) + "\r\n",
+		"leading newlines":  strings.Repeat("\n", passwordauth.MaxPasswordLength+1) + "a long synthetic password",
+		"trailing newlines": "a long synthetic password" + strings.Repeat("\n", 2048),
+		"newlines at limit": strings.Repeat("a", passwordauth.MaxPasswordLength-1) + "\n\n" + "still oversized",
+	} {
+		t.Run(name, func(t *testing.T) {
+			originalHash := readPasswordHash(t, dbURL, "maggie@example.com")
+			pipeStdin(t, input)
+			if err := adminUserSetPassword(args); !errors.Is(err, passwordauth.ErrPasswordTooLong) {
+				t.Errorf("expected password overflow rejection, got %v", err)
+			}
+			if hash := readPasswordHash(t, dbURL, "maggie@example.com"); hash != originalHash {
+				t.Fatal("overflow changed the stored password")
+			}
+		})
 	}
 }
 

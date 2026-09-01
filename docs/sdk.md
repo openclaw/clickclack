@@ -167,9 +167,11 @@ targets to publish workspace-wide.
 export type { components, paths } from "./generated/openapi";
 ```
 
-Use the friendly hand-written types (`User`, `Workspace`, `Message`, etc.)
-for app code; reach into `components["schemas"]` only when you need the
-exact OpenAPI shape.
+Use the friendly exported types (`User`, `Workspace`, `Message`, etc.)
+for app code. Resource types reuse the generated OpenAPI schemas, so the
+protocol owns their fields and optionality. Client input helpers retain richer
+constraints, such as mutually exclusive message and event targets. Reach into
+`components["schemas"]` for other wire shapes.
 
 ## Bot accounts
 

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"mime"
 	"net"
@@ -102,23 +103,24 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 	// Every attempt costs the caller's address budget, but only failures cost
 	// the account's, so a correct password never contributes to the account
 	// owner's own lockout.
-	if !s.passwordIPLimiter.allow(clientIPKey(r)) || s.passwordIDLimiter.blocked(identifier) {
+	if !s.passwordIPLimiter.allow(clientIPKey(r)) {
 		writeError(w, http.StatusTooManyRequests, errors.New("too many sign-in attempts, retry later"))
 		return
 	}
-	login, ok := s.verifyPasswordLogin(r.Context(), identifier, body.Password)
-	if !ok {
-		s.passwordIDLimiter.record(identifier)
+	attempt := s.passwordIDLimiter.reserve(identifier)
+	if attempt == nil {
+		writeError(w, http.StatusTooManyRequests, errors.New("too many sign-in attempts, retry later"))
+		return
+	}
+	login, err := s.verifyPasswordLogin(r.Context(), identifier, body.Password)
+	if !errors.Is(err, errPasswordLoginRejected) {
+		s.passwordIDLimiter.refund(identifier, attempt)
+	}
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, errPasswordLoginRejected)
 		return
 	}
-	// The session is created against the hash this request verified, not just
-	// against the account. Key derivation is expensive and deliberately runs
-	// outside the write, so a password change can commit while it runs; without
-	// the compare the replaced secret would still mint a live session here. A
-	// lost race is rejected like any other bad login, but it does not spend the
-	// account's budget: the caller proved a secret that was current when it was
-	// checked, and the owner's own rotation is what invalidated it.
+	// Argon2 runs outside the write; commit only against the hash it verified.
 	session, err := s.store.CreateSessionForVerifiedPassword(r.Context(), login.User.ID, login.PasswordHash)
 	if errors.Is(err, store.ErrPasswordVerificationStale) {
 		writeError(w, http.StatusUnauthorized, errPasswordLoginRejected)
@@ -137,17 +139,25 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 // the caller can commit against that same hash. Accounts that do not exist, are
 // ambiguous, or have no password set still pay for one key derivation so that
 // failures cost comparable wall time.
-func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password string) (store.PasswordLogin, bool) {
+func (s *Server) verifyPasswordLogin(ctx context.Context, identifier, password string) (store.PasswordLogin, error) {
 	login, err := s.store.GetPasswordLogin(ctx, identifier)
 	if err != nil || login.PasswordHash == "" {
-		passwordauth.VerifyDecoy(password)
-		return store.PasswordLogin{}, false
+		if decoyErr := passwordauth.VerifyDecoy(ctx, password); decoyErr != nil {
+			return store.PasswordLogin{}, decoyErr
+		}
+		if err == nil || errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrAmbiguousUserIdentifier) {
+			err = errPasswordLoginRejected
+		}
+		return store.PasswordLogin{}, err
 	}
-	matched, err := passwordauth.Verify(login.PasswordHash, password)
-	if err != nil || !matched {
-		return store.PasswordLogin{}, false
+	matched, err := passwordauth.Verify(ctx, login.PasswordHash, password)
+	if err != nil {
+		return store.PasswordLogin{}, err
 	}
-	return login, true
+	if !matched {
+		return store.PasswordLogin{}, errPasswordLoginRejected
+	}
+	return login, nil
 }
 
 // errPasswordChangeUnenrolled is returned when the caller has no password on
@@ -203,10 +213,17 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	// Only wrong guesses spend the budget, so rotating a password several times
 	// in a row never locks the account owner out of their own account.
-	if s.passwordChangeLimiter.blocked(act.user.ID) {
+	attempt := s.passwordChangeLimiter.reserve(act.user.ID)
+	if attempt == nil {
 		writeError(w, http.StatusTooManyRequests, errors.New("too many password change attempts, retry later"))
 		return
 	}
+	failedGuess := false
+	defer func() {
+		if !failedGuess {
+			s.passwordChangeLimiter.refund(act.user.ID, attempt)
+		}
+	}()
 	stored, err := s.store.GetUserPasswordHash(r.Context(), act.user.ID)
 	if err != nil {
 		writeStoreError(w, err)
@@ -216,30 +233,19 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, errPasswordChangeUnenrolled)
 		return
 	}
-	matched, err := passwordauth.Verify(stored, body.CurrentPassword)
+	matched, err := passwordauth.Verify(r.Context(), stored, body.CurrentPassword)
 	if err != nil || !matched {
-		s.passwordChangeLimiter.record(act.user.ID)
+		failedGuess = err == nil
 		writeError(w, http.StatusUnauthorized, errors.New("current password is incorrect"))
 		return
 	}
-	hash, err := passwordauth.Hash(body.NewPassword)
+	hash, err := passwordauth.Hash(r.Context(), body.NewPassword)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// A password change is how someone locks out a device they no longer
-	// control, so every other session for the account ends here. The caller
-	// keeps the session it is holding, which leaves the tab it just used signed
-	// in. A caller the server cannot place in a session, such as a trusted-proxy
-	// assertion, revokes all of them instead.
-	//
-	// Both writes commit in one transaction, conditional on the state this
-	// handler checked above: the stored hash must still be the snapshot the
-	// current-password check verified, and the caller's own session must still
-	// be live. Argon2 is slow by design and runs outside that transaction, which
-	// leaves a wide window for a competing change; without the compare, the
-	// loser of that race would overwrite the winner's password and revoke the
-	// winner's retained session while reporting success.
+	// Commit the verified replacement and revocations together. Keep only the
+	// caller's live session; a trusted-proxy caller has none, so all are revoked.
 	if _, err := s.store.ChangeUserPassword(r.Context(), store.ChangeUserPasswordInput{
 		UserID:           act.user.ID,
 		VerifiedHash:     stored,
@@ -278,11 +284,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSameOriginJSON(w, r) {
 		return
 	}
-	// Bearer before cookie, the precedence currentActor resolves callers with.
-	// Login hands back a bearer-usable session token and the API accepts it, so
-	// reading only the cookie made sign-out a successful no-op for every
-	// bearer-only caller. A bot token revokes nothing, which is correct: bot
-	// tokens are not sessions and are revoked through their own endpoint.
+	// Match currentActor's bearer-before-cookie precedence. Bot tokens are not sessions.
 	if token := requestSessionToken(r, s.cookies.Session); token != "" {
 		if err := s.store.RevokeSession(r.Context(), token); err != nil {
 			writeStoreError(w, err)

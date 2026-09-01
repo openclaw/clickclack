@@ -1393,23 +1393,24 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
-	// Authentication is captured once, at accept, but a session can be revoked
-	// while the socket is open: a password change signs other devices out, and so
-	// does sign-out. The socket is a live authenticated channel, so revocation
-	// has to reach it. The check reads the store rather than an in-process
-	// signal, because the hub is per process and a deployment runs replicas: the
-	// session that gets revoked and the socket holding it are routinely in
-	// different processes. Connections that authenticated some other way, such as
-	// a bot token or a trusted-proxy assertion, have no session to revalidate.
+	// Read shared session state so revocation on another replica reaches this socket.
+	// Bot tokens and trusted-proxy identities have no session to revalidate.
 	sessionAuthorityLive := func() bool {
 		if act.sessionToken == "" {
 			return true
 		}
-		if _, err := s.store.GetSessionUser(ctx, act.sessionToken); err != nil {
-			_ = conn.Close(websocket.StatusPolicyViolation, realtimeSessionRevokedCloseReason)
+		if _, err := s.sessionUser(ctx, act.sessionToken); err != nil {
+			if errors.Is(err, errSessionLookupUnavailable) {
+				_ = conn.Close(websocket.StatusTryAgainLater, "session verification unavailable; retry")
+			} else {
+				_ = conn.Close(websocket.StatusPolicyViolation, realtimeSessionRevokedCloseReason)
+			}
 			return false
 		}
 		return true
+	}
+	writeEvent := func(event store.Event) bool {
+		return sessionAuthorityLive() && writeWS(ctx, conn, event) == nil
 	}
 	sessionRecheck := time.NewTicker(s.realtimeSessionCheck)
 	defer sessionRecheck.Stop()
@@ -1483,7 +1484,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 					replayCursor = event.Cursor
 					continue
 				}
-				if err := writeWS(ctx, conn, event); err != nil {
+				if !writeEvent(event) {
 					return false
 				}
 				replayCursor = event.Cursor
@@ -1534,13 +1535,10 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
 				return
 			}
-			if !sessionAuthorityLive() {
-				return
-			}
 			if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
 				continue
 			}
-			if err := writeWS(ctx, conn, event); err != nil {
+			if !writeEvent(event) {
 				return
 			}
 		}
@@ -1657,6 +1655,18 @@ func directConversationIDFromEvent(event store.Event) string {
 	}
 }
 
+var errSessionLookupUnavailable = errors.New("session verification unavailable; retry later")
+
+// Only missing or expired sessions invalidate authentication. Backend failures
+// must remain retryable across HTTP and already-open realtime connections.
+func (s *Server) sessionUser(ctx context.Context, token string) (store.User, error) {
+	user, err := s.store.GetSessionUser(ctx, token)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, store.ErrSessionExpired) {
+		return store.User{}, fmt.Errorf("%w: %w", errSessionLookupUnavailable, err)
+	}
+	return user, err
+}
+
 func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
@@ -1668,7 +1678,7 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 				scopes:      botAuth.Scopes,
 			}, nil
 		}
-		user, err := s.store.GetSessionUser(r.Context(), token)
+		user, err := s.sessionUser(r.Context(), token)
 		if err != nil {
 			return actor{}, err
 		}
@@ -1679,11 +1689,11 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 		return actor{}, err
 	}
 	if err == nil && cookie.Value != "" {
-		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
+		user, err := s.sessionUser(r.Context(), cookie.Value)
 		if err == nil {
 			return actor{user: user, sessionToken: cookie.Value}, nil
 		}
-		if s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
+		if errors.Is(err, errSessionLookupUnavailable) || s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
 			return actor{}, err
 		}
 	}
@@ -1917,6 +1927,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
+	if errors.Is(err, errSessionLookupUnavailable) {
+		status = http.StatusServiceUnavailable
+		err = errSessionLookupUnavailable
+	}
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
 		status = http.StatusRequestEntityTooLarge

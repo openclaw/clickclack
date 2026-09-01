@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/openclaw/clickclack/apps/api/internal/passwordauth"
 	"golang.org/x/term"
@@ -58,7 +59,7 @@ func adminUserSetPassword(args []string) error {
 	if err != nil {
 		return err
 	}
-	hash, err := passwordauth.Hash(password)
+	hash, err := passwordauth.Hash(ctx, password)
 	if err != nil {
 		return err
 	}
@@ -74,11 +75,21 @@ func adminUserSetPassword(args []string) error {
 func readAdminPassword() (string, error) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
-		body, err := io.ReadAll(io.LimitReader(os.Stdin, passwordauth.MaxPasswordLength+1))
+		// Allow every code point plus an optional CRLF, then detect overflow
+		// before removing the line ending so a truncated prefix is never hashed.
+		const maxBytes = passwordauth.MaxPasswordLength*utf8.UTFMax + len("\r\n")
+		body, err := io.ReadAll(io.LimitReader(os.Stdin, int64(maxBytes)+1))
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimRight(string(body), "\r\n"), nil
+		if len(body) > maxBytes {
+			return "", passwordauth.ErrPasswordTooLong
+		}
+		password, hasLF := strings.CutSuffix(string(body), "\n")
+		if hasLF {
+			password = strings.TrimSuffix(password, "\r")
+		}
+		return password, nil
 	}
 	fmt.Fprint(os.Stderr, "New password: ")
 	first, err := term.ReadPassword(fd)

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,4 +168,99 @@ func TestRealtimeIdleConnectionClosesAfterRevocation(t *testing.T) {
 	}
 	// Nothing is published here: the socket has to notice on its own.
 	expectRealtimeSessionClose(t, conn)
+}
+
+func TestRealtimeReplayRechecksSessionAfterVisibilityLookup(t *testing.T) {
+	ctx := context.Background()
+	fixture := newRealtimeSessionFixture(t, "replay-revoke@example.com", 0)
+	session, err := fixture.store.CreateSession(ctx, fixture.owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := fixture.store.ListChannels(ctx, fixture.workspace.ID, fixture.owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := fixture.store.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: fixture.owner.ID, Body: "Private replay"}); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	blocked := &blockingChannelStore{Store: fixture.store, entered: make(chan struct{}), release: release, tailCaptured: make(chan struct{})}
+	fixture.server.store = blocked
+	conn := dialRealtimeWithSession(t, fixture.http.URL, fixture.workspace.ID, session.Token)
+	defer conn.CloseNow()
+	select {
+	case <-blocked.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("replay did not reach visibility lookup")
+	}
+	if err := fixture.store.RevokeSession(ctx, session.Token); err != nil {
+		t.Fatal(err)
+	}
+	unblock()
+	expectRealtimeSessionClose(t, conn)
+}
+
+type unavailableSessionStore struct {
+	store.Store
+	unavailable atomic.Bool
+}
+
+func (s *unavailableSessionStore) GetSessionUser(ctx context.Context, token string) (store.User, error) {
+	if s.unavailable.Load() {
+		return store.User{}, errors.New("temporary database failure")
+	}
+	return s.Store.GetSessionUser(ctx, token)
+}
+
+func TestRealtimeSessionLookupFailureRemainsRetryable(t *testing.T) {
+	fixture := newRealtimeSessionFixture(t, "session-retry@example.com", 0)
+	session, err := fixture.store.CreateSession(context.Background(), fixture.owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped := &unavailableSessionStore{Store: fixture.store}
+	fixture.server.store = wrapped
+	conn := dialRealtimeWithSession(t, fixture.http.URL, fixture.workspace.ID, session.Token)
+	defer conn.CloseNow()
+	fixture.hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
+	if _, ok := readEventTypeWithin(t, conn, "presence.changed", 5*time.Second); !ok {
+		t.Fatal("positive delivery missing")
+	}
+	wrapped.unavailable.Store(true)
+	fixture.hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, _, err = conn.Read(ctx)
+	if got := websocket.CloseStatus(err); got != websocket.StatusTryAgainLater {
+		t.Errorf("temporary lookup closed with %v, want retryable %v", got, websocket.StatusTryAgainLater)
+	}
+	for _, bearer := range []bool{true, false} {
+		req, err := http.NewRequest(http.MethodGet, fixture.http.URL+"/api/me", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bearer {
+			req.Header.Set("Authorization", "Bearer "+session.Token)
+		} else {
+			req.AddCookie(&http.Cookie{Name: fixture.server.cookies.Session, Value: session.Token})
+		}
+		response, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("temporary lookup (bearer=%v) returned HTTP %d, want 503", bearer, response.StatusCode)
+		}
+	}
+	wrapped.unavailable.Store(false)
+	recovered := dialRealtimeWithSession(t, fixture.http.URL, fixture.workspace.ID, session.Token)
+	defer recovered.CloseNow()
+	fixture.hub.Publish(store.Event{WorkspaceID: fixture.workspace.ID, Type: "presence.changed"})
+	if _, ok := readEventTypeWithin(t, recovered, "presence.changed", 5*time.Second); !ok {
+		t.Fatal("original session could not recover")
+	}
 }

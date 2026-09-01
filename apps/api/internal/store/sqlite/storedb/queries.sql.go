@@ -1561,8 +1561,6 @@ type GetLiveUserSessionExpiryParams struct {
 	TokenHash string `json:"token_hash"`
 }
 
-// Read inside the rotation transaction to confirm the caller still holds the
-// session it authenticated with. A revoked or unknown token returns no row.
 func (q *Queries) GetLiveUserSessionExpiry(ctx context.Context, arg GetLiveUserSessionExpiryParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, getLiveUserSessionExpiry, arg.UserID, arg.TokenHash)
 	var expires_at string
@@ -2833,10 +2831,6 @@ type InsertSessionForVerifiedPasswordParams struct {
 	VerifiedHash string `json:"verified_hash"`
 }
 
-// Password login commits its session only while the stored hash is still the
-// one this request verified. A password change that lands during the argon2
-// verification cannot then be followed by a session minted for the secret it
-// replaced.
 func (q *Queries) InsertSessionForVerifiedPassword(ctx context.Context, arg InsertSessionForVerifiedPasswordParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, insertSessionForVerifiedPassword,
 		arg.ID,
@@ -5273,9 +5267,6 @@ type ReplaceVerifiedUserPasswordParams struct {
 	VerifiedHash string `json:"verified_hash"`
 }
 
-// A rotation writes its replacement only while the stored hash is still the
-// snapshot its current-password check verified, so two changes racing on one
-// account cannot both report success.
 func (q *Queries) ReplaceVerifiedUserPassword(ctx context.Context, arg ReplaceVerifiedUserPasswordParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, replaceVerifiedUserPassword,
 		arg.PasswordHash,
@@ -5559,9 +5550,6 @@ type RevokeUserSessionsExceptTokenHashParams struct {
 	KeepTokenHash string         `json:"keep_token_hash"`
 }
 
-// A password change ends the account's other sessions. The caller's own
-// session is spared by token hash so the person changing the password is not
-// signed out of the tab they are working in.
 func (q *Queries) RevokeUserSessionsExceptTokenHash(ctx context.Context, arg RevokeUserSessionsExceptTokenHashParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, revokeUserSessionsExceptTokenHash, arg.RevokedAt, arg.UserID, arg.KeepTokenHash)
 	if err != nil {

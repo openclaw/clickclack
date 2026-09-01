@@ -47,7 +47,7 @@ func (s *racingPasswordHashStore) GetUserPasswordHash(ctx context.Context, userI
 // clickclack admin user set-password would store it.
 func hashFor(t *testing.T, secret string) string {
 	t.Helper()
-	hash, err := passwordauth.Hash(secret)
+	hash, err := passwordauth.Hash(t.Context(), secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +64,29 @@ func storedHash(t *testing.T, st store.Store, userID string) string {
 		t.Error(err)
 	}
 	return hash
+}
+
+func assertPasswordGuessBudgetAfterRace(t *testing.T, serverURL string, auth func(*http.Request)) {
+	t.Helper()
+	limit := passwordLoginIDLimit
+	if auth != nil {
+		limit = passwordChangeLimit
+	}
+	for i := 0; i <= limit; i++ {
+		var resp *http.Response
+		if auth == nil {
+			resp, _ = passwordLogin(t, serverURL, "enrolled@example.com", "a wrong password after the race")
+		} else {
+			resp, _ = changePasswordRequest(t, serverURL, "a wrong password after the race", changedPasswordSecret, auth, nil)
+		}
+		want := http.StatusUnauthorized
+		if i == limit {
+			want = http.StatusTooManyRequests
+		}
+		if resp.StatusCode != want {
+			t.Fatalf("guess %d after race: got HTTP %d, want %d with an intact budget", i, resp.StatusCode, want)
+		}
+	}
 }
 
 func TestPasswordLoginRefusesASessionForASupersededPassword(t *testing.T) {
@@ -108,12 +131,13 @@ func TestPasswordLoginRefusesASessionForASupersededPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if matched, err := passwordauth.Verify(hash, changedPasswordSecret); err != nil || !matched {
+	if matched, err := passwordauth.Verify(t.Context(), hash, changedPasswordSecret); err != nil || !matched {
 		t.Fatalf("expected the new password to stand, matched=%v err=%v", matched, err)
 	}
 	if _, err := st.GetSessionUser(ctx, owner.Token); err != nil {
 		t.Fatalf("expected the owner's session to survive, got %v", err)
 	}
+	assertPasswordGuessBudgetAfterRace(t, server.URL, nil)
 }
 
 func TestChangePasswordLosesToACompetingChangeOnTheSameAccount(t *testing.T) {
@@ -156,9 +180,10 @@ func TestChangePasswordLosesToACompetingChangeOnTheSameAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if matched, err := passwordauth.Verify(hash, competingSecret); err != nil || !matched {
+	if matched, err := passwordauth.Verify(t.Context(), hash, competingSecret); err != nil || !matched {
 		t.Fatalf("expected the winning password to stand, matched=%v err=%v", matched, err)
 	}
+	assertPasswordGuessBudgetAfterRace(t, server.URL, withBearer(caller.Token))
 }
 
 func TestChangePasswordCannotCommitAfterItsOwnSessionIsRevoked(t *testing.T) {
@@ -207,10 +232,10 @@ func TestChangePasswordCannotCommitAfterItsOwnSessionIsRevoked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if matched, err := passwordauth.Verify(hash, changedPasswordSecret); err != nil || !matched {
+	if matched, err := passwordauth.Verify(t.Context(), hash, changedPasswordSecret); err != nil || !matched {
 		t.Fatalf("expected the owner's password to stand, matched=%v err=%v", matched, err)
 	}
-	if matched, err := passwordauth.Verify(hash, loserSecret); err == nil && matched {
+	if matched, err := passwordauth.Verify(t.Context(), hash, loserSecret); err == nil && matched {
 		t.Fatal("expected the revoked device's password never to be written")
 	}
 	if _, err := st.GetSessionUser(ctx, owner.Token); err != nil {
@@ -219,4 +244,5 @@ func TestChangePasswordCannotCommitAfterItsOwnSessionIsRevoked(t *testing.T) {
 	if _, err := st.GetSessionUser(ctx, loser.Token); err == nil {
 		t.Fatal("expected the revoked session to stay revoked")
 	}
+	assertPasswordGuessBudgetAfterRace(t, server.URL, withBearer(owner.Token))
 }

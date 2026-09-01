@@ -6,225 +6,54 @@ export type HomeLink = components["schemas"]["HomeLink"];
 
 export type User = components["schemas"]["User"];
 
-export type DeletedBot = {
-  id: string;
-  display_name: string;
-  former_handle: string;
-  deleted_at: string;
-};
+export type DeletedBot = components["schemas"]["DeletedBot"];
 
-export type BotToken = {
-  id: string;
-  bot_user_id: string;
-  workspace_id: string;
-  owner_user_id?: string;
-  name: string;
-  scopes: string[];
-  created_by?: string;
-  created_at: string;
-  last_used_at?: string;
-  revoked_at?: string;
-  token?: string;
-};
+export type BotToken = components["schemas"]["BotToken"];
 
-export type BotWithTokens = {
-  bot: User;
-  tokens: BotToken[];
-};
+export type BotWithTokens = components["schemas"]["BotWithTokens"];
 
-export type BotSetupCode = {
-  id: string;
-  bot_user_id: string;
-  workspace_id: string;
-  token_name: string;
-  scopes: string[];
-  defaults: BotSetupCodeDefaults;
-  created_by?: string;
-  created_at: string;
-  expires_at: string;
-  /** One-time plaintext setup code. Present only in the mint response. */
-  code?: string;
-  /** Version 1 treats claim_url as the exact endpoint. */
-  contract_version?: 1;
-  claim_url?: string;
-  api_base_url?: string;
-};
+export type BotSetupCode = components["schemas"]["BotSetupCode"];
 
-export type BotSetupCodeDefaults = {
-  defaultTo?: string;
-  allowFrom?: string[];
-  agentActivity?: boolean;
-};
+export type BotSetupCodeDefaults = components["schemas"]["BotSetupCodeClaimDefaults"];
 
-export type BotSetupCodeClaim = {
-  token: string;
-  bot: {
-    id: string;
-    handle: string;
-    display_name: string;
-  };
-  workspace: {
-    id: string;
-    route_id: string;
-    slug: string;
-    name: string;
-  };
-  defaults: BotSetupCodeDefaults;
-  contract_version?: 1;
-  api_base_url?: string;
-};
+export type BotSetupCodeClaim = components["schemas"]["BotSetupCodeClaimResponse"];
 
-export type BotCommandInput = {
-  command: string;
-  description: string;
-  args_hint?: string;
-};
+export type BotCommandInput = components["schemas"]["BotCommandInput"];
 
-export type BotCommand = {
-  id: string;
-  workspace_id: string;
-  bot_user_id: string;
-  command: string;
-  description: string;
-  args_hint: string;
-  created_at: string;
-  updated_at: string;
-};
+export type BotCommand = components["schemas"]["BotCommand"];
 
-export type BotCommandBot = {
-  id: string;
-  handle: string;
-  display_name: string;
-  avatar_url: string;
-};
+export type BotCommandBot = components["schemas"]["BotCommandBot"];
 
-export type WorkspaceBotCommand = {
-  id: string;
-  command: string;
-  description: string;
-  args_hint: string;
-  bot: BotCommandBot;
-  created_at: string;
-  updated_at: string;
-};
+export type WorkspaceBotCommand = components["schemas"]["WorkspaceBotCommand"];
 
-export type OwnedBotWorkspace = {
-  id: string;
-  route_id: string;
-  name: string;
-};
+export type OwnedBotWorkspace = components["schemas"]["OwnedBotWorkspace"];
 
-export type OwnedBotEntry = {
-  bot: User;
-  workspace: OwnedBotWorkspace;
-  active_token_count: number;
-};
+export type OwnedBotEntry = components["schemas"]["OwnedBotEntry"];
 
-export type AppInstallation = {
-  id: string;
-  workspace_id: string;
-  app_slug: string;
-  display_name: string;
-  bot_user_id: string;
-  config: Record<string, unknown>;
-  created_by?: string;
-  created_at: string;
-  revoked_at?: string;
-};
+export type AppInstallation = components["schemas"]["AppInstallation"];
 
-export type RevokeAppInstallationOptions = {
-  revoke_slash_commands?: boolean;
-  revoke_event_subscriptions?: boolean;
-  revoke_bot_tokens?: boolean;
-  delete_bot?: boolean;
-};
+export type RevokeAppInstallationOptions = components["schemas"]["RevokeAppInstallationRequest"];
 
-export type AppInstallationRevokedCounts = {
-  slash_commands: number;
-  event_subscriptions: number;
-  bot_tokens: number;
-};
+export type AppInstallationRevokedCounts = components["schemas"]["AppInstallationRevokedCounts"];
 
-export type RevokeAppInstallationResult = {
-  installation: AppInstallation;
-  revoked: AppInstallationRevokedCounts;
-  deleted_bot?: DeletedBot;
-};
+export type RevokeAppInstallationResult = components["schemas"]["RevokeAppInstallationResponse"];
 
-export type SlashCommand = {
-  id: string;
-  workspace_id: string;
-  app_installation_id?: string;
-  command: string;
-  description: string;
-  callback_url: string;
-  signing_secret?: string;
-  bot_user_id: string;
-  created_by?: string;
-  created_at: string;
-  revoked_at?: string;
-};
+export type SlashCommand = components["schemas"]["SlashCommand"];
 
-export type EventSubscription = {
-  id: string;
-  workspace_id: string;
-  app_installation_id?: string;
-  event_types: string[];
-  callback_url: string;
-  signing_secret?: string;
-  created_by?: string;
-  created_at: string;
-  revoked_at?: string;
-};
+export type EventSubscription = components["schemas"]["EventSubscription"];
 
-export type EventDeliveryAttempt = {
-  id: string;
-  subscription_id: string;
-  event_id: string;
-  workspace_id: string;
-  event_type: string;
-  attempt: number;
-  request_json?: string;
-  response_status: number;
-  response_body?: string;
-  error?: string;
-  created_at: string;
-  completed_at: string;
-};
+export type EventDeliveryAttempt = components["schemas"]["EventDeliveryAttempt"];
 
 export type EventDeliveryAttemptsOptions = {
   limit?: number;
   before?: string;
 };
 
-export type EventDeliveryAttemptsPage = {
-  deliveries: EventDeliveryAttempt[];
-  next_cursor: string | null;
-};
+export type EventDeliveryAttemptsPage = components["schemas"]["EventDeliveryAttemptsResponse"];
 
-export type AuditLogEntry = {
-  id: string;
-  workspace_id: string;
-  actor_user_id: string;
-  action: string;
-  target_type: string;
-  target_id: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
-};
+export type AuditLogEntry = components["schemas"]["AuditLogEntry"];
 
-export type ConnectedAccount = {
-  id: string;
-  workspace_id: string;
-  user_id: string;
-  provider: string;
-  provider_account_id: string;
-  display_name: string;
-  scopes: string[];
-  metadata: Record<string, unknown>;
-  created_at: string;
-  revoked_at?: string;
-};
+export type ConnectedAccount = components["schemas"]["ConnectedAccount"];
 
 export type BotEventHandler = (
   event: RealtimeEvent,
@@ -238,43 +67,11 @@ export type ClickClackBotOptions = ClickClackClientOptions & {
   onClose?: () => void;
 };
 
-export type Workspace = {
-  id: string;
-  route_id: string;
-  name: string;
-  slug: string;
-  icon_url: string;
-  created_at: string;
-  role?: "owner" | "moderator" | "member" | "guest" | "bot";
-};
+export type Workspace = components["schemas"]["Workspace"];
 
-export type Channel = {
-  id: string;
-  route_id: string;
-  workspace_id: string;
-  name: string;
-  display_title?: string;
-  kind: string;
-  created_at: string;
-  archived_at?: string;
-  external_managed: boolean;
-  external_ref?: string;
-  external_url?: string;
-  sidebar_section?: string;
-  last_seq?: number;
-  last_read_seq?: number;
-  unread_count?: number;
-};
+export type Channel = components["schemas"]["Channel"];
 
-export type Topic = {
-  id: string;
-  workspace_id: string;
-  channel_id?: string;
-  name: string;
-  created_by?: string;
-  created_at: string;
-  archived_at?: string;
-};
+export type Topic = components["schemas"]["Topic"];
 
 export type MessageKind = "message" | "agent_commentary" | "agent_tool";
 
@@ -308,67 +105,19 @@ export type MessagePageOptions = {
   topic_id?: string;
 };
 
-export type SearchHighlight = {
-  start: number;
-  end: number;
-};
+export type SearchHighlight = components["schemas"]["SearchHighlight"];
 
-export type SearchResult = {
-  id: string;
-  workspace_id: string;
-  channel_id?: string;
-  channel_name?: string;
-  direct_conversation_id?: string;
-  author: User;
-  parent_message_id?: string;
-  thread_root_id: string;
-  channel_seq?: number;
-  thread_seq?: number;
-  created_at: string;
-  edited_at?: string;
-  reply_count: number;
-  last_reply_at?: string;
-  snippet: string;
-  highlights: SearchHighlight[];
-};
+export type SearchResult = components["schemas"]["SearchResult"];
 
-export type SearchResponse = {
-  results: SearchResult[];
-  next_cursor: string | null;
-};
+export type SearchResponse = components["schemas"]["SearchResponse"];
 
 export type Upload = components["schemas"]["Upload"];
 
-export type DirectConversation = {
-  id: string;
-  route_id: string;
-  workspace_id: string;
-  created_at: string;
-  members: User[];
-  can_send: boolean;
-  last_seq?: number;
-  last_read_seq?: number;
-  unread_count?: number;
-};
+export type DirectConversation = components["schemas"]["DirectConversation"];
 
-export type ReadReceipt = {
-  scope_id: string;
-  user_id: string;
-  last_read_seq: number;
-  last_read_at: string;
-};
+export type ReadReceipt = components["schemas"]["ReadReceipt"];
 
-export type RouteTarget = {
-  workspace_id: string;
-  workspace_route_id: string;
-  target_type: "channel" | "direct" | "thread";
-  target_id: string;
-  target_route_id: string;
-  parent_type?: "channel" | "direct";
-  parent_id?: string;
-  parent_route_id?: string;
-  canonical_path: string;
-};
+export type RouteTarget = components["schemas"]["RouteTarget"];
 
 export type RealtimeEventPayload = {
   correlation_id?: string;

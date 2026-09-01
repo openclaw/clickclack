@@ -83,7 +83,7 @@ func (s *Store) GetSessionUser(ctx context.Context, token string) (store.User, e
 		return store.User{}, err
 	}
 	if authTimestampExpired(row.SessionExpiresAt, time.Now()) {
-		return store.User{}, errors.New("session expired")
+		return store.User{}, store.ErrSessionExpired
 	}
 	return storeUserFromGetSessionUser(row), nil
 }
@@ -130,12 +130,7 @@ func (s *Store) GetPasswordLogin(ctx context.Context, identifier string) (store.
 	}, nil
 }
 
-// CreateSessionForVerifiedPassword mints a session for a caller that has just
-// verified a password, and only while the stored hash is still the one it
-// verified. The argon2 comparison runs outside this call, so a password change
-// can commit in between; that race ends here with
-// store.ErrPasswordVerificationStale and no session, rather than a live session
-// minted for a replaced secret.
+// CreateSessionForVerifiedPassword commits a login only while its verified hash is current.
 func (s *Store) CreateSessionForVerifiedPassword(ctx context.Context, userID, verifiedHash string) (store.Session, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" || strings.TrimSpace(verifiedHash) == "" {
@@ -207,13 +202,8 @@ func (s *Store) GetUserPasswordHash(ctx context.Context, userID string) (string,
 	return hash, err
 }
 
-// ChangeUserPassword replaces a password and ends the account's other sessions
-// in one transaction, and reports how many sessions it ended. Both writes are
-// conditional on the state the caller checked before it got here: the stored
-// hash must still be input.VerifiedHash, and a caller that named a session must
-// still hold a live one. Either condition failing rolls the whole change back,
-// so a rotation that lost a race neither overwrites the winner's password nor
-// signs the winner out.
+// ChangeUserPassword atomically replaces the verified password and revokes other sessions.
+// A stale credential or invalid caller session rolls back the entire change.
 func (s *Store) ChangeUserPassword(ctx context.Context, input store.ChangeUserPasswordInput) (int64, error) {
 	userID := strings.TrimSpace(input.UserID)
 	verifiedHash := strings.TrimSpace(input.VerifiedHash)
@@ -227,6 +217,16 @@ func (s *Store) ChangeUserPassword(ctx context.Context, input store.ChangeUserPa
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	// Lock the credential before any session so competing devices cannot deadlock.
+	changed, err := qtx.ReplaceVerifiedUserPassword(ctx, storedb.ReplaceVerifiedUserPasswordParams{
+		PasswordHash: newHash,
+		UpdatedAt:    now(),
+		UserID:       userID,
+		VerifiedHash: verifiedHash,
+	})
+	if err != nil {
+		return 0, err
+	}
 	keepToken := strings.TrimSpace(input.KeepSessionToken)
 	if keepToken != "" {
 		expiresAt, err := qtx.GetLiveUserSessionExpiry(ctx, storedb.GetLiveUserSessionExpiryParams{
@@ -242,15 +242,6 @@ func (s *Store) ChangeUserPassword(ctx context.Context, input store.ChangeUserPa
 		if authTimestampExpired(expiresAt, time.Now()) {
 			return 0, store.ErrSessionRevoked
 		}
-	}
-	changed, err := qtx.ReplaceVerifiedUserPassword(ctx, storedb.ReplaceVerifiedUserPasswordParams{
-		PasswordHash: newHash,
-		UpdatedAt:    now(),
-		UserID:       userID,
-		VerifiedHash: verifiedHash,
-	})
-	if err != nil {
-		return 0, err
 	}
 	if changed != 1 {
 		return 0, store.ErrPasswordVerificationStale

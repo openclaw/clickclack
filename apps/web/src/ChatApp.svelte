@@ -440,23 +440,16 @@
     }
   }
 
-  // Both sign-in forms hand off to boot(), which clears the auth screen once
-  // the new session cookie resolves /api/me.
+  // A fresh document prevents account-scoped state from crossing sign-ins.
   async function completeSignIn(path: string, body: Record<string, string>) {
     if (authSubmitting) return;
     authSubmitting = true;
     authError = "";
     try {
       await api(path, { method: "POST", body: JSON.stringify(body) });
-      passwordSecret = "";
-      magicToken = "";
-      authRequired = false;
-      status = "loading";
-      await boot();
+      window.location.reload();
     } catch (error) {
       authError = readableAPIError(error, "Could not sign in.");
-      authRequired = true;
-    } finally {
       authSubmitting = false;
     }
   }
@@ -577,6 +570,9 @@
 
   function handleAppLoadError(error: unknown) {
     if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
+      socket?.close();
+      socket = null;
+      settingsModalOpen = false;
       authRequired = true;
       status = "auth";
       return;
@@ -3306,6 +3302,10 @@
       },
       onError: (error) => {
         if (workspaceID === selectedWorkspaceID) {
+          if (error instanceof APIError && error.status === 401) {
+            handleAppLoadError(error);
+            return;
+          }
           realtimeError = error instanceof Error ? error.message : "Could not process realtime event";
           status = realtimeError;
         }

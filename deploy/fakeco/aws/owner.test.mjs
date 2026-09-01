@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const directory = path.dirname(new URL(import.meta.url).pathname);
+const directory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(directory, "../../..");
 const ownerPath = path.join(directory, "owner.mjs");
 const profilePath = path.join(directory, "profile.json");
@@ -1430,6 +1431,25 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   assert.match(runbook, /wait_ready \|\| "\$\{compose\[@\]\}" stop app/u);
 });
 
+test("sibling fixtures resolve from module directories containing spaces", async (t) => {
+  const temporary = await temporaryDirectory(t, "clickclack fakeco spaces ");
+  const copiedDirectory = path.join(temporary, "deploy/fakeco/aws");
+  await cp(directory, copiedDirectory, { recursive: true });
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=^profile and template lock the private ARM64 single-VM contract$",
+      path.join(copiedDirectory, "owner.test.mjs"),
+    ],
+    // A nested test runner otherwise skips its files inside a node:test child.
+    { encoding: "utf8", env: { ...process.env, NODE_TEST_CONTEXT: undefined } },
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /# pass 1\b/u);
+});
+
 function fakecoEnvironment() {
   return {
     FAKECO_AWS_ACCOUNT_ID: "123456789012",
@@ -1727,8 +1747,8 @@ function runOwner(args, environment = {}) {
   });
 }
 
-async function temporaryDirectory(t) {
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "clickclack-fakeco-owner-"));
+async function temporaryDirectory(t, prefix = "clickclack-fakeco-owner-") {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), prefix));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   return temporary;
 }

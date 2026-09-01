@@ -27,3 +27,10 @@ test("validateNewPassword accepts a confirmed password at the minimum length", (
   const atMinimum = "x".repeat(MIN_PASSWORD_LENGTH);
   assert.equal(validateNewPassword("current", atMinimum, atMinimum), "");
 });
+
+test("validateNewPassword counts Unicode characters rather than UTF-16 units", () => {
+  const short = "🦞".repeat(4);
+  assert.notEqual(validateNewPassword("current", short, short), "");
+  const valid = "🦞".repeat(MIN_PASSWORD_LENGTH);
+  assert.equal(validateNewPassword("current", valid, valid), "");
+});

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed FakeCo AWS test fixture loading in checkout paths containing spaces. Thanks @isaiahknight-va.
+
+- Reused generated API schemas for 31 TypeScript SDK resource types, preserving public type shapes and runtime behavior, and corrected DM search documentation.
+
 - Fixed CLI thread output dropping paging metadata, added latest and cursor windows, and aligned SDK message types with API thread summaries and attachments.
 
 - Fixed concurrent first GitHub sign-ins failing after OAuth state consumption; SQLite and PostgreSQL now resolve one provider identity atomically while preserving profile overrides and notification settings.

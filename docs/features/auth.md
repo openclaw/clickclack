@@ -341,7 +341,9 @@ Flow and guarantees:
    instead of a live session for a replaced secret. A lost race does not spend
    the account's rate-limit budget.
 3. Hashes are argon2id in PHC string format (`apps/api/internal/passwordauth`).
-   Verification is constant time.
+   Verification uses constant-time digest comparison. A process-wide budget
+   permits two concurrent derivations; queued requests stop waiting when their
+   request context is canceled.
 4. A wrong password, an unknown identifier, and an account with no password on
    file all return the same `401` body, and all three pay for one key
    derivation, so the endpoint does not disclose which accounts are enrolled.
@@ -364,7 +366,7 @@ POST /api/auth/password/change
   stays unenrolled, so enabling password sign-in remains an operator decision.
 - The current password is verified against the stored argon2id hash in constant
   time, and the new one has to satisfy the same length rules the admin command
-  enforces.
+  enforces: 8–256 Unicode code points.
 - It carries the same `Content-Type`, `Origin`, and `Sec-Fetch-Site` rejections
   as password login, on top of the session CSRF header every unsafe cookie
   request already needs.
@@ -402,7 +404,11 @@ bearer token or cookie, in the precedence `currentActor` uses, and expires the
 cookie. Login returns a bearer-usable session token and the API accepts bearer
 authentication, so a bearer-only caller signs out through the same endpoint. It
 is idempotent, so a stale browser can always return to a signed-out state. A bot
-token revokes nothing here: bot tokens are not sessions.
+token revokes nothing here: bot tokens are not sessions. If sign-out fails,
+Settings keeps the session visible, shows the error, and offers a retry. Realtime
+authentication failures return the web app to sign-in. Successful password or
+magic-token sign-in reloads the app so cached messages and workspace state from
+the previous account cannot appear under the new identity.
 
 ## Authorization
 

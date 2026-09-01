@@ -5,19 +5,19 @@
 package passwordauth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 )
 
 const (
-	// MinPasswordLength follows NIST SP 800-63B for human-chosen secrets.
 	MinPasswordLength = 8
 	// MaxPasswordLength bounds the work an unauthenticated caller can ask for.
 	MaxPasswordLength = 256
@@ -41,12 +41,16 @@ type params struct {
 
 var defaultParams = params{memory: 64 * 1024, iterations: 3, parallelism: 2, saltLength: 16, keyLength: 32}
 
+// Share the budget across all password entrypoints: 128 MiB at current costs.
+var derivationSlots = make(chan struct{}, 2)
+
 // ValidatePassword reports whether a candidate secret is acceptable to store.
 func ValidatePassword(password string) error {
+	length := utf8.RuneCountInString(password)
 	switch {
-	case len(password) < MinPasswordLength:
+	case length < MinPasswordLength:
 		return ErrPasswordTooShort
-	case len(password) > MaxPasswordLength:
+	case length > MaxPasswordLength:
 		return ErrPasswordTooLong
 	default:
 		return nil
@@ -54,7 +58,7 @@ func ValidatePassword(password string) error {
 }
 
 // Hash derives a new argon2id hash and returns it in PHC string format.
-func Hash(password string) (string, error) {
+func Hash(ctx context.Context, password string) (string, error) {
 	if err := ValidatePassword(password); err != nil {
 		return "", err
 	}
@@ -62,43 +66,57 @@ func Hash(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	return encode(defaultParams, salt, derive(defaultParams, salt, password)), nil
+	digest, err := derive(ctx, defaultParams, salt, password)
+	if err != nil {
+		return "", err
+	}
+	return encode(defaultParams, salt, digest), nil
 }
 
 // Verify reports whether password matches the encoded hash. It compares in
-// constant time and returns false (never an error) for a mismatch, so callers
-// can treat any false result as a failed login.
-func Verify(encoded, password string) (bool, error) {
+// constant time; mismatches return false without an error, while cancellation
+// and invalid hashes return an error rather than a failed guess.
+func Verify(ctx context.Context, encoded, password string) (bool, error) {
 	stored, salt, digest, err := decode(encoded)
 	if err != nil {
 		return false, err
 	}
-	if len(password) > MaxPasswordLength {
+	if utf8.RuneCountInString(password) > MaxPasswordLength {
 		return false, nil
 	}
-	candidate := derive(stored, salt, password)
+	candidate, err := derive(ctx, stored, salt, password)
+	if err != nil {
+		return false, err
+	}
 	return subtle.ConstantTimeCompare(candidate, digest) == 1, nil
 }
 
-// VerifyDecoy performs the same key derivation Verify would against a fixed
-// hash generated at startup. Callers use it when an identifier has no password
-// on file so that unknown accounts cost the same wall time as known ones.
-func VerifyDecoy(password string) {
-	_, _ = Verify(decoyHash(), password)
+// VerifyDecoy pays the same derivation cost for unknown or unenrolled accounts.
+func VerifyDecoy(ctx context.Context, password string) error {
+	if utf8.RuneCountInString(password) > MaxPasswordLength {
+		return nil
+	}
+	// The discarded digest is never a credential, so its salt need not be secret
+	// or unique. Direct derivation also keeps cold requests cancellable in queue.
+	_, err := derive(ctx, defaultParams, make([]byte, defaultParams.saltLength), password)
+	return err
 }
 
-var decoyHash = sync.OnceValue(func() string {
-	salt := make([]byte, defaultParams.saltLength)
-	if _, err := rand.Read(salt); err != nil {
-		// A decoy only has to cost the right amount of time, never to stay
-		// secret, so a zero salt is an acceptable last resort.
-		salt = make([]byte, defaultParams.saltLength)
+func derive(ctx context.Context, p params, salt []byte, password string) ([]byte, error) {
+	select {
+	case derivationSlots <- struct{}{}:
+		defer func() { <-derivationSlots }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	return encode(defaultParams, salt, derive(defaultParams, salt, "decoy"))
-})
-
-func derive(p params, salt []byte, password string) []byte {
-	return argon2.IDKey([]byte(password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
+	// Cancellation and an available slot can race in the select above.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Argon2 cannot be interrupted; keep the slot until its memory is no longer
+	// in use, even when the caller cancels during the derivation.
+	digest := argon2.IDKey([]byte(password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
+	return digest, ctx.Err()
 }
 
 func encode(p params, salt, digest []byte) string {

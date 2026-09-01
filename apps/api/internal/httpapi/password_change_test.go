@@ -137,7 +137,7 @@ func TestChangePasswordRejectsAWrongCurrentPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matched, err := passwordauth.Verify(hash, passwordTestSecret)
+	matched, err := passwordauth.Verify(t.Context(), hash, passwordTestSecret)
 	if err != nil || !matched {
 		t.Fatalf("expected the stored password to be untouched, matched=%v err=%v", matched, err)
 	}
@@ -170,9 +170,11 @@ func TestChangePasswordRejectsAnUnenrolledAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, body := changePasswordRequest(t, server.URL, passwordTestSecret, changedPasswordSecret, withBearer(session.Token), nil)
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("expected 409 for an account with no password, got %d %s", resp.StatusCode, body)
+	for i := 0; i < passwordChangeLimit+1; i++ {
+		resp, body := changePasswordRequest(t, server.URL, passwordTestSecret, changedPasswordSecret, withBearer(session.Token), nil)
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("attempt %d: expected 409 for an account with no password, got %d %s", i, resp.StatusCode, body)
+		}
 	}
 	// This endpoint must never enroll an account. Enabling password sign-in
 	// stays an administrator action.
@@ -302,7 +304,7 @@ func TestChangePasswordDisabledReportsNotImplemented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matched, err := passwordauth.Verify(hash, passwordTestSecret)
+	matched, err := passwordauth.Verify(t.Context(), hash, passwordTestSecret)
 	if err != nil || !matched {
 		t.Fatalf("expected a disabled endpoint to leave the password alone, matched=%v err=%v", matched, err)
 	}

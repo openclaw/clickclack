@@ -1793,9 +1793,6 @@ SELECT password_hash
 FROM user_passwords
 WHERE user_id = sqlc.arg(user_id);
 
--- A password change ends the account's other sessions. The caller's own
--- session is spared by token hash so the person changing the password is not
--- signed out of the tab they are working in.
 -- name: RevokeUserSessionsExceptTokenHash :execrows
 UPDATE sessions
 SET revoked_at = sqlc.arg(revoked_at)
@@ -1803,10 +1800,6 @@ WHERE user_id = sqlc.arg(user_id)
   AND revoked_at IS NULL
   AND token_hash <> sqlc.arg(keep_token_hash);
 
--- Password login commits its session only while the stored hash is still the
--- one this request verified. A password change that lands during the argon2
--- verification cannot then be followed by a session minted for the secret it
--- replaced.
 -- name: InsertSessionForVerifiedPassword :execrows
 INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
 SELECT sqlc.arg(id), sqlc.arg(token), sqlc.arg(token_hash), p.user_id, sqlc.arg(created_at), sqlc.arg(expires_at)
@@ -1814,9 +1807,6 @@ FROM user_passwords p
 WHERE p.user_id = sqlc.arg(user_id)
   AND p.password_hash = sqlc.arg(verified_hash);
 
--- A rotation writes its replacement only while the stored hash is still the
--- snapshot its current-password check verified, so two changes racing on one
--- account cannot both report success.
 -- name: ReplaceVerifiedUserPassword :execrows
 UPDATE user_passwords
 SET password_hash = sqlc.arg(password_hash),
@@ -1824,8 +1814,6 @@ SET password_hash = sqlc.arg(password_hash),
 WHERE user_id = sqlc.arg(user_id)
   AND password_hash = sqlc.arg(verified_hash);
 
--- Read inside the rotation transaction to confirm the caller still holds the
--- session it authenticated with. A revoked or unknown token returns no row.
 -- name: GetLiveUserSessionExpiry :one
 SELECT expires_at
 FROM sessions

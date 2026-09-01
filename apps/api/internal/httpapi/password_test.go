@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/passwordauth"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
@@ -37,7 +36,7 @@ func newPasswordTestServer(t *testing.T, passwordAuthEnabled bool) (*httptest.Se
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash, err := passwordauth.Hash(passwordTestSecret)
+	hash, err := passwordauth.Hash(ctx, passwordTestSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,31 +406,6 @@ func TestLogoutFollowsBearerBeforeCookiePrecedence(t *testing.T) {
 	}
 	if _, err := st.GetSessionUser(ctx, cookie.Value); err != nil {
 		t.Fatalf("expected the cookie session to be untouched, got %v", err)
-	}
-}
-
-func TestLimiterBlockedAndRecordSeparateCheckingFromCharging(t *testing.T) {
-	now := time.Date(2026, time.August, 31, 12, 0, 0, 0, time.UTC)
-	limiter := newSlidingWindowLimiter(2, time.Minute)
-	limiter.nowFn = func() time.Time { return now }
-
-	// Checking never charges, however often it is called.
-	for i := 0; i < 10; i++ {
-		if limiter.blocked("account") {
-			t.Fatal("expected checking alone to leave the budget untouched")
-		}
-	}
-	limiter.record("account")
-	if limiter.blocked("account") {
-		t.Fatal("expected one charge to stay under a limit of two")
-	}
-	limiter.record("account")
-	if !limiter.blocked("account") {
-		t.Fatal("expected the budget to be spent after two charges")
-	}
-	now = now.Add(time.Minute)
-	if limiter.blocked("account") {
-		t.Fatal("expected the window to release the key")
 	}
 }
 

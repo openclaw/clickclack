@@ -24,10 +24,13 @@
   import { collectMentionPeople, collectRecentPeople, dmTitle } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { newNonce } from "./lib/chat/messages";
+  import { MessageRequests, type AuthorUpdate } from "./lib/chat/messageRequests";
+  import { mergeMessageUpdate, type MessageUpdate } from "./lib/chat/messageUpdates";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
   import {
     MessageEditController,
+    type MessageEdit,
     type MessageEditSession,
   } from "./lib/messageEditing.svelte";
   import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "./lib/realtime.svelte";
@@ -62,7 +65,7 @@
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
-  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -112,7 +115,7 @@
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
-  let recoverableDraftMessages = new Map<string, Message[]>();
+  let outgoingMessages = new Map<string, OutgoingMessage>();
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
   let pinnedMessages: Message[] = [];
@@ -205,7 +208,8 @@
   let socket: RealtimeConnection | null = null;
   let messageList: MessageListHandle | null = null;
   let scrollMemory = new Map<string, MessageListState>();
-  let messageWindows = new Map<string, MessageWindow>();
+  let messageWindows = new Map<string, MessagePage>();
+  const messageRequests = new MessageRequests(() => [user?.id, selectedWorkspaceID, currentConversationKey()].join(":"));
   let loadingMessagePages = new Set<string>();
   let olderPageState: HistoryEdgeState = "idle";
   let newerPageState: HistoryEdgeState = "idle";
@@ -257,10 +261,6 @@
   let deletingMessageIDs = new Set<string>();
   let pendingDeleteMessage: Message | null = null;
   let deleteMessageError = "";
-
-  type MessageWindow = Omit<MessagePage, "messages"> & {
-    messages: Message[];
-  };
 
   type HistoryEdgeState = "idle" | "loading" | "settling";
   type HiddenDirectUndo = {
@@ -344,7 +344,7 @@
   }
 
   function activeMessageScopeKey(): string {
-    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}`;
+    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}:${messageLoadGeneration}`;
   }
 
   function topicsForChannel(source: Topic[], channelID: string): Topic[] {
@@ -539,6 +539,7 @@
     thread.close();
     routeApplySerial += 1;
     messageLoadGeneration += 1;
+    messageRequests.clear();
     workspaceMembersLoadSerial += 1;
     workspaceMembersAbort?.abort();
     socket?.close();
@@ -621,9 +622,7 @@
 
   function handleSettingsUserUpdated(updated: User) {
     user = updated;
-    setActiveMessages(messages.map((message) =>
-      message.author?.id === updated.id ? { ...message, author: updated } : message,
-    ));
+    updateActiveAuthor(updated);
     thread.updateAuthor(updated);
   }
 
@@ -695,7 +694,7 @@
       method: "POST",
     });
     if (!data.message.route_id) throw new Error("Message route was not allocated");
-    applyEditedMessage(data.message);
+    updateActiveMessage({ id: data.message.id, route_id: data.message.route_id });
     const workspaceRouteID = routeWorkspaceIDFor(data.message.workspace_id);
     if (!workspaceRouteID) throw new Error("Workspace route is unavailable");
     const path = `/app/${encodeURIComponent(workspaceRouteID)}/${encodeURIComponent(data.message.route_id)}`;
@@ -840,13 +839,14 @@
         ? workspaces.find((candidate) => candidate.id === routeTarget.workspace_id)
         : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
       if (!workspace) {
-        commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
+        commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, "replace");
         return;
       }
       const workspaceChanged = selectedWorkspaceID !== workspace.id;
       if (workspaceChanged) {
         captureScrollMemory();
         editController.clear();
+        messageRequests.clear();
         resetCreateActions();
         selectedWorkspaceID = workspace.id;
         topicsLoadSerial += 1;
@@ -1025,6 +1025,7 @@
     } else {
       return false;
     }
+    messageRequests.prune();
     const sameThread = thread.root?.id === route.target_id && viewKey === currentConversationKey();
     selectedProfile = null;
     pinnedPanelOpen = false;
@@ -1172,7 +1173,7 @@
       await loadLatestMessages();
     } catch (error) {
       if (currentConversationKey() !== conversationKey || activeTopicFilterID) return;
-      setActiveMessages(localDraftMessagesForView(conversationKey));
+      updateActiveMessages();
       composerNotice = {
         kind: "error",
         text:
@@ -1371,21 +1372,37 @@
   }
 
   function beginMessageLoad(loading = false): () => boolean {
+    resetHistoryPaging();
     messagesLoading = loading;
-    const generation = ++messageLoadGeneration;
+    messageLoadGeneration += 1;
+    // Page selection changes do not retire updates for this conversation's rows.
+    messageRequests.prune();
     const scopeKey = activeMessageScopeKey();
-    return () => generation === messageLoadGeneration && activeMessageScopeKey() === scopeKey;
+    return () => activeMessageScopeKey() === scopeKey;
   }
 
   async function replaceMessageWindow(query: string, direction: MessageWindowDirection = "replace", isCurrent = beginMessageLoad()) {
     const targetKey = currentConversationKey();
-    resetHistoryPaging();
     if (targetKey !== viewKey) messagesLoading = true;
     try {
-      const data = targetKey
-        ? await api<MessagePage>(messagePagePath(query))
-        : { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false };
-      if (isCurrent()) commitMessageWindow(targetKey, pageToWindow(data), direction);
+      if (!targetKey) {
+        if (isCurrent()) commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, direction);
+        return;
+      }
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(query)), (data) => {
+        let window = data;
+        const previous = messageWindows.get(targetKey);
+        // A latest snapshot predating the current tail cannot erase newer confirmed rows.
+        if (!window.has_newer && previous && previous.newest_seq > window.newest_seq) {
+          window = previous.oldest_seq > window.newest_seq ? previous : {
+            ...window,
+            messages: mergeMessageWindows(window.messages, previous.messages.filter((message) => messageSeq(message) > window.newest_seq)),
+            newest_seq: previous.newest_seq,
+            has_newer: previous.has_newer,
+          };
+        }
+        commitMessageWindow(targetKey, window, direction);
+      }, isCurrent);
     } catch (error) {
       if (isCurrent()) throw error;
     } finally {
@@ -1487,7 +1504,7 @@
           commitView(conversationKey, previousWindow.messages);
           updateActiveMessageWindowFlags(conversationKey, previousWindow);
         } else {
-          setActiveMessages(localDraftMessagesForView(conversationKey));
+          updateActiveMessages();
         }
         if (previousScroll) {
           scrollMemory.set(conversationKey, previousScroll);
@@ -1504,27 +1521,32 @@
     }
   }
 
-  function pageToWindow(page: MessagePage): MessageWindow {
-    return {
-      messages: page.messages,
-      oldest_seq: page.oldest_seq,
-      newest_seq: page.newest_seq,
-      has_older: page.has_older,
-      has_newer: page.has_newer,
-    };
-  }
-
   function commitMessageWindow(
     key: string,
-    window: MessageWindow,
+    window: MessagePage,
     direction: MessageWindowDirection,
   ) {
+    const confirmed = outgoingForView(key)
+      .flatMap((outgoing) => outgoing.receipt ? [outgoing.receipt] : [])
+      .sort((a, b) => messageSeq(a) - messageSeq(b));
+    let newestSeq = messageSeq(window.messages.at(-1));
+    // Receipts extend a fetched live interval only when they prove the next sequence.
+    // Topic-filtered gaps and older history must still be fetched through the page API.
+    if (!window.has_newer) {
+      for (const message of confirmed) {
+        if (messageSeq(message) === newestSeq + 1) {
+          window = { ...window, messages: [...window.messages, message] };
+          newestSeq = messageSeq(message);
+        }
+      }
+    }
+    if (confirmed.some((message) => messageSeq(message) > newestSeq)) window = { ...window, has_newer: true };
     const trimmedMessages = trimMessageWindow(key, window.messages, direction);
     const firstSeq = trimmedMessages[0]?.channel_seq || 0;
     const lastSeq = trimmedMessages[trimmedMessages.length - 1]?.channel_seq || 0;
     const droppedOlder = firstSeq > (window.messages[0]?.channel_seq || firstSeq);
     const droppedNewer = lastSeq < (window.messages[window.messages.length - 1]?.channel_seq || lastSeq);
-    const nextWindow: MessageWindow = {
+    const nextWindow: MessagePage = {
       messages: trimmedMessages,
       oldest_seq: firstSeq,
       newest_seq: lastSeq,
@@ -1533,10 +1555,12 @@
     };
     rememberMessageWindow(key, nextWindow);
     updateActiveMessageWindowFlags(key, nextWindow);
+    // An append must not consume the position captured for a pending history page.
+    if (direction !== "append" || key !== viewKey) viewRestoreState = scrollMemory.get(key);
     commitView(key, trimmedMessages);
   }
 
-  function rememberMessageWindow(key: string, window: MessageWindow) {
+  function rememberMessageWindow(key: string, window: MessagePage) {
     if (!key) return;
     messageWindows.delete(key);
     messageWindows.set(key, window);
@@ -1675,18 +1699,17 @@
     captureScrollMemory();
     let committed = false;
     try {
-      const data = await api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (activeMessageScopeKey() !== scopeKey) return;
-      const merged = mergeMessageWindows(data.messages, messages);
-      commitMessageWindow(key, {
-        messages: merged,
-        oldest_seq: data.oldest_seq || window.oldest_seq,
-        newest_seq: window.newest_seq,
-        has_older: data.has_older,
-        has_newer: window.has_newer,
-      }, "prepend");
-      committed = true;
-      setHistoryEdgeState("older", "settling");
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`)), (data) => {
+        const currentWindow = messageWindows.get(key);
+        if (!currentWindow) return;
+        commitMessageWindow(key, {
+          ...currentWindow,
+          messages: mergeMessageWindows(data.messages, currentWindow.messages),
+          has_older: data.has_older,
+        }, "prepend");
+        committed = true;
+        setHistoryEdgeState("older", "settling");
+      }, () => activeMessageScopeKey() === scopeKey);
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
         composerNotice = { kind: "error", text: readableAPIError(error, "Could not load older messages") };
@@ -1716,28 +1739,10 @@
     setHistoryEdgeState("newer", "loading");
     let committed = false;
     try {
-      const data = await api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (activeMessageScopeKey() !== scopeKey) return;
-      if (data.messages.length === 0) {
-        commitMessageWindow(key, { ...window, has_newer: data.has_newer }, "append");
-        committed = true;
-        setHistoryEdgeState("newer", "settling");
-        return;
-      }
-      const merged = mergeMessageWindows(messages, data.messages);
-      commitMessageWindow(
-        key,
-        {
-          messages: merged,
-          oldest_seq: window.oldest_seq,
-          newest_seq: data.newest_seq || window.newest_seq,
-          has_older: window.has_older,
-          has_newer: data.has_newer,
-        },
-        "append",
-      );
-      committed = true;
-      setHistoryEdgeState("newer", "settling");
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`)), (data) => {
+        committed = appendMessagePage(key, data, window.newest_seq);
+        if (committed) setHistoryEdgeState("newer", "settling");
+      }, () => activeMessageScopeKey() === scopeKey);
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
         composerNotice = { kind: "error", text: readableAPIError(error, "Could not load newer messages") };
@@ -1749,10 +1754,9 @@
   }
 
   async function loadNewerMessagesFromRealtime(isCurrent: () => boolean): Promise<void> {
-    const targetWorkspaceID = selectedWorkspaceID;
     const targetKey = currentConversationKey();
-    const targetScopeKey = activeMessageScopeKey();
-    if (!targetWorkspaceID || !targetKey) return;
+    const scopeKey = activeMessageScopeKey();
+    if (!selectedWorkspaceID || !targetKey) return;
 
     // The durable event queue serializes these fetches, independently of frames.
     const window = messageWindows.get(targetKey);
@@ -1760,22 +1764,19 @@
       await loadMessages();
       return;
     }
-    const data = await api<MessagePage>(
-      messagePagePath(
+    await messageRequests.run(
+      () => api<MessagePage>(messagePagePath(
         `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
-      ),
+      )),
+      (data) => { appendMessagePage(targetKey, data, window.newest_seq); },
+      () => isCurrent() && activeMessageScopeKey() === scopeKey,
     );
-    if (
-      !isCurrent() ||
-      selectedWorkspaceID !== targetWorkspaceID ||
-      currentConversationKey() !== targetKey ||
-      activeMessageScopeKey() !== targetScopeKey
-    ) {
-      return;
-    }
-    const currentWindow = messageWindows.get(targetKey);
-    if (!currentWindow) return;
-    const responseNewestSeq = data.newest_seq || window.newest_seq;
+  }
+
+  function appendMessagePage(key: string, data: MessagePage, afterSeq: number): boolean {
+    const currentWindow = messageWindows.get(key);
+    if (!currentWindow) return false;
+    const responseNewestSeq = data.newest_seq || afterSeq;
     const hasNewer =
       responseNewestSeq > currentWindow.newest_seq
         ? data.has_newer
@@ -1783,16 +1784,15 @@
           ? currentWindow.has_newer
           : currentWindow.has_newer || data.has_newer;
     commitMessageWindow(
-      targetKey,
+      key,
       {
-        messages: mergeMessageWindows(messages, data.messages),
-        oldest_seq: currentWindow.oldest_seq,
-        newest_seq: Math.max(currentWindow.newest_seq, responseNewestSeq),
-        has_older: currentWindow.has_older,
+        ...currentWindow,
+        messages: mergeMessageWindows(currentWindow.messages, data.messages),
         has_newer: hasNewer,
       },
       "append",
     );
+    return true;
   }
 
   function handleHistorySettled(state: MessageListViewportState) {
@@ -2238,28 +2238,25 @@
   function commitView(key: string, msgs: Message[]) {
     // Update viewKey + messages atomically so MessageList sees the swap as one tick.
     const switchingView = key !== viewKey;
-    viewRestoreState = scrollMemory.get(key);
-    // Preserve outgoing optimistic placeholders for this view that the server
-    // hasn't echoed yet. Without this the placeholder would flicker out when a
-    // sibling realtime event triggers a reload mid-flight.
-    const localOptimistic = localDraftMessagesForView(key);
+    // Unfetched sends overlay the canonical window without changing its page cursors.
+    for (const [nonce, outgoing] of outgoingMessages) {
+      if (!outgoing.message.status && (outgoing.draft.viewKey !== key ||
+        (activeTopicFilterID && outgoing.draft.topicID !== activeTopicFilterID))) outgoingMessages.delete(nonce);
+    }
+    const localOptimistic = outgoingForView(key).map((outgoing) => outgoing.message);
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
     reactionController.seedMessages(msgs);
     const merged = msgs.map((m) => {
       const local = localByID.get(m.id) || (m.nonce ? localByNonce.get(m.nonce) : undefined);
       if (!local) return m;
-      if (m.nonce && pendingDrafts.has(m.nonce)) {
-        return {
-          ...m,
-          nonce: local.nonce,
-          status: local.status,
-          attachments: local.attachments?.length ? local.attachments : m.attachments,
-        };
+      if (!local.status && (local.attachments || []).every((attachment) => m.attachments?.some((fresh) => fresh.id === attachment.id))) {
+        outgoingMessages.delete(local.nonce!);
       }
       return {
         ...m,
         nonce: local.nonce,
+        status: local.status,
         attachments: local.attachments?.length ? local.attachments : m.attachments,
       };
     });
@@ -2267,14 +2264,10 @@
     const knownNonces = new Set(merged.map((m) => m.nonce).filter(Boolean));
     const preserve = localOptimistic.filter(
       (m) =>
-        (m.status === "pending" || m.status === "failed") &&
-        m.id.startsWith("tmp_") &&
         !knownIDs.has(m.id) &&
-        !(m.nonce && knownNonces.has(m.nonce)) &&
-        belongsToView(m, key) &&
-        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
+        !(m.nonce && knownNonces.has(m.nonce)),
     );
-    messages = preserve.length > 0 ? [...merged, ...preserve] : merged;
+    messages = [...merged, ...preserve].sort((a, b) => (a.channel_seq || Infinity) - (b.channel_seq || Infinity));
     editController.reconcile(key, messages);
     viewKey = key;
     rememberUnreadMarkerForMessages(key, messages);
@@ -2285,32 +2278,28 @@
     }
   }
 
-  function setActiveMessages(nextMessages: Message[], direction: MessageWindowDirection = "append") {
+  function updateActiveMessage(updated: MessageUpdate) {
+    updateActiveMessages(messageRequests.updateMessage(updated));
+  }
+
+  function updateActiveAuthor(updated: AuthorUpdate) {
+    updateActiveMessages(messageRequests.updateAuthor(updated));
+  }
+
+  function updateActiveMessages(update?: (message: Message) => Message) {
     const key = currentConversationKey();
     const window = key ? messageWindows.get(key) : undefined;
-    if (!key || !window) {
-      messages = nextMessages;
-      return;
+    if (update) {
+      for (const outgoing of outgoingMessages.values()) {
+        const local = outgoing.message;
+        // Server metadata cannot complete or discard an in-flight send or attachment.
+        outgoing.message = { ...update(local), status: local.status, attachments: local.attachments };
+        if (outgoing.receipt) outgoing.receipt = update(outgoing.receipt);
+      }
     }
-    const scopedMessages = nextMessages.filter((message) => belongsToView(message, key));
-    const trimmedMessages = trimMessageWindow(key, scopedMessages, direction);
-    const sequencedMessages = trimmedMessages.filter((message) => (message.channel_seq || 0) > 0);
-    const oldestSeq = sequencedMessages[0]?.channel_seq || window.oldest_seq;
-    const newestSeq = sequencedMessages[sequencedMessages.length - 1]?.channel_seq || window.newest_seq;
-    const droppedOlder = messageSeq(trimmedMessages[0]) > messageSeq(scopedMessages[0]);
-    const droppedNewer =
-      messageSeq(trimmedMessages[trimmedMessages.length - 1]) <
-      messageSeq(scopedMessages[scopedMessages.length - 1]);
-    messages = trimmedMessages;
-    rememberMessageWindow(key, {
-      ...window,
-      messages: trimmedMessages,
-      oldest_seq: oldestSeq,
-      newest_seq: newestSeq,
-      has_older: window.has_older || droppedOlder,
-      has_newer: window.has_newer || droppedNewer,
-    });
-    updateActiveMessageWindowFlags(key);
+    const canonical = update ? window?.messages.map(update) || [] : window?.messages || [];
+    if (window) commitMessageWindow(key, { ...window, messages: canonical }, "append");
+    else commitView(key, canonical);
   }
 
   function messageSeq(message: Message | undefined): number {
@@ -2331,21 +2320,21 @@
     return messageList?.isFollowing() || messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
   }
 
-  async function revealOwnSentMessage() {
-    await scrollMessagesToBottom();
-  }
-
-  async function jumpToLiveChat() {
+  async function jumpToLiveChat(revealSentMessage = false) {
     const reload = messagesLoading || activeHasNewer || activeUnreadCount > 0;
     const isCurrent = beginMessageLoad();
     try {
       if (reload) await loadLatestMessages(isCurrent);
       await scrollMessagesToBottom(isCurrent);
       if (!isCurrent()) return;
-      markActiveViewRead({ all: true });
+      if (!activeHasNewer) markActiveViewRead({ all: true });
       await scrollMessagesToBottom(isCurrent);
     } catch (error) {
-      if (isCurrent()) composerNotice = { kind: "error", text: readableAPIError(error, "Could not jump to latest messages") };
+      if (isCurrent()) {
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not jump to latest messages") };
+        // The send receipt is confirmed even when missing history cannot reload.
+        if (revealSentMessage) await scrollMessagesToBottom(isCurrent);
+      }
     }
   }
 
@@ -2362,8 +2351,11 @@
     viewKey: string;
   };
 
-  let pendingDrafts = new Map<string, OutgoingDraft>();
-
+  type OutgoingMessage = {
+    draft: OutgoingDraft;
+    message: Message;
+    receipt?: Message;
+  };
 
   function buildOptimisticMessage(nonce: string, draft: OutgoingDraft, id = `tmp_${nonce}`): Message {
     const now = new Date().toISOString();
@@ -2489,67 +2481,37 @@
     return err.message;
   }
 
-  function localDraftMessagesForView(viewKey: string): Message[] {
-    const candidates = [...messages, ...(recoverableDraftMessages.get(viewKey) || [])].filter(
-      (message) =>
-        (message.status === "pending" || message.status === "failed") &&
-        belongsToView(message, viewKey) &&
-        (!activeTopicFilterID || message.topic_id === activeTopicFilterID),
+  function outgoingForView(viewKey: string): OutgoingMessage[] {
+    return [...outgoingMessages.values()].filter(
+      ({ draft }) => draft.viewKey === viewKey &&
+        (!activeTopicFilterID || draft.topicID === activeTopicFilterID),
     );
-    const drafts = new Map<string, Message>();
-    for (const message of candidates) {
-      const key = message.nonce ? `nonce:${message.nonce}` : `id:${message.id}`;
-      drafts.set(key, message);
-    }
-    return [...drafts.values()];
-  }
-
-  function rememberRecoverableDraft(viewKey: string, draftMessage: Message) {
-    const existing = recoverableDraftMessages.get(viewKey) || [];
-    const next = existing.filter(
-      (message) =>
-        message.id !== draftMessage.id &&
-        !(draftMessage.nonce && message.nonce === draftMessage.nonce),
-    );
-    recoverableDraftMessages = new Map(recoverableDraftMessages).set(viewKey, [
-      ...next,
-      draftMessage,
-    ]);
-  }
-
-  function forgetRecoverableDraft(viewKey: string, messageID: string, nonce?: string) {
-    const existing = recoverableDraftMessages.get(viewKey);
-    if (!existing) return;
-    const next = existing.filter(
-      (message) => message.id !== messageID && !(nonce && message.nonce === nonce),
-    );
-    const updated = new Map(recoverableDraftMessages);
-    if (next.length > 0) updated.set(viewKey, next);
-    else updated.delete(viewKey);
-    recoverableDraftMessages = updated;
   }
 
   async function revealFailedDraft(
-    draft: OutgoingDraft,
+    outgoing: OutgoingMessage,
     failedMessage: Message,
     notice: string,
+    isCurrent: () => boolean,
   ) {
-    rememberRecoverableDraft(draft.viewKey, failedMessage);
+    const { draft } = outgoing;
+    outgoing.message = failedMessage;
     if (currentConversationKey() !== draft.viewKey) return;
     let reloadFailed = false;
     const originalFilterStillActive =
       activeTopicFilterID === draft.topicFilterID &&
       topicFilterGeneration === draft.topicFilterGeneration;
     if (
-      originalFilterStillActive &&
+      isCurrent() && originalFilterStillActive &&
       activeTopicFilterID &&
       draft.topicID !== activeTopicFilterID
     ) {
       updateActiveTopicFilter("");
       scrollMemory.delete(draft.viewKey);
       messageWindows.delete(draft.viewKey);
+      isCurrent = beginMessageLoad();
       try {
-        await loadLatestMessages();
+        await loadLatestMessages(isCurrent);
       } catch {
         reloadFailed = true;
       }
@@ -2563,42 +2525,29 @@
       };
       return;
     }
-    if (reloadFailed) setActiveMessages(localDraftMessagesForView(draft.viewKey));
-    const failedID = failedMessage.id;
-    const failedNonce = failedMessage.nonce;
-    const existingIndex = messages.findIndex(
-      (message) => message.id === failedID || (failedNonce && message.nonce === failedNonce),
-    );
-    if (existingIndex >= 0) {
-      setActiveMessages(
-        messages.map((message, index) => (index === existingIndex ? failedMessage : message)),
-      );
-    } else {
-      setActiveMessages([...messages, failedMessage]);
-    }
+    updateActiveMessages();
     composerNotice = {
       kind: "error",
       text: reloadFailed ? `${notice} The unfiltered timeline could not reload.` : notice,
     };
-    await revealOwnSentMessage();
+    await scrollMessagesToBottom(isCurrent);
   }
 
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
+    const revealGeneration = messageLoadGeneration;
+    const isCurrent = () => messageLoadGeneration === revealGeneration && currentConversationKey() === draft.viewKey;
     const nonce = existingNonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
     const localID = existingMessageID ?? tmpID;
     const matchesTopicFilter = !activeTopicFilterID || draft.topicID === activeTopicFilterID;
     const shouldRevealSentMessage =
       !existingNonce && currentConversationKey() === draft.viewKey && matchesTopicFilter;
-    const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
-    pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
-    if (existingNonce) rememberRecoverableDraft(draft.viewKey, placeholder);
-    if (existingNonce) {
-      setActiveMessages(messages.map((m) => (m.id === localID ? placeholder : m)));
-    } else if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
-      setActiveMessages([...messages, placeholder]);
-      void revealOwnSentMessage();
+    const outgoing: OutgoingMessage = { draft, message: placeholder, receipt: outgoingMessages.get(nonce)?.receipt };
+    outgoingMessages.set(nonce, outgoing);
+    if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
+      updateActiveMessages();
+      if (!existingNonce) void scrollMessagesToBottom();
     }
     const path = draft.directConversationID
       ? `/api/dms/${draft.directConversationID}/messages`
@@ -2607,11 +2556,12 @@
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
     try {
-      const data = await api<{ message: Message }>(path, {
+      let message = outgoing.receipt || (await api<{ message: Message }>(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      });
-      let message = data.message;
+      })).message;
+      // The text is durable before attachment linking, including when linking fails.
+      outgoing.receipt = message;
       if (draft.upload) {
         try {
           await api(`/api/messages/${message.id}/attachments`, {
@@ -2631,66 +2581,43 @@
             attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
           };
           await revealFailedDraft(
-            draft,
+            outgoing,
             failedMessage,
             "The message was sent, but its attachment failed. Retry or discard it below.",
+            isCurrent,
           );
           return;
         }
       }
-      forgetRecoverableDraft(draft.viewKey, message.id, nonce);
-      pendingDrafts.delete(nonce);
-      // Replace placeholder with the real message (or append if a concurrent
-      // realtime reload already removed our placeholder).
-      const tmpIndex = messages.findIndex((m) => m.id === localID);
-      if (tmpIndex >= 0) {
-        setActiveMessages(messages.map((m) => (m.id === localID ? message : m)));
-      } else if (messages.some((m) => m.id === message.id)) {
-        setActiveMessages(messages.map((m) => (m.id === message.id ? message : m)));
-      } else if (
-        belongsToView(message, currentConversationKey()) &&
-        (!activeTopicFilterID || message.topic_id === activeTopicFilterID) &&
-        !messages.some((m) => m.id === message.id)
-      ) {
-        setActiveMessages([...messages, message]);
-      }
-      if (currentConversationKey() === draft.viewKey && shouldRevealSentMessage) {
-        if (shouldRefreshLatestAfterSend) {
-          await loadLatestMessages();
-        }
-        await revealOwnSentMessage();
-        markActiveViewRead({ all: true, seq: message.channel_seq || 0 });
-      }
+      outgoing.receipt = message;
+      outgoing.message = { ...message, nonce };
+      if (currentConversationKey() === draft.viewKey) updateActiveMessages();
+      else outgoingMessages.delete(nonce);
     } catch (err) {
       console.warn("send failed", err);
       await revealFailedDraft(
-        draft,
+        outgoing,
         { ...placeholder, status: "failed" },
         "The message failed to send. Retry or discard it below.",
+        isCurrent,
       );
+      return;
     }
+    if (isCurrent() && shouldRevealSentMessage) await jumpToLiveChat(true);
   }
 
   function retryFailedMessage(message: Message) {
     if (!message.nonce) return;
-    const draft = pendingDrafts.get(message.nonce);
-    if (!draft) {
-      // We lost the draft (e.g., page reload). Best we can do is reuse the
-      // placeholder body — but our pending tracker is in-memory only, so we
-      // simply discard.
-      discardFailedMessage(message);
-      return;
-    }
-    void dispatchDraft({ ...draft, viewKey: draft.viewKey }, message.nonce, message.id);
+    const draft = outgoingMessages.get(message.nonce)?.draft;
+    if (draft) void dispatchDraft(draft, message.nonce, message.id);
   }
 
   function discardFailedMessage(message: Message) {
-    if (message.nonce) {
-      const draft = pendingDrafts.get(message.nonce);
-      if (draft) forgetRecoverableDraft(draft.viewKey, message.id, message.nonce);
-      pendingDrafts.delete(message.nonce);
-    }
-    setActiveMessages(messages.filter((m) => m.id !== message.id));
+    if (!message.nonce) return;
+    const outgoing = outgoingMessages.get(message.nonce);
+    if (outgoing?.receipt) outgoing.message = { ...outgoing.receipt, nonce: message.nonce };
+    else outgoingMessages.delete(message.nonce);
+    updateActiveMessages();
   }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
@@ -2729,13 +2656,11 @@
     }
   }
 
-  function applyEditedMessage(updated: Message) {
-    setActiveMessages(
-      messages.map((current) => (current.id === updated.id ? { ...current, ...updated } : current)),
-    );
+  function applyEditedMessage(updated: MessageEdit) {
+    updateActiveMessage(updated);
     thread.updateMessage(updated);
     pinnedMessages = pinnedMessages.map((current) =>
-      current.id === updated.id ? { ...current, ...updated } : current,
+      current.id === updated.id ? mergeMessageUpdate(current, updated) : current,
     );
   }
 
@@ -2754,7 +2679,7 @@
       const data = await api<{ message: Message }>(`/api/messages/${message.id}`, { method: "DELETE" });
       const deleted = data.message;
       editController.cancelMessage(currentConversationKey(), deleted.id);
-      setActiveMessages(messages.map((current) => (current.id === deleted.id ? { ...current, ...deleted } : current)));
+      updateActiveMessage(deleted);
       thread.updateMessage(deleted);
       pinnedMessages = pinnedMessages.filter((current) => current.id !== deleted.id);
       if (replyTarget?.id === deleted.id) clearReplyTarget();
@@ -2801,14 +2726,21 @@
     if (!root) return;
     reactionController.seedMessages(freshMessages);
     editController.reconcile(currentConversationKey(), [root, ...thread.replies]);
-    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
+    // Thread view commits own its summary, not the timeline's body or author snapshot.
+    updateActiveMessage({ id: root.id, thread_state: root.thread_state });
   }
 
   async function refreshThreadSummary(messageID: string) {
-    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread?latest=true&limit=1`);
-    const root = { ...data.root, thread_state: data.thread_state };
-    reactionController.seedMessages([root]);
-    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
+    await messageRequests.run(() => api<ThreadPage>(`/api/messages/${messageID}/thread?latest=true&limit=1`), (data) => {
+      const root = { ...data.root, thread_state: data.thread_state };
+      reactionController.seedMessages([root]);
+      updateActiveMessage(root);
+    });
+  }
+
+  async function refreshActiveMessage(messageID: string, isCurrent: () => boolean) {
+    if (!messages.some((message) => message.id === messageID) && !messageRequests.pending) return;
+    await messageRequests.run(() => api<{ message: Message }>(`/api/messages/${messageID}`), (data) => updateActiveMessage(data.message), isCurrent);
   }
 
   function shouldRefreshThreadSummary(rootID: string, event: RealtimeEvent): boolean {
@@ -3440,7 +3372,7 @@
           }
         }
         if (!selectedChannelID && !selectedDirectID) {
-          commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
+          commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, "replace");
           return;
         }
         await loadMessages();
@@ -3488,7 +3420,7 @@
       // Optimistic-send echo: if this is our own outgoing message, the HTTP
       // response will swap the placeholder; skip the reload to avoid a flicker.
       const echoNonce = event.payload.nonce;
-      if (event.type === "message.created" && echoNonce && pendingDrafts.has(echoNonce)) {
+      if (event.type === "message.created" && echoNonce && outgoingMessages.has(echoNonce)) {
         return;
       }
       // Snapshot stuck-to-bottom state BEFORE mutating messages. Once the
@@ -3505,7 +3437,7 @@
       } else if (missingMessage) {
         await loadNewerMessagesFromRealtime(isCurrent);
       } else if (event.type !== "message.created") {
-        await loadMessages();
+        await refreshActiveMessage(event.payload.message_id || "", isCurrent);
       }
       if (!isCurrent()) return;
       if (event.type === "message.created") {
@@ -3565,7 +3497,7 @@
       loadBotCommands(),
     ]);
     void loadWorkspaceMembers();
-    await loadMessages();
+    updateActiveAuthor({ id: botUserID, handle: "", former_handle: formerHandle, deleted_at: deletedAt });
     if (thread.isCurrent(threadSelection)) await thread.refresh();
   }
 
@@ -3924,9 +3856,11 @@
     pinnedMessagesLoading = true;
     pinnedMessagesError = "";
     try {
-      const data = await api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`);
-      if (!isCurrent()) return;
-      pinnedMessages = data.messages;
+      await messageRequests.run(
+        () => api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`),
+        (data) => { pinnedMessages = data.messages.filter((message) => !message.deleted_at); },
+        isCurrent,
+      );
     } catch (error) {
       if (!isCurrent()) return;
       pinnedMessagesError = error instanceof Error ? error.message : "Could not load pinned messages";

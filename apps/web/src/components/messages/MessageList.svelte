@@ -27,7 +27,7 @@
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Topic, Upload, User } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
@@ -87,7 +87,7 @@
     onCopyLink?: (message: Message) => Promise<string>;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     topics?: Topic[];
     onSelectTopic?: (topicID: string) => void;
   };
@@ -310,6 +310,9 @@
   let lastMessageID = "";
   let lastPreambleLayoutRevision = "";
   let lastRestoreState: MessageListState | undefined;
+  // A proxied snapshot keeps its identity when a parent stores it in $state.
+  let capturedScrollState = $state<MessageListState>();
+  let capturedScrollGeneration = 0;
   let pendingRestore = false;
   let suppressPagination = false;
   let newerEdgeConsumed = false;
@@ -566,6 +569,7 @@
     generation: number,
     indexForTarget: () => number,
     selector: string,
+    pixelOffset = 0,
   ): Promise<boolean> {
     suppressProgrammaticPagination(3);
     for (let attempt = 0; attempt < 24; attempt++) {
@@ -573,7 +577,7 @@
       if (!virtualizer || !scrollEl) return false;
       const target = scrollEl.querySelector<HTMLElement>(selector);
       if (target) {
-        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
+        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top - pixelOffset;
         if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
         scrollEl.scrollTop += delta;
       } else {
@@ -631,25 +635,20 @@
   }
 
   function captureState(): MessageListState | null {
-    if (!virtualizer) return null;
-    const isAtBottom = checkAtBottom();
-    if (isAtBottom) return { atBottom: true };
-    const offset = virtualizer.getScrollOffset();
-    const idx = virtualizer.findItemIndex(offset);
-    const relativeOffset = Math.max(0, offset - historyLoaderHeight);
-    for (let i = Math.max(0, idx); i < items.length; i++) {
-      const it = items[i];
-      if (it.kind !== "group") continue;
-      const itemTop = virtualizer.getItemOffset(i);
-      const anchorMessageID = it.group.messages[0]?.id;
-      if (!anchorMessageID) continue;
-      return {
-        atBottom: false,
-        anchorMessageID,
-        anchorPixelOffset: Math.max(0, relativeOffset - itemTop),
-      };
+    if (!virtualizer || !scrollEl) return null;
+    capturedScrollState = { atBottom: checkAtBottom() };
+    capturedScrollGeneration = scrollCommandGeneration;
+    if (!capturedScrollState.atBottom) {
+      const top = scrollEl.getBoundingClientRect().top;
+      for (const row of scrollEl.querySelectorAll<HTMLElement>("[data-message-id]")) {
+        const bounds = row.getBoundingClientRect();
+        if (bounds.bottom <= top) continue;
+        capturedScrollState.anchorMessageID = row.dataset.messageId;
+        capturedScrollState.anchorPixelOffset = bounds.top - top;
+        break;
+      }
     }
-    return { atBottom: false };
+    return capturedScrollState;
   }
 
   $effect(() => {
@@ -681,6 +680,7 @@
       lastItemCount = count;
       lastPreambleLayoutRevision = layoutRevision;
       lastRestoreState = restoreState;
+      capturedScrollState = undefined;
       shouldStickToBottom = true;
       atBottom = true;
       revealed = false;
@@ -691,26 +691,26 @@
     }
 
     const target = restoreState;
-    if (target && target !== lastRestoreState) {
+    const restoreChanged = target && target !== lastRestoreState;
+    if (restoreChanged) {
+      // Only the first admission of a capture yields to intervening input.
+      const interrupted = target === capturedScrollState && capturedScrollGeneration !== scrollCommandGeneration;
+      capturedScrollState = undefined;
       lastRestoreState = target;
-      if (target.atBottom) {
+      if (!interrupted && (target.atBottom || target.anchorMessageID)) {
         lastItemCount = count;
         lastPreambleLayoutRevision = layoutRevision;
         pendingRestore = true;
-        void runRestore(key, target, true);
+        void runRestore(key, target, target.atBottom);
         return;
       }
-      if (target.anchorMessageID) {
-        lastItemCount = count;
-        lastPreambleLayoutRevision = layoutRevision;
-        pendingRestore = true;
-        void runRestore(key, target, false);
-        return;
+      if (interrupted && !shouldStickToBottom && virtualizer) {
+        handleScroll(virtualizer.getScrollOffset());
       }
     }
 
     const dataChanged =
-      count !== lastItemCount || newestMessageChanged || layoutRevision !== lastPreambleLayoutRevision;
+      restoreChanged || count !== lastItemCount || newestMessageChanged || layoutRevision !== lastPreambleLayoutRevision;
     if (dataChanged && shouldStickToBottom && !hasNewer && !pendingRestore) {
       void scrollLastItemIntoView();
     } else if (dataChanged && !pendingRestore) {
@@ -728,17 +728,19 @@
 
   async function runRestore(key: string, target: MessageListState | undefined, fallbackToBottom: boolean) {
     const generation = beginScrollCommand(false);
+    const anchorID = target && !target.atBottom ? target.anchorMessageID : undefined;
+    const settleAnchor = anchorID
+      ? () => settleVirtualTarget(
+          key, generation, () => findMessageIndex(anchorID),
+          `[data-message-id="${CSS.escape(anchorID)}"]`, target?.anchorPixelOffset ?? 0,
+        )
+      : undefined;
     let restoredToUnreadDivider = false;
     await tick();
     await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
-    if (target && !target.atBottom && target.anchorMessageID) {
-      const restored = await restoreToAnchor(
-        key,
-        generation,
-        target.anchorMessageID,
-        target.anchorPixelOffset ?? 0,
-      );
+    if (settleAnchor) {
+      const restored = await settleAnchor();
       if (!isCurrentScrollCommand(key, generation)) return;
       if (!restored && fallbackToBottom) await scrollLastItemIntoView(generation);
       else shouldStickToBottom = false;
@@ -768,29 +770,11 @@
       if (virtualizer) handleScroll(virtualizer.getScrollOffset());
     }
     emitHistorySettled();
-  }
-
-  async function restoreToAnchor(
-    key: string,
-    generation: number,
-    messageID: string,
-    pixelOffset: number,
-  ): Promise<boolean> {
-    if (!virtualizer) return false;
-    const idx = findMessageIndex(messageID);
-    if (idx < 0) return false;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return false;
-      const desired = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
-      suppressProgrammaticPagination();
-      scrollEl.scrollTop = desired;
-      await nextFrame();
-      if (!isCurrentScrollCommand(key, generation)) return false;
-      const recheck = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
-      const current = virtualizer.getScrollOffset();
-      if (Math.abs(recheck - desired) < 1 && Math.abs(current - desired) < 1) break;
+    if (settleAnchor) {
+      // Removing the history loader changes the row's viewport position.
+      await tick();
+      if (isCurrentScrollCommand(key, generation)) await settleAnchor();
     }
-    return true;
   }
 
   function handleScroll(offset: number) {

@@ -45,6 +45,11 @@ request; sending the visible draft or removing its attachment also cancels a
 pending replacement. Upload failures appear in the composer and can be retried
 with the same file.
 
+If the text was sent but attachment linking fails, Retry attaches the existing
+upload to that saved message. Discard removes the failed attachment from the
+local view and keeps the sent text. Message and thread refreshes preserve these
+recovery actions until you retry or discard the attachment.
+
 `POST /api/messages/{message_id}/attachments` records a row in
 `message_attachments`. The store hydrates attachments on
 `ListMessages`/`GetThread`, so subsequent reads include the attachment list

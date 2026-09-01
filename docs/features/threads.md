@@ -113,10 +113,11 @@ controls fetch adjacent pages of 50 without moving the reading anchor. Ordinary
 refresh revalidates the retained interval instead of replacing it with a new
 100-reply slice. New replies follow only when already at the live edge; Jump to
 latest and a successful own reply explicitly select and follow the latest
-window. Selecting a search reply supersedes pending parent navigation, so
-returning to search and reopening a reply keeps its selection and load errors
-visible. Search and quote jumps load around the actual reply, with a visible
-error if it is unavailable. The root remains the canonical URL; a reload opens
+window. A newer history selection made while a reply is sending takes precedence
+over its delayed receipt. Selecting a search reply supersedes pending parent
+navigation, so returning to search and reopening a reply keeps its selection and
+load errors visible. Search and quote jumps load around the actual reply, with a
+visible error if it is unavailable. The root remains the canonical URL; a reload opens
 latest rather than persisting a reply cursor.
 
 The shared native thread panel retains at most 300 reply rows and trims toward

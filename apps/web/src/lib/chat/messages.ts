@@ -1,4 +1,4 @@
-import type { Message, ThreadState } from "../types";
+import type { Message } from "../types";
 import { isDeletedBot, userDisplayLabel, userHandle } from "./people";
 
 export type MessageGroup = {
@@ -114,12 +114,4 @@ export function newNonce(): string {
     return crypto.randomUUID().replace(/-/g, "");
   }
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function latestThreadState(current: ThreadState | null, incoming: ThreadState): ThreadState {
-  // Counts only grow; delayed receipts must not replace a newer summary of the same root.
-  return current?.root_message_id === incoming.root_message_id &&
-    current.reply_count > incoming.reply_count
-    ? current
-    : incoming;
 }

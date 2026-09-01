@@ -166,6 +166,12 @@ progress while retaining targetless, workspace-wide presence events.
   timeline events. Browser and desktop alerts track received message sequences
   separately, so a list refresh cannot hide a new alert and a retried event does
   not repeat it. Initial snapshots still suppress historical message alerts.
+- Embedded channels show confirmed sends immediately, then fetch any intervening
+  messages before advancing their loaded sequence boundary. A refresh failure
+  leaves the confirmed message visible and reports a refresh error; it does not
+  turn the successful send into a retryable submission.
+  Authoritative resync replaces the embedded window and invalidates older page
+  requests, so late responses cannot splice separate history ranges together.
 - When following live chat, a snapshot arriving before or after a live message
   does not leave it unread after its row and scroll position settle.
   Replayed loaded rows and history viewed away from the live edge retain their

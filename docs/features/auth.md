@@ -410,6 +410,11 @@ authentication failures return the web app to sign-in. Successful password or
 magic-token sign-in reloads the app so cached messages and workspace state from
 the previous account cannot appear under the new identity.
 
+Embedded channels retire pending sends when authentication expires. A later
+response from that session cannot interrupt a new session or affect a new send.
+The draft text is preserved when the same account returns and cleared when a
+different account signs in.
+
 ## Authorization
 
 Every store mutation that touches a workspace runs `requireMembership` (or the

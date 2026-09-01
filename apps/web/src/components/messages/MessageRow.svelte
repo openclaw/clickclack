@@ -5,7 +5,7 @@
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
@@ -37,7 +37,7 @@
     deleting?: boolean;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;

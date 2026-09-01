@@ -1,5 +1,6 @@
 import { api, readableAPIError } from "./api";
-import { latestThreadState, newNonce } from "./chat/messages";
+import { newNonce } from "./chat/messages";
+import { latestThreadState, mergeMessageUpdate, type MessageUpdate } from "./chat/messageUpdates";
 import type { Message, RealtimeEvent, ThreadPage, ThreadState, User } from "./types";
 
 type ThreadSelection = { messageID: string; context: string };
@@ -38,7 +39,7 @@ export class ThreadController {
   private window = 0;
   private revision = 0;
   private rowRevisions = new Map<string, number>();
-  private pageMutations = new Set<Map<string, Message>>();
+  private pageMutations = new Set<Map<string, MessageUpdate>>();
   private edgeOwners: Partial<Record<Edge, object>> = {};
   private knownTail = 0;
   private initialized = false;
@@ -98,25 +99,39 @@ export class ThreadController {
       Object.entries(options).map(([key, value]) => [key, String(value)]),
     );
     // Receipts may arrive after a row was paged out but before this snapshot commits.
-    const mutations = new Map<string, Message>();
+    const mutations = new Map<string, MessageUpdate>();
     this.pageMutations.add(mutations);
     try {
       const page = await api<ThreadPage>(`/api/messages/${selection.messageID}/thread?${query}`);
       if (mutations.size > THREAD_WINDOW_LIMIT) {
         throw new Error("Too many replies changed while loading. Please try again.");
       }
-      page.root = mutations.get(page.root.id) ?? page.root;
-      page.replies = page.replies.map((reply) => mutations.get(reply.id) ?? reply);
+      const replay = (message: Message) => {
+        const updated = mutations.get(message.id);
+        return updated ? mergeMessageUpdate(message, updated) : message;
+      };
+      page.root = replay(page.root);
+      page.replies = page.replies.map(replay);
       return page;
     } finally {
       this.pageMutations.delete(mutations);
     }
   }
+  private mergeSnapshot(
+    incoming: Message,
+    current: Message | null | undefined,
+    revision: number,
+  ): Message {
+    if (!current) return incoming;
+    // Local revisions protect metadata changed during the read; edit timestamps
+    // still decide the body when a late acknowledgement belongs to an older edit.
+    return (this.rowRevisions.get(incoming.id) ?? 0) > revision
+      ? mergeMessageUpdate(incoming, current)
+      : mergeMessageUpdate(current, incoming);
+  }
   private metadata(page: ThreadPage, revision: number) {
-    if ((this.rowRevisions.get(page.root.id) ?? 0) <= revision || !this.root) {
-      this.root = page.root;
-      this.rowRevisions.set(page.root.id, ++this.revision);
-    }
+    this.root = this.mergeSnapshot(page.root, this.root, revision);
+    this.rowRevisions.set(page.root.id, ++this.revision);
     this.knownTail = Math.max(this.knownTail, page.newest_seq);
     this.reconcileState(page.thread_state);
     this.error = "";
@@ -136,11 +151,8 @@ export class ThreadController {
     this.beforeChange?.(intent);
     const rows = new Map(this.replies.map((reply) => [reply.id, reply]));
     for (const reply of incoming) {
-      // A page captured before an acknowledged local mutation cannot undo it.
-      if ((this.rowRevisions.get(reply.id) ?? 0) <= revision || !rows.has(reply.id)) {
-        rows.set(reply.id, reply);
-        this.rowRevisions.set(reply.id, ++this.revision);
-      }
+      rows.set(reply.id, this.mergeSnapshot(reply, rows.get(reply.id), revision));
+      this.rowRevisions.set(reply.id, ++this.revision);
     }
     let replies = [...rows.values()].sort((a, b) => seq(a) - seq(b));
     if (replies.length > THREAD_WINDOW_LIMIT) {
@@ -198,9 +210,7 @@ export class ThreadController {
       this.beforeChange?.(intent);
       const existing = new Map(this.replies.map((reply) => [reply.id, reply]));
       let replies = page.replies.map((reply) =>
-        (this.rowRevisions.get(reply.id) ?? 0) > revision
-          ? (existing.get(reply.id) ?? reply)
-          : reply,
+        this.mergeSnapshot(reply, existing.get(reply.id), revision),
       );
       // A delayed latest snapshot must retain a newer contiguous interval already observed.
       if (intent === "latest" && page.replies.some((reply) => existing.has(reply.id))) {
@@ -386,8 +396,11 @@ export class ThreadController {
         const { current } = this.owner(shouldCommit),
           revision = this.revision;
         const data = await api<{ message: Message }>(`/api/messages/${id}`);
-        if (current() && (this.rowRevisions.get(id) ?? 0) <= revision)
-          this.updateMessage(data.message);
+        if (current()) {
+          const existing =
+            this.root?.id === id ? this.root : this.replies.find((reply) => reply.id === id);
+          this.updateMessage(this.mergeSnapshot(data.message, existing, revision));
+        }
       } else return false;
       return true;
     } catch (error) {
@@ -424,27 +437,35 @@ export class ThreadController {
 
   updateAuthor(user: User) {
     for (const message of this.root ? [this.root, ...this.replies] : this.replies) {
-      if (message.author?.id === user.id) this.updateMessage({ ...message, author: user });
+      if (message.author?.id === user.id)
+        this.updateMessage({
+          id: message.id,
+          thread_root_id: message.thread_root_id,
+          author: user,
+        });
     }
   }
-  updateMessage(message: Message) {
+  updateMessage(message: MessageUpdate) {
     if (message.deleted_at && this.draft?.quote?.id === message.id) this.setQuote(null);
     if (message.thread_root_id !== this.selection?.messageID) return;
     for (const mutations of this.pageMutations) {
       // One overflow sentinel bounds memory even when a page is held during a burst.
-      if (mutations.size <= THREAD_WINDOW_LIMIT) mutations.set(message.id, message);
+      if (mutations.size <= THREAD_WINDOW_LIMIT) {
+        const previous = mutations.get(message.id);
+        mutations.set(message.id, previous ? mergeMessageUpdate(previous, message) : message);
+      }
     }
     this.beforeChange?.("preserve");
     this.rowRevisions.set(message.id, ++this.revision);
     this.replies = this.replies.map((reply) =>
-      reply.id === message.id ? { ...reply, ...message } : reply,
+      reply.id === message.id ? mergeMessageUpdate(reply, message) : reply,
     );
-    if (this.root?.id === message.id) this.root = { ...this.root, ...message };
+    if (this.root?.id === message.id) this.root = mergeMessageUpdate(this.root, message);
     this.pruneRevisions();
     this.committed();
   }
   async send(onError?: (error: unknown) => void): Promise<void> {
-    const selection = this.selection,
+    const { selection, current } = this.owner(),
       draft = this.draft,
       body = draft?.body.trim();
     if (!this.isCurrent(selection) || !this.root || !draft || !body || draft.sending) return;
@@ -471,6 +492,8 @@ export class ThreadController {
         return;
       this.revision++;
       this.reconcileState(data.thread_state);
+      this.committed();
+      if (!current()) return;
       if (
         !this.hasNewer &&
         !this.replies.some((reply) => reply.id === data.message.id) &&

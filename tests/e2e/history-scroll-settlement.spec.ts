@@ -1,4 +1,11 @@
-import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+  type WebSocketRoute,
+} from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
 import { pauseMessageFrames, settleScrollFrames } from "./message-frames";
@@ -43,7 +50,12 @@ async function historyFixture(request: APIRequestContext) {
       })
     ).ok(),
   ).toBe(true);
-  return { path, route: `/app/${workspace.route_id}/${channel.route_id}`, targetID };
+  return {
+    path,
+    route: `/app/${workspace.route_id}/${channel.route_id}`,
+    embedRoute: `/embed/channel/${workspace.route_id}/${channel.route_id}`,
+    targetID,
+  };
 }
 
 async function deliverWheel(page: Page, viewport: Locator, deltaY: number) {
@@ -62,6 +74,57 @@ let fixture: Awaited<ReturnType<typeof historyFixture>>;
 test.beforeAll(async ({ request }) => {
   fixture = await historyFixture(request);
 });
+
+for (const surface of ["channel", "embedded channel"]) {
+  test(`older paging preserves the visible row when its author group expands in the ${surface}`, async ({
+    page,
+  }) => {
+    const { path, route: appRoute, embedRoute } = fixture;
+    const entered = deferred(),
+      release = deferred();
+    let requests = 0;
+    await page.route(`**${path}?*`, async (route) => {
+      if (!new URL(route.request().url()).searchParams.has("before_seq")) return route.continue();
+      if (++requests === 1) {
+        entered.resolve();
+        await release.promise;
+      }
+      await route.continue();
+    });
+    await page.goto(surface === "channel" ? appRoute : embedRoute);
+    await expect(page.locator(".markdown").filter({ hasText: "Quote navigation" })).toBeVisible();
+    await settleScrollFrames(page);
+    const viewport = page.locator(".messages-scroll");
+    const olderPage = page.waitForResponse(
+      (response) => response.url().includes(`${path}?before_seq=`) && response.ok(),
+    );
+    const anchor = await viewport.evaluate((el) => {
+      el.scrollTop = 0;
+      const row = el.querySelector<HTMLElement>("[data-message-id]")!;
+      const captured = {
+        id: row.dataset.messageId!,
+        offset: row.getBoundingClientRect().top - el.getBoundingClientRect().top,
+      };
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+      return captured;
+    });
+    await entered.promise;
+    await expect.poll(() => requests).toBe(1);
+    release.resolve();
+    await (await olderPage).finished();
+    await settleScrollFrames(page);
+    await expect(page.locator(".messages-history-pad")).toHaveCount(0);
+    expect(requests).toBe(1);
+    const row = page.locator(`[data-message-id="${anchor.id}"]`);
+    await expect(row).toBeInViewport();
+    const offset = await row.evaluate(
+      (el) =>
+        el.getBoundingClientRect().top -
+        el.closest(".messages-scroll")!.getBoundingClientRect().top,
+    );
+    expect(Math.abs(offset - anchor.offset)).toBeLessThan(2);
+  });
+}
 
 for (const interruption of ["loading", "restore", "quote"] as const) {
   test(`older paging continues after ${interruption === "quote" ? "a quote replaces its restore" : `wheel input during ${interruption}`}`, async ({
@@ -132,3 +195,116 @@ for (const interruption of ["loading", "restore", "quote"] as const) {
     await expect(page.locator(".messages-history-pad")).toHaveCount(0);
   });
 }
+
+test("a history resync preserves scrolling after a bottom capture", async ({ page }) => {
+  const { path, route: appRoute } = fixture;
+  let socket: WebSocketRoute | undefined, server: WebSocketRoute | undefined;
+  await page.routeWebSocket("**/api/realtime/ws?*", (client) => {
+    socket = client;
+    server = client.connectToServer();
+  });
+  await page.goto(appRoute);
+  await waitForAppReady(page);
+  await settleScrollFrames(page);
+  const viewport = page.locator(".messages-scroll");
+  await expect
+    .poll(() => viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+    .toBeLessThan(2);
+  const entered = deferred(),
+    release = deferred();
+  await page.route(`**${path}?*`, async (route) => {
+    const response = await route.fetch();
+    entered.resolve();
+    await release.promise;
+    await route.fulfill({ response });
+  });
+  const refreshed = page.waitForResponse(
+    (response) => response.url().includes(`${path}?`) && response.ok(),
+  );
+  const upstream = server!;
+  await socket!.close({ code: 4001, reason: "History resync regression" });
+  await upstream.close();
+  try {
+    await entered.promise;
+    await viewport.hover();
+    await deliverWheel(page, viewport, -600);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+      .toBeGreaterThan(300);
+    await settleScrollFrames(page);
+    const anchor = await viewport.evaluate((el) => {
+      const top = el.getBoundingClientRect().top;
+      const row = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find(
+        (row) => row.getBoundingClientRect().bottom > top,
+      )!;
+      return { id: row.dataset.messageId!, offset: row.getBoundingClientRect().top - top };
+    });
+    release.resolve();
+    await (await refreshed).finished();
+    await settleScrollFrames(page);
+    const row = page.locator(`[data-message-id="${anchor.id}"]`);
+    await expect(row).toBeInViewport();
+    const offset = await row.evaluate(
+      (el) =>
+        el.getBoundingClientRect().top -
+        el.closest(".messages-scroll")!.getBoundingClientRect().top,
+    );
+    expect(Math.abs(offset - anchor.offset)).toBeLessThan(2);
+  } finally {
+    release.resolve();
+  }
+});
+
+test("older paging preserves live following after an append during the request", async ({
+  page,
+  request,
+}) => {
+  const { path, route: appRoute } = fixture;
+  const entered = deferred(),
+    release = deferred();
+  let requests = 0;
+  await page.route(`**${path}?*`, async (route) => {
+    if (!new URL(route.request().url()).searchParams.has("before_seq")) return route.continue();
+    const response = await route.fetch();
+    if (++requests === 1) {
+      entered.resolve();
+      await release.promise;
+    }
+    await route.fulfill({ response });
+  });
+  await page.goto(appRoute);
+  await waitForAppReady(page);
+  await settleScrollFrames(page);
+  const viewport = page.locator(".messages-scroll");
+  const olderPage = page.waitForResponse(
+    (response) => response.url().includes(`${path}?before_seq=`) && response.ok(),
+  );
+  await viewport.hover();
+  await deliverWheel(page, viewport, -100000);
+  try {
+    await entered.promise;
+    await settleScrollFrames(page);
+    await deliverWheel(page, viewport, 100000);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+      .toBeLessThan(2);
+    const posted = await request.post(path, {
+      data: { body: "Live message while an older page is loading" },
+    });
+    expect(posted.ok()).toBe(true);
+    const { message } = await posted.json();
+    const row = page.locator(`[data-message-id="${message.id}"]`);
+    await expect(row).toBeInViewport();
+    release.resolve();
+    await (await olderPage).finished();
+    await settleScrollFrames(page);
+    await expect(page.locator(".messages-history-pad")).toHaveCount(0);
+    await expect(row).toBeInViewport();
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+      .toBeLessThan(2);
+    expect(requests).toBe(1);
+  } finally {
+    release.resolve();
+  }
+});

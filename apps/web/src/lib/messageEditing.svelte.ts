@@ -2,6 +2,7 @@ import { api, readableAPIError } from "./api";
 import type { Message } from "./types";
 
 export type MessageEditSurface = "timeline" | "thread";
+export type MessageEdit = Pick<Message, "id" | "thread_root_id" | "body" | "edited_at">;
 
 export type MessageEditSession = {
   messageID: string;
@@ -141,7 +142,7 @@ export class MessageEditController {
   async save(
     scope: string,
     message: Message,
-    onSaved: (updated: Message) => void,
+    onSaved: (updated: MessageEdit) => void,
   ): Promise<MessageEditSaveResult> {
     const session = this.sessions.get(scope);
     if (!session || session.messageID !== message.id || session.saving) return "invalid";
@@ -165,7 +166,9 @@ export class MessageEditController {
       });
       const current = this.sessions.get(scope);
       if (current?.generation !== generation) return "invalid";
-      onSaved(data.message);
+      // PATCH owns edited content, not the author or attachment snapshot it returns.
+      const { id, thread_root_id, body, edited_at } = data.message;
+      onSaved({ id, thread_root_id, body, edited_at });
       this.deleteSession(scope);
       return "saved";
     } catch (error) {

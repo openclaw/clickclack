@@ -12,7 +12,7 @@
     userHandle,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, ThreadState, Upload, User } from "../../lib/types";
@@ -63,7 +63,7 @@
     onCopyLink?: (message: Message) => Promise<string>;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     onClearReply: () => void;
     onActivateThreadComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;

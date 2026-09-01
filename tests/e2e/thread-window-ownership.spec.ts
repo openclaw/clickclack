@@ -1,5 +1,12 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { threadFixture, openThread, deferred, longThread, scrollThreadTo } from "./thread-fixture";
+import {
+  threadFixture,
+  openThread,
+  deferred,
+  longThread,
+  scrollThreadTo,
+  expectInsideThread,
+} from "./thread-fixture";
 
 async function holdResponse(
   route: Route,
@@ -18,6 +25,61 @@ async function edit(page: Page, id: string, body: string) {
   await row.getByLabel("Edit message", { exact: true }).fill(body);
   await row.getByRole("button", { name: "Save", exact: true }).click();
   await expect(row.locator(".markdown")).toHaveText(body);
+}
+
+for (const surface of ["main", "embed"] as const) {
+  test(`a delayed ${surface} reply receipt preserves a newer historical selection`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const { root, replies, workspace } = await longThread(page);
+    if (surface === "embed")
+      await page.goto(`/embed/thread/${workspace.route_id}/${root.route_id}`);
+    const quoteResponse = await page.request.post(`/api/messages/${root.id}/thread/replies`, {
+      data: { body: "Return to earlier context", quoted_message_id: replies[1].id },
+    });
+    expect(quoteResponse.status()).toBe(201);
+    const quote = (await quoteResponse.json()).message;
+    const quoteRow = page.locator(`.reply[data-message-id="${quote.id}"]`);
+    await expect(quoteRow).toBeAttached();
+
+    const entered = deferred(),
+      release = deferred(),
+      delivered = deferred();
+    let sentID = "";
+    await page.route(`**/api/messages/${root.id}/thread/replies`, async (route) => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(201);
+      sentID = (await response.json()).message.id;
+      entered.resolve();
+      await release.promise;
+      await route.fulfill({ response });
+      delivered.resolve();
+    });
+    try {
+      const composer = page.getByLabel("Reply body");
+      await composer.fill("Sent before choosing older context");
+      await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
+      await entered.promise;
+      // The real event has already applied the reply before navigation supersedes its receipt.
+      await expect(page.locator(`.reply[data-message-id="${sentID}"]`)).toBeAttached();
+      await quoteRow.getByRole("button", { name: /Jump to quoted message/ }).click();
+      const target = page.locator(`.reply[data-message-id="${replies[1].id}"]`);
+      await expectInsideThread(target, page);
+      const selectedURL = page.url();
+      await page.screenshot({ path: testInfo.outputPath("selected-history.png") });
+      release.resolve();
+      await delivered.promise;
+      await expect(composer).toHaveValue("");
+      await expect(composer).toBeEnabled();
+      await page.screenshot({ path: testInfo.outputPath("after-reply-receipt.png") });
+      await expectInsideThread(target, page);
+      await expect(page.locator(`.reply[data-message-id="${sentID}"]`)).toHaveCount(0);
+      await expect(page).toHaveURL(selectedURL);
+    } finally {
+      release.resolve();
+    }
+  });
 }
 
 test("older retry retains its window, hydrates partial reactions and survives a concurrent newer load", async ({

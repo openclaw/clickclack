@@ -67,10 +67,16 @@ Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
 Read events are private to the user who advanced the pointer.
 
+Loading older history preserves the visible message's position, including when
+adjacent messages are grouped by author. The full app and embedded channel view
+share this behavior.
+
 The web message menu exposes **Copy link** for channel roots. It builds the
 absolute URL from the configured public frontend origin and the canonical
 `/app/{workspace_route_id}/{message_route_id}` path. If clipboard access is
 blocked, a focused read-only field exposes the selected URL for manual copy.
+Allocating a link updates only its route metadata; a delayed response cannot
+overwrite a newer message edit.
 
 ## Editing in the web app
 
@@ -96,6 +102,9 @@ earlier navigation finishes later. Drafts in other conversations are retained fo
 a bounded number of recent views. Realtime updates refresh an untouched draft;
 if the user already changed it, the editor keeps that draft and warns that the
 message changed elsewhere.
+A delayed save acknowledgement cannot replace a newer edit or restore deleted
+content. Edit acknowledgements also preserve author and attachment updates.
+A pinned-list refresh retains edits saved while it was loading.
 
 ## Durable agent activity
 
@@ -188,6 +197,17 @@ schema is required for V1.
 Searching for a GIF never submits the message draft.
 `Escape` closes the active GIF picker or suggestion menu while preserving the
 draft and reply quote. Once both are closed, `Escape` clears the quote.
+
+Sending from history returns to the latest messages. A failed refresh keeps the
+confirmed message visible and reports the refresh error. Dismiss any open search
+results and press Escape to retry the jump. Selecting history while a send,
+attachment, or refresh is pending keeps that selection even if the operation fails.
+Background message edits, deletions, and deleted bot identities update in place
+without changing the history selection or cancelling that return to live chat.
+Changes received while history is loading stay applied when its snapshot arrives.
+Returning to live chat or pressing Escape also preserves pending message updates.
+A delayed refresh in an embedded channel cannot undo an acknowledged edit or
+restore a deleted message.
 
 ## Attachments
 

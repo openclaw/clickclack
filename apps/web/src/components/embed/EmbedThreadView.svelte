@@ -11,6 +11,7 @@
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
     MessageEditController,
+    type MessageEdit,
     type MessageEditSession,
   } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
@@ -122,7 +123,7 @@
     }
   }
 
-  function applyEditedMessage(updated: Message) {
+  function applyEditedMessage(updated: MessageEdit) {
     thread.updateMessage(updated);
   }
 

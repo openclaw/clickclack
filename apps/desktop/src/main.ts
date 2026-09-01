@@ -422,7 +422,6 @@ function registerIPC() {
       rememberWindowState();
       mainWindow?.destroy();
       createMainWindow();
-      setTimeout(() => settingsWindow?.close(), 350);
       return settingsInfo();
     });
   });

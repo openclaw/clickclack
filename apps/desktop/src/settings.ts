@@ -70,6 +70,7 @@ async function save() {
       startAtLogin: startAtLoginInput.checked,
     });
     setStatus("Connected. Returning to ClickClack…", "success");
+    setTimeout(() => window.close(), 350);
   } catch (error) {
     setStatus(errorMessage(error), "error");
     setBusy(false);

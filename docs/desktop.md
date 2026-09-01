@@ -72,6 +72,8 @@ Saving a server takes effect after the settings file is written successfully.
 Until then, the current server, window, and desktop controls stay active. A
 failed save leaves that selection intact and can be retried. Concurrent saves
 are applied in order, including window-state updates made while saving.
+A successful save dismisses its original Settings window; reopening Settings
+during a save leaves the new window open.
 
 GitHub sign-in opens in the system browser, where existing GitHub sessions,
 passkeys, password managers, and two-factor authentication already work. After

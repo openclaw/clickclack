@@ -312,3 +312,33 @@ test("current OAuth verifies the session before navigating and consumes the atte
   assert.equal(d.requests.length, 2);
   assert.equal(JSON.parse(await readFile(d.destination, "utf8")).serverUrl, A);
 });
+
+for (const replacementStage of ["after-save", "during-probe"]) {
+  test(`saving Settings never closes a replacement opened ${replacementStage}`, async (t) => {
+    const d = await desktop(t);
+    const originalSettings = d.windows[1];
+    let save;
+    let probe;
+    if (replacementStage === "during-probe") {
+      probe = deferred();
+      d.controls.probe = () => probe.promise;
+      save = d.save(B);
+      await settle();
+    } else {
+      await d.save(B);
+    }
+    originalSettings.destroy();
+    d.send(d.main, "desktop:open-settings");
+    const replacement = d.windows.at(-1);
+    assert.notEqual(replacement, originalSettings);
+    assert.equal(replacement.destroyed, false);
+    let unexpectedCloses = 0;
+    replacement.on("close", () => unexpectedCloses++);
+    if (probe) {
+      probe.resolve(new Response(""));
+      await save;
+    }
+    await d.flushTimers();
+    assert.equal(unexpectedCloses, 0, "An old save must not close a newly opened Settings window");
+  });
+}

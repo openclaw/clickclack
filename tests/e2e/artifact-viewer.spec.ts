@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { zipSync } from "fflate";
 import { deflateRawSync } from "node:zlib";
 import { classifyArtifact } from "../../apps/web/src/lib/artifacts";
@@ -576,6 +576,52 @@ test("rejects presentation paragraph floods deterministically", () => {
   expect(() => parsePresentation(new Uint8Array(paragraphFloodPresentation()))).toThrow(
     "too many paragraphs",
   );
+});
+
+test("keeps artifact and message actions clickable as scrolling settles", async ({ page }) => {
+  const { channel, messages } = await seedArtifacts(page, [
+    {
+      filename: "scroll-proof.md",
+      contentType: "text/markdown",
+      body: Buffer.from("# Scrolled artifact"),
+    },
+  ]);
+  const filler = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: Array.from({ length: 40 }, (_, index) => `Scroll row ${index}`).join("\n\n") },
+  });
+  expect(filler.ok()).toBe(true);
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${channel.name}` }).click();
+
+  const scroll = page.locator(".messages-scroll");
+  const row = page.locator(`[data-message-id="${messages["scroll-proof.md"]}"]`);
+  const clickAfterScroll = async (target: Locator) => {
+    await target.hover();
+    const previousTop = await scroll.evaluate((element) => element.scrollTop);
+    await page.mouse.wheel(0, previousTop > 8 ? -8 : 8);
+    await page.waitForFunction(
+      (previous) => document.querySelector(".messages-scroll")!.scrollTop !== previous,
+      previousTop,
+    );
+    const box = await target.boundingBox();
+    if (!box) throw new Error("Scrolled control is not visible");
+    // Native input must reach the visible control before scroll-end debounce finishes.
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  };
+
+  await clickAfterScroll(row.getByRole("button", { name: "Open scroll-proof.md" }));
+  const viewer = page.getByRole("complementary", { name: "Artifact viewer" });
+  await expect(viewer.getByRole("heading", { name: "Scrolled artifact" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
+
+  await row.hover();
+  await clickAfterScroll(row.getByRole("button", { name: "React with 👍" }));
+  await expect(row.getByRole("button", { name: "👍 — 1 reaction" })).toBeVisible();
+
+  await row.hover();
+  await clickAfterScroll(row.getByRole("button", { name: "More actions" }));
+  await expect(row.getByRole("menu", { name: "More actions" })).toBeVisible();
 });
 
 test("opens spreadsheets and slide decks with navigation", async ({ page }) => {

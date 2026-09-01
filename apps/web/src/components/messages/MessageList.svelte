@@ -846,10 +846,12 @@
           <HistoryLoader direction="older" rows={skeletonRows} />
         </div>
       {/if}
+      <!-- Keep revealed controls clickable while virtua debounces scroll-end. -->
       <Virtualizer
         bind:this={virtualizer}
         data={items}
         getKey={(item: Item) => item.id}
+        itemProps={() => loading || !revealed ? undefined : { style: { "pointer-events": "auto" } }}
         scrollRef={scrollEl}
         shift={prepending}
         startMargin={historyLoaderHeight}

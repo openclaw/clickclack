@@ -143,7 +143,10 @@ before publishing them alongside the Windows and Linux installers.
 
 ## Icon system
 
-`apps/desktop/assets/icon-source.svg` is the source of truth: opposing claws for
-conversation, a central aqua realtime pulse, and ClickClack coral. Generated
-assets include multi-resolution macOS `.icns`, Windows `.ico`, Linux PNG, a
-monochrome macOS tray template, and a Windows unread overlay.
+`apps/desktop/assets/icon-source.svg` is the source of truth: the "Keystroke"
+mark — two keycaps mid-stroke, one raised in porcelain and one pressed in
+signal cyan, on the navy Switchboard board. Generated assets include
+multi-resolution macOS `.icns`, Windows `.ico`, Linux PNG, a monochrome macOS
+tray template, and a Windows unread overlay. Regenerate them from the SVG
+sources with `rsvg-convert` (PNGs), `iconutil` (`.icns`), and ImageMagick
+(`.ico`).

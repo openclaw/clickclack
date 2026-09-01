@@ -6,34 +6,54 @@
   const appURL = productAppURLForHost(window.location.hostname);
   const repoURL = "https://github.com/openclaw/clickclack";
 
+  // The hero keyboard: the product name as two rows of keycaps. The C keys
+  // carry the signal cyan, echoing the pressed key in the logo mark.
+  const keyRows = [
+    ["C", "L", "I", "C", "K"],
+    ["C", "L", "A", "C", "K"],
+  ];
+
+  const stats = [
+    { key: "1", label: "binary, zero services" },
+    { key: "SQLite", label: "by default, Postgres ready" },
+    { key: "OpenAPI", label: "contract + TypeScript SDK" },
+    { key: "MIT", label: "licensed, self-host first" },
+  ];
+
   const features = [
     {
       icon: "box",
+      legend: "pkg",
       title: "One binary, zero services",
       body: "A single Go binary with the Svelte app, migrations, and static assets embedded. SQLite and local uploads by default — nothing else to run.",
     },
     {
       icon: "bolt",
+      legend: "rt",
       title: "Durable realtime",
       body: "WebSocket is the pipe, the database is the truth. Every event lands in a durable log, so clients reconnect with a cursor and miss nothing.",
     },
     {
       icon: "thread",
+      legend: "thr",
       title: "Threads that stay flat",
       body: "Slack-style threads, one level deep. Conversations branch without turning into reply-tree archaeology.",
     },
     {
       icon: "robot",
+      legend: "bot",
       title: "Agents are first-class",
       body: "Bots and agents use the same public API as humans: CLI, OpenAPI contract, TypeScript SDK, webhooks, and slash commands.",
     },
     {
       icon: "server",
+      legend: "db",
       title: "Self-host first",
       body: "SQLite is the default, not the demo — WAL, FTS5 search, online backups. Postgres slots in behind the same store interface.",
     },
     {
       icon: "shield",
+      legend: "mod",
       title: "Calm moderation",
       body: "Magic-link auth, optional GitHub OAuth, and a guest waiting room with approvals, timeouts, and blocks built in.",
     },
@@ -95,23 +115,36 @@
 
   <main>
     <section class="hero">
-      <p class="hero-badge">
-        <span class="badge-dot" aria-hidden="true"></span>
-        Open source · MIT · Single Go binary
-      </p>
-      <h1>Team chat for humans<br /> and their agents.</h1>
-      <p class="lede">
-        ClickClack is a self-hostable chat app with Slack-style threads, durable
-        realtime, and an API surface that bots, CI jobs, and agents can drive
-        from a shell.
-      </p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href={appURL}>Open app</a>
-        <a class="btn btn-ghost" href={docsURL}>Read the docs</a>
+      <div class="hero-copy">
+        <p class="hero-legend">Open source · MIT · Single Go binary</p>
+        <h1>Team chat for humans and their agents.</h1>
+        <p class="lede">
+          ClickClack is a self-hostable chat app with Slack-style threads,
+          durable realtime, and an API surface that bots, CI jobs, and agents
+          can drive from a shell.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href={appURL}>Open app</a>
+          <a class="btn btn-ghost" href={docsURL}>Read the docs</a>
+        </div>
+        <code class="hero-install" aria-label="Quick start command">
+          <span aria-hidden="true">$</span> go run ./apps/api/cmd/clickclack serve
+        </code>
       </div>
-      <code class="hero-install" aria-label="Quick start command">
-        <span aria-hidden="true">$</span> go run ./apps/api/cmd/clickclack serve
-      </code>
+
+      <div class="hero-board" role="img" aria-label="The word ClickClack spelled out on two rows of keyboard keycaps">
+        {#each keyRows as row, r}
+          <div class="key-row" class:row-2={r === 1}>
+            {#each row as letter, i}
+              <span
+                class="cap"
+                class:cap-signal={letter === "C" && i === 0}
+                style="--press-delay: {(r * 5 + i) * 70}ms"
+              >{letter}</span>
+            {/each}
+          </div>
+        {/each}
+      </div>
 
       <div class="app-frame" role="img" aria-label="Preview of the ClickClack app showing a channel timeline and an open thread">
         <div class="app-titlebar" aria-hidden="true">
@@ -188,6 +221,15 @@
       </div>
     </section>
 
+    <section class="stat-strip" aria-label="Product facts">
+      {#each stats as s}
+        <div class="stat">
+          <span class="stat-key">{s.key}</span>
+          <span class="stat-label">{s.label}</span>
+        </div>
+      {/each}
+    </section>
+
     <section class="pillars" aria-label="Product summary">
       <p class="section-kicker">Why ClickClack</p>
       <h2>Chat infrastructure that stays boring when the socket drops.</h2>
@@ -201,23 +243,26 @@
     <section class="feature-grid" id="features" aria-label="Feature highlights">
       {#each features as feature}
         <article>
-          <span class="feature-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              {#if feature.icon === "box"}
-                <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" />
-              {:else if feature.icon === "bolt"}
-                <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
-              {:else if feature.icon === "thread"}
-                <path d="M21 11a8 8 0 0 1-8 8H4l3-3" /><path d="M3 11a8 8 0 0 1 8-8h1" /><circle cx="17" cy="5" r="1.6" /><circle cx="7" cy="19" r="1.6" />
-              {:else if feature.icon === "robot"}
-                <rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 4v4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01M15 13h.01" /><path d="M9.5 16.5h5" />
-              {:else if feature.icon === "server"}
-                <rect x="3" y="4" width="18" height="7" rx="2" /><rect x="3" y="13" width="18" height="7" rx="2" /><path d="M7 7.5h.01M7 16.5h.01" />
-              {:else}
-                <path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" />
-              {/if}
-            </svg>
-          </span>
+          <div class="feature-head">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                {#if feature.icon === "box"}
+                  <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" />
+                {:else if feature.icon === "bolt"}
+                  <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
+                {:else if feature.icon === "thread"}
+                  <path d="M21 11a8 8 0 0 1-8 8H4l3-3" /><path d="M3 11a8 8 0 0 1 8-8h1" /><circle cx="17" cy="5" r="1.6" /><circle cx="7" cy="19" r="1.6" />
+                {:else if feature.icon === "robot"}
+                  <rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 4v4" /><circle cx="12" cy="3" r="1" /><path d="M9 13h.01M15 13h.01" /><path d="M9.5 16.5h5" />
+                {:else if feature.icon === "server"}
+                  <rect x="3" y="4" width="18" height="7" rx="2" /><rect x="3" y="13" width="18" height="7" rx="2" /><path d="M7 7.5h.01M7 16.5h.01" />
+                {:else}
+                  <path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" /><path d="M9 12l2 2 4-4" />
+                {/if}
+              </svg>
+            </span>
+            <span class="feature-legend" aria-hidden="true">{feature.legend}</span>
+          </div>
           <h3>{feature.title}</h3>
           <p>{feature.body}</p>
         </article>
@@ -248,7 +293,7 @@
           <span class="tl-title">agent@ci — zsh</span>
         </div>
         <pre>{#each terminalLines as line}<span class={line.prompt ? "t-prompt" : "t-out"}>{line.prompt ? "$ " : "  "}{line.text}
-</span>{/each}</pre>
+</span>{/each}<span class="t-caret" aria-hidden="true"></span></pre>
       </div>
     </section>
 
@@ -282,6 +327,15 @@
           </a>
         {/each}
       </div>
+    </section>
+
+    <section class="enter-band" aria-label="Get started">
+      <p class="section-kicker">Ready</p>
+      <h2>Press Enter to start.</h2>
+      <a class="enter-key" href={appURL}>
+        <span>Open ClickClack</span>
+        <span class="enter-glyph" aria-hidden="true">↵</span>
+      </a>
     </section>
   </main>
 

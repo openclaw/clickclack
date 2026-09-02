@@ -87,8 +87,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
 
-export async function apiWithTimeout<T>(path: string, signal?: AbortSignal): Promise<T> {
-  if (!signal) return api<T>(path);
+export async function apiWithTimeout<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const { signal } = init;
+  if (!signal) return api<T>(path, init);
   signal.throwIfAborted();
   // Keep caller cancellation and the deadline without requiring AbortSignal.any.
   const controller = new AbortController();
@@ -98,7 +99,7 @@ export async function apiWithTimeout<T>(path: string, signal?: AbortSignal): Pro
   signal.addEventListener("abort", onCancel, { once: true });
   timeout.addEventListener("abort", onTimeout, { once: true });
   try {
-    return await api<T>(path, { signal: controller.signal });
+    return await api<T>(path, { ...init, signal: controller.signal });
   } finally {
     signal.removeEventListener("abort", onCancel);
     timeout.removeEventListener("abort", onTimeout);

@@ -101,13 +101,13 @@ export function connectRealtime(options: RealtimeOptions): RealtimeConnection {
     });
     const data = await apiWithTimeout<RealtimeTailResponse>(
       `/api/realtime/events?${params.toString()}`,
-      signal,
+      { signal },
     ).catch(async (error: unknown) => {
       if (error instanceof APIError && [400, 403].includes(error.status)) {
         // A denied realtime scope alone does not revoke workspace membership.
         const { workspaces } = await apiWithTimeout<{ workspaces: Workspace[] }>(
           "/api/workspaces",
-          signal,
+          { signal },
         );
         if (!workspaces.some((workspace) => workspace.id === workspaceID)) {
           throw new WorkspaceUnavailableError("You no longer have access to this workspace.");

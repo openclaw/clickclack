@@ -1,24 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-
-// Each run gets its own workspace and #general so realtime traffic from
-// parallel workers cannot shift rows or the sidebar mid-interaction.
-async function createIsolatedGeneralRoute(page: Page, label: string): Promise<string> {
-  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const workspaceResponse = await page.request.post("/api/workspaces", {
-    data: { name: `${label} ${suffix}` },
-  });
-  expect(workspaceResponse.ok()).toBe(true);
-  const { workspace } = (await workspaceResponse.json()) as {
-    workspace: { id: string; route_id: string };
-  };
-  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: "general", kind: "public" },
-  });
-  expect(channelResponse.ok()).toBe(true);
-  const { channel } = (await channelResponse.json()) as { channel: { route_id: string } };
-  return `/app/${workspace.route_id}/${channel.route_id}`;
-}
+import { createGeneralChannel } from "./channel-fixture";
 
 async function clickThreadRootReplyButton(page: Page) {
   const button = page.locator(".thread-root .reply-quote-btn");
@@ -31,7 +12,7 @@ async function clickThreadRootReplyButton(page: Page) {
 
 test.describe("type-to-focus composer", () => {
   test.beforeEach(async ({ page }) => {
-    const route = await createIsolatedGeneralRoute(page, "Type Focus");
+    const { route } = await createGeneralChannel(page, "Type Focus");
     await page.goto(route);
     await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
   });

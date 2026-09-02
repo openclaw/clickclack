@@ -70,9 +70,9 @@ const (
 	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
 	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
 	realtimeSessionRevokedCloseReason = "session revoked; sign in again"
-	// realtimeSessionRecheckInterval bounds how long a connection whose session
+	// realtimeSessionRecheckInterval bounds how long a connection whose credential
 	// was revoked can sit open while its workspace is quiet. Delivery revalidates
-	// the session regardless, so this only shortens the idle case.
+	// the credential regardless, so this only shortens the idle case.
 	realtimeSessionRecheckInterval = 30 * time.Second
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
@@ -1393,31 +1393,37 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
-	// Read shared session state so revocation on another replica reaches this socket.
-	// Bot tokens and trusted-proxy identities have no session to revalidate.
-	sessionAuthorityLive := func() bool {
-		if act.sessionToken == "" {
-			return true
+	// Revalidate the exact credential in the shared store: setup replay can replace
+	// a bot secret without changing its token ID, including on another replica.
+	bearerToken := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	credentialAuthorityLive := func() bool {
+		var err error
+		revokedReason := realtimeSessionRevokedCloseReason
+		if act.botTokenID != "" {
+			_, err = s.store.GetBotTokenAuth(ctx, bearerToken)
+			revokedReason = "bot token revoked; reconnect with a valid token"
+		} else if act.sessionToken != "" {
+			_, err = s.sessionUser(ctx, act.sessionToken)
 		}
-		if _, err := s.sessionUser(ctx, act.sessionToken); err != nil {
-			if errors.Is(err, errSessionLookupUnavailable) {
-				_ = conn.Close(websocket.StatusTryAgainLater, "session verification unavailable; retry")
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrSessionExpired) {
+				_ = conn.Close(websocket.StatusPolicyViolation, revokedReason)
 			} else {
-				_ = conn.Close(websocket.StatusPolicyViolation, realtimeSessionRevokedCloseReason)
+				_ = conn.Close(websocket.StatusTryAgainLater, "credential verification unavailable; retry")
 			}
 			return false
 		}
 		return true
 	}
 	writeEvent := func(event store.Event) bool {
-		return sessionAuthorityLive() && writeWS(ctx, conn, event) == nil
+		return credentialAuthorityLive() && writeWS(ctx, conn, event) == nil
 	}
 	sessionRecheck := time.NewTicker(s.realtimeSessionCheck)
 	defer sessionRecheck.Stop()
 	// Startup and live delivery share one ordered, authorized durable-log drain.
 	// Capture a finite tail each time; a wake received during this drain stays queued.
 	drain := func() bool {
-		if !sessionAuthorityLive() {
+		if !credentialAuthorityLive() {
 			return false
 		}
 		replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
@@ -1516,7 +1522,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		case <-sessionRecheck.C:
 			// An idle socket delivers nothing to revalidate against, so revocation
 			// reaches it here instead of waiting for the workspace's next event.
-			if !sessionAuthorityLive() {
+			if !credentialAuthorityLive() {
 				return
 			}
 		case _, ok := <-subscription.Wake:
@@ -1671,6 +1677,8 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 		if botAuth, err := s.store.GetBotTokenAuth(r.Context(), token); err == nil {
+			// Record ingress use once; realtime revalidation stays read-only.
+			_ = s.store.RecordBotTokenUse(r.Context(), botAuth.TokenID)
 			return actor{
 				user:        botAuth.User,
 				botTokenID:  botAuth.TokenID,

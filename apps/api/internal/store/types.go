@@ -1332,4 +1332,5 @@ type Store interface {
 	CreateDesktopOAuthGrant(ctx context.Context, grant DesktopOAuthGrant) error
 	ConsumeDesktopOAuthGrant(ctx context.Context, grantHash, desktopChallenge string, now time.Time) (Session, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)
+	RecordBotTokenUse(ctx context.Context, tokenID string) error
 }

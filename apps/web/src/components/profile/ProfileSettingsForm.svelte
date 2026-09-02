@@ -1,7 +1,7 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import AccountSettingsForm from "./AccountSettingsForm.svelte";
   import BrowserNotificationSetting from "./BrowserNotificationSetting.svelte";
-  import { requestCurrentUser } from "../../lib/appearance";
   import type { User } from "../../lib/types";
 
   type Props = {
@@ -39,9 +39,6 @@
   let displayName = $state("");
   let handle = $state("");
   let avatarURL = $state("");
-  let status = $state("");
-  let statusError = $state(false);
-  let saving = $state(false);
 
   const previewName = $derived(displayName.trim() || user.display_name || "Your name");
   const previewHandle = $derived(handle.trim().replace(/^@+/, "") || user.handle || "");
@@ -52,47 +49,20 @@
     avatarURL = user.avatar_url;
   });
 
-  function normalizedHandleForSave(): string {
-    const trimmed = handle.trim().replace(/^@+/, "");
-    return trimmed ? `@${trimmed}` : "";
-  }
-
-  async function save() {
-    if (saving) return;
-    saving = true;
-    status = "";
-    statusError = false;
-    try {
-      const data = await requestCurrentUser({
-        method: "PATCH",
-        body: JSON.stringify({
-          display_name: displayName,
-          handle: normalizedHandleForSave(),
-          avatar_url: avatarURL,
-        }),
-      });
-      onUserUpdated(data.user);
-      status = "Saved";
-      onSaved?.();
-    } catch (error) {
-      status = error instanceof Error ? error.message : "Could not save profile";
-      statusError = true;
-    } finally {
-      saving = false;
-    }
-  }
-
   function clearAvatar() {
     avatarURL = "";
   }
 </script>
 
-<form
-  class="settings-form"
-  onsubmit={(event) => {
-    event.preventDefault();
-    void save();
-  }}
+<AccountSettingsForm
+  section="profile"
+  {onUserUpdated}
+  {onSaved}
+  payload={() => ({
+    display_name: displayName,
+    handle: handle.trim().replace(/^@+/, ""),
+    avatar_url: avatarURL,
+  })}
 >
   <section class="settings-identity" aria-label="Profile preview">
     <Avatar
@@ -256,14 +226,4 @@
     />
   </div>
 
-  <footer class="settings-footer">
-    {#if status}
-      <p class="settings-status" class:is-error={statusError} role="status">{status}</p>
-    {:else}
-      <span class="settings-footer__spacer" aria-hidden="true"></span>
-    {/if}
-    <button type="submit" class="settings-button settings-button--primary" disabled={saving}>
-      {saving ? "Saving..." : "Save profile"}
-    </button>
-  </footer>
-</form>
+</AccountSettingsForm>

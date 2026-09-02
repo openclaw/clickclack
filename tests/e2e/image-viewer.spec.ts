@@ -1,32 +1,14 @@
-import { expect, test, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { expect, test } from "@playwright/test";
+import { createGeneralChannel } from "./channel-fixture";
 import { waitForAppReady } from "./app-ready";
-
-// Isolated workspace + #general so realtime traffic from parallel workers
-// cannot reflow the message list around the lightbox triggers.
-async function createIsolatedGeneralRoute(page: Page, label: string): Promise<string> {
-  const wsSuffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const workspaceResponse = await page.request.post("/api/workspaces", {
-    data: { name: `${label} ${wsSuffix}` },
-  });
-  expect(workspaceResponse.ok()).toBe(true);
-  const { workspace } = (await workspaceResponse.json()) as {
-    workspace: { id: string; route_id: string };
-  };
-  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: "general", kind: "public" },
-  });
-  expect(channelResponse.ok()).toBe(true);
-  const { channel } = (await channelResponse.json()) as { channel: { route_id: string } };
-  return `/app/${workspace.route_id}/${channel.route_id}`;
-}
 
 test("opens conversation and thread images in an accessible lightbox", async ({ page }) => {
   const suffix = Date.now();
   const filename = `lightbox-${suffix}.png`;
   const messageText = `image lightbox ${suffix}`;
 
-  await page.goto(await createIsolatedGeneralRoute(page, "Image Viewer"));
+  const { route } = await createGeneralChannel(page, "Image Viewer");
+  await page.goto(route);
   await waitForAppReady(page);
   await page.getByLabel("Upload file").setInputFiles({
     name: filename,

@@ -13,6 +13,7 @@ import {
 } from "../../apps/web/src/lib/bots";
 import { productAppURLForHost } from "../../apps/web/src/productLinks";
 import { waitForAppReady } from "./app-ready";
+import { createGeneralChannel } from "./channel-fixture";
 import { pauseMessageFrames, settleScrollFrames } from "./message-frames";
 
 const serverURL = "http://127.0.0.1:18082";
@@ -45,51 +46,6 @@ async function clickclackAsync(args: string[], env: NodeJS.ProcessEnv = {}): Pro
     env: { ...process.env, ...env },
   });
   return stdout.trim();
-}
-
-async function createGeneralChannelRoute(
-  page: Page,
-  label: string,
-  isolatedUser = false,
-): Promise<string> {
-  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const workspaceResponse = await page.request.post("/api/workspaces", {
-    data: { name: `${label} ${suffix}` },
-  });
-  expect(workspaceResponse.ok()).toBe(true);
-  const { workspace } = (await workspaceResponse.json()) as {
-    workspace: { id: string; route_id: string };
-  };
-  if (isolatedUser) {
-    const userID = execFileSync(
-      "go",
-      [
-        "run",
-        "./apps/api/cmd/clickclack",
-        "admin",
-        "user",
-        "create",
-        "--data",
-        "./data/e2e",
-        "--workspace",
-        workspace.id,
-        "--name",
-        `${label} Tester`,
-        "--email",
-        `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}@example.com`,
-      ],
-      { cwd: process.cwd(), encoding: "utf8" },
-    ).trim();
-    await page.setExtraHTTPHeaders({ "X-ClickClack-User": userID });
-  }
-  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: "general", kind: "public" },
-  });
-  expect(channelResponse.ok()).toBe(true);
-  const { channel } = (await channelResponse.json()) as {
-    channel: { route_id: string };
-  };
-  return `/app/${workspace.route_id}/${channel.route_id}`;
 }
 
 function isolatedHome(): NodeJS.ProcessEnv {
@@ -1124,7 +1080,7 @@ test("aligns self and other messages independently", async ({ page }) => {
 });
 
 test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
-  const route = await createGeneralChannelRoute(page, "Right aligned Markdown", true);
+  const { route } = await createGeneralChannel(page, "Right aligned Markdown", true);
   const markdownBody = [
     "Right-aligned Markdown:",
     "",
@@ -1307,7 +1263,7 @@ test("realtime cursor storage failures do not block app startup", async ({ page 
 });
 
 test("browser notification storage failures do not block app startup", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Notification storage");
+  const { route: generalRoute } = await createGeneralChannel(page, "Notification storage");
   await page.addInitScript(() => {
     const blockedKeyPrefix = "clickclack:browser-notifications-enabled:v1:";
     const getItem = Storage.prototype.getItem;
@@ -1333,7 +1289,7 @@ test("browser notification storage failures do not block app startup", async ({ 
 });
 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Mobile navigation");
+  const { route: generalRoute } = await createGeneralChannel(page, "Mobile navigation");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
@@ -1390,7 +1346,7 @@ test("desktop sidebar collapse preference still toggles", async ({ page }) => {
 });
 
 test("desktop shell moves sidebar and search controls into the title bar", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Desktop titlebar");
+  const { route: generalRoute } = await createGeneralChannel(page, "Desktop titlebar");
   await page.addInitScript(() => {
     Object.assign(window, {
       clickclackDesktop: {
@@ -1560,7 +1516,7 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
 });
 
 test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Mobile geometry");
+  const { route: generalRoute } = await createGeneralChannel(page, "Mobile geometry");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(generalRoute);
@@ -3207,26 +3163,7 @@ test("search paginates, and handles empty, failed, and stale responses", async (
 });
 
 test("message history pages older, newer, and search target windows", async ({ page }) => {
-  // Seeding 260 messages over HTTP can exceed the default budget when a
-  // parallel worker is loading the shared server.
-  test.slow();
-  // Own workspace: parallel workers otherwise reorder the shared sidebar and
-  // stream unrelated realtime traffic into this client mid-interaction.
-  const workspaceResponse = await page.request.post("/api/workspaces", {
-    data: { name: `History Paging ${randomUUID().replaceAll("-", "").slice(0, 12)}` },
-  });
-  expect(workspaceResponse.ok()).toBe(true);
-  const { workspace } = (await workspaceResponse.json()) as {
-    workspace: { id: string; route_id: string };
-  };
-  const workspaceId = workspace.id;
-  const channelName = `history-paging-${Date.now()}`;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: channelName, kind: "public" },
-  });
-  const channel = (await channelResponse.json()) as {
-    channel: { id: string; name: string; route_id: string };
-  };
+  const { workspace, channel, route } = await createGeneralChannel(page, "History Paging");
   const senderID = clickclack([
     "admin",
     "user",
@@ -3234,28 +3171,28 @@ test("message history pages older, newer, and search target windows", async ({ p
     "--data",
     "./data/e2e",
     "--workspace",
-    workspaceId,
+    workspace.id,
     "--name",
     "History Sender",
     "--email",
-    `${channelName}@example.com`,
+    `${channel.id}@example.com`,
   ]);
 
   for (let i = 0; i < 260; i++) {
-    const response = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
       data: {
         body: `history-msg-${String(i).padStart(3, "0")} ${i === 10 ? "targetten " : ""}${"paged history row ".repeat(4)}`,
       },
     });
     expect(response.ok()).toBe(true);
   }
-  const readResponse = await page.request.post(`/api/channels/${channel.channel.id}/read`, {
+  const readResponse = await page.request.post(`/api/channels/${channel.id}/read`, {
     data: { seq: 260 },
   });
   expect(readResponse.ok()).toBe(true);
 
-  await page.goto(`/app/${workspace.route_id}/${channel.channel.route_id}`);
-  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+  await page.goto(route);
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-259" })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-000" })).toHaveCount(0);
 
@@ -3267,10 +3204,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   let olderPageRequests = 0;
   await page.route("**/api/channels/**/messages**", async (route) => {
     const url = route.request().url();
-    if (
-      !url.includes(`/api/channels/${channel.channel.id}/messages`) ||
-      !url.includes("before_seq=")
-    ) {
+    if (!url.includes(`/api/channels/${channel.id}/messages`) || !url.includes("before_seq=")) {
       await route.continue();
       return;
     }
@@ -3280,7 +3214,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   });
   const olderPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("before_seq=") &&
       response.ok(),
   );
@@ -3322,7 +3256,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   ).toBeVisible();
   const aroundPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("around_seq=") &&
       response.ok(),
   );
@@ -3337,7 +3271,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   const newerResponses: string[] = [];
   page.on("response", (response) => {
     if (
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("after_seq=") &&
       response.ok()
     ) {
@@ -3345,13 +3279,10 @@ test("message history pages older, newer, and search target windows", async ({ p
     }
   });
 
-  const liveMessageResponse = await page.request.post(
-    `/api/channels/${channel.channel.id}/messages`,
-    {
-      headers: { "X-ClickClack-User": senderID },
-      data: { body: "live while reading old history" },
-    },
-  );
+  const liveMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: "live while reading old history" },
+  });
   expect(liveMessageResponse.ok()).toBe(true);
   await page.waitForTimeout(300);
   expect(newerResponses).toHaveLength(0);
@@ -3362,7 +3293,7 @@ test("message history pages older, newer, and search target windows", async ({ p
 
   const newerPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("after_seq=") &&
       response.ok(),
   );

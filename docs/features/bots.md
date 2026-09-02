@@ -125,7 +125,8 @@ Rules:
   changes are not applied retroactively; rotate or mint a token to gain a newly
   added scope such as `commands:write`.
 - Revoked tokens fail auth.
-- Tokens update `last_used_at` after successful auth.
+- Tokens update `last_used_at` after successful request authentication, including
+  a WebSocket handshake. Rechecking an established socket does not update it.
 - Tokens are workspace-scoped. A token cannot access another workspace even if
   the bot user is later added there.
 - A bot may have multiple tokens for different runtimes.

@@ -53,6 +53,10 @@ avatar URL, conversation display preferences, and notification settings.
 
 Profile and notification saves update only their respective sections. Saving
 one section preserves changes to another section made in another tab or device.
+Fields stay disabled while their save is pending. Leaving a section or closing
+account settings prevents its delayed response from replacing a newer draft,
+reverting appearance, or closing another dialog. Each section refreshes when
+opened, so saves already accepted by the server remain visible when returning.
 
 Conversation display preferences can hide agent commentary or tool calls and
 independently place the current user's messages and other human or agent

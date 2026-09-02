@@ -184,6 +184,7 @@ test("appearance choices survive cache loss and roam to a second browser context
 test("stale account responses cannot overwrite a newer appearance choice", async ({ page }) => {
   let releaseProfileResponse!: () => void;
   let markProfileResponseCaptured!: () => void;
+  let profileRequest: import("@playwright/test").Request;
   const profileResponseGate = new Promise<void>((resolve) => {
     releaseProfileResponse = resolve;
   });
@@ -199,6 +200,7 @@ test("stale account responses cannot overwrite a newer appearance choice", async
       !body.includes('"appearance_preferences"')
     ) {
       const response = await route.fetch();
+      profileRequest = request;
       markProfileResponseCaptured();
       await profileResponseGate;
       await route.fulfill({ response });
@@ -213,13 +215,23 @@ test("stale account responses cannot overwrite a newer appearance choice", async
   await expect(modal.getByRole("heading", { name: "Profile settings" })).toBeVisible();
   await modal.getByRole("button", { name: "Save profile" }).click();
   await profileResponseCaptured;
+  const completed = Promise.race([
+    page.waitForEvent("requestfinished", { predicate: (request) => request === profileRequest }),
+    page.waitForEvent("requestfailed", { predicate: (request) => request === profileRequest }),
+  ]);
 
   await modal.getByRole("button", { name: "Appearance", exact: true }).click();
   await modal.getByRole("radio", { name: /^Iris/ }).click();
   await expect.poll(() => serverAppearance(page)).toMatchObject({ board_theme: "iris" });
   releaseProfileResponse();
-
-  await expect(modal).toBeHidden();
+  await completed;
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(modal.getByRole("heading", { name: "Appearance" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-board", "iris");
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("clickclack:board-theme:v1")))

@@ -4,7 +4,7 @@
 // and data attributes on <html> drive the active styles. The inline app.html
 // script reads these storage keys before hydration; keep them in sync.
 
-import { api } from "./api";
+import { api, apiWithTimeout } from "./api";
 import { getEmbedHostThemeMode } from "./embed-theme";
 import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
 
@@ -269,7 +269,8 @@ export async function requestCurrentUser(init: RequestInit = {}): Promise<{ user
     settledRevision: appearanceSettledRevision,
     accountGeneration: appearanceAccountGeneration,
   };
-  const data = await api<{ user: User }>("/api/me", init);
+  const data = await apiWithTimeout<{ user: User }>("/api/me", init);
+  init.signal?.throwIfAborted();
   reconcileAppearancePreferences(data.user, requestState);
   return data;
 }

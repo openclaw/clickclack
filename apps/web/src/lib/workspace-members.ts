@@ -42,7 +42,7 @@ export async function listWorkspaceMembersPage(
   if (params.role) search.set("role", params.role);
   const qs = search.toString();
   const path = `/api/workspaces/${params.workspaceID}/members${qs ? `?${qs}` : ""}`;
-  return apiWithTimeout<WorkspaceMemberPage>(path, params.signal);
+  return apiWithTimeout<WorkspaceMemberPage>(path, { signal: params.signal });
 }
 
 export async function listAllWorkspaceMembers(

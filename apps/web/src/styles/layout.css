@@ -562,6 +562,10 @@
   min-width: 0;
   background: var(--bg);
   overflow: hidden;
+  /* Contain row-lift z-indexes (hover/selected/menu-open) inside the
+     timeline; without a stacking context they compete globally and paint
+     through the fixed thread/search drawers on narrow viewports. */
+  isolation: isolate;
 }
 
 .timeline > * {

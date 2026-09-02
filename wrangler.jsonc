@@ -12,7 +12,7 @@
   ],
   "vars": {
     "CLICKCLACK_PUBLIC_URL": "https://app.clickclack.chat",
-    "CLICKCLACK_CONTAINER_NAME": "prod-20260818-openclaw-id",
+    "CLICKCLACK_CONTAINER_NAME": "prod-20260901-keystroke",
     "CLICKCLACK_GITHUB_MODERATOR_ORG": "openclaw",
     "CLICKCLACK_UPLOADS": "r2://clickclack-uploads/prod",
     "CLICKCLACK_R2_ACCOUNT_ID": "91b59577e757131d68d55a471fe32aca"

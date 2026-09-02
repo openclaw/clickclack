@@ -706,6 +706,14 @@
     padding-right: calc(20px + var(--safe-area-right));
     padding-left: calc(64px + var(--safe-area-left));
   }
+  /* The thread and search drawers are full-width here, so their headers sit
+     under the fixed nav toggle just like .topbar does; give them the same
+     clearance or the toggle covers the title. */
+  .thread > header,
+  .search-results-head {
+    padding-top: calc(12px + var(--safe-area-top));
+    padding-left: calc(64px + var(--safe-area-left));
+  }
   .search {
     width: 180px;
   }

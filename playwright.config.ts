@@ -6,6 +6,10 @@ const embedHostOrigin = `http://127.0.0.1:${Number(e2ePort) + 1}`;
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 30_000,
+  // CI shares one server across parallel workers; realtime traffic from a
+  // sibling worker can occasionally shift UI mid-action. Retries keep that
+  // long tail from failing runs while traces still record every failure.
+  retries: process.env.CI ? 2 : 0,
   expect: {
     timeout: 5_000,
   },

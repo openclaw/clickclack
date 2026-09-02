@@ -1,8 +1,37 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+// Isolated workspace + #general so parallel workers cannot move rows
+// under the hover-revealed reply controls mid-click.
+async function createIsolatedGeneral(
+  page: Page,
+  label: string,
+): Promise<{ route: string; workspaceID: string; channelID: string }> {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `${label} ${suffix}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "general", kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; route_id: string };
+  };
+  return {
+    route: `/app/${workspace.route_id}/${channel.route_id}`,
+    workspaceID: workspace.id,
+    channelID: channel.id,
+  };
+}
 
 test("inline quote-reply renders, jumps, and survives source delete", async ({ page }) => {
-  await page.goto("/app");
-  await page.getByRole("link", { name: "# general" }).click();
+  const isolated = await createIsolatedGeneral(page, "Reply");
+  await page.goto(isolated.route);
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
 
   // Send the original message we'll reply to.
@@ -38,22 +67,13 @@ test("inline quote-reply renders, jumps, and survives source delete", async ({ p
   await expect(originalRow).toHaveClass(/highlight/);
 
   // Cross-channel quote is forbidden by the API: directly verify the contract.
-  const workspacesResp = await page.request.get("/api/workspaces");
-  const workspaceId = (await workspacesResp.json()).workspaces[0].id;
-  const channelsResp = await page.request.get(`/api/workspaces/${workspaceId}/channels`);
-  const { channels } = await channelsResp.json();
-  // Find any non-general channel; if none, create one.
-  let otherChannel = channels.find((c: { name: string }) => c.name !== "general");
-  if (!otherChannel) {
-    const created = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-      data: { name: "second", kind: "public" },
-    });
-    otherChannel = (await created.json()).channel;
-  }
+  const created = await page.request.post(`/api/workspaces/${isolated.workspaceID}/channels`, {
+    data: { name: "second", kind: "public" },
+  });
+  const otherChannel = (await created.json()).channel;
 
-  // Get the original's id by sending another targeted message via API.
-  const generalId = channels.find((c: { name: string }) => c.name === "general").id;
-  const list = await page.request.get(`/api/channels/${generalId}/messages`);
+  // Get the original's id by reading the channel history via API.
+  const list = await page.request.get(`/api/channels/${isolated.channelID}/messages`);
   const { messages } = await list.json();
   const originalMsg = messages.find((m: { body: string }) => m.body === "the quoted original");
   expect(originalMsg).toBeTruthy();

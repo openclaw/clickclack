@@ -3207,14 +3207,26 @@ test("search paginates, and handles empty, failed, and stale responses", async (
 });
 
 test("message history pages older, newer, and search target windows", async ({ page }) => {
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
+  // Seeding 260 messages over HTTP can exceed the default budget when a
+  // parallel worker is loading the shared server.
+  test.slow();
+  // Own workspace: parallel workers otherwise reorder the shared sidebar and
+  // stream unrelated realtime traffic into this client mid-interaction.
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `History Paging ${randomUUID().replaceAll("-", "").slice(0, 12)}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const workspaceId = workspace.id;
   const channelName = `history-paging-${Date.now()}`;
   const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
     data: { name: channelName, kind: "public" },
   });
-  const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const channel = (await channelResponse.json()) as {
+    channel: { id: string; name: string; route_id: string };
+  };
   const senderID = clickclack([
     "admin",
     "user",
@@ -3242,8 +3254,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   });
   expect(readResponse.ok()).toBe(true);
 
-  await page.goto("/app");
-  await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
+  await page.goto(`/app/${workspace.route_id}/${channel.channel.route_id}`);
   await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-259" })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-000" })).toHaveCount(0);

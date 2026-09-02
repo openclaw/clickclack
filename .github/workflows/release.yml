@@ -60,12 +60,26 @@ jobs:
       - name: Set web asset version
         run: echo "CLICKCLACK_WEB_VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
 
+      - name: Prepare release notes
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const version = process.env.RELEASE_TAG.replace(/^v/, "");
+          const section = readFileSync("CHANGELOG.md", "utf8").split(/^## /m)
+            .find((section) => section.startsWith(`v${version} - `) || section.startsWith(`${version} - `));
+          const notes = section?.slice(section.indexOf("\n") + 1).trim();
+          if (!notes) throw new Error(`Missing changelog for ${process.env.RELEASE_TAG}`);
+          writeFileSync(`${process.env.RUNNER_TEMP}/clickclack-release-notes.md`, `${notes}\n`);
+          NODE
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: "v2.18.0"
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/clickclack-release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

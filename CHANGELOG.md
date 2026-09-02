@@ -1,55 +1,44 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 - 2026-09-02
 
-- Fixed FakeCo AWS test fixture loading in checkout paths containing spaces. Thanks @isaiahknight-va.
+### Highlights
 
-- Reused generated API schemas for 31 TypeScript SDK resource types, preserving public type shapes and runtime behavior, and corrected DM search documentation.
+- **Chat that keeps your place.** Long threads now open at the latest replies and page beyond the first 100. Live messages, search results, quote jumps, drafts, and unread markers stay consistent as history loads and connections recover.
+- **Working embedded chat, familiar faces.** Formatting, GIF, profile, and image controls work in embedded conversations. Operators can map existing ClickClack accounts to OpenClaw profiles and reuse their names and avatars while preserving message authors and custom avatar overrides.
+- **More ways to sign in.** Added browser sign-in with OpenClaw ID and optional local passwords for offline and self-hosted teams. Administrators enroll password users; users can change their password and sign out other devices. Enable local passwords with `--password-auth`. Thanks @isaiahknight-va.
+- **A fresh look on every desktop.** Introduced the Keystroke logo across the app, desktop icons, tray, and product website, and redesigned native Settings with clearer controls and save/test feedback.
 
-- Fixed CLI thread output dropping paging metadata, added latest and cursor windows, and aligned SDK message types with API thread summaries and attachments.
+### Chat and everyday use
 
-- Fixed concurrent first GitHub sign-ins failing after OAuth state consumption; SQLite and PostgreSQL now resolve one provider identity atomically while preserving profile overrides and notification settings.
+- Start DM now searches the complete workspace directory, including people who have never posted. Person actions reopen the exact one-to-one conversation instead of a group containing that person. Thanks @isaiahknight-va for the directory report.
+- Added configurable workspace home destinations and labels, including desktop navigation and long-label support. Thanks @sercada.
+- Preserved reading positions in long threads and growing same-author message groups, kept user scrolling in control, and prevented horizontal message scrolling from moving the surrounding app.
+- Kept newer edits, deletions, reactions, pins, and confirmed sends intact when delayed history or save responses arrive. Failed attachment linking retries against the already-sent message without changing its text.
+- Preserved drafts and quotes after failed replies, and prevented delayed loads or actions from reopening closed panes, replacing newer selections, or hiding navigation errors. Failed workspace, channel, and DM creation remains visible and retryable.
+- Fixed refreshes hiding live messages or notifications, duplicate alerts after reconnect, and visible live messages remaining unread after their rows settle.
+- Preserved IME composition, modifier shortcuts, caret position, and the active control's Escape behavior in composers, inline editing, and the GIF picker. Restored clickable controls on virtualized message rows.
+- Kept profile and notification saves independent across tabs. Closing, switching, or reopening Settings retires old requests so they cannot erase a new draft, close the new view, or restore stale appearance.
+- Fixed member-directory pagination across chat, embeds, and workspace settings, restored newer embedded messages and avatar fallbacks, and allowed workspace profile updates to retain provisioned slugs. Thanks @SebTardif and @sercada.
+- Kept failed desktop server saves from switching the active connection, and prevented old sign-in attempts or saves from affecting a replacement server or Settings window.
 
-- Fixed reaction viewer state when realtime events arrive before history pages, and refreshed root and reply reactions after authoritative reconnects in chat and embeds.
+### Sign-in, bots, and self-hosting
 
-- Fixed delayed channel and DM history loads replacing newer search, quote, unread, or latest-message selections, ignored topic filter changes during loading, and target scrolling within long same-author message groups.
+- Returned chat and embeds to sign-in when sessions expire, cleared content after workspace access is lost, and kept temporary server failures retryable. Revoked or replaced bot credentials now close already-open realtime sockets.
+- Fixed concurrent first GitHub sign-ins and HTTPS cookie handling behind trusted proxies while preserving account details and explicit profile overrides. Thanks @vincentkoc.
+- Preserved durable realtime event ordering through concurrent database commits and delayed publication, restored idle socket handling, and drained active requests before server shutdown.
+- Bounded stalled R2 headers and response reads while allowing progressing transfers to finish. Truncated downloads now fail, and stored object addresses correctly encode spaces and reserved characters. Thanks @SebTardif.
+- Bounded hanging browser API and slash-command requests while retaining streaming uploads, and hardened API pagination limits. Thanks @SebTardif and @vincentkoc.
+- Fixed concurrent PostgreSQL channel updates overwriting omitted fields, and rechecked message access when recovering interrupted sends.
 
-- Fixed delayed parent navigation dismissing a newly selected search reply or hiding its load error.
+### CLI, SDK, and maintenance
 
-- Fixed stale pin and upload responses affecting newer selections, restored upload failure retries and member avatar fallbacks, and kept live messages read when a channel snapshot arrives before their events.
+- Preserved CLI thread paging metadata and latest/cursor windows, corrected workspace/channel resolution, and surfaced discovery failures instead of silently selecting nothing.
+- Aligned TypeScript SDK resource types with the generated API contract, preserved opaque realtime metadata, and kept bot close callbacks attached to the correct socket across stop/restart.
+- Updated Go, SQLite, web, Electron 43, pnpm, Cloudflare, container, and CI dependencies while retaining macOS 12 desktop support.
+- Preserved complete docs navigation labels, fixed FakeCo fixtures in checkout paths containing spaces, and isolated parallel browser tests without adding retries or increasing timeouts. Thanks @vincentkoc and @isaiahknight-va.
 
-- Fixed CLI status pairing a channel with the wrong workspace and silently treating discovery failures as empty selections.
-
-- Fixed channel-list refreshes hiding live messages and notifications, and prevented duplicate message alerts after realtime recovery.
-
-- Fixed profile and notification saves overwriting changes from another tab, and aligned SDK account updates with the API's partial settings contract.
-
-- Fixed long threads hiding replies beyond the first 100: main and embedded views now open latest, page bounded history, preserve reading anchors and drafts, and load search/quote targets through shared thread paging in the API and SDK.
-
-- Fixed durable realtime events being skipped after delayed publication or concurrent PostgreSQL commits, restored idle WebSocket ping/disconnect handling, and kept attachment callbacks and moderation responses consistent with committed events.
-
-- Fixed person actions opening group DMs, preserved exact one-to-one reopening, and made failed workspace, channel, and DM creation visible and retryable without late responses taking over navigation.
-
-- Fixed concurrent PostgreSQL channel settings updates overwriting changes to omitted fields.
-
-- Fixed message recovery by nonce returning hidden channel and direct messages after the sender loses access.
-
-- Fixed delayed thread loads reopening closed panes or replacing newer selections, and preserved failed reply drafts and quotes with duplicate-safe retries.
-
-- Fixed failed desktop server saves changing the active selection, and prevented stale desktop OAuth completions and browser-open failures from affecting a replacement server, window, or sign-in attempt.
-
-- Added configurable workspace home destinations and labels, preserving desktop home navigation and keeping long labels within the badge. Thanks @sercada.
-
-- Fixed background message ingestion, live scrolling as same-author groups grow, and channel navigation during startup, including stale route failures after revisiting a channel.
-- Fixed stalled R2 response reads and truncated downloads without interrupting progressing streams. Thanks @SebTardif.
-- Fixed R2 header stalls while preserving configured HTTP transport wrappers. Thanks @SebTardif.
-- Fixed member-directory pagination loops across chat, embeds, and workspace settings, and restored loading newer embedded channel messages. Thanks @SebTardif.
-- Fixed profile saves for provisioned workspaces retaining their reserved slug. Thanks @sercada.
-- Fixed embedded channel formatting, GIF, profile, and image controls by sharing working composer behavior across views.
-- Added explicit OpenClaw profile identity synchronization for existing ClickClack users, preserving message authors and custom avatars while reusing OpenClaw names and avatar URLs.
-- Updated Go, SQLite, web, Electron 43, pnpm, lint/format, Cloudflare, container-base, and CI tooling dependencies while preserving macOS 12 desktop support.
-- Added "Sign in with OpenClaw ID" browser login through the first-party OIDC provider at id.openclaw.ai, reusing the existing OAuth transaction store, email-linked user provisioning, and session cookies alongside GitHub login.
-- Fixed browser API and slash-command requests hanging indefinitely when the API host stalls, while preserving unbounded streaming uploads.
+Thanks also to @KrasimirKralev for simplifying realtime internals.
 
 ## v0.3.1 - 2026-08-14
 

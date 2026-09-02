@@ -88,7 +88,9 @@ gh release create v0.3.0 --draft --verify-tag \
 Run the `release` workflow from protected `main` and provide the existing tag.
 The workflow checks out the tag, installs Go and pnpm, runs `pnpm check`, sets
 `CLICKCLACK_WEB_VERSION` to the checked-out commit, then runs
-`goreleaser release --clean` with `GITHUB_TOKEN`. In parallel, native runners
+`goreleaser release --clean` with `GITHUB_TOKEN`. Release notes come from the
+matching version section in `CHANGELOG.md`, preserving its highlights and order
+in the GitHub Release; a missing or empty section stops publication. In parallel, native runners
 build Windows and Linux desktop apps and a clean macOS runner verifies the
 signed draft assets. Once every job succeeds, the verified desktop files are
 attached and the draft is published.

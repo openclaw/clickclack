@@ -1564,13 +1564,8 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
   page.on("pageerror", (error) => consoleMessages.push(`pageerror: ${error.message}`));
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: `main-${Date.now()}`, kind: "public" },
-  });
-  const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const { workspace, channel, route } = await createGeneralChannel(page, "Chat Smoke", true);
+  const handle = `@smoke-${channel.route_id.toLowerCase()}`;
   const secondUserId = execFileSync(
     "go",
     [
@@ -1582,28 +1577,28 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
       "--data",
       "./data/e2e",
       "--workspace",
-      workspaceId,
+      workspace.id,
       "--name",
       "Second User",
       "--email",
-      "second@example.com",
+      `${channel.id}@example.com`,
     ],
     { cwd: process.cwd(), encoding: "utf8" },
   ).trim();
 
-  await page.goto("/app");
+  await page.goto(route);
   await waitForAppReady(page);
   await expect(page).toHaveURL(/\/app\/[^/]+\/[^/]+$/);
 
   await page
-    .getByRole("button", { name: /Account settings for Local Captain/ })
+    .getByRole("button", { name: /Account settings for Chat Smoke Tester/ })
     .click({ button: "right" });
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
   await page.getByLabel("Display name").fill("Peter Steinberger");
-  await page.getByLabel("Handle").fill("@steipete");
+  await page.getByLabel("Handle").fill(handle);
   await page.getByLabel("Avatar URL").fill("https://avatars.githubusercontent.com/u/280?v=4");
   await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("button", { name: /@steipete/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(handle) })).toBeVisible();
 
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
@@ -1620,7 +1615,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(
     page.getByLabel("Profile pane").getByRole("heading", { name: "Peter Steinberger" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Profile pane").getByText("@steipete").first()).toBeVisible();
+  await expect(page.getByLabel("Profile pane").getByText(handle).first()).toBeVisible();
   const infoIconOffset = await page
     .getByLabel("Profile pane")
     .locator(".info-icon")

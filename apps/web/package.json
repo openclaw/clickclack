@@ -20,10 +20,10 @@
     "fflate": "^0.8.3",
     "highlight.js": "^11.12.0",
     "marked": "^18.0.11",
-    "pdfjs-dist": "^6.2.108",
+    "pdfjs-dist": "^6.3.289",
     "sax": "^1.6.1",
     "svelte": "^5.57.0",
-    "virtua": "^0.50.6",
+    "virtua": "^0.51.0",
     "vite": "^8.2.2"
   },
   "devDependencies": {

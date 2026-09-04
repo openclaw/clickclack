@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated PDF.js to 6.3.289, virtua to 0.51.0, and Electron to 43.5.1 for rendering, scrolling, and desktop runtime fixes while retaining the macOS 12 minimum and dependency release-age gate.
 - Updated pnpm to 11.25.0, Node.js types, Oxc tooling, Wrangler, and the Pages/AWS credential actions; aligned both Docker builders with the source toolchains while preserving runtime minimums and the dependency release-age gate.
 - Updated the server build toolchain to Go 1.27.1, SQLite driver to 1.58.0, and Go cryptography dependency to 0.56.0 while retaining the Go 1.26.6 minimum and existing database and password formats.
 

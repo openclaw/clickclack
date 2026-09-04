@@ -77,6 +77,20 @@
   white-space: nowrap;
 }
 
+/* The default home key is the Keystroke logo itself: the tile becomes the navy
+   board and the mark fills it edge to edge, so the two share one silhouette. */
+.guild-rail .guild.home.home--mark {
+  padding: 0;
+  background: #141926;
+  border-color: color-mix(in srgb, #41c6ff 35%, var(--line-strong));
+}
+
+.guild-rail .guild.home.home--mark .keystroke-mark {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
 /* Placed after (and as specific as) the home hover rule so the pressed
    position wins while the pointer is still over the key. */
 .guild-rail .guild.home:active {

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DEFAULT_HOME_LINK, homeLinkTitle, loadHomeLink, normalizeHomeLink } from "./home-link.ts";
+import {
+  DEFAULT_HOME_LINK,
+  homeLinkTitle,
+  isDefaultHomeLabel,
+  loadHomeLink,
+  normalizeHomeLink,
+} from "./home-link.ts";
 
 describe("home link", () => {
   it("keeps the ClickClack default when the payload is missing or malformed", () => {
@@ -9,6 +15,13 @@ describe("home link", () => {
     assert.deepEqual(normalizeHomeLink("nope"), DEFAULT_HOME_LINK);
     assert.deepEqual(normalizeHomeLink({}), DEFAULT_HOME_LINK);
     assert.equal(homeLinkTitle(DEFAULT_HOME_LINK), "ClickClack home");
+  });
+
+  it("only the default label renders as the logo mark", () => {
+    assert.equal(isDefaultHomeLabel(DEFAULT_HOME_LINK.label), true);
+    assert.equal(isDefaultHomeLabel(normalizeHomeLink({ label: "  " }).label), true);
+    assert.equal(isDefaultHomeLabel("CC"), false);
+    assert.equal(isDefaultHomeLabel("Portal"), false);
   });
 
   it("accepts an absolute http(s) URL or an absolute path with a short label", () => {

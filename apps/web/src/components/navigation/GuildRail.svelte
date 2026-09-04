@@ -1,7 +1,9 @@
 <script lang="ts">
   import { workspaceInitial } from "../../lib/chat/people";
   import { apiResourceURL } from "../../lib/api";
+  import { isDefaultHomeLabel } from "../../lib/home-link";
   import type { Workspace } from "../../lib/types";
+  import KeystrokeMark from "../KeystrokeMark.svelte";
 
   type Props = {
     workspaces: Workspace[];
@@ -43,8 +45,18 @@
 </script>
 
 <nav id="workspace-navigation" class="guild-rail" aria-label="Workspaces">
-  <a class="guild home" title={homeTitle} aria-label={homeTitle} href={homeHref}>
-    <span>{homeLabel}</span>
+  <a
+    class="guild home"
+    class:home--mark={isDefaultHomeLabel(homeLabel)}
+    title={homeTitle}
+    aria-label={homeTitle}
+    href={homeHref}
+  >
+    {#if isDefaultHomeLabel(homeLabel)}
+      <KeystrokeMark size={48} />
+    {:else}
+      <span>{homeLabel}</span>
+    {/if}
   </a>
   <div class="guild-divider" aria-hidden="true"></div>
   <div class="guild-list">

@@ -45,8 +45,13 @@ export function normalizeHomeLink(value: unknown): HomeLink {
   };
 }
 
+/** The default label renders as the ClickClack logo mark rather than as text. */
+export function isDefaultHomeLabel(label: string): boolean {
+  return label === DEFAULT_HOME_LINK.label;
+}
+
 export function homeLinkTitle(link: HomeLink): string {
-  return link.label === DEFAULT_HOME_LINK.label ? "ClickClack home" : `${link.label} home`;
+  return isDefaultHomeLabel(link.label) ? "ClickClack home" : `${link.label} home`;
 }
 
 /** Older servers lack this endpoint; a failure must never block the shell. */

@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
+  import KeystrokeMark from "../KeystrokeMark.svelte";
   import ProfilePane from "../profile/ProfilePane.svelte";
   import MessageList, {
     type MessageListHandle,
@@ -601,7 +602,7 @@
 {:else if viewState === "auth"}
   <main class="embed-state-shell">
     <section class="embed-state-card" aria-label="Sign in">
-      <div class="embed-mark" aria-hidden="true">cc</div>
+      <KeystrokeMark class="embed-mark" size={42} />
       <h1>Sign in to ClickClack</h1>
       <p>Open ClickClack in a new tab, sign in, then return here. This panel will reconnect automatically.</p>
       <a class="embed-action" href="/app" target="_blank" rel="noopener">Open ClickClack</a>
@@ -789,16 +790,12 @@
     line-height: 1.5;
   }
 
-  .embed-mark {
-    display: grid;
-    width: 42px;
-    height: 42px;
+  /* :global reaches the mark component's root, which Svelte does not scope. */
+  .embed-state-card :global(.embed-mark) {
     margin: 0 auto 2px;
-    place-items: center;
-    border-radius: 11px;
-    background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-    color: var(--brand-contrast);
-    font-weight: 800;
+    box-shadow:
+      inset 0 0 0 1px rgba(190, 210, 255, 0.13),
+      var(--key-edge);
   }
 
   .embed-action {

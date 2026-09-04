@@ -102,14 +102,21 @@ for (const scenario of [
               capability === "integrated titlebar" && (!homeURL || homeURL === "/")
                 ? "/app"
                 : homeURL.trim() || "/";
-            await expect(home).toHaveText(scenario.wantLabel);
+            // The default label is the Keystroke logo mark; any custom label is text.
+            if (scenario.wantLabel === "cc") {
+              await expect(home.locator(".keystroke-mark svg")).toBeVisible();
+              await expect(home).toHaveText("");
+            } else {
+              await expect(home.locator(".keystroke-mark")).toHaveCount(0);
+              await expect(home).toHaveText(scenario.wantLabel);
+            }
             await expect(home).toHaveAttribute("href", href);
             await expect(home).toHaveAccessibleName(
               scenario.wantLabel === "cc" ? "ClickClack home" : `${scenario.wantLabel} home`,
             );
             const bounds = await home.evaluate((element) => {
               const tile = element.getBoundingClientRect();
-              const label = element.querySelector("span")!.getBoundingClientRect();
+              const label = element.querySelector(".keystroke-mark, span")!.getBoundingClientRect();
               return {
                 left: label.left - tile.left,
                 right: tile.right - label.right,

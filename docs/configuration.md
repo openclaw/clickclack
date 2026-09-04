@@ -38,7 +38,7 @@ hook in `cmd/clickclack/main.go`.
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
 | —                     | `CLICKCLACK_PUBLIC_API_URL`      | public URL  | Canonical external API base. May use a different origin and a normalized base path. |
 | —                     | `CLICKCLACK_HOME_URL`            | `/`         | Destination of the workspace rail's home button (`home_url` in the config file). An absolute `http(s)` URL or a path starting with `/`; use it when ClickClack lives inside a larger product. |
-| —                     | `CLICKCLACK_HOME_LABEL`          | `cc`        | Short label (max 32 characters) on that button, e.g. the product name (`home_label` in the config file). |
+| —                     | `CLICKCLACK_HOME_LABEL`          | `cc`        | Short label (max 32 characters) on that button, e.g. the product name (`home_label` in the config file). The default renders the ClickClack logo mark instead of text. |
 | `--embed-frame-ancestors` | `CLICKCLACK_EMBED_FRAME_ANCESTORS` | unset | Comma- or whitespace-separated exact origins allowed to frame `/embed/*`; see [Embedded threads](features/embedding.md). |
 | `--access-team-domain` | `CLICKCLACK_ACCESS_TEAM_DOMAIN` | unset | Cloudflare Access team HTTPS origin. Must be configured together with the Access audience. |
 | `--access-aud`        | `CLICKCLACK_ACCESS_AUD`         | unset       | Expected Cloudflare Access application audience tag. Must be non-empty when the team domain is set. |
@@ -148,8 +148,10 @@ configuration.
 Set `CLICKCLACK_HOME_URL` and `CLICKCLACK_HOME_LABEL` (or `home_url` and
 `home_label` in the JSON file) when the workspace rail's home button should
 return to a surrounding product. They are independent: an unset or empty URL
-defaults to `/`, and an unset or empty label defaults to `cc`. Ordinary spaces
-around values are trimmed. Environment values override the file as usual.
+defaults to `/`, and an unset or empty label defaults to `cc`, which the app
+renders as the ClickClack Keystroke logo mark; any other label renders as text
+on the button. Ordinary spaces around values are trimmed. Environment values
+override the file as usual.
 
 The destination must be an absolute HTTP(S) URL without credentials or a path
 starting with a single `/`, such as `/portal?from=chat#latest`. Paths resolve

@@ -42,17 +42,13 @@
   gap: 12px;
 }
 
+/* The Keystroke mark sits on the card like its first keycap: plate ring, hard
+   edge, then the brand glow. */
 .auth-brand .mark {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-  color: var(--brand-contrast);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--brand-b) 65%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgba(190, 210, 255, 0.13),
+    var(--key-edge),
+    0 10px 24px -8px color-mix(in srgb, var(--brand-b) 65%, transparent);
 }
 
 .auth-brand .brand-text strong {

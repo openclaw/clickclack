@@ -40,6 +40,7 @@
   import ChatComposer from "./components/composer/ChatComposer.svelte";
   import ArtifactViewer from "./components/artifacts/ArtifactViewer.svelte";
   import ImageViewer from "./components/media/ImageViewer.svelte";
+  import KeystrokeMark from "./components/KeystrokeMark.svelte";
   import MessageList, {
     type MessageListHandle,
     type MessageListState,
@@ -4017,7 +4018,7 @@
   <main class="auth-shell">
     <section class="auth-panel" aria-label="Sign in">
       <div class="auth-brand">
-        <div class="mark">cc</div>
+        <KeystrokeMark class="mark" size={44} />
         <div class="brand-text">
           <strong>ClickClack</strong>
           <span>OpenClaw workspace chat</span>

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Updated the server build toolchain to Go 1.27.1, SQLite driver to 1.58.0, and Go cryptography dependency to 0.56.0 while retaining the Go 1.26.6 minimum and existing database and password formats.
+
 ## v0.4.0 - 2026-09-02
 
 ### Highlights

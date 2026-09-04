@@ -15,7 +15,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "11.24.0"
+  PNPM_VERSION: "11.25.0"
 
 concurrency:
   group: ci-${{ github.ref }}

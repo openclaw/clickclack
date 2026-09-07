@@ -2559,10 +2559,38 @@
     if (draft.topicID) payload.topic_id = draft.topicID;
     if (draft.upload) payload.upload_id = draft.upload.id;
     try {
-      const message = outgoing.receipt || (await api<{ message: Message }>(path, {
+      let message = outgoing.receipt || (await api<{ message: Message }>(path, {
         method: "POST",
         body: JSON.stringify(payload),
       })).message;
+      outgoing.receipt = message;
+      if (draft.upload && !message.attachments?.some((attachment) => attachment.id === draft.upload?.id)) {
+        try {
+          await api(`/api/messages/${message.id}/attachments`, {
+            method: "POST",
+            body: JSON.stringify({ upload_id: draft.upload.id }),
+          });
+          message = {
+            ...message,
+            attachments: [...(message.attachments || []), draft.upload],
+          };
+        } catch (err) {
+          console.warn("attachment fallback failed", err);
+          const failedMessage: Message = {
+            ...message,
+            nonce,
+            status: "failed",
+            attachments: [...(message.attachments || []), draft.upload],
+          };
+          await revealFailedDraft(
+            outgoing,
+            failedMessage,
+            "The message was sent, but its attachment failed. Retry or discard it below.",
+            isCurrent,
+          );
+          return;
+        }
+      }
       outgoing.receipt = message;
       outgoing.message = { ...message, nonce };
       if (currentConversationKey() === draft.viewKey) updateActiveMessages();

@@ -2557,40 +2557,12 @@
     const payload: Record<string, unknown> = { body: draft.body, nonce };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
+    if (draft.upload) payload.upload_id = draft.upload.id;
     try {
-      let message = outgoing.receipt || (await api<{ message: Message }>(path, {
+      const message = outgoing.receipt || (await api<{ message: Message }>(path, {
         method: "POST",
         body: JSON.stringify(payload),
       })).message;
-      // The text is durable before attachment linking, including when linking fails.
-      outgoing.receipt = message;
-      if (draft.upload) {
-        try {
-          await api(`/api/messages/${message.id}/attachments`, {
-            method: "POST",
-            body: JSON.stringify({ upload_id: draft.upload.id }),
-          });
-          message = {
-            ...message,
-            attachments: [...(message.attachments || []), draft.upload],
-          };
-        } catch (err) {
-          console.warn("attachment failed", err);
-          const failedMessage: Message = {
-            ...message,
-            nonce,
-            status: "failed",
-            attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
-          };
-          await revealFailedDraft(
-            outgoing,
-            failedMessage,
-            "The message was sent, but its attachment failed. Retry or discard it below.",
-            isCurrent,
-          );
-          return;
-        }
-      }
       outgoing.receipt = message;
       outgoing.message = { ...message, nonce };
       if (currentConversationKey() === draft.viewKey) updateActiveMessages();

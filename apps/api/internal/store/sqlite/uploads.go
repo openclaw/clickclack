@@ -278,6 +278,39 @@ func (s *Store) UploadHasOtherDirectMessageAttachment(ctx context.Context, uploa
 	return s.q.UploadHasOtherDirectMessageAttachment(ctx, storedb.UploadHasOtherDirectMessageAttachmentParams{UploadID: uploadID, MessageID: messageID})
 }
 
+func attachUploadForCreateTx(ctx context.Context, tx *sql.Tx, qtx *storedb.Queries, messageID, workspaceID, userID, uploadID string) (store.Upload, int64, error) {
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return store.Upload{}, 0, nil
+	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
+		return store.Upload{}, 0, err
+	}
+	uploadRow, err := qtx.GetUpload(ctx, uploadID)
+	if err != nil {
+		return store.Upload{}, 0, err
+	}
+	upload := storeUploadFromGetUpload(uploadRow)
+	if upload.WorkspaceID != workspaceID {
+		return store.Upload{}, 0, errors.New("upload and message workspaces differ")
+	}
+	if upload.OwnerID != userID {
+		visible, err := uploadVisibleToUserTx(ctx, tx, uploadID, userID)
+		if err != nil {
+			return store.Upload{}, 0, err
+		}
+		if !visible {
+			return store.Upload{}, 0, errors.New("upload is not visible")
+		}
+	}
+	rows, err := qtx.AttachUpload(ctx, storedb.AttachUploadParams{
+		MessageID: messageID,
+		UploadID:  uploadID,
+		CreatedAt: now(),
+	})
+	return upload, rows, err
+}
+
 func (s *Store) AttachUpload(ctx context.Context, input store.AttachUploadInput) (store.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

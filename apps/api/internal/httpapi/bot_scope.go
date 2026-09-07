@@ -2,9 +2,27 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
+
+func (s *Server) requireCreateUpload(w http.ResponseWriter, r *http.Request, act actor, uploadID string) bool {
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return true
+	}
+	if err := act.requireScope("uploads:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	upload, err := s.store.GetUpload(r.Context(), uploadID, act.user.ID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	return s.requireBotUploadResource(w, r, act, upload, "")
+}
 
 func (s *Server) requireBotChannelWorkspace(w http.ResponseWriter, r *http.Request, act actor, channelID string) bool {
 	if act.botTokenID == "" {

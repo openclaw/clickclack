@@ -1053,6 +1053,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		QuotedMessageID string `json:"quoted_message_id"`
 		Nonce           string `json:"nonce"`
 		TopicID         string `json:"topic_id"`
+		UploadID        string `json:"upload_id"`
 		Kind            string `json:"kind"`
 		TurnID          string `json:"turn_id"`
 	}
@@ -1067,7 +1068,10 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotChannelWorkspace(w, r, act, chi.URLParam(r, "channel_id")) {
 		return
 	}
-	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID})
+	if !s.requireCreateUpload(w, r, act, body.UploadID) {
+		return
+	}
+	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, UploadID: body.UploadID, Kind: kind, TurnID: turnID})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {

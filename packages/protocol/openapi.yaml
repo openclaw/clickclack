@@ -2906,6 +2906,12 @@ components:
         topic_id:
           type: string
           description: Optional topic id. Channel-scoped topics can only be used in their channel.
+        upload_id:
+          type: string
+          description: |
+            Optional upload to attach atomically before message.created is
+            published. The upload must be visible in the message workspace;
+            bot tokens also require uploads:write.
         kind:
           type: string
           enum: [message, agent_commentary, agent_tool]

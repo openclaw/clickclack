@@ -894,6 +894,7 @@ type CreateMessageInput struct {
 	QuotedMessageID *string
 	Nonce           string
 	TopicID         string
+	UploadID        string
 	// Kind defaults to 'message' when empty. Activity kinds are gated at the
 	// API layer by AgentActivityWriteScope.
 	Kind   string
@@ -1060,6 +1061,7 @@ type CreateDirectMessageInput struct {
 	Body            string
 	QuotedMessageID *string
 	Nonce           string
+	UploadID        string
 	Kind            string
 	TurnID          string
 }

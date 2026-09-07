@@ -229,6 +229,70 @@ func TestStoreChatThreadsSearchUploadsAndEvents(t *testing.T) {
 	}
 }
 
+func TestCreateMessageAttachesUploadBeforeCreatedEvent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "atomic-attachment@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     owner.ID,
+		Filename:    "floor-plan.png",
+		ContentType: "image/png",
+		ByteSize:    42,
+		StoragePath: "/tmp/floor-plan.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	message, event, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channels[0].ID,
+		AuthorID:  owner.ID,
+		Body:      "please inspect the plan",
+		Nonce:     "atomic-attachment",
+		UploadID:  upload.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "message.created" || len(message.Attachments) != 1 || message.Attachments[0].ID != upload.ID {
+		t.Fatalf("attachment was not present at message creation: message=%#v event=%#v", message, event)
+	}
+	stored, err := st.GetMessage(ctx, message.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Attachments) != 1 || stored.Attachments[0].ID != upload.ID {
+		t.Fatalf("attachment was not committed with message: %#v", stored)
+	}
+	replayed, replayEvent, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channels[0].ID,
+		AuthorID:  owner.ID,
+		Body:      "please inspect the plan",
+		Nonce:     "atomic-attachment",
+		UploadID:  upload.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.ID != message.ID || replayEvent.ID != "" || len(replayed.Attachments) != 1 || replayed.Attachments[0].ID != upload.ID {
+		t.Fatalf("unexpected atomic attachment replay: message=%#v event=%#v", replayed, replayEvent)
+	}
+}
+
 func TestMessageSequenceAllocationIsConcurrentSafe(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

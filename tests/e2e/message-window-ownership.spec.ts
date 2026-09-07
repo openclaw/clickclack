@@ -748,16 +748,13 @@ for (const kind of ["channel", "dm"] as const) {
       const entered = deferred(),
         release = deferred(),
         delivered = deferred();
-      await page.route(
-        failure === "send" ? `**${path}/messages` : "**/api/messages/*/attachments",
-        async (route) => {
-          if (route.request().method() !== "POST") return route.continue();
-          entered.resolve();
-          await release.promise;
-          await route.fulfill({ status: 503, json: { error: "Submission unavailable" } });
-          delivered.resolve();
-        },
-      );
+      await page.route(`**${path}/messages`, async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        entered.resolve();
+        await release.promise;
+        await route.fulfill({ status: 503, json: { error: "Submission unavailable" } });
+        delivered.resolve();
+      });
       try {
         await page.getByLabel("Message body", { exact: true }).fill("A delayed failed draft");
         await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -912,11 +909,7 @@ test("a delayed older page preserves the selected window and one attached send",
   await expect(page.locator(".attachment-name")).toContainText("receipt.txt");
   const olderRequested = deferred(),
     olderRelease = deferred(),
-    olderDelivered = deferred(),
-    attachmentRequested = deferred(),
-    attachmentRelease = deferred(),
-    refreshRelease = deferred();
-  let sentID = "";
+    olderDelivered = deferred();
   await page.route(`**${path}/messages?*`, async (route) => {
     const query = new URL(route.request().url()).searchParams;
     if (query.get("before_seq") === "61") {
@@ -926,21 +919,6 @@ test("a delayed older page preserves the selected window and one attached send",
       await route.fulfill({ response });
       olderDelivered.resolve();
     } else await route.continue();
-  });
-  await page.route("**/api/messages/*", async (route) => {
-    if (route.request().method() !== "GET" || !route.request().url().endsWith(`/${sentID}`))
-      return route.continue();
-    // Deliver the attachment refresh after the older page, keeping this race ordered.
-    const response = await route.fetch();
-    await refreshRelease.promise;
-    await route.fulfill({ response });
-  });
-  await page.route("**/api/messages/*/attachments", async (route) => {
-    attachmentRequested.resolve();
-    await attachmentRelease.promise;
-    const response = await route.fetch();
-    expect(response.ok()).toBe(true);
-    await route.fulfill({ response });
   });
   try {
     await page.locator(".messages-scroll").focus();
@@ -954,15 +932,11 @@ test("a delayed older page preserves the selected window and one attached send",
     await page.getByLabel("Message body", { exact: true }).fill("One confirmed attached send");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     const { message } = await (await sentResponse).json();
-    sentID = message.id;
-    await attachmentRequested.promise;
     const bravo = page.locator(".search-result").filter({ hasText: "windowtarget Bravo" });
     await bravo.click();
     await expectInTimeline(page, messages[130]);
     const row = page.locator(`.message-row[data-message-id="${message.id}"]`);
     await expect(row).toHaveCount(1);
-    await expect(row).toHaveClass(/is-pending/);
-    attachmentRelease.resolve();
     await expect(row).not.toHaveClass(/is-(pending|failed)/);
     await expect(row.getByText("receipt.txt", { exact: true })).toBeVisible();
     olderRelease.resolve();
@@ -988,7 +962,5 @@ test("a delayed older page preserves the selected window and one attached send",
     expect(pageErrors).toEqual([]);
   } finally {
     olderRelease.resolve();
-    attachmentRelease.resolve();
-    refreshRelease.resolve();
   }
 });

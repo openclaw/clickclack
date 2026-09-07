@@ -2572,7 +2572,9 @@
       await revealFailedDraft(
         outgoing,
         { ...placeholder, status: "failed" },
-        "The message failed to send. Retry or discard it below.",
+        draft.upload
+          ? "The attachment failed, so the message was not sent. Retry or discard it below."
+          : "The message failed to send. Retry or discard it below.",
         isCurrent,
       );
       return;

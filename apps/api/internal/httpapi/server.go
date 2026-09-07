@@ -1068,7 +1068,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotChannelWorkspace(w, r, act, chi.URLParam(r, "channel_id")) {
 		return
 	}
-	if !s.requireCreateUpload(w, r, act, body.UploadID) {
+	if !s.requireCreateUpload(w, r, act, body.UploadID, body.Nonce, chi.URLParam(r, "channel_id"), "") {
 		return
 	}
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, UploadID: body.UploadID, Kind: kind, TurnID: turnID})

@@ -2,9 +2,18 @@
 
 ## Unreleased
 
-- Updated PDF.js to 6.3.289, virtua to 0.51.0, and Electron to 43.5.1 for rendering, scrolling, and desktop runtime fixes while retaining the macOS 12 minimum and dependency release-age gate.
-- Updated pnpm to 11.25.0, Node.js types, Oxc tooling, Wrangler, and the Pages/AWS credential actions; aligned both Docker builders with the source toolchains while preserving runtime minimums and the dependency release-age gate.
+**Highlights:** Complete attachment delivery and reliable unread and reaction controls.
+
+- Committed channel and direct-message attachments before creation events, preserved complete attachments on nonce replay, and kept already-committed channel sends recoverable after moderation changes. Thanks @sercada.
+- Kept the unread bar readable and clickable above message menus and reaction pickers. Thanks @isaiahknight-va.
+- Fixed removal of percent-containing reaction keys without double-decoding them, and clarified glyph-based bot reactions while preserving custom strings. Thanks @isaiahknight-va.
+- Kept the mobile thread drawer above raised message rows and prevented the navigation toggle from covering its header. Thanks @isaiahknight-va.
+- Updated in-app brand tiles to use the Keystroke mark.
+- Updated PDF.js to 6.3.289, virtua to 0.51.0, and Electron to 43.6.0 for rendering, scrolling, and desktop runtime fixes while retaining the macOS 12 minimum and dependency release-age gate.
 - Updated the server build toolchain to Go 1.27.1, SQLite driver to 1.58.0, and Go cryptography dependency to 0.56.0 while retaining the Go 1.26.6 minimum and existing database and password formats.
+- Updated Playwright to 1.63.0 and Wrangler to 4.129.0 alongside pnpm 11.25.0, Node.js types, Oxc tooling, and the Pages/AWS credential actions; aligned Docker builders with the source toolchains while preserving runtime minimums and the dependency release-age gate.
+
+Thanks @KrasimirKralev for member-directory validation coverage.
 
 ## v0.4.0 - 2026-09-02
 

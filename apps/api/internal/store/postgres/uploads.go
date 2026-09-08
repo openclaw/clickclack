@@ -461,6 +461,10 @@ func workspaceIconUploadVisibleTx(ctx context.Context, q uploadVisibilityQueryer
 }
 
 func (s *Store) hydrateAttachments(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+	return hydrateAttachments(ctx, s.db, messages)
+}
+
+func hydrateAttachments(ctx context.Context, db storedb.DBTX, messages []store.Message) ([]store.Message, error) {
 	if len(messages) == 0 {
 		return messages, nil
 	}
@@ -481,7 +485,7 @@ func (s *Store) hydrateAttachments(ctx context.Context, messages []store.Message
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT ma.message_id, u.id, u.workspace_id, u.owner_id, u.filename, u.content_type, u.byte_size, u.width, u.height, u.duration_ms, u.storage_path, u.created_at
 		FROM message_attachments ma
 		JOIN uploads u ON u.id = ma.upload_id

@@ -744,16 +744,19 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 			return store.Message{}, store.Event{}, err
 		}
 		if strings.TrimSpace(input.UploadID) != "" {
-			upload, rows, err := attachUploadForCreateTx(ctx, tx, qtx, existing.ID, existing.WorkspaceID, input.AuthorID, input.UploadID)
+			_, rows, err := attachUploadForCreateTx(ctx, tx, qtx, existing.ID, existing.WorkspaceID, input.AuthorID, input.UploadID)
 			if err != nil {
 				return store.Message{}, store.Event{}, err
 			}
 			if rows != 0 {
 				return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 			}
-			existing.Attachments = []store.Upload{upload}
 		}
-		return existing, store.Event{}, nil
+		messages, err := hydrateAttachments(ctx, tx, []store.Message{existing})
+		if err != nil {
+			return store.Message{}, store.Event{}, err
+		}
+		return messages[0], store.Event{}, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.Message{}, store.Event{}, err
 	}

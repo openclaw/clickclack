@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
@@ -72,8 +73,33 @@ func TestAtomicMessageReplayPreservesAttachments(t *testing.T) {
 					if len(attachments) != 2 || attachments[0].ID != first.ID || attachments[1].ID != second.ID {
 						t.Fatalf("replay lost attachments: %#v", attachments)
 					}
+					unlinked := uploadFile(t, server.URL+"/api/uploads", workspace.ID, "unlinked.txt", "unlinked")
+					expectStatus(t, http.MethodPost, server.URL+target.path, strings.NewReader(`{"body":"complete replay","nonce":"`+target.kind+`","upload_id":"`+unlinked.ID+`"}`), http.StatusBadRequest)
+					stored := getJSON[response](t, server.URL+"/api/messages/"+created.Message.ID)
+					if len(stored.Message.Attachments) != 2 {
+						t.Fatalf("conflicting replay changed attachments: %#v", stored.Message.Attachments)
+					}
 				})
 			}
+			t.Run("channel replay after moderation", func(t *testing.T) {
+				upload := uploadFileAsUser(t, peer.ID, server.URL+"/api/uploads", workspace.ID, "committed.txt", "committed")
+				endpoint := server.URL + "/api/channels/" + channels[0].ID + "/messages"
+				payload := map[string]string{"body": "already committed", "nonce": "moderated-replay", "upload_id": upload.ID}
+				type response struct {
+					Message store.Message `json:"message"`
+					Event   store.Event   `json:"event"`
+				}
+				created := postJSONAsUser[response](t, peer.ID, endpoint, payload)
+				blocked := true
+				if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{WorkspaceID: workspace.ID, ActorUserID: owner.ID, TargetUserID: peer.ID, Blocked: &blocked}); err != nil {
+					t.Fatal(err)
+				}
+				replayed := postJSONAsUser[response](t, peer.ID, endpoint, payload)
+				if replayed.Message.ID != created.Message.ID || replayed.Event.ID != "" || len(replayed.Message.Attachments) != 1 || replayed.Message.Attachments[0].ID != upload.ID {
+					t.Fatalf("committed channel replay changed after moderation: %#v", replayed)
+				}
+				expectStatusAsUser(t, peer.ID, http.MethodPost, endpoint, strings.NewReader(`{"body":"new write","nonce":"new-after-block","upload_id":"`+upload.ID+`"}`), http.StatusForbidden)
+			})
 		})
 	}
 }

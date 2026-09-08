@@ -278,6 +278,25 @@ func (s *Store) UploadHasOtherDirectMessageAttachment(ctx context.Context, uploa
 	return s.q.UploadHasOtherDirectMessageAttachment(ctx, storedb.UploadHasOtherDirectMessageAttachmentParams{UploadID: uploadID, MessageID: messageID})
 }
 
+func hydrateMessageCreateReplay(ctx context.Context, tx *sql.Tx, message store.Message, uploadID string) (store.Message, error) {
+	messages, err := hydrateAttachments(ctx, tx, []store.Message{message})
+	if err != nil {
+		return store.Message{}, err
+	}
+	message = messages[0]
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return message, nil
+	}
+	// A replay only reads the committed link; it must not reauthorize a new write.
+	for _, upload := range message.Attachments {
+		if upload.ID == uploadID {
+			return message, nil
+		}
+	}
+	return store.Message{}, store.ErrClientNonceConflict
+}
+
 func attachUploadForCreateTx(ctx context.Context, tx *sql.Tx, qtx *storedb.Queries, messageID, workspaceID, userID, uploadID string) (store.Upload, int64, error) {
 	uploadID = strings.TrimSpace(uploadID)
 	if uploadID == "" {

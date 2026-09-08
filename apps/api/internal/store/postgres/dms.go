@@ -263,20 +263,8 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		if existing.DirectConversationID != input.ConversationID || existing.ChannelID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.Kind != kind || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
-		if strings.TrimSpace(input.UploadID) != "" {
-			_, rows, err := attachUploadForCreateTx(ctx, tx, qtx, existing.ID, existing.WorkspaceID, input.AuthorID, input.UploadID)
-			if err != nil {
-				return store.Message{}, store.Event{}, err
-			}
-			if rows != 0 {
-				return store.Message{}, store.Event{}, store.ErrClientNonceConflict
-			}
-		}
-		messages, err := hydrateAttachments(ctx, tx, []store.Message{existing})
-		if err != nil {
-			return store.Message{}, store.Event{}, err
-		}
-		return messages[0], store.Event{}, nil
+		existing, err = hydrateMessageCreateReplay(ctx, tx, existing, input.UploadID)
+		return existing, store.Event{}, err
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.Message{}, store.Event{}, err
 	}

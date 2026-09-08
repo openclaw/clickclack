@@ -1307,10 +1307,14 @@ func (s *Server) removeReaction(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
 		return
 	}
-	emoji, err := url.PathUnescape(chi.URLParam(r, "emoji"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
+	emoji := chi.URLParam(r, "emoji")
+	// Chi routes on RawPath when present; otherwise the parameter is already decoded.
+	if r.URL.RawPath != "" {
+		emoji, err = url.PathUnescape(emoji)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 	}
 	event, err := s.store.RemoveReaction(r.Context(), store.CreateReactionInput{MessageID: chi.URLParam(r, "message_id"), UserID: act.user.ID, Emoji: emoji})
 	if err == nil && event.ID != "" {

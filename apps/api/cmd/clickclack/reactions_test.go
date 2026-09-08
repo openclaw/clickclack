@@ -280,28 +280,37 @@ func TestReactionCommandsUseCurrentClientErrors(t *testing.T) {
 func captureStdout(t *testing.T, fn func() error) string {
 	t.Helper()
 	oldStdout := os.Stdout
-	read, write, err := os.Pipe()
+	outputFile, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Stdout = write
-	t.Cleanup(func() { os.Stdout = oldStdout })
+	os.Stdout = outputFile
+	defer func() {
+		os.Stdout = oldStdout
+		_ = outputFile.Close()
+	}()
 	if err := fn(); err != nil {
-		_ = write.Close()
 		t.Fatal(err)
 	}
-	if err := write.Close(); err != nil {
+	if _, err := outputFile.Seek(0, io.SeekStart); err != nil {
 		t.Fatal(err)
 	}
-	os.Stdout = oldStdout
-	output, err := io.ReadAll(read)
+	output, err := io.ReadAll(outputFile)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := read.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return string(output)
+}
+
+func TestCaptureStdoutHandlesLargeOutput(t *testing.T) {
+	want := strings.Repeat("large output\n", 1<<16)
+	got := captureStdout(t, func() error {
+		_, err := io.WriteString(os.Stdout, want)
+		return err
+	})
+	if got != want {
+		t.Fatalf("captured %d bytes, want %d", len(got), len(want))
+	}
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

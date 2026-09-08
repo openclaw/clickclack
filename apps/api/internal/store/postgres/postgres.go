@@ -729,7 +729,8 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		if err := requireMessageAccessTx(ctx, tx, existing, input.AuthorID); err != nil {
 			return store.Message{}, store.Event{}, err
 		}
-		return existing, store.Event{}, nil
+		existing, err = hydrateMessageCreateReplay(ctx, tx, existing, input.UploadID)
+		return existing, store.Event{}, err
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.Message{}, store.Event{}, err
 	}
@@ -775,6 +776,17 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err := qtx.InsertThreadState(ctx, id); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	var attachedUpload *store.Upload
+	if strings.TrimSpace(input.UploadID) != "" {
+		upload, rows, err := attachUploadForCreateTx(ctx, tx, qtx, id, workspaceID, input.AuthorID, input.UploadID)
+		if err != nil {
+			return store.Message{}, store.Event{}, err
+		}
+		if rows != 1 {
+			return store.Message{}, store.Event{}, errors.New("upload was not attached to new message")
+		}
+		attachedUpload = &upload
+	}
 	eventFields := map[string]string{"message_id": id, "author_id": input.AuthorID}
 	if input.TopicID != "" {
 		eventFields["topic_id"] = input.TopicID
@@ -796,6 +808,9 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	msg, err := getMessageTx(ctx, tx, id)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
+	}
+	if attachedUpload != nil {
+		msg.Attachments = []store.Upload{*attachedUpload}
 	}
 	return msg, event, tx.Commit()
 }

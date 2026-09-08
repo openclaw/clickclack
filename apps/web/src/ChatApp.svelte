@@ -2557,14 +2557,14 @@
     const payload: Record<string, unknown> = { body: draft.body, nonce };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
+    if (draft.upload) payload.upload_id = draft.upload.id;
     try {
       let message = outgoing.receipt || (await api<{ message: Message }>(path, {
         method: "POST",
         body: JSON.stringify(payload),
       })).message;
-      // The text is durable before attachment linking, including when linking fails.
       outgoing.receipt = message;
-      if (draft.upload) {
+      if (draft.upload && !message.attachments?.some((attachment) => attachment.id === draft.upload?.id)) {
         try {
           await api(`/api/messages/${message.id}/attachments`, {
             method: "POST",
@@ -2575,12 +2575,12 @@
             attachments: [...(message.attachments || []), draft.upload],
           };
         } catch (err) {
-          console.warn("attachment failed", err);
+          console.warn("attachment fallback failed", err);
           const failedMessage: Message = {
             ...message,
             nonce,
             status: "failed",
-            attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
+            attachments: [...(message.attachments || []), draft.upload],
           };
           await revealFailedDraft(
             outgoing,
@@ -2600,7 +2600,9 @@
       await revealFailedDraft(
         outgoing,
         { ...placeholder, status: "failed" },
-        "The message failed to send. Retry or discard it below.",
+        draft.upload
+          ? "The attachment failed, so the message was not sent. Retry or discard it below."
+          : "The message failed to send. Retry or discard it below.",
         isCurrent,
       );
       return;

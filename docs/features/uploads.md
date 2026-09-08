@@ -45,15 +45,18 @@ request; sending the visible draft or removing its attachment also cancels a
 pending replacement. Upload failures appear in the composer and can be retried
 with the same file.
 
-If the text was sent but attachment linking fails, Retry attaches the existing
-upload to that saved message. Discard removes the failed attachment from the
-local view and keeps the sent text. Message and thread refreshes preserve these
-recovery actions until you retry or discard the attachment.
+The channel and direct-message create endpoints accept an optional `upload_id`.
+The web composer uses this field so the attachment is linked in the same
+transaction before `message.created` is published. Consumers that react to the
+creation event therefore see the complete message on their first read. A
+failed atomic create leaves neither the message nor the attachment link behind,
+and retrying the same message nonce with the same upload remains idempotent.
 
 `POST /api/messages/{message_id}/attachments` records a row in
 `message_attachments`. The store hydrates attachments on
 `ListMessages`/`GetThread`, so subsequent reads include the attachment list
-without an extra round-trip.
+without an extra round-trip. This endpoint remains available for adding an
+attachment to an existing message.
 
 The handler checks that the requester can read the upload, can access the
 message workspace, and is the message author before linking. Bot tokens need

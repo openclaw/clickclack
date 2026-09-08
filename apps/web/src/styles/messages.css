@@ -17,6 +17,11 @@
   padding: 0 4px;
   opacity: 1;
   transition: opacity 140ms ease-out;
+  /* Contain row lifts (hover/selected 5, menu-open 6) inside the scrollport
+     so they never outrank the unread bar floating over it; a row with an open
+     ⋮ menu or reaction picker otherwise paints over the bar and eats its
+     clicks. Nothing inside the scrollport can paint outside it anyway. */
+  isolation: isolate;
 }
 
 .messages-scroll:focus {

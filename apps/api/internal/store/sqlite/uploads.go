@@ -278,6 +278,58 @@ func (s *Store) UploadHasOtherDirectMessageAttachment(ctx context.Context, uploa
 	return s.q.UploadHasOtherDirectMessageAttachment(ctx, storedb.UploadHasOtherDirectMessageAttachmentParams{UploadID: uploadID, MessageID: messageID})
 }
 
+func hydrateMessageCreateReplay(ctx context.Context, tx *sql.Tx, message store.Message, uploadID string) (store.Message, error) {
+	messages, err := hydrateAttachments(ctx, tx, []store.Message{message})
+	if err != nil {
+		return store.Message{}, err
+	}
+	message = messages[0]
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return message, nil
+	}
+	// A replay only reads the committed link; it must not reauthorize a new write.
+	for _, upload := range message.Attachments {
+		if upload.ID == uploadID {
+			return message, nil
+		}
+	}
+	return store.Message{}, store.ErrClientNonceConflict
+}
+
+func attachUploadForCreateTx(ctx context.Context, tx *sql.Tx, qtx *storedb.Queries, messageID, workspaceID, userID, uploadID string) (store.Upload, int64, error) {
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return store.Upload{}, 0, nil
+	}
+	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
+		return store.Upload{}, 0, err
+	}
+	uploadRow, err := qtx.GetUpload(ctx, uploadID)
+	if err != nil {
+		return store.Upload{}, 0, err
+	}
+	upload := storeUploadFromGetUpload(uploadRow)
+	if upload.WorkspaceID != workspaceID {
+		return store.Upload{}, 0, errors.New("upload and message workspaces differ")
+	}
+	if upload.OwnerID != userID {
+		visible, err := uploadVisibleToUserTx(ctx, tx, uploadID, userID)
+		if err != nil {
+			return store.Upload{}, 0, err
+		}
+		if !visible {
+			return store.Upload{}, 0, errors.New("upload is not visible")
+		}
+	}
+	rows, err := qtx.AttachUpload(ctx, storedb.AttachUploadParams{
+		MessageID: messageID,
+		UploadID:  uploadID,
+		CreatedAt: now(),
+	})
+	return upload, rows, err
+}
+
 func (s *Store) AttachUpload(ctx context.Context, input store.AttachUploadInput) (store.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -400,6 +452,10 @@ func workspaceIconUploadVisibleTx(ctx context.Context, q uploadVisibilityQueryer
 }
 
 func (s *Store) hydrateAttachments(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+	return hydrateAttachments(ctx, s.db, messages)
+}
+
+func hydrateAttachments(ctx context.Context, db storedb.DBTX, messages []store.Message) ([]store.Message, error) {
 	if len(messages) == 0 {
 		return messages, nil
 	}
@@ -420,7 +476,7 @@ func (s *Store) hydrateAttachments(ctx context.Context, messages []store.Message
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT ma.message_id, u.id, u.workspace_id, u.owner_id, u.filename, u.content_type, u.byte_size, u.width, u.height, u.duration_ms, u.storage_path, u.created_at
 		FROM message_attachments ma
 		JOIN uploads u ON u.id = ma.upload_id

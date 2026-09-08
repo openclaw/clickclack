@@ -285,6 +285,23 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if removedSlashReaction.Event.Type != "reaction.removed" || len(removedSlashReaction.Reactions) != 0 {
 		t.Fatalf("slash reaction was not removed: %#v", removedSlashReaction)
 	}
+	for _, emoji := range []string{"%", "%2F", "%25", "100%", "%/", "👀", "eyes"} {
+		t.Run("reaction round trip "+emoji, func(t *testing.T) {
+			message := postJSON[struct {
+				Message store.Message `json:"message"`
+			}](t, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "reaction path proof"})
+			endpoint := server.URL + "/api/messages/" + message.Message.ID + "/reactions"
+			postJSON[struct{}](t, endpoint, map[string]string{"emoji": emoji})
+			removed := deleteJSONAsUser[struct {
+				Event     store.Event             `json:"event"`
+				Reactions []store.ReactionSummary `json:"reactions"`
+			}](t, owner.ID, endpoint+"/"+url.PathEscape(emoji))
+			payload, ok := removed.Event.Payload.(map[string]any)
+			if removed.Event.Type != "reaction.removed" || !ok || payload["emoji"] != emoji || len(removed.Reactions) != 0 {
+				t.Fatalf("reaction %q was not removed exactly: %#v", emoji, removed)
+			}
+		})
+	}
 
 	dm := postJSON[struct {
 		Conversation store.DirectConversation `json:"conversation"`
@@ -3535,6 +3552,35 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, server.URL+"/api/messages/"+writeMessage.ID+"/attachments", strings.NewReader(attachBody), http.StatusOK)
 	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, server.URL+"/api/messages/"+writeMessage.ID+"/attachments", strings.NewReader(attachBody), http.StatusOK)
 
+	atomicUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
+		WorkspaceID: workspace.ID,
+		OwnerID:     writeBot.ID,
+		Filename:    "atomic-retry.txt",
+		ContentType: "text/plain",
+		ByteSize:    12,
+		StoragePath: filepath.Join(dataDir, "uploads", "atomic-retry.txt"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomicBody := `{"body":"atomic dm","nonce":"atomic-dm-retry","upload_id":"` + atomicUpload.ID + `"}`
+	atomicEndpoint := server.URL + "/api/dms/" + writeDM.ID + "/messages"
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, atomicEndpoint, strings.NewReader(atomicBody), http.StatusCreated)
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, atomicEndpoint, strings.NewReader(atomicBody), http.StatusOK)
+	atomicMessage, err := st.GetMessageByNonce(ctx, writeBot.ID, "atomic-dm-retry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(atomicMessage.Attachments) != 1 || atomicMessage.Attachments[0].ID != atomicUpload.ID {
+		t.Fatalf("atomic DM replay lost its attachment: %#v", atomicMessage)
+	}
+
+	missingBody := `{"body":"must roll back","nonce":"atomic-dm-missing","upload_id":"upl_missing"}`
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, atomicEndpoint, strings.NewReader(missingBody), http.StatusForbidden)
+	if _, err := st.GetMessageByNonce(ctx, writeBot.ID, "atomic-dm-missing"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("failed atomic DM create persisted a message: %v", err)
+	}
+
 	otherWriteDM, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{writeBot.ID}})
 	if err != nil {
 		t.Fatal(err)
@@ -3559,6 +3605,11 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	}
 	reuseBody := `{"upload_id":"` + otherDMUpload.ID + `"}`
 	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, server.URL+"/api/messages/"+writeMessage.ID+"/attachments", strings.NewReader(reuseBody), http.StatusForbidden)
+	reuseCreateBody := `{"body":"blocked reuse","nonce":"atomic-dm-other","upload_id":"` + otherDMUpload.ID + `"}`
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, atomicEndpoint, strings.NewReader(reuseCreateBody), http.StatusForbidden)
+	if _, err := st.GetMessageByNonce(ctx, writeBot.ID, "atomic-dm-other"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-DM atomic upload reuse persisted a message: %v", err)
+	}
 }
 
 type quotaObservingUploadStore struct {

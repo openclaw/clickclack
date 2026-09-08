@@ -218,32 +218,33 @@ for (const [action, refresh] of [
     await waitForAppReady(page);
     await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("attachment.txt"));
     await expect(page.locator(".attachment-name")).toContainText("attachment.txt");
+    const messagePath = `/api/channels/${data.channel.id}/messages`;
+    await page.route(`**${messagePath}`, async (route) => {
+      const payload = route.request().postDataJSON();
+      delete payload.upload_id;
+      const response = await route.fetch({ postData: JSON.stringify(payload) });
+      await route.fulfill({ response });
+    });
     await page.route("**/api/messages/*/attachments", (route) =>
       route.fulfill({ status: 503, json: { error: "Attachment unavailable" } }),
     );
     const nonces: string[] = [];
     page.on("request", (request) => {
-      if (
-        request.method() === "POST" &&
-        request.url().endsWith(`/api/channels/${data.channel.id}/messages`)
-      ) {
+      if (request.method() === "POST" && request.url().endsWith(messagePath)) {
         nonces.push(request.postDataJSON().nonce);
       }
     });
     const sent = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        response.url().endsWith(`/api/channels/${data.channel.id}/messages`),
+      (response) => response.request().method() === "POST" && response.url().endsWith(messagePath),
     );
-    await page
-      .getByLabel("Message body", { exact: true })
-      .fill("The message was saved before its attachment failed");
+    const body = "The message was saved before its fallback attachment failed";
+    await page.getByLabel("Message body", { exact: true }).fill(body);
     await page.getByRole("button", { name: "Send", exact: true }).click();
     const { message } = await (await sent).json();
     const row = page.locator(`.message-row[data-message-id="${message.id}"]`);
     await expect(row).toHaveClass(/is-failed/);
     if (refresh) {
-      // Reopening fetches the saved body while the failed attachment stays local.
+      // Reopening fetches the saved body while the failed fallback attachment stays local.
       await page.locator(`#sidebar-channels-list a[href$="/${other.route_id}"]`).click();
       await expect(
         page.getByRole("heading", { name: "#attachment-neighbor", exact: true }),
@@ -293,3 +294,59 @@ for (const [action, refresh] of [
     ).toHaveLength(1);
   });
 }
+
+test("an atomic attachment failure retries the same draft without orphan text", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  await page.goto(data.path);
+  await waitForAppReady(page);
+  await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("attachment.txt"));
+  await expect(page.locator(".attachment-name")).toContainText("attachment.txt");
+  const messagePath = `/api/channels/${data.channel.id}/messages`;
+  const nonces: string[] = [];
+  let rejectCreate = true;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith(messagePath)) {
+      nonces.push(request.postDataJSON().nonce);
+    }
+  });
+  await page.route(`**${messagePath}`, async (route) => {
+    if (rejectCreate) {
+      rejectCreate = false;
+      await route.fulfill({ status: 503, json: { error: "Atomic create unavailable" } });
+      return;
+    }
+    await route.continue();
+  });
+  const failed = page.waitForResponse(
+    (response) => response.request().method() === "POST" && response.url().endsWith(messagePath),
+  );
+  const body = "Atomic attachment retry has no orphan text";
+  await page.getByLabel("Message body", { exact: true }).fill(body);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  expect((await failed).status()).toBe(503);
+  expect(nonces).toHaveLength(1);
+  const failedRow = page.locator(`.message-row[data-message-id="tmp_${nonces[0]}"]`);
+  await expect(failedRow).toHaveClass(/is-failed/);
+  const beforeRetry = await page.request.get(`/api/channels/${data.channel.id}/messages`);
+  expect(
+    (await beforeRetry.json()).messages.filter(
+      (message: { body: string }) => message.body === body,
+    ),
+  ).toHaveLength(0);
+
+  const retried = page.waitForResponse(
+    (response) => response.request().method() === "POST" && response.url().endsWith(messagePath),
+  );
+  await failedRow.getByRole("button", { name: "Retry", exact: true }).click();
+  const { message } = await (await retried).json();
+  const savedRow = page.locator(`.message-row[data-message-id="${message.id}"]`);
+  await expect(savedRow).not.toHaveClass(/is-pending|is-failed/);
+  await expect(savedRow.getByText("attachment.txt", { exact: true })).toBeVisible();
+  expect(nonces).toEqual([nonces[0], nonces[0]]);
+  const afterRetry = await page.request.get(`/api/channels/${data.channel.id}/messages`);
+  expect(
+    (await afterRetry.json()).messages.filter((current: { body: string }) => current.body === body),
+  ).toHaveLength(1);
+});

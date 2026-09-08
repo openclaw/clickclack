@@ -1,10 +1,45 @@
 package httpapi
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
+
+func (s *Server) requireCreateUpload(w http.ResponseWriter, r *http.Request, act actor, uploadID, nonce, channelID, conversationID string) bool {
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return true
+	}
+	if err := act.requireScope("uploads:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	upload, err := s.store.GetUpload(r.Context(), uploadID, act.user.ID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return false
+	}
+	sameMessageID := ""
+	if act.botTokenID != "" && strings.TrimSpace(nonce) != "" {
+		existing, err := s.store.GetMessageByNonce(r.Context(), act.user.ID, nonce)
+		switch {
+		case err == nil && ((channelID != "" && existing.ChannelID != channelID) || (conversationID != "" && existing.DirectConversationID != conversationID)):
+			writeStoreError(w, store.ErrClientNonceConflict)
+			return false
+		case err == nil:
+			sameMessageID = existing.ID
+		case errors.Is(err, sql.ErrNoRows):
+		default:
+			writeStoreError(w, err)
+			return false
+		}
+	}
+	return s.requireBotUploadResource(w, r, act, upload, sameMessageID)
+}
 
 func (s *Server) requireBotChannelWorkspace(w http.ResponseWriter, r *http.Request, act actor, channelID string) bool {
 	if act.botTokenID == "" {

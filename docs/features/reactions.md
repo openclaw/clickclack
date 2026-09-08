@@ -15,7 +15,7 @@ POST   /api/messages/{message_id}/reactions
 DELETE /api/messages/{message_id}/reactions/{emoji}
 ```
 
-`POST` body: `{emoji}`. Both endpoints require workspace membership for the
+`POST` body: `{"emoji":"👀"}`. Both endpoints require workspace membership for the
 message's workspace. Adding twice is a no-op that returns HTTP 200 without an
 event; removing a missing reaction is a no-op. Mutation responses include an
 event object and the message's complete aggregated reaction summaries. The
@@ -25,7 +25,7 @@ response shape.
 Message reads expose reactions as per-emoji summaries:
 
 ```json
-{"emoji":"lobster","count":3,"reacted_by_me":true}
+{"emoji":"🦞","count":3,"reacted_by_me":true}
 ```
 
 The API does not include the individual reacting users in message payloads.
@@ -48,7 +48,11 @@ fresh snapshot page; ordinary pages preserve newer realtime state.
 
 ## Storage
 
-Reactions are stored verbatim — there's no allowlist or canonical shortcode
-table. Pass any string the UI is willing to render. Crustacean reactions like
-`:lobster:` and `:claw:` are intended in the reaction pack but not enforced
-server-side.
+Reactions are stored and compared as exact strings; there is no allowlist or
+shortcode conversion. Bots should send the same Unicode glyph as the web picker
+(for example, `👀`, `👍`, or `🦞`) to share its reaction count. `eyes`, `:eyes:`, and
+`👀` are three separate reactions, and custom strings render literally.
+
+To remove a reaction, URL-encode its exact string once as a path segment. For
+example, `%` becomes `%25`, `/` becomes `%2F`, and the literal string `%2F`
+becomes `%252F`. The SDK handles this encoding in `removeReaction`.

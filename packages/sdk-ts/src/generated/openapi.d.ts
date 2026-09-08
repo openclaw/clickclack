@@ -1812,6 +1812,12 @@ export interface components {
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
       /**
+       * @description Optional upload to attach atomically before message.created is
+       *     published. The upload must be visible in the message workspace;
+       *     bot tokens also require uploads:write.
+       */
+      upload_id?: string;
+      /**
        * @description Durable message kind; omitted values default to message. Agent
        *     activity kinds require bot-token auth
        *     with the explicit agent_activity:write scope and are supported on

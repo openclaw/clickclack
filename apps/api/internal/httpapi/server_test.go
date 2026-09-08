@@ -285,6 +285,23 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	if removedSlashReaction.Event.Type != "reaction.removed" || len(removedSlashReaction.Reactions) != 0 {
 		t.Fatalf("slash reaction was not removed: %#v", removedSlashReaction)
 	}
+	for _, emoji := range []string{"%", "%2F", "%25", "100%", "%/", "👀", "eyes"} {
+		t.Run("reaction round trip "+emoji, func(t *testing.T) {
+			message := postJSON[struct {
+				Message store.Message `json:"message"`
+			}](t, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "reaction path proof"})
+			endpoint := server.URL + "/api/messages/" + message.Message.ID + "/reactions"
+			postJSON[struct{}](t, endpoint, map[string]string{"emoji": emoji})
+			removed := deleteJSONAsUser[struct {
+				Event     store.Event             `json:"event"`
+				Reactions []store.ReactionSummary `json:"reactions"`
+			}](t, owner.ID, endpoint+"/"+url.PathEscape(emoji))
+			payload, ok := removed.Event.Payload.(map[string]any)
+			if removed.Event.Type != "reaction.removed" || !ok || payload["emoji"] != emoji || len(removed.Reactions) != 0 {
+				t.Fatalf("reaction %q was not removed exactly: %#v", emoji, removed)
+			}
+		})
+	}
 
 	dm := postJSON[struct {
 		Conversation store.DirectConversation `json:"conversation"`

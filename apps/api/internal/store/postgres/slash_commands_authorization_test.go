@@ -33,10 +33,7 @@ func TestPostgresSlashCommandGuestBudgetIndexMigration(t *testing.T) {
 	}
 	var indexDefinition string
 	if err := st.db.QueryRowContext(ctx, `
-		SELECT indexdef
-		FROM pg_indexes
-		WHERE schemaname = current_schema()
-		  AND indexname = 'idx_slash_command_invocations_guest_budget'`,
+		SELECT pg_get_indexdef('idx_slash_command_invocations_guest_budget'::regclass)`,
 	).Scan(&indexDefinition); err != nil {
 		t.Fatal(err)
 	}

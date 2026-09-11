@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+**Highlights:** Quieter server access logs with explicit operator controls.
+
+- Added `serve --access-log=all|errors|off`, `CLICKCLACK_ACCESS_LOG`, and the `access_log` configuration key, preserving full request logging by default and panic diagnostics in every mode. Thanks @isaiahknight-va.
+- Updated DOMPurify, Marked, and Virtua for browser rendering and scrolling maintenance.
+- Updated PostgreSQL, Go cryptography, OAuth, terminal, and platform dependencies while preserving the Go 1.26.6 minimum and existing database and password formats.
+- Updated Node.js types, Oxc tooling, Wrangler, and the pnpm setup action while retaining the 48-hour dependency release-age gate, Node.js 24 minimum, and macOS 12 desktop support.
+
 ## 0.4.1 - 2026-09-07
 
 **Highlights:** Complete attachment delivery and reliable unread and reaction controls.

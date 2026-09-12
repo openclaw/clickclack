@@ -83,6 +83,11 @@ clickclack serve \
 - Logs the resolved listen URL and the dev-auth user ID.
 - `--environment` labels opt-in metrics; `--metrics-enabled=true` exposes them
   at `/metrics`.
+- `--access-log` sets how much of the per-request log the server writes: `all`
+  (default), `errors` for status 400 and above only, or `off`. Also settable
+  as `CLICKCLACK_ACCESS_LOG` or `access_log` in the JSON config file; an
+  invalid value fails before the database is opened. Panics print their stack
+  in every mode, and startup and shutdown lines are unaffected.
 
 ## `migrate`
 

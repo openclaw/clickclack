@@ -91,6 +91,7 @@ func serve(args []string) error {
 	flags.Bool("dev-bootstrap", false, "create a local owner/workspace/channel if no user exists")
 	flags.Bool("password-auth", false, "enable local email/handle and password sign-in")
 	flags.Bool("metrics-enabled", false, "expose metadata-only Prometheus metrics at /metrics")
+	flags.String("access-log", "all", "per-request access log: all, errors, or off")
 	flags.String("embed-frame-ancestors", "", "comma-separated origins allowed to embed /embed/* pages")
 	flags.String("access-team-domain", "", "Cloudflare Access team HTTPS origin")
 	flags.String("access-aud", "", "Cloudflare Access application audience tag")
@@ -102,6 +103,10 @@ func serve(args []string) error {
 		return err
 	}
 	applyFlagOverrides(flags, &cfg)
+	accessLog, err := parseAccessLogMode(cfg.AccessLog)
+	if err != nil {
+		return err
+	}
 	if err := cfg.ValidateServe(); err != nil {
 		return err
 	}
@@ -167,6 +172,7 @@ func serve(args []string) error {
 		},
 		PushNotifier:   pushNotifier,
 		MetricsEnabled: cfg.MetricsEnabled,
+		AccessLog:      accessLog,
 		Environment:    cfg.Environment,
 		Version:        version,
 		Commit:         commit,
@@ -666,6 +672,24 @@ func openUploadStorage(cfg config.Config) (uploadstore.Store, error) {
 	return uploadstore.NewLocal(uploads), nil
 }
 
+// parseAccessLogMode maps the -access-log flag, CLICKCLACK_ACCESS_LOG, and the
+// access_log config key onto the server option. Empty keeps the historical
+// behavior of logging every request.
+func parseAccessLogMode(value string) (httpapi.AccessLogMode, error) {
+	switch strings.TrimSpace(value) {
+	case "":
+		return httpapi.AccessLogAll, nil
+	case string(httpapi.AccessLogAll):
+		return httpapi.AccessLogAll, nil
+	case string(httpapi.AccessLogErrors):
+		return httpapi.AccessLogErrors, nil
+	case string(httpapi.AccessLogOff):
+		return httpapi.AccessLogOff, nil
+	default:
+		return "", fmt.Errorf("invalid -access-log value %q: want all, errors, or off", value)
+	}
+}
+
 func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -685,6 +709,8 @@ func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {
 			cfg.PasswordAuthEnabled = f.Value.String() == "true"
 		case "metrics-enabled":
 			cfg.MetricsEnabled = f.Value.String() == "true"
+		case "access-log":
+			cfg.AccessLog = f.Value.String()
 		case "embed-frame-ancestors":
 			cfg.EmbedFrameAncestors = config.ParseEmbedFrameAncestors(f.Value.String())
 		case "access-team-domain":

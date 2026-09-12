@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/config"
+	"github.com/openclaw/clickclack/apps/api/internal/httpapi"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
@@ -85,6 +86,90 @@ func TestApplyFlagOverridesSetsAccessConfig(t *testing.T) {
 	applyFlagOverrides(flags, &cfg)
 	if cfg.AccessTeamDomain != "https://openclaw.cloudflareaccess.com" || cfg.AccessAUD != "test-aud" {
 		t.Fatalf("unexpected Access flag config: %#v", cfg)
+	}
+}
+
+func TestServeRejectsInvalidAccessLogBeforeOpeningDatabase(t *testing.T) {
+	const wantErr = `invalid -access-log value "verbose": want all, errors, or off`
+	tests := []struct {
+		name string
+		// setup returns the extra serve arguments carrying the bad value.
+		setup func(t *testing.T, dir string) []string
+	}{
+		{
+			name: "flag",
+			setup: func(_ *testing.T, _ string) []string {
+				return []string{"--access-log", "verbose"}
+			},
+		},
+		{
+			name: "env",
+			setup: func(t *testing.T, _ string) []string {
+				t.Setenv("CLICKCLACK_ACCESS_LOG", "verbose")
+				return nil
+			},
+		},
+		{
+			name: "config file",
+			setup: func(t *testing.T, dir string) []string {
+				path := filepath.Join(dir, "clickclack.json")
+				if err := os.WriteFile(path, []byte(`{"access_log":"verbose"}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return []string{"--config", path}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			dbPath := filepath.Join(dir, "missing.db")
+			args := append([]string{"--data", dir, "--db", "sqlite://" + dbPath}, test.setup(t, dir)...)
+			err := serve(args)
+			if err == nil || err.Error() != wantErr {
+				t.Fatalf("expected %q, got %v", wantErr, err)
+			}
+			if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("validation opened the database before rejecting the command: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestAccessLogFlagMapsToServerOption(t *testing.T) {
+	tests := []struct {
+		value string
+		want  httpapi.AccessLogMode
+	}{
+		{value: "all", want: httpapi.AccessLogAll},
+		{value: "errors", want: httpapi.AccessLogErrors},
+		{value: "off", want: httpapi.AccessLogOff},
+	}
+	for _, test := range tests {
+		t.Run(test.value, func(t *testing.T) {
+			flags := flag.NewFlagSet("test", flag.ContinueOnError)
+			flags.String("access-log", "all", "")
+			if err := flags.Parse([]string{"--access-log", test.value}); err != nil {
+				t.Fatal(err)
+			}
+			cfg := config.Config{}
+			applyFlagOverrides(flags, &cfg)
+			if cfg.AccessLog != test.value {
+				t.Fatalf("cfg.AccessLog = %q, want %q", cfg.AccessLog, test.value)
+			}
+			mode, err := parseAccessLogMode(cfg.AccessLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode != test.want {
+				t.Fatalf("access log mode = %q, want %q", mode, test.want)
+			}
+		})
+	}
+	// An unset flag leaves the config empty, which the server reads as "all".
+	mode, err := parseAccessLogMode("")
+	if err != nil || mode != httpapi.AccessLogAll {
+		t.Fatalf("empty access log mode = %q, %v", mode, err)
 	}
 }
 

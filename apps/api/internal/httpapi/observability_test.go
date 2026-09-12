@@ -165,6 +165,65 @@ func TestRequestLoggerIncludesOnlySafeCorrelationMetadata(t *testing.T) {
 	}
 }
 
+func TestRequestLoggerHonorsAccessLogMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		mode         AccessLogMode
+		wantLines    int
+		wantStatuses []string
+	}{
+		{name: "empty mode logs everything", mode: "", wantLines: 3, wantStatuses: []string{"status=200", "status=404", "status=500"}},
+		{name: "all logs everything", mode: AccessLogAll, wantLines: 3, wantStatuses: []string{"status=200", "status=404", "status=500"}},
+		{name: "errors logs failures only", mode: AccessLogErrors, wantLines: 2, wantStatuses: []string{"status=404", "status=500"}},
+		{name: "off logs nothing", mode: AccessLogOff, wantLines: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			formatter := &pathOnlyLogFormatter{Logger: log.New(&logs, "", 0), Mode: test.mode}
+			router := chi.NewRouter()
+			router.Use(correlationIDMiddleware)
+			router.Use(middleware.RequestLogger(formatter))
+			router.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			router.Get("/api/channels/{channel_id}/missing", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			})
+			router.Get("/api/broken", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			})
+			for _, path := range []string{"/api/health", "/api/channels/chn_1/missing", "/api/broken"} {
+				router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://example.test"+path, nil))
+			}
+			lines := strings.Split(strings.TrimSuffix(logs.String(), "\n"), "\n")
+			if logs.Len() == 0 {
+				lines = nil
+			}
+			if len(lines) != test.wantLines {
+				t.Fatalf("logged %d lines, want %d: %q", len(lines), test.wantLines, logs.String())
+			}
+			for i, want := range test.wantStatuses {
+				if !strings.Contains(lines[i], want) {
+					t.Fatalf("line %d = %q, want %s", i, lines[i], want)
+				}
+			}
+			if test.wantLines == 3 && !strings.Contains(lines[0], `route="/api/health"`) {
+				t.Fatalf("success line lost its route: %q", lines[0])
+			}
+			if test.wantLines > 0 {
+				failures := lines[len(lines)-2:]
+				if !strings.Contains(failures[0], `route="/api/channels/{channel_id}/missing"`) {
+					t.Fatalf("404 line lost its route: %q", failures[0])
+				}
+				if !strings.Contains(failures[1], `route="/api/broken"`) {
+					t.Fatalf("500 line lost its route: %q", failures[1])
+				}
+			}
+		})
+	}
+}
+
 type failingPingStore struct {
 	store.Store
 }

@@ -20,6 +20,7 @@ type Config struct {
 	Uploads                string   `json:"uploads"`
 	Environment            string   `json:"environment"`
 	MetricsEnabled         bool     `json:"metrics_enabled"`
+	AccessLog              string   `json:"access_log"`
 	PublicURL              string   `json:"public_url"`
 	PublicAPIURL           string   `json:"public_api_url"`
 	HomeURL                string   `json:"home_url"`
@@ -86,6 +87,9 @@ func Load(path string) (Config, error) {
 			return Config{}, err
 		}
 		cfg.MetricsEnabled = value
+	}
+	if env := os.Getenv("CLICKCLACK_ACCESS_LOG"); env != "" {
+		cfg.AccessLog = env
 	}
 	if env := os.Getenv("CLICKCLACK_PUBLIC_URL"); env != "" {
 		cfg.PublicURL = env

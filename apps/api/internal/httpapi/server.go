@@ -45,6 +45,7 @@ type Server struct {
 	passwordAuthEnabled   bool
 	pushNotifier          PushNotifier
 	metrics               *metricsRegistry
+	accessLog             AccessLogMode
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
 	passwordIPLimiter     *slidingWindowLimiter
@@ -122,6 +123,7 @@ type Options struct {
 	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
 	MetricsEnabled      bool
+	AccessLog           AccessLogMode
 	Environment         string
 	Version             string
 	Commit              string
@@ -163,6 +165,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		passwordAuthEnabled:   options.PasswordAuthEnabled,
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
+		accessLog:             options.AccessLog,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
 		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
 		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
@@ -185,7 +188,7 @@ func (s *Server) Handler() http.Handler {
 	if s.metrics != nil {
 		r.Use(s.metrics.middleware)
 	}
-	r.Use(middleware.RequestLogger(&pathOnlyLogFormatter{}))
+	r.Use(middleware.RequestLogger(&pathOnlyLogFormatter{Mode: s.accessLog}))
 	r.Use(middleware.Recoverer)
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
@@ -349,17 +352,33 @@ func requestCookie(r *http.Request, name string) (*http.Cookie, error) {
 	}
 }
 
+// AccessLogMode selects how much of the per-request access log the server
+// writes. The zero value logs every request, which is what operators got
+// before the mode existed.
+type AccessLogMode string
+
+const (
+	AccessLogAll    AccessLogMode = "all"
+	AccessLogErrors AccessLogMode = "errors"
+	AccessLogOff    AccessLogMode = "off"
+)
+
 type pathOnlyLogFormatter struct {
 	Logger middleware.LoggerInterface
+	Mode   AccessLogMode
 }
 
 func (f *pathOnlyLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
+	mode := f.mode()
+	if mode == AccessLogOff {
+		return &pathOnlyLogEntry{logger: f.logger(), request: r, mode: mode}
+	}
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
 	prefix := fmt.Sprintf("method=%q scheme=%q host=%q proto=%q remote=%q correlation_id=%q ", r.Method, scheme, r.Host, r.Proto, r.RemoteAddr, correlationIDFromContext(r.Context()))
-	return &pathOnlyLogEntry{logger: f.logger(), prefix: prefix, request: r}
+	return &pathOnlyLogEntry{logger: f.logger(), prefix: prefix, request: r, mode: mode}
 }
 
 func (f *pathOnlyLogFormatter) logger() middleware.LoggerInterface {
@@ -369,13 +388,29 @@ func (f *pathOnlyLogFormatter) logger() middleware.LoggerInterface {
 	return log.Default()
 }
 
+func (f *pathOnlyLogFormatter) mode() AccessLogMode {
+	if f.Mode == "" {
+		return AccessLogAll
+	}
+	return f.Mode
+}
+
 type pathOnlyLogEntry struct {
 	logger  middleware.LoggerInterface
 	prefix  string
 	request *http.Request
+	mode    AccessLogMode
 }
 
 func (e *pathOnlyLogEntry) Write(status, bytes int, _ http.Header, elapsed time.Duration, _ interface{}) {
+	switch e.mode {
+	case AccessLogOff:
+		return
+	case AccessLogErrors:
+		if status < http.StatusBadRequest {
+			return
+		}
+	}
 	route := chi.RouteContext(e.request.Context()).RoutePattern()
 	if route == "" {
 		route = "unmatched"

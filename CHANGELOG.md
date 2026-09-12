@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-09-11
 
 **Highlights:** Quieter server access logs with explicit operator controls.
 

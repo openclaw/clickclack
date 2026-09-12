@@ -23,11 +23,11 @@ built SPA, so a full local build runs both toolchains.
 ```sh
 pnpm install
 pnpm build                                          # builds SPA + SDK and copies dist into apps/api
-go run ./apps/api/cmd/clickclack serve
+go run ./apps/api/cmd/clickclack serve --dev-bootstrap=true
 open http://localhost:8080
 ```
 
-The dev fallback creates `Local Captain` as the first user, a `ClickClack`
+The explicit development bootstrap creates `Local Captain` as the first user, a `ClickClack`
 workspace, and a `general` channel, so the SPA loads into a working state on
 first hit.
 
@@ -51,7 +51,7 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 | `pnpm build:web`       | Builds and normalizes the Svelte app without touching embedded Go assets. |
 | `pnpm build:sdk`       | Builds the TypeScript SDK. |
 | `pnpm build:desktop`   | Bundles the Electron main process, preloads, and settings renderer. |
-| `pnpm check`           | Full local gate: `pnpm test`, root/workspace `tsc`, `oxlint`, and format checks. |
+| `pnpm check`           | Full local gate: web/Go, FakeCo AWS and desktop tests, root/workspace `tsc`, `oxlint`, and format checks. |
 | `pnpm coverage`        | Go tests with coverage; fails under 85% line coverage. |
 | `pnpm dev:api`         | `go run ./apps/api/cmd/clickclack serve --dev-bootstrap=true`. |
 | `pnpm dev:web`         | `vite dev` for the SPA. |
@@ -77,9 +77,10 @@ apps/
   api/                  # Go backend, single-binary entrypoint
     cmd/clickclack/     # CLI main
     internal/
-      auth/             # placeholder
+      authpolicy/       # public origins, cookies, and OAuth callback policy
+      passwordauth/     # password hashing and validation
       config/           # flag/env/file resolution
-      httpapi/          # chi router, handlers, auth resolution
+      httpapi/          # chi router and domain handlers; auth, realtime, and uploads
       realtime/         # in-process pub/sub hub
       store/            # store interface + types
         sqlite/         # SQLite implementation, migrations, backup, export
@@ -117,8 +118,10 @@ docs/                   # this directory
 
 - `apps/api/internal/...` is the bulk of the test suite. Coverage gate is
   85%.
-- `tests/e2e/chat.spec.ts` exercises the SPA end-to-end via Playwright.
-- The SDK has no test target yet — the bot example is the smoke test.
+- `tests/e2e/` exercises the SPA end-to-end via Playwright, with focused suites
+  for chat, routing, authentication, embeds, artifacts, and message behavior.
+- The SDK has no standalone test target. Its build and the bot example's
+  typecheck are part of the local gate.
 
 ## Coding rules
 

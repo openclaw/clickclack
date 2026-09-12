@@ -247,7 +247,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if body == "" {
 		return store.Message{}, store.Event{}, errors.New("message body is required")
 	}
-	nonce, err := normalizeClientNonce(input.Nonce)
+	nonce, err := store.NormalizeClientNonce(input.Nonce)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}

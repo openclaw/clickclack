@@ -14,7 +14,7 @@ import (
 const uploadQuotaReservationTTL = 15 * time.Minute
 
 func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (store.UploadQuotaReservation, error) {
-	normalizedNonce, err := normalizeClientNonce(nonce)
+	normalizedNonce, err := store.NormalizeClientNonce(nonce)
 	if err != nil {
 		return store.UploadQuotaReservation{}, err
 	}
@@ -104,7 +104,7 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, non
 }
 
 func (s *Store) CreateReservedUpload(ctx context.Context, reservationID string, input store.CreateUploadInput) (store.Upload, error) {
-	nonce, err := normalizeClientNonce(input.Nonce)
+	nonce, err := store.NormalizeClientNonce(input.Nonce)
 	if err != nil {
 		return store.Upload{}, err
 	}
@@ -281,7 +281,7 @@ func (s *Store) GetUpload(ctx context.Context, uploadID, userID string) (store.U
 }
 
 func (s *Store) GetUploadByNonce(ctx context.Context, ownerID, nonce string) (store.Upload, error) {
-	normalized, err := normalizeClientNonce(nonce)
+	normalized, err := store.NormalizeClientNonce(nonce)
 	if err != nil {
 		return store.Upload{}, err
 	}

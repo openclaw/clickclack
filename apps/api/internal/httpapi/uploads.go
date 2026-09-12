@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -47,7 +46,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
+	nonce, err := store.NormalizeClientNonce(r.URL.Query().Get("nonce"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -307,20 +306,6 @@ func (s *Server) authorizeWorkspaceAccess(w http.ResponseWriter, r *http.Request
 	return true
 }
 
-func normalizeClientNonce(value string) (string, error) {
-	nonce := strings.TrimSpace(value)
-	if !utf8.ValidString(nonce) {
-		return "", errors.New("nonce must be valid UTF-8")
-	}
-	if strings.IndexByte(nonce, 0) >= 0 {
-		return "", errors.New("nonce must not contain NUL")
-	}
-	if utf8.RuneCountInString(nonce) > 128 {
-		return "", errors.New("nonce is too long")
-	}
-	return nonce, nil
-}
-
 func writeUploadBodyError(w http.ResponseWriter, err error, fallbackStatus int) {
 	if errors.Is(err, store.ErrUploadQuotaExceeded) {
 		writeStoreError(w, err)
@@ -350,7 +335,7 @@ func (s *Server) getUploadByNonce(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("workspace_id is required"))
 		return
 	}
-	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
+	nonce, err := store.NormalizeClientNonce(r.URL.Query().Get("nonce"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

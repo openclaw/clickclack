@@ -270,7 +270,7 @@ func (s *Store) EnsureDefaultWorkspaceMember(ctx context.Context, userID string)
 		workspace = store.Workspace{ID: newID("wsp"), Name: "ClickClack", Slug: "clickclack", CreatedAt: now()}
 		insertedWorkspace := false
 		createdWorkspace := false
-		for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
+		for range routeIDInsertAttempts {
 			workspaceRouteID, err := store.NewRouteID('T')
 			if err != nil {
 				return store.Workspace{}, err
@@ -310,7 +310,7 @@ func (s *Store) EnsureDefaultWorkspaceMember(ctx context.Context, userID string)
 		if createdWorkspace {
 			channelID := newID("chn")
 			insertedChannel := false
-			for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
+			for range routeIDInsertAttempts {
 				channelRouteID, err := store.NewRouteID('C')
 				if err != nil {
 					return store.Workspace{}, err
@@ -361,7 +361,7 @@ func (s *Store) EnsureDefaultGuestWorkspaceMember(ctx context.Context, userID, r
 	if err == sql.ErrNoRows {
 		workspace = store.Workspace{ID: newID("wsp"), Name: "Guests", Slug: "guests", CreatedAt: now()}
 		insertedWorkspace := false
-		for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
+		for range routeIDInsertAttempts {
 			workspaceRouteID, err := store.NewRouteID('T')
 			if err != nil {
 				return store.Workspace{}, err
@@ -424,7 +424,7 @@ func postgresEnsureNamedChannelTx(ctx context.Context, tx *sql.Tx, workspaceID, 
 	if err != sql.ErrNoRows {
 		return err
 	}
-	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
+	for range routeIDInsertAttempts {
 		routeID, err := store.NewRouteID('C')
 		if err != nil {
 			return err

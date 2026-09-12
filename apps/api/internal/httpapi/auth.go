@@ -433,7 +433,7 @@ func localDevBrowserOriginAllowed(r *http.Request) bool {
 
 func headerHostsAreLocal(values []string) bool {
 	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
+		for part := range strings.SplitSeq(value, ",") {
 			if strings.TrimSpace(part) != "" && !isLocalHostPort(part) {
 				return false
 			}
@@ -444,8 +444,8 @@ func headerHostsAreLocal(values []string) bool {
 
 func forwardedHeaderIsLocal(values []string) bool {
 	for _, value := range values {
-		for _, hop := range strings.Split(value, ",") {
-			for _, field := range strings.Split(hop, ";") {
+		for hop := range strings.SplitSeq(value, ",") {
+			for field := range strings.SplitSeq(hop, ";") {
 				key, raw, ok := strings.Cut(strings.TrimSpace(field), "=")
 				if !ok {
 					continue

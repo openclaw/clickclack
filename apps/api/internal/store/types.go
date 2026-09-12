@@ -776,7 +776,7 @@ func hasURLLikePrefix(value string) bool {
 	if separator <= 0 {
 		return false
 	}
-	for i := 0; i < separator; i++ {
+	for i := range separator {
 		char := value[i]
 		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' ||
 			(char >= '0' && char <= '9' && i > 0) || char == '+' || char == '-' || char == '.') {

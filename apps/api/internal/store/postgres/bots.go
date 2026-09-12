@@ -975,7 +975,7 @@ func normalizeBotScopes(values []string) ([]string, error) {
 	seen := map[string]bool{}
 	var scopes []string
 	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
+		for part := range strings.SplitSeq(value, ",") {
 			scope := strings.TrimSpace(part)
 			if scope == "" {
 				continue
@@ -1023,7 +1023,7 @@ func botSetupScopesMatch(values, stored, normalized []string) bool {
 	usesWriteBundle := false
 	hasScope := false
 	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
+		for part := range strings.SplitSeq(value, ",") {
 			scope := strings.TrimSpace(part)
 			if scope == "" {
 				continue

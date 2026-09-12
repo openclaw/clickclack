@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -97,10 +98,8 @@ func (a actor) requireScope(scope string) error {
 	if a.botTokenID == "" {
 		return nil
 	}
-	for _, candidate := range a.scopes {
-		if candidate == scope {
-			return nil
-		}
+	if slices.Contains(a.scopes, scope) {
+		return nil
 	}
 	return errors.New("bot token is missing scope " + scope)
 }

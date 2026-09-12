@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -247,7 +248,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func websocketBearerProtocol(r *http.Request) string {
-	for _, protocol := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
+	for protocol := range strings.SplitSeq(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
 		protocol = strings.TrimSpace(protocol)
 		if strings.HasPrefix(protocol, websocketBearerProtocolPrefix) {
 			return protocol
@@ -268,12 +269,7 @@ func (s *Server) websocketOriginPatterns(r *http.Request) []string {
 // sessions and never leak to other workspace members.
 func shouldDeliverEvent(event store.Event, userID string) bool {
 	if len(event.RecipientUserIDs) > 0 {
-		for _, allowed := range event.RecipientUserIDs {
-			if allowed == userID {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(event.RecipientUserIDs, userID)
 	}
 	switch event.Type {
 	case "channel.read", "dm.read":

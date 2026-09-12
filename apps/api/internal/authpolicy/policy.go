@@ -165,7 +165,7 @@ func canonicalBasePath(value *url.URL) (string, error) {
 	if cleaned != trimmed || strings.Contains(value.Path, "//") {
 		return "", errors.New("public API URL base path must be normalized")
 	}
-	for _, segment := range strings.Split(strings.TrimPrefix(cleaned, "/"), "/") {
+	for segment := range strings.SplitSeq(strings.TrimPrefix(cleaned, "/"), "/") {
 		if segment == "" || segment == "." || segment == ".." {
 			return "", errors.New("public API URL base path must be normalized")
 		}

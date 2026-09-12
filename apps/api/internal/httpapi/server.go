@@ -20,7 +20,6 @@ import (
 type Server struct {
 	store                 store.Store
 	hub                   *realtime.Hub
-	uploadDir             string
 	uploadStorage         uploadstore.Store
 	githubOAuth           GitHubOAuthConfig
 	openclawID            OpenClawIDConfig
@@ -126,7 +125,6 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	return &Server{
 		store:                 st,
 		hub:                   hub,
-		uploadDir:             options.UploadDir,
 		uploadStorage:         uploadStorage,
 		githubOAuth:           options.GitHubOAuth.withDefaults(),
 		openclawID:            options.OpenClawID.withDefaults(),

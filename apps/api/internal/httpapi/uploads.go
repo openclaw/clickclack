@@ -311,8 +311,7 @@ func writeUploadBodyError(w http.ResponseWriter, err error, fallbackStatus int) 
 		writeStoreError(w, err)
 		return
 	}
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		writeError(w, http.StatusRequestEntityTooLarge, err)
 		return
 	}

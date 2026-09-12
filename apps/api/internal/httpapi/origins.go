@@ -81,7 +81,7 @@ func allowedCORSHeaders(value string) (string, bool) {
 		return "", true
 	}
 	var allowed []string
-	for _, header := range strings.Split(value, ",") {
+	for header := range strings.SplitSeq(value, ",") {
 		header = strings.ToLower(strings.TrimSpace(header))
 		if _, ok := corsHeaders[header]; !ok {
 			return "", false

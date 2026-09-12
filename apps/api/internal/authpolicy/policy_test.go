@@ -28,6 +28,7 @@ func TestCanonicalPublicURL(t *testing.T) {
 		"http://localhost:8080/":         "http://localhost:8080",
 		"http://127.0.0.1:8080":          "http://127.0.0.1:8080",
 		"http://[::1]:8080":              "http://[::1]:8080",
+		"https://[::1]":                  "https://[::1]",
 	} {
 		got, err := CanonicalPublicURL(input)
 		if err != nil {
@@ -48,6 +49,7 @@ func TestCanonicalPublicURL(t *testing.T) {
 		"https://chat.example.com.",
 		"https://chat.example.com:0",
 		"https://chat.example.com:65536",
+		"https://chat.example.com/%",
 	} {
 		if _, err := CanonicalPublicURL(value); err == nil {
 			t.Fatalf("expected %q to be invalid", value)
@@ -118,7 +120,25 @@ func TestNewCookieNames(t *testing.T) {
 	if loopback.Session != "cc-dev-session" || loopback.OAuthBinding != "cc-dev-oauth-binding" || !loopback.Namespaced {
 		t.Fatalf("unexpected loopback names: %#v", loopback)
 	}
-	if _, err := NewCookieNames("prod", "", ""); err == nil {
-		t.Fatal("expected namespaced cookies without a public URL to fail")
+	fallback, err := NewCookieNames("prod", "https://chat.example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fallback.Session != "__Host-cc-prod-session" || fallback.OAuthBinding != "__Host-cc-prod-oauth-binding" || !fallback.Namespaced {
+		t.Fatalf("unexpected fallback names: %#v", fallback)
+	}
+	for _, invalid := range []struct {
+		namespace    string
+		publicURL    string
+		publicAPIURL string
+	}{
+		{"prod", "", ""},
+		{"Prod", "https://chat.example.com", "https://api.example.com"},
+		{"prod", "ftp://chat.example.com", ""},
+		{"prod", "https://chat.example.com", "http://api.example.com"},
+	} {
+		if _, err := NewCookieNames(invalid.namespace, invalid.publicURL, invalid.publicAPIURL); err == nil {
+			t.Fatalf("expected %+v to be invalid", invalid)
+		}
 	}
 }

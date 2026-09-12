@@ -6,10 +6,6 @@ export type RespondingAgentTurn = {
   lines: Array<{ finalized: boolean }>;
 };
 
-export function agentProgressTurnKey(userId: string, turnId: string): string {
-  return `${userId}\u0000${turnId}`;
-}
-
 export function agentNameFor(
   userId: string,
   botCommands: WorkspaceBotCommand[],

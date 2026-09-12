@@ -10,6 +10,7 @@
   } from "./lib/home-link";
   import { APIError, api, apiResourceURL, apiURL, authMethods, frontendBaseURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
+  import { readBrowserNotificationsEnabled, writeBrowserNotificationsEnabled } from "./lib/browserNotifications";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
@@ -23,6 +24,7 @@
   } from "./lib/chat/messageWindow";
   import { collectMentionPeople, collectRecentPeople, dmTitle } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
+  import { loadActivityPreferences, storeActivityPreference, applyMessageAlignments } from "./lib/chat/activity-preferences";
   import { newNonce } from "./lib/chat/messages";
   import { MessageRequests, type AuthorUpdate } from "./lib/chat/messageRequests";
   import { mergeMessageUpdate, type MessageUpdate } from "./lib/chat/messageUpdates";
@@ -48,7 +50,8 @@
   } from "./components/messages/MessageList.svelte";
   import DeleteMessageModal from "./components/messages/DeleteMessageModal.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
-  import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
+  import AgentProgress from "./components/messages/AgentProgress.svelte";
+  import { updateAgentProgress, type AgentProgressTurn } from "./lib/chat/agent-progress";
   import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
@@ -64,21 +67,15 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
-  import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
+  import { respondingAgentNames } from "./lib/agent-responding";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
-  const BROWSER_NOTIFICATIONS_STORAGE_PREFIX = "clickclack:browser-notifications-enabled:v1:";
   const CHANNEL_NOTIFICATION_STORAGE_PREFIX = "clickclack:channel-notification:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
-  const SHOW_AGENT_ACTIVITY_STORAGE_KEY = "clickclack:show-agent-activity:v1";
-  const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
-  const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
-  const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
-  const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
   let homeLink: HomeLink = DEFAULT_HOME_LINK;
@@ -171,16 +168,8 @@
   let showCreateChannel = false;
   let showCreateDirect = false;
   let browserNotificationsEnabled = false;
-  // Client-only preferences for agent activity. Consecutive same-turn
-  // agent_commentary/agent_tool rows are coalesced into one preamble block;
-  // these two independent flags drop the commentary prose and/or the tool-call
-  // sub-items from that block. When both are set the block is omitted entirely.
-  // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
-  // Self-message alignment: "left" (default, matches the legacy layout) or
-  // "right". Persisted client-side and applied as a root data attribute so the
-  // messages.css mirror rules can flip the self group without prop drilling.
   let userAlign: "left" | "right" = "left";
   let otherAlign: "left" | "right" = "left";
   let appReady = false;
@@ -470,69 +459,30 @@
   }
 
   function loadActivityPrefs() {
-    try {
-      // New flags default off (both shown). Migrate the legacy single toggle:
-      // if the operator had previously hidden all activity, carry that forward
-      // as both flags hidden.
-      const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
-      hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
-      hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
-      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
-      otherAlign = window.localStorage.getItem(OTHER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
-    } catch {
-      hideCommentary = false;
-      hideToolCalls = false;
-      userAlign = "left";
-      otherAlign = "left";
-    }
-    applyMessageAlignments();
-  }
-
-  function applyMessageAlignments() {
-    try {
-      document.documentElement.setAttribute("data-user-align", userAlign);
-      document.documentElement.setAttribute("data-other-align", otherAlign);
-    } catch {
-      // Non-DOM context (SSR/tests); the in-memory pref still applies on mount.
-    }
+    ({ hideCommentary, hideToolCalls, userAlign, otherAlign } = loadActivityPreferences());
+    applyMessageAlignments(userAlign, otherAlign);
   }
 
   function setUserAlign(value: "left" | "right") {
     userAlign = value;
-    applyMessageAlignments();
-    try {
-      window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, value);
-    } catch {
-      // Ignore unavailable storage; the in-memory pref still applies this session.
-    }
+    applyMessageAlignments(userAlign, otherAlign);
+    storeActivityPreference("userAlign", value);
   }
 
   function setOtherAlign(value: "left" | "right") {
     otherAlign = value;
-    applyMessageAlignments();
-    try {
-      window.localStorage.setItem(OTHER_ALIGN_STORAGE_KEY, value);
-    } catch {
-      // Ignore unavailable storage; the in-memory pref still applies this session.
-    }
+    applyMessageAlignments(userAlign, otherAlign);
+    storeActivityPreference("otherAlign", value);
   }
 
   function setHideCommentary(value: boolean) {
     hideCommentary = value;
-    try {
-      window.localStorage.setItem(HIDE_COMMENTARY_STORAGE_KEY, value ? "1" : "0");
-    } catch {
-      // Ignore unavailable storage; the in-memory pref still applies this session.
-    }
+    storeActivityPreference("hideCommentary", value);
   }
 
   function setHideToolCalls(value: boolean) {
     hideToolCalls = value;
-    try {
-      window.localStorage.setItem(HIDE_TOOL_CALLS_STORAGE_KEY, value ? "1" : "0");
-    } catch {
-      // Ignore unavailable storage; the in-memory pref still applies this session.
-    }
+    storeActivityPreference("hideToolCalls", value);
   }
 
   onDestroy(() => {
@@ -629,44 +579,15 @@
 
   function syncBrowserNotificationState() {
     if (desktop) {
-      browserNotificationsEnabled = storedBrowserNotificationsEnabled();
+      browserNotificationsEnabled = readBrowserNotificationsEnabled(user?.id || "");
       return;
     }
-    const storedEnabled = storedBrowserNotificationsEnabled();
+    const storedEnabled = readBrowserNotificationsEnabled(user?.id || "");
     browserNotificationsEnabled = typeof Notification !== "undefined" &&
       Notification.permission === "granted" &&
       storedEnabled;
     if (storedEnabled && !browserNotificationsEnabled) {
-      storeBrowserNotificationsEnabled(false);
-    }
-  }
-
-  function browserNotificationsStorageKey(): string {
-    return user?.id ? `${BROWSER_NOTIFICATIONS_STORAGE_PREFIX}${user.id}` : "";
-  }
-
-  function storedBrowserNotificationsEnabled(): boolean {
-    const key = browserNotificationsStorageKey();
-    if (!key) return false;
-    try {
-      return window.localStorage.getItem(key) === "enabled";
-    } catch {
-      return false;
-    }
-  }
-
-  function storeBrowserNotificationsEnabled(enabled: boolean): boolean {
-    const key = browserNotificationsStorageKey();
-    if (!key) return false;
-    try {
-      if (enabled) {
-        window.localStorage.setItem(key, "enabled");
-      } else {
-        window.localStorage.removeItem(key);
-      }
-      return true;
-    } catch {
-      return false;
+      writeBrowserNotificationsEnabled(user?.id || "", false);
     }
   }
 
@@ -3582,8 +3503,7 @@
     const payload = event.payload as Record<string, unknown>;
     const userID = typeof payload.user_id === "string" ? payload.user_id : "";
     if (!userID || userID === user?.id) return;
-    const eventChannel = event.channel_id || (typeof payload.channel_id === "string" ? payload.channel_id : "");
-    const eventDM = typeof payload.direct_conversation_id === "string" ? payload.direct_conversation_id : "";
+    const { channelID: eventChannel, dmID: eventDM } = messageEventScope(event);
     const matchesView =
       (selectedChannelID && eventChannel === selectedChannelID) ||
       (selectedDirectID && eventDM === selectedDirectID);
@@ -3601,66 +3521,14 @@
 
   function handleAgentProgressEvent(event: RealtimeEvent) {
     const payload = event.payload as Record<string, unknown>;
-    const eventChannel = event.channel_id || (typeof payload.channel_id === "string" ? payload.channel_id : "");
-    const eventDM = typeof payload.direct_conversation_id === "string" ? payload.direct_conversation_id : "";
+    const { channelID: eventChannel, dmID: eventDM } = messageEventScope(event);
     const matchesView =
       (selectedChannelID && eventChannel === selectedChannelID) ||
       (selectedDirectID && eventDM === selectedDirectID);
     if (!matchesView) return;
-    const turnId = typeof payload.turn_id === "string" ? payload.turn_id : "";
-    const op = typeof payload.op === "string" ? payload.op : "";
-    if (!turnId || !op) return;
-    const userId = typeof payload.user_id === "string" ? payload.user_id : "";
-    const turnKey = agentProgressTurnKey(userId, turnId);
-    if (op === "clear") {
-      agentProgressTurns = agentProgressTurns.filter((turn) => {
-        if (turn.turnId !== turnId) return true;
-        return userId && turn.userId ? turn.key !== turnKey : false;
-      });
-      return;
-    }
-    const line = payload.line as Record<string, unknown> | undefined;
-    const lineId = line && typeof line.id === "string" ? line.id : "";
-    if (!lineId) return;
-    const text = line && typeof line.text === "string" ? line.text : "";
-    const title = line && typeof line.title === "string" ? line.title : "";
-    const incomingText = text || title;
-    const incomingToolName =
-      line && typeof line.tool_name === "string"
-        ? line.tool_name
-        : typeof line?.toolName === "string"
-          ? (line.toolName as string)
-          : undefined;
-    const incomingStatus = line && typeof line.status === "string" ? line.status : undefined;
-    const incomingKind = line && typeof line.kind === "string" ? line.kind : undefined;
-    // Finalize/update frames legitimately carry only { id, kind, status } and no
-    // text/toolName. Merge onto the prior line so a status-only finalize still
-    // applies (the line dims) instead of being dropped and left live until TTL.
-    const existing = agentProgressTurns.find((turn) => turn.key === turnKey);
-    const prior = existing?.lines.find((l) => l.id === lineId);
-    const view = {
-      id: lineId,
-      kind: incomingKind ?? prior?.kind ?? "lifecycle",
-      text: incomingText || prior?.text || "",
-      toolName: incomingToolName ?? prior?.toolName,
-      status: incomingStatus ?? prior?.status,
-      finalized: op === "finalize" || (prior?.finalized ?? false),
-    };
-    // Only drop a brand-new line that carries nothing renderable. An update for
-    // an existing line must always apply, even when this frame omits content.
-    if (!prior && !view.text && !view.toolName) return;
-    const expiresAt = Date.now() + AGENT_PROGRESS_TTL_MS;
-    if (!existing) {
-      agentProgressTurns = [...agentProgressTurns, { key: turnKey, turnId, userId, lines: [view], expiresAt }];
-    } else {
-      const lines = existing.lines.some((l) => l.id === lineId)
-        ? existing.lines.map((l) => (l.id === lineId ? view : l))
-        : [...existing.lines, view];
-      agentProgressTurns = agentProgressTurns.map((turn) =>
-        turn.key === turnKey ? { ...turn, lines, expiresAt } : turn,
-      );
-    }
-    ensureAgentProgressSweeper();
+    const previous = agentProgressTurns;
+    agentProgressTurns = updateAgentProgress(previous, payload, Date.now());
+    if (payload.op !== "clear" && agentProgressTurns !== previous) ensureAgentProgressSweeper();
   }
 
   function ensureAgentProgressSweeper() {

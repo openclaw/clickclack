@@ -1,27 +1,5 @@
-<script lang="ts" module>
-  // Progress lines decay after the turn goes quiet. Generous TTL: turns can
-  // legitimately pause for many seconds between tool calls.
-  export const AGENT_PROGRESS_TTL_MS = 45_000;
-
-  export type AgentProgressLineView = {
-    id: string;
-    kind: string;
-    text: string;
-    toolName?: string;
-    status?: string;
-    finalized: boolean;
-  };
-
-  export type AgentProgressTurn = {
-    key: string;
-    turnId: string;
-    userId: string;
-    lines: AgentProgressLineView[];
-    expiresAt: number;
-  };
-</script>
-
 <script lang="ts">
+  import type { AgentProgressTurn, AgentProgressLineView } from "../../lib/chat/agent-progress";
   type Props = {
     turns: AgentProgressTurn[];
   };

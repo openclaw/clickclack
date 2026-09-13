@@ -14,7 +14,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "11.25.0"
+  PNPM_VERSION: "12.4.1"
 
 jobs:
   release:
@@ -78,7 +78,7 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
-          version: "v2.18.0"
+          version: "v2.18.1"
           args: release --clean --release-notes=${{ runner.temp }}/clickclack-release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

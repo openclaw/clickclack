@@ -13,9 +13,11 @@ built SPA, so a full local build runs both toolchains.
 ## Prerequisites
 
 - Go (matching `go.mod`).
-- pnpm 11 (auto-managed via `corepack`).
+- pnpm 12.4.1, matching `packageManager` in `package.json`.
 - TypeScript runs via stable TypeScript 7 native `tsc` from `@typescript/native` — installed
   through pnpm.
+- The OpenAPI generator has its own TypeScript 5 compiler API dependency, matching
+  its declared peer range; application typechecking still uses native TypeScript 7.
 - Lint/format use `oxlint` and `oxfmt` — installed through pnpm.
 
 ## First run
@@ -122,6 +124,12 @@ docs/                   # this directory
   for chat, routing, authentication, embeds, artifacts, and message behavior.
 - The SDK has no standalone test target. Its build and the bot example's
   typecheck are part of the local gate.
+
+CI runs web utility tests on Node.js 24 and 26 and builds the SDK on the minimum
+supported Node.js line. The Go job runs every package once through the coverage
+gate, whose 85% aggregate still covers internal request and business logic.
+Browser and Docker jobs build their own inputs and
+start independently of the language checks.
 
 ## Coding rules
 

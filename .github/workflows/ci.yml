@@ -15,7 +15,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "11.25.0"
+  PNPM_VERSION: "12.4.1"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -65,9 +65,6 @@ jobs:
             exit 1
           fi
 
-      - name: Test
-        run: go test ./...
-
       - name: Deadcode
         run: |
           output_file=$(mktemp)
@@ -110,6 +107,9 @@ jobs:
       - name: Lint TypeScript
         run: pnpm lint
 
+      - name: Test web utilities
+        run: pnpm --filter @clickclack/web test
+
       - name: Test FakeCo AWS owner
         run: pnpm test:fakeco-aws
 
@@ -129,11 +129,38 @@ jobs:
       - name: Build docs site
         run: pnpm docs:site
 
+  node-compatibility:
+    name: Node 24 compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test web utilities
+        run: pnpm --filter @clickclack/web test
+
+      - name: Build SDK
+        run: pnpm build:sdk
+
   e2e:
     name: Playwright E2E
-    needs:
-      - go
-      - typescript
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
@@ -180,9 +207,6 @@ jobs:
 
   docker:
     name: Docker Image
-    needs:
-      - go
-      - typescript
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

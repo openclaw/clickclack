@@ -92,6 +92,12 @@ function isChatSurfaceAction(el: HTMLElement): boolean {
   return role === "button" || role === "link";
 }
 
+// Numbered choices inside messages keep their digits; other typing still reaches the composer.
+function claimsShortcutKey(el: HTMLElement | null, key: string): boolean {
+  const owner = el?.closest<HTMLElement>("[data-shortcut-keys]");
+  return owner?.dataset.shortcutKeys?.split(" ").includes(key) ?? false;
+}
+
 function hasMessageTextSelection(): boolean {
   const sel = typeof window !== "undefined" ? window.getSelection() : null;
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
@@ -112,6 +118,7 @@ function shouldRedirectKeystroke(event: KeyboardEvent, options: RedirectTypingOp
   const active = document.activeElement as HTMLElement | null;
   if (active === options.messageInput || active === options.replyInput) return false;
   if (isEditableElement(active)) return false;
+  if (claimsShortcutKey(active, event.key)) return false;
   if (consumesKeystrokes(active)) return false;
   return true;
 }

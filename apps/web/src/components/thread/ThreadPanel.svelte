@@ -19,6 +19,7 @@
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
   import MessageEditor from "../messages/MessageEditor.svelte";
+  import QuestionCard from "../messages/QuestionCard.svelte";
   import QuoteBlock from "../messages/QuoteBlock.svelte";
   import ReactionsBar from "../messages/ReactionsBar.svelte";
   import AddReactionButton from "../messages/AddReactionButton.svelte";
@@ -686,11 +687,17 @@
           onSave={() => saveEdit(root)}
         />
       {:else}
-        <div
-          class="markdown"
-          use:enhanceMarkdown
-          use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
-        >{@html markdown(root.body)}</div>
+        {#if root.question}
+          {#key `${root.id}:${root.question.version}`}
+            <QuestionCard message={root} question={root.question} {currentUserID} people={mentionPeople} />
+          {/key}
+        {:else}
+          <div
+            class="markdown"
+            use:enhanceMarkdown
+            use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+          >{@html markdown(root.body)}</div>
+        {/if}
         {#if root.edited_at}
           <span class="message-edit__indicator" title="Edited {time(root.edited_at)}">(edited)</span>
         {/if}
@@ -850,11 +857,17 @@
             />
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />
-            <div
-              class="markdown"
-              use:enhanceMarkdown
-              use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
-            >{@html markdown(reply.body)}</div>
+            {#if reply.question}
+              {#key `${reply.id}:${reply.question.version}`}
+                <QuestionCard message={reply} question={reply.question} {currentUserID} people={mentionPeople} />
+              {/key}
+            {:else}
+              <div
+                class="markdown"
+                use:enhanceMarkdown
+                use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+              >{@html markdown(reply.body)}</div>
+            {/if}
             {#if reply.edited_at}
               <span class="message-edit__indicator" title="Edited {time(reply.edited_at)}">(edited)</span>
             {/if}

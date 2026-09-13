@@ -592,6 +592,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/bots/self/questions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List the authenticated bot's open and submitted questions in its token workspace
+     * @description Requires messages:read. Questions in direct messages are included only for tokens that also have dms:read.
+     */
+    get: operations["listBotUnresolvedQuestions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/bot-tokens/{token_id}/revoke": {
     parameters: {
       query?: never;
@@ -971,6 +991,40 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations["createThreadReply"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/messages/{message_id}/question/answers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Records the first valid answer, or a skip, from a person who can write in the conversation. Emits message.updated and question.submitted. */
+    post: operations["answerQuestion"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/messages/{message_id}/question/resolution": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Records the outcome of a question. Only the bot that asked it can call this. */
+    post: operations["resolveQuestion"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1830,11 +1884,128 @@ export interface components {
        *     agent_commentary or agent_tool; ordinary messages reject it.
        */
       turn_id?: string;
+      question?: components["schemas"]["QuestionSpec"];
     };
     CreateThreadReplyRequest: {
       body: string;
       quoted_message_id?: string;
       nonce?: string;
+      question?: components["schemas"]["QuestionSpec"];
+    };
+    QuestionOption: {
+      label: string;
+      description?: string;
+    };
+    QuestionItem: {
+      id: string;
+      header: string;
+      /** @description Rendered as inline Markdown. */
+      prompt: string;
+      /**
+       * Format: uri
+       * @description Optional http(s) link opened by an action that never answers the question.
+       */
+      url?: string;
+      /** @description Declared choices. An item without options accepts one free-text answer. */
+      options?: components["schemas"]["QuestionOption"][];
+      /** @description Allow several options. Requires at least two options. */
+      multi_select?: boolean;
+      /** @description Accept one free-text answer in addition to the declared options. */
+      allow_other?: boolean;
+      other_placeholder?: string;
+    };
+    /** @description Structured question a bot attaches to its message. Only bot tokens can create questions, and only on ordinary messages (not agent activity kinds). The message body remains the readable fallback for clients that do not render questions. */
+    QuestionSpec: {
+      /** @description Opaque identifier from the bot's runtime. */
+      external_id?: string;
+      title?: string;
+      /**
+       * Format: date-time
+       * @description Between 10 seconds and 7 days from now.
+       */
+      expires_at: string;
+      /** @description People allowed to answer. Empty means anyone who can read and write in the conversation. */
+      responder_user_ids?: string[];
+      /** @default true */
+      allow_skip: boolean;
+      items: components["schemas"]["QuestionItem"][];
+    };
+    QuestionResponse: {
+      answers?: {
+        [key: string]: string[];
+      };
+      skipped?: boolean;
+      /**
+       * @description external marks answers the bot recorded from outside ClickClack.
+       * @enum {string}
+       */
+      source: "clickclack" | "external";
+      responder?: components["schemas"]["User"];
+      /** Format: date-time */
+      responded_at?: string;
+    };
+    MessageQuestion: {
+      /**
+       * @description An open question past expires_at is reported as expired.
+       * @enum {string}
+       */
+      status: "open" | "submitted" | "answered" | "cancelled" | "expired" | "failed";
+      external_id?: string;
+      title?: string;
+      /** Format: date-time */
+      expires_at: string;
+      allow_skip: boolean;
+      items: components["schemas"]["QuestionItem"][];
+      responder_user_ids?: string[];
+      response?: components["schemas"]["QuestionResponse"];
+      note?: string;
+      /** Format: date-time */
+      resolved_at?: string;
+      /** Format: int64 */
+      version: number;
+    };
+    AnswerQuestionRequest: {
+      /** @description Answers keyed by item id. Every item needs at least one value. */
+      answers?: {
+        [key: string]: string[];
+      };
+      /** @description Decline to answer when the question allows it. Cannot be combined with answers. */
+      skip?: boolean;
+      /** @description Replaying the same nonce as the same person returns the recorded answer. */
+      nonce?: string;
+      /**
+       * Format: int64
+       * @description Question version the person answered. A different current version, such as after the bot reopened the question, returns 409 instead of recording the answer.
+       */
+      expected_version?: number;
+    };
+    ResolveQuestionRequest: {
+      /**
+       * @description open reopens a submitted question and requires a note.
+       * @enum {string}
+       */
+      status: "open" | "answered" | "cancelled" | "expired" | "failed";
+      note?: string;
+      /** @description Answers recorded outside ClickClack, accepted when an open question becomes answered. */
+      answers?: {
+        [key: string]: string[];
+      };
+      /** Format: int64 */
+      expected_version?: number;
+    };
+    BotQuestion: {
+      message_id: string;
+      workspace_id: string;
+      channel_id?: string;
+      direct_conversation_id?: string;
+      thread_root_id: string;
+      external_id?: string;
+      /** @enum {string} */
+      status: "open" | "submitted" | "expired";
+      /** Format: date-time */
+      expires_at: string;
+      /** Format: int64 */
+      version: number;
     };
     UpdateMessageRequest: {
       body: string;
@@ -2076,6 +2247,7 @@ export interface components {
       thread_state?: components["schemas"]["ThreadState"];
       nonce?: string;
       reactions?: components["schemas"]["ReactionSummary"][];
+      question?: components["schemas"]["MessageQuestion"];
     };
     MessageResponse: {
       message: components["schemas"]["Message"];
@@ -3730,6 +3902,40 @@ export interface operations {
       };
     };
   };
+  listBotUnresolvedQuestions: {
+    parameters: {
+      query?: {
+        /** @description next_cursor from the previous page */
+        after?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Unresolved questions ordered by message id */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            questions: components["schemas"]["BotQuestion"][];
+            next_cursor: string | null;
+          };
+        };
+      };
+      /** @description Bot token required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   revokeBotToken: {
     parameters: {
       query?: never;
@@ -4639,6 +4845,103 @@ export interface operations {
       };
       /** @description Created thread reply */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  answerQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: components["parameters"]["message_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnswerQuestionRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated message with its submitted question */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Answers do not match the question */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bot tokens and people outside responder_user_ids cannot answer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Question not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The question already has an answer, was resolved, expired, or changed since expected_version */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  resolveQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: components["parameters"]["message_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ResolveQuestionRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated message. The event is omitted when the status was already recorded. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Only the authoring bot can resolve the question */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Question not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Stale expected_version or a transition the current status does not allow */
+      409: {
         headers: {
           [name: string]: unknown;
         };

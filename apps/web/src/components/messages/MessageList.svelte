@@ -302,13 +302,20 @@
       .filter(Boolean)
       .join("\u0002"),
   );
+  // Question cards resize when their status changes; a reopened card grows in place.
+  let questionLayoutRevision = $derived.by(() =>
+    messages
+      .map((message) => (message.question ? `${message.id}\u0000${message.question.version}` : ""))
+      .filter(Boolean)
+      .join("\u0002"),
+  );
   // Reactive mirror for the FAB visibility only. Never gates programmatic scroll.
   let atBottom = $state(true);
   let revealed = $state(false);
   let lastViewKey: string | undefined;
   let lastItemCount = 0;
   let lastMessageID = "";
-  let lastPreambleLayoutRevision = "";
+  let lastLayoutRevision = "";
   let lastRestoreState: MessageListState | undefined;
   // A proxied snapshot keeps its identity when a parent stores it in $state.
   let capturedScrollState = $state<MessageListState>();
@@ -669,7 +676,7 @@
   $effect(() => {
     const key = viewKey;
     const count = items.length;
-    const layoutRevision = preambleLayoutRevision;
+    const layoutRevision = `${preambleLayoutRevision}\u0003${questionLayoutRevision}`;
     // Ordinary messages can grow an existing group without adding a virtual item.
     const newestMessageID = messages.at(-1)?.id || "";
     const newestMessageChanged = newestMessageID !== lastMessageID;
@@ -678,7 +685,7 @@
     if (key !== lastViewKey) {
       lastViewKey = key;
       lastItemCount = count;
-      lastPreambleLayoutRevision = layoutRevision;
+      lastLayoutRevision = layoutRevision;
       lastRestoreState = restoreState;
       capturedScrollState = undefined;
       shouldStickToBottom = true;
@@ -699,7 +706,7 @@
       lastRestoreState = target;
       if (!interrupted && (target.atBottom || target.anchorMessageID)) {
         lastItemCount = count;
-        lastPreambleLayoutRevision = layoutRevision;
+        lastLayoutRevision = layoutRevision;
         pendingRestore = true;
         void runRestore(key, target, target.atBottom);
         return;
@@ -710,14 +717,14 @@
     }
 
     const dataChanged =
-      restoreChanged || count !== lastItemCount || newestMessageChanged || layoutRevision !== lastPreambleLayoutRevision;
+      restoreChanged || count !== lastItemCount || newestMessageChanged || layoutRevision !== lastLayoutRevision;
     if (dataChanged && shouldStickToBottom && !hasNewer && !pendingRestore) {
       void scrollLastItemIntoView();
     } else if (dataChanged && !pendingRestore) {
       void emitSettledAfterFrames(key);
     }
     lastItemCount = count;
-    lastPreambleLayoutRevision = layoutRevision;
+    lastLayoutRevision = layoutRevision;
   });
 
   async function emitSettledAfterFrames(key: string, generation = scrollCommandGeneration) {

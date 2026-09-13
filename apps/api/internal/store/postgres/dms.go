@@ -234,6 +234,10 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if err := requireDirectActivePeerTx(ctx, tx, input.ConversationID, input.AuthorID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	question, err := prepareQuestion(input.Question)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if err := lockMessageSequenceTx(ctx, tx, "direct", input.ConversationID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -263,9 +267,17 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		if existing.DirectConversationID != input.ConversationID || existing.ChannelID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.Kind != kind || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
+		if matches, err := questionReplayMatchesTx(ctx, tx, existing.ID, question); err != nil {
+			return store.Message{}, store.Event{}, err
+		} else if !matches {
+			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
+		}
 		existing, err = hydrateMessageCreateReplay(ctx, tx, existing, input.UploadID)
 		return existing, store.Event{}, err
 	} else if !errors.Is(err, sql.ErrNoRows) {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := validateNewQuestionTx(ctx, tx, workspaceID, "", input.ConversationID, kind, question); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	if quotedID != "" {
@@ -314,6 +326,10 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		}
 		attachedUpload = &upload
 	}
+	createdQuestion, err := insertMessageQuestionTx(ctx, tx, id, workspaceID, input.AuthorID, createdAt, question)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if err := qtx.UnhideDirectConversationForMembers(ctx, input.ConversationID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -328,7 +344,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if input.TurnID != "" {
 		dmEventFields["turn_id"] = input.TurnID
 	}
-	event, err := insertEventWithRecipients(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(ctx, dmEventFields, nonce), recipients)
+	event, err := insertEventWithRecipientsAndMentions(ctx, tx, workspaceID, "", "message.created", &seq, eventPayload(ctx, dmEventFields, nonce), recipients, mergeMentionedUserIDs(nil, question))
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -339,6 +355,7 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 	if attachedUpload != nil {
 		msg.Attachments = []store.Upload{*attachedUpload}
 	}
+	msg.Question = createdQuestion
 	return msg, event, tx.Commit()
 }
 

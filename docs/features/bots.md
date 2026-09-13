@@ -179,6 +179,9 @@ MVP endpoint mapping:
   bot bundles cannot publish them.
 - `GET /api/realtime/events` and `/ws`: `realtime:read`
 - `PUT /api/bots/self/commands`: bot tokens only, with `commands:write`
+- `GET /api/bots/self/questions`: bot tokens only, with `messages:read`
+- `POST /api/messages/{id}/question/resolution`: the authoring bot, with
+  `messages:write`; questions on message create need a bot token
 - `GET /api/workspaces/{id}/bot-commands`: `workspaces:read`
 - `POST /api/uploads`: `uploads:write`
 - `POST /api/messages/{id}/attachments`: `uploads:write` and `messages:write`

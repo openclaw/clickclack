@@ -595,6 +595,10 @@ func (s *Store) GetMessage(ctx context.Context, messageID, userID string) (store
 	if err != nil {
 		return store.Message{}, err
 	}
+	messages, err = s.hydrateQuestions(ctx, messages)
+	if err != nil {
+		return store.Message{}, err
+	}
 	return messages[0], nil
 }
 
@@ -647,6 +651,10 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err := requireTopicTx(ctx, tx, workspaceID, input.ChannelID, input.TopicID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	question, err := prepareQuestion(input.Question)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if err := lockMessageSequenceTx(ctx, tx, "channel", input.ChannelID); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -676,12 +684,20 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		if existing.ChannelID != input.ChannelID || existing.DirectConversationID != "" || existing.ParentMessageID != nil || existing.Body != body || existing.TopicID != input.TopicID || existing.Kind != kind || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
 		}
+		if matches, err := questionReplayMatchesTx(ctx, tx, existing.ID, question); err != nil {
+			return store.Message{}, store.Event{}, err
+		} else if !matches {
+			return store.Message{}, store.Event{}, store.ErrClientNonceConflict
+		}
 		if err := requireMessageAccessTx(ctx, tx, existing, input.AuthorID); err != nil {
 			return store.Message{}, store.Event{}, err
 		}
 		existing, err = hydrateMessageCreateReplay(ctx, tx, existing, input.UploadID)
 		return existing, store.Event{}, err
 	} else if !errors.Is(err, sql.ErrNoRows) {
+		return store.Message{}, store.Event{}, err
+	}
+	if err := validateNewQuestionTx(ctx, tx, workspaceID, input.ChannelID, "", kind, question); err != nil {
 		return store.Message{}, store.Event{}, err
 	}
 	if err := requireCanPostTx(ctx, tx, workspaceID, input.ChannelID, input.AuthorID); err != nil {
@@ -737,6 +753,10 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		}
 		attachedUpload = &upload
 	}
+	createdQuestion, err := insertMessageQuestionTx(ctx, tx, id, workspaceID, input.AuthorID, createdAt, question)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	eventFields := map[string]string{"message_id": id, "author_id": input.AuthorID}
 	if input.TopicID != "" {
 		eventFields["topic_id"] = input.TopicID
@@ -751,6 +771,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	mentionedIDs = mergeMentionedUserIDs(mentionedIDs, question)
 	event, err := insertEventWithRecipientsAndMentions(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(ctx, eventFields, nonce), nil, mentionedIDs)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
@@ -762,6 +783,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if attachedUpload != nil {
 		msg.Attachments = []store.Upload{*attachedUpload}
 	}
+	msg.Question = createdQuestion
 	return msg, event, tx.Commit()
 }
 
@@ -783,6 +805,10 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
 	root, err = ensureThreadRouteIDTx(ctx, tx, root)
+	if err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	question, err := prepareQuestion(input.Question)
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
@@ -811,12 +837,25 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		if existing.ThreadRootID != root.ID || existing.ParentMessageID == nil || *existing.ParentMessageID != root.ID || existing.Body != body || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.ThreadState{}, nil, store.ErrClientNonceConflict
 		}
+		if matches, err := questionReplayMatchesTx(ctx, tx, existing.ID, question); err != nil {
+			return store.Message{}, store.ThreadState{}, nil, err
+		} else if !matches {
+			return store.Message{}, store.ThreadState{}, nil, store.ErrClientNonceConflict
+		}
+		if hydrated, err := hydrateQuestions(ctx, tx, []store.Message{existing}); err != nil {
+			return store.Message{}, store.ThreadState{}, nil, err
+		} else {
+			existing = hydrated[0]
+		}
 		stateRow, err := qtx.GetThreadState(ctx, root.ID)
 		if err != nil {
 			return store.Message{}, store.ThreadState{}, nil, err
 		}
 		return existing, storeThreadStateFromDB(stateRow), nil, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	if err := validateNewQuestionTx(ctx, tx, root.WorkspaceID, root.ChannelID, root.DirectConversationID, "", question); err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
 	if root.DirectConversationID != "" {
@@ -876,6 +915,10 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
+	createdQuestion, err := insertMessageQuestionTx(ctx, tx, id, root.WorkspaceID, input.AuthorID, createdAt, question)
+	if err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
 	replyPayload := eventPayload(ctx, map[string]string{
 		"message_id":      id,
 		"root_message_id": root.ID,
@@ -894,6 +937,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
+	mentionedIDs = mergeMentionedUserIDs(mentionedIDs, question)
 	// recipients is a privacy boundary for direct conversations, not a thread
 	// follower list. Mention metadata must never grant a workspace user access
 	// to a DM they are not already participating in.
@@ -909,6 +953,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
+	msg.Question = createdQuestion
 	return msg, state, []store.Event{replyEvent, stateEvent}, tx.Commit()
 }
 

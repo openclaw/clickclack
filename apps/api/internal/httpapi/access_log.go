@@ -60,7 +60,7 @@ type pathOnlyLogEntry struct {
 	mode    AccessLogMode
 }
 
-func (e *pathOnlyLogEntry) Write(status, bytes int, _ http.Header, elapsed time.Duration, _ interface{}) {
+func (e *pathOnlyLogEntry) Write(status, bytes int, _ http.Header, elapsed time.Duration, _ any) {
 	switch e.mode {
 	case AccessLogOff:
 		return
@@ -76,6 +76,6 @@ func (e *pathOnlyLogEntry) Write(status, bytes int, _ http.Header, elapsed time.
 	e.logger.Print(fmt.Sprintf("%sroute=%q status=%03d bytes=%d elapsed=%s", e.prefix, route, status, bytes, elapsed))
 }
 
-func (e *pathOnlyLogEntry) Panic(v interface{}, _ []byte) {
+func (e *pathOnlyLogEntry) Panic(v any, _ []byte) {
 	middleware.PrintPrettyStack(v)
 }

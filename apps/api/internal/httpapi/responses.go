@@ -98,8 +98,7 @@ func writeError(w http.ResponseWriter, status int, err error) {
 		status = http.StatusServiceUnavailable
 		err = errSessionLookupUnavailable
 	}
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		status = http.StatusRequestEntityTooLarge
 	}
 	writeJSON(w, status, map[string]any{"error": err.Error()})

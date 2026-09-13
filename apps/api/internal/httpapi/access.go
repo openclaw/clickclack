@@ -258,7 +258,7 @@ func (j accessJWK) rsaPublicKey() (*rsa.PublicKey, error) {
 }
 
 func accessCacheExpiry(header http.Header, now time.Time) time.Time {
-	for _, directive := range strings.Split(header.Get("Cache-Control"), ",") {
+	for directive := range strings.SplitSeq(header.Get("Cache-Control"), ",") {
 		name, value, ok := strings.Cut(strings.TrimSpace(directive), "=")
 		if !ok || !strings.EqualFold(name, "max-age") {
 			continue

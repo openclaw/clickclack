@@ -213,10 +213,7 @@ func postsRemainingTx(ctx context.Context, q storedb.DBTX, workspaceID, userID, 
 	if err != nil {
 		return 0, 0, err
 	}
-	remaining := store.GuestPostLimit - int(count)
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(store.GuestPostLimit-int(count), 0)
 	return remaining, store.GuestPostLimit, nil
 }
 

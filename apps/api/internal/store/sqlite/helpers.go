@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"regexp"
 	"strings"
 	"sync"
@@ -294,9 +295,7 @@ func eventPayload(ctx context.Context, base map[string]string, nonce string) map
 		return base
 	}
 	out := make(map[string]string, len(base)+2)
-	for k, v := range base {
-		out[k] = v
-	}
+	maps.Copy(out, base)
 	if nonce != "" {
 		out["nonce"] = nonce
 	}

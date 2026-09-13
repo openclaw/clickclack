@@ -1,5 +1,7 @@
 package store
 
+import "slices"
+
 // DurableEventTypes enumerates every event type persisted to the event log and
 // eligible for outgoing event subscriptions.
 var DurableEventTypes = []string{
@@ -22,10 +24,5 @@ var DurableEventTypes = []string{
 }
 
 func IsDurableEventType(value string) bool {
-	for _, eventType := range DurableEventTypes {
-		if value == eventType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(DurableEventTypes, value)
 }

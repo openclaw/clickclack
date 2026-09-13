@@ -126,7 +126,8 @@ docs/                   # this directory
   typecheck are part of the local gate.
 
 CI runs web utility tests on Node.js 24 and 26 and builds the SDK on the minimum
-supported Node.js line. The Go job runs every package once through the coverage
+supported Node.js line. The Go job uses PostgreSQL 18 for database integration
+tests and runs every package once through the coverage
 gate, whose 85% aggregate still covers internal request and business logic.
 Browser and Docker jobs build their own inputs and
 start independently of the language checks.

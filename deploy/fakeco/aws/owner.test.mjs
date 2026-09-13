@@ -1322,10 +1322,10 @@ test("bootstrap proves seed equality, health, readiness, metadata metrics, and b
   const bootstrap = await readFile(bootstrapPath, "utf8");
   const runbook = await readFile(runbookPath, "utf8");
   assert.doesNotMatch(bootstrap, /^\s*awscli\s*\\\s*$/mu);
-  assert.match(bootstrap, /readonly aws_cli_version=2\.35\.20/u);
+  assert.match(bootstrap, /readonly aws_cli_version=2\.36\.43/u);
   assert.match(
     bootstrap,
-    /readonly aws_cli_archive_sha256=58799ce9276d4e8815fd19e4dc35649626c6b4fbd4d0e3df7433af9cfde41882/u,
+    /readonly aws_cli_archive_sha256=e810abf8c26c100e19a6c57ad69f41ff34f1bf68b5df5aab076fa2d6b28d0dbb/u,
   );
   assert.match(bootstrap, /awscli-exe-linux-aarch64-\$aws_cli_version\.zip/u);
   assert.match(bootstrap, /dpkg --print-architecture \| grep -Fx arm64/u);

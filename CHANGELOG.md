@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated Virtua, Wrangler, transitive build dependencies, the pinned AWS CLI, and the PostgreSQL CI service while retaining the 48-hour release-age gate and supported runtime minimums.
 - Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.

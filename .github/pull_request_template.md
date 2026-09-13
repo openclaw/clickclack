@@ -13,10 +13,15 @@ For fixes, describe the user-visible symptom and trigger:
 fix: task list fails to load when user has no environments
 Avoid implementation details such as:
 fix: add null check to task query
+-->
+
+<details>
+<summary>Maintainer edits</summary>
 
 **MUST:** Keep **Allow edits from maintainers** enabled for this PR so maintainers
 can help update the branch when needed.
--->
+
+</details>
 
 ## What Problem This Solves
 

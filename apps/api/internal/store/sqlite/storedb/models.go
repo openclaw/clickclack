@@ -425,6 +425,13 @@ type UserPassword struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+type UserSidebarChannelOrder struct {
+	UserID      string `json:"user_id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelIds  string `json:"channel_ids"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`

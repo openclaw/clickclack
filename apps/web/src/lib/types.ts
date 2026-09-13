@@ -10,6 +10,7 @@ export type User = {
   created_at: string;
   notification_settings?: NotificationSettings;
   appearance_preferences?: AppearancePreferences;
+  sidebar_preferences?: SidebarPreferences;
   // Reported only for the signed-in account, on /api/me.
   password_enrolled?: boolean;
 };
@@ -31,6 +32,17 @@ export type AppearancePreferencesPatch = {
   board_theme?: "" | "signal" | "ember" | "moss" | "iris";
   message_layout?: "" | "standard" | "outlined";
   density?: "" | "comfortable" | "compact";
+};
+
+export type SidebarPreferences = {
+  // Ordered channel ids keyed by workspace id. A workspace whose order was
+  // cleared is present with an empty list; a workspace that never saved one is
+  // absent.
+  channel_order?: Record<string, string[]>;
+};
+
+export type SidebarPreferencesPatch = {
+  channel_order?: Record<string, string[]>;
 };
 
 export type Workspace = {

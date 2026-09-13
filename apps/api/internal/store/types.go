@@ -142,6 +142,10 @@ func NormalizeMessageKind(kind string) (string, error) {
 // owner or moderator.
 var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
 
+// ErrNotWorkspaceMember is returned when a workspace operation requires any
+// membership and the caller has none.
+var ErrNotWorkspaceMember = errors.New("workspace membership required")
+
 // ErrWorkspaceOwnerRequired is returned when a workspace operation requires the
 // current owner, not just a moderator.
 var ErrWorkspaceOwnerRequired = errors.New("workspace owner permission required")
@@ -233,6 +237,18 @@ type AppearancePreferencesPatch struct {
 	BoardTheme    *string `json:"board_theme,omitempty"`
 	MessageLayout *string `json:"message_layout,omitempty"`
 	Density       *string `json:"density,omitempty"`
+}
+
+// SidebarPreferences is the caller's complete roaming sidebar snapshot.
+// Workspaces with no saved channel order are absent from the map.
+type SidebarPreferences struct {
+	ChannelOrder map[string][]string `json:"channel_order,omitempty"`
+}
+
+// SidebarPreferencesPatch replaces the channel order of every workspace it
+// lists and leaves the rest untouched. An empty list clears that workspace.
+type SidebarPreferencesPatch struct {
+	ChannelOrder map[string][]string `json:"channel_order,omitempty"`
 }
 
 type ChannelNotificationInput struct {
@@ -836,11 +852,13 @@ type UpdateCurrentUserInput struct {
 	AvatarURL             *string
 	NotificationSettings  *NotificationSettings
 	AppearancePreferences *AppearancePreferencesPatch
+	SidebarPreferences    *SidebarPreferencesPatch
 }
 
 type CurrentUserState struct {
 	User                  User
 	AppearancePreferences *AppearancePreferences
+	SidebarPreferences    *SidebarPreferences
 }
 
 type CreateWorkspaceInput struct {
@@ -1247,6 +1265,7 @@ type Store interface {
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
+	GetSidebarPreferences(ctx context.Context, userID string) (*SidebarPreferences, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)

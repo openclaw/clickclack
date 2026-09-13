@@ -124,6 +124,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):
 		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrNotWorkspaceMember):
+		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrWorkspaceOwnerRequired):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrBotOwnerRequired):

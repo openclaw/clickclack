@@ -1310,6 +1310,7 @@ export interface components {
       avatar_url?: string;
       notification_settings?: components["schemas"]["NotificationSettings"];
       appearance_preferences?: components["schemas"]["AppearancePreferencesPatch"];
+      sidebar_preferences?: components["schemas"]["SidebarPreferencesPatch"];
     };
     User: {
       id: string;
@@ -1334,6 +1335,7 @@ export interface components {
       created_at: string;
       notification_settings?: components["schemas"]["NotificationSettings"];
       appearance_preferences?: components["schemas"]["AppearancePreferences"];
+      sidebar_preferences?: components["schemas"]["SidebarPreferences"];
       /** @description Whether this account has a password on file. Reported only for the signed-in caller, on /api/me. */
       password_enrolled?: boolean;
     };
@@ -1742,6 +1744,20 @@ export interface components {
       message_layout?: "" | "standard" | "outlined";
       /** @enum {string} */
       density?: "" | "comfortable" | "compact";
+    };
+    /** @description Current user's complete sidebar preference snapshot. Omitted properties use client defaults. */
+    SidebarPreferences: {
+      /** @description Personal channel order, keyed by workspace id. Each value lists the caller's channel ids for that workspace in sidebar order. A workspace whose order was cleared is present with an empty array, so a client can tell a clear from a workspace that never saved an order; workspaces that never saved one are absent. */
+      channel_order?: {
+        [key: string]: string[];
+      };
+    };
+    /** @description Partial sidebar update. Workspaces omitted from channel_order are unchanged, a listed workspace replaces that workspace's order, and an empty array clears it back to the server's default ordering. */
+    SidebarPreferencesPatch: {
+      /** @description Ordered channel ids keyed by workspace id. The caller must be a member of every workspace listed. Ids that are not channels of that workspace are dropped, and repeated ids keep their first position. */
+      channel_order?: {
+        [key: string]: string[];
+      };
     };
     CreateChannelRequest: {
       name: string;

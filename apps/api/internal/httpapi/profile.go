@@ -21,6 +21,9 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	preferences, err := s.store.GetAppearancePreferences(r.Context(), act.user.ID)
 	payload := currentUserPayload{User: act.user, AppearancePreferences: preferences}
 	if err == nil {
+		payload.SidebarPreferences, err = s.store.GetSidebarPreferences(r.Context(), act.user.ID)
+	}
+	if err == nil {
 		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), act.user.ID)
 	}
 	writeResult(w, map[string]any{"user": payload}, err)
@@ -42,6 +45,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		AvatarURL             *string                           `json:"avatar_url"`
 		NotificationSettings  *store.NotificationSettings       `json:"notification_settings"`
 		AppearancePreferences *store.AppearancePreferencesPatch `json:"appearance_preferences"`
+		SidebarPreferences    *store.SidebarPreferencesPatch    `json:"sidebar_preferences"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -54,8 +58,13 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		AvatarURL:             body.AvatarURL,
 		NotificationSettings:  body.NotificationSettings,
 		AppearancePreferences: body.AppearancePreferences,
+		SidebarPreferences:    body.SidebarPreferences,
 	})
-	payload := currentUserPayload{User: updated.User, AppearancePreferences: updated.AppearancePreferences}
+	payload := currentUserPayload{
+		User:                  updated.User,
+		AppearancePreferences: updated.AppearancePreferences,
+		SidebarPreferences:    updated.SidebarPreferences,
+	}
 	if err == nil {
 		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), updated.User.ID)
 	}
@@ -65,6 +74,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 type currentUserPayload struct {
 	store.User
 	AppearancePreferences *store.AppearancePreferences `json:"appearance_preferences,omitempty"`
+	SidebarPreferences    *store.SidebarPreferences    `json:"sidebar_preferences,omitempty"`
 	PasswordEnrolled      bool                         `json:"password_enrolled"`
 }
 

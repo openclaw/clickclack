@@ -8,6 +8,7 @@
   const enabledAuthMethods = authMethods();
   const githubAuthEnabled = enabledAuthMethods.includes("github");
   const passwordAuthEnabled = enabledAuthMethods.includes("password");
+  const openclawAuthEnabled = !desktop && enabledAuthMethods.includes("openclaw");
   let passwordIdentifier = $state("");
   let passwordSecret = $state("");
   let magicToken = $state("");
@@ -19,7 +20,9 @@
       : "Sign in with your ClickClack account."
     : githubAuthEnabled
       ? "Sign in with GitHub to join the guest room."
-      : "Sign in with a token from your ClickClack administrator.";
+      : openclawAuthEnabled
+        ? "Sign in with OpenClaw ID to join the guest room."
+        : "Sign in with a token from your ClickClack administrator.";
   const authFoot = githubAuthEnabled && !passwordAuthEnabled ? "Any GitHub account can join." : "";
 
   async function signInWithGitHub(event: MouseEvent) {
@@ -117,7 +120,7 @@
         Continue with GitHub
       </a>
     {/if}
-    {#if !desktop}
+    {#if openclawAuthEnabled}
       <a class="openclaw-login" href={apiURL("/api/auth/openclaw/start")}>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path
@@ -131,7 +134,7 @@
     {#if authError}
       <p class="auth-error" role="alert">{authError}</p>
     {/if}
-    <details class="auth-magic" open={!githubAuthEnabled && !passwordAuthEnabled}>
+    <details class="auth-magic" open={!githubAuthEnabled && !passwordAuthEnabled && !openclawAuthEnabled}>
       <summary>Have a sign-in token?</summary>
       <form class="auth-form" onsubmit={submitMagicToken}>
         <label class="field">

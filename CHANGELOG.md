@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.
 - Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
 - Updated Vite, Electron 43, desktop packaging, Wrangler, pnpm and build image/tool pins while preserving Node.js 24, macOS 12 and Go 1.26.6 minimums; CI now covers web utilities on Node.js 24 and 26 and avoids duplicate Go tests and unnecessary job dependencies.

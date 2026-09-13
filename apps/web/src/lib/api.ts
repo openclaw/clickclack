@@ -29,13 +29,12 @@ declare global {
   }
 }
 
-// Sign-in surfaces the server has enabled. A server that predates the field
-// omits it entirely, so an absent list falls back to GitHub, which was then
-// the only browser method.
+// Explicit capabilities are authoritative. Without metadata, preserve the
+// GitHub and OpenClaw ID links shown by older or separately hosted frontends.
 export function authMethods(): string[] {
   if (typeof window === "undefined") return [];
   const methods = window.__CLICKCLACK_CONFIG__?.authMethods;
-  return Array.isArray(methods) ? methods : ["github"];
+  return Array.isArray(methods) ? methods : ["github", "openclaw"];
 }
 
 export function apiBaseURL(): string {

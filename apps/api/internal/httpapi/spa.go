@@ -69,6 +69,9 @@ func (s *Server) enabledAuthMethods() []string {
 	if s.passwordAuthEnabled {
 		methods = append(methods, "password")
 	}
+	if s.openclawID.ClientID != "" && s.openclawID.ClientSecret != "" {
+		methods = append(methods, "openclaw")
+	}
 	return methods
 }
 

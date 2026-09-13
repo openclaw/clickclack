@@ -528,6 +528,77 @@ WHERE id = sqlc.arg(id);
 DELETE FROM workspaces
 WHERE id = sqlc.arg(id);
 
+-- name: CountWorkspaceChannels :one
+SELECT COUNT(*)
+FROM channels
+WHERE workspace_id = sqlc.arg(workspace_id);
+
+-- name: GetWorkspaceSlug :one
+SELECT slug
+FROM workspaces
+WHERE id = sqlc.arg(id);
+
+-- name: CountChannelDeletionContent :one
+SELECT
+  (
+    SELECT COUNT(*)
+    FROM messages root_message
+    WHERE root_message.channel_id = sqlc.arg(channel_id)
+      AND root_message.parent_message_id IS NULL
+      AND root_message.kind = 'message'
+      AND root_message.deleted_at IS NULL
+  ) AS messages,
+  (
+    SELECT COUNT(*)
+    FROM messages reply
+    WHERE reply.channel_id = sqlc.arg(channel_id)
+      AND reply.parent_message_id IS NOT NULL
+      AND reply.deleted_at IS NULL
+  ) AS thread_replies,
+  (
+    SELECT COUNT(*)
+    FROM pinned_messages pin
+    WHERE pin.channel_id = sqlc.arg(channel_id)
+  ) AS pins,
+  (
+    SELECT COUNT(*)
+    FROM topics topic
+    WHERE topic.channel_id = sqlc.arg(channel_id)
+  ) AS topics;
+
+-- name: ListChannelExclusiveUploads :many
+SELECT u.id, u.storage_path, u.byte_size
+FROM uploads u
+WHERE u.workspace_id = sqlc.arg(workspace_id)
+  AND u.id IN (
+    SELECT channel_attachment.upload_id
+    FROM message_attachments channel_attachment
+    JOIN messages channel_message ON channel_message.id = channel_attachment.message_id
+    WHERE channel_message.channel_id = sqlc.arg(channel_id)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM message_attachments other_attachment
+    JOIN messages other_message ON other_message.id = other_attachment.message_id
+    WHERE other_attachment.upload_id = u.id
+      AND (other_message.channel_id IS NULL OR other_message.channel_id <> sqlc.arg(channel_id))
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM workspaces icon_workspace
+    WHERE icon_workspace.id = u.workspace_id
+      AND icon_workspace.icon_url = '/api/uploads/' || u.id
+  )
+ORDER BY u.id;
+
+-- name: DeleteUpload :exec
+DELETE FROM uploads
+WHERE id = sqlc.arg(id);
+
+-- name: DeleteChannel :execrows
+DELETE FROM channels
+WHERE id = sqlc.arg(id);
+
 -- name: InsertDefaultChannel :exec
 INSERT INTO channels (id, route_id, workspace_id, name, kind, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(route_id), sqlc.arg(workspace_id), 'general', 'public', sqlc.arg(created_at));

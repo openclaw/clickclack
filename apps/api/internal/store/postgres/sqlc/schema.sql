@@ -153,6 +153,10 @@ CREATE TABLE messages (
 
 CREATE INDEX idx_messages_channel_seq ON messages(channel_id, channel_seq);
 CREATE INDEX idx_messages_thread_seq ON messages(thread_root_id, thread_seq);
+CREATE INDEX idx_messages_parent_message ON messages(parent_message_id)
+  WHERE parent_message_id IS NOT NULL;
+CREATE INDEX idx_messages_quoted_message ON messages(quoted_message_id)
+  WHERE quoted_message_id IS NOT NULL;
 CREATE INDEX idx_messages_topic ON messages(topic_id, channel_seq);
 CREATE INDEX idx_messages_channel_root_page ON messages(channel_id, parent_message_id, channel_seq)
   WHERE channel_id IS NOT NULL AND parent_message_id IS NULL;

@@ -173,6 +173,54 @@ func (q *Queries) ClearMemberTimeout(ctx context.Context, arg ClearMemberTimeout
 	return err
 }
 
+const countChannelDeletionContent = `-- name: CountChannelDeletionContent :one
+SELECT
+  (
+    SELECT COUNT(*)
+    FROM messages root_message
+    WHERE root_message.channel_id = ?1
+      AND root_message.parent_message_id IS NULL
+      AND root_message.kind = 'message'
+      AND root_message.deleted_at IS NULL
+  ) AS messages,
+  (
+    SELECT COUNT(*)
+    FROM messages reply
+    WHERE reply.channel_id = ?1
+      AND reply.parent_message_id IS NOT NULL
+      AND reply.deleted_at IS NULL
+  ) AS thread_replies,
+  (
+    SELECT COUNT(*)
+    FROM pinned_messages pin
+    WHERE pin.channel_id = ?1
+  ) AS pins,
+  (
+    SELECT COUNT(*)
+    FROM topics topic
+    WHERE topic.channel_id = ?1
+  ) AS topics
+`
+
+type CountChannelDeletionContentRow struct {
+	Messages      int64 `json:"messages"`
+	ThreadReplies int64 `json:"thread_replies"`
+	Pins          int64 `json:"pins"`
+	Topics        int64 `json:"topics"`
+}
+
+func (q *Queries) CountChannelDeletionContent(ctx context.Context, channelID sql.NullString) (CountChannelDeletionContentRow, error) {
+	row := q.db.QueryRowContext(ctx, countChannelDeletionContent, channelID)
+	var i CountChannelDeletionContentRow
+	err := row.Scan(
+		&i.Messages,
+		&i.ThreadReplies,
+		&i.Pins,
+		&i.Topics,
+	)
+	return i, err
+}
+
 const countDesktopOAuthGrants = `-- name: CountDesktopOAuthGrants :one
 SELECT COUNT(*)
 FROM desktop_oauth_grants
@@ -297,6 +345,19 @@ func (q *Queries) CountRecentGuestWritesByAuthor(ctx context.Context, arg CountR
 		arg.AuthorID,
 		arg.Cutoff,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWorkspaceChannels = `-- name: CountWorkspaceChannels :one
+SELECT COUNT(*)
+FROM channels
+WHERE workspace_id = ?1
+`
+
+func (q *Queries) CountWorkspaceChannels(ctx context.Context, workspaceID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaceChannels, workspaceID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -482,6 +543,19 @@ func (q *Queries) DeleteBotSetupCodesForWorkspaceBot(ctx context.Context, arg De
 	return result.RowsAffected()
 }
 
+const deleteChannel = `-- name: DeleteChannel :execrows
+DELETE FROM channels
+WHERE id = ?1
+`
+
+func (q *Queries) DeleteChannel(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteChannel, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteDesktopOAuthGrant = `-- name: DeleteDesktopOAuthGrant :execrows
 DELETE FROM desktop_oauth_grants
 WHERE id = ?1 AND grant_hash = ?2
@@ -618,6 +692,16 @@ func (q *Queries) DeleteUnclaimedBotSetupCodesForTokenName(ctx context.Context, 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const deleteUpload = `-- name: DeleteUpload :exec
+DELETE FROM uploads
+WHERE id = ?1
+`
+
+func (q *Queries) DeleteUpload(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteUpload, id)
+	return err
 }
 
 const deleteUploadQuotaReservation = `-- name: DeleteUploadQuotaReservation :execrows
@@ -2100,6 +2184,19 @@ func (q *Queries) GetWorkspaceForSetupClaim(ctx context.Context, workspaceID str
 	return i, err
 }
 
+const getWorkspaceSlug = `-- name: GetWorkspaceSlug :one
+SELECT slug
+FROM workspaces
+WHERE id = ?1
+`
+
+func (q *Queries) GetWorkspaceSlug(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceSlug, id)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const hideDirectConversation = `-- name: HideDirectConversation :exec
 INSERT INTO direct_conversation_hidden (conversation_id, user_id, hidden_at)
 VALUES (?1, ?2, ?3)
@@ -3351,6 +3448,66 @@ func (q *Queries) ListBotsOwnedBy(ctx context.Context, ownerUserID sql.NullStrin
 			&i.WorkspaceName,
 			&i.ActiveTokenCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelExclusiveUploads = `-- name: ListChannelExclusiveUploads :many
+SELECT u.id, u.storage_path, u.byte_size
+FROM uploads u
+WHERE u.workspace_id = ?1
+  AND u.id IN (
+    SELECT channel_attachment.upload_id
+    FROM message_attachments channel_attachment
+    JOIN messages channel_message ON channel_message.id = channel_attachment.message_id
+    WHERE channel_message.channel_id = ?2
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM message_attachments other_attachment
+    JOIN messages other_message ON other_message.id = other_attachment.message_id
+    WHERE other_attachment.upload_id = u.id
+      AND (other_message.channel_id IS NULL OR other_message.channel_id <> ?2)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM workspaces icon_workspace
+    WHERE icon_workspace.id = u.workspace_id
+      AND icon_workspace.icon_url = '/api/uploads/' || u.id
+  )
+ORDER BY u.id
+`
+
+type ListChannelExclusiveUploadsParams struct {
+	WorkspaceID string         `json:"workspace_id"`
+	ChannelID   sql.NullString `json:"channel_id"`
+}
+
+type ListChannelExclusiveUploadsRow struct {
+	ID          string `json:"id"`
+	StoragePath string `json:"storage_path"`
+	ByteSize    int64  `json:"byte_size"`
+}
+
+func (q *Queries) ListChannelExclusiveUploads(ctx context.Context, arg ListChannelExclusiveUploadsParams) ([]ListChannelExclusiveUploadsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelExclusiveUploads, arg.WorkspaceID, arg.ChannelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChannelExclusiveUploadsRow
+	for rows.Next() {
+		var i ListChannelExclusiveUploadsRow
+		if err := rows.Scan(&i.ID, &i.StoragePath, &i.ByteSize); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -71,6 +71,8 @@ export type Workspace = components["schemas"]["Workspace"];
 
 export type Channel = components["schemas"]["Channel"];
 
+export type ChannelDeletionPreview = components["schemas"]["ChannelDeletionPreview"];
+
 export type Topic = components["schemas"]["Topic"];
 
 export type MessageKind = "message" | "agent_commentary" | "agent_tool";
@@ -699,6 +701,11 @@ export class ClickClackClient {
         body: JSON.stringify(input),
       });
       return data.channel;
+    },
+    deletionPreview: async (channelId: string): Promise<ChannelDeletionPreview> =>
+      this.request<ChannelDeletionPreview>(`/api/channels/${channelId}/deletion-preview`),
+    delete: async (channelId: string): Promise<void> => {
+      await this.request(`/api/channels/${channelId}`, { method: "DELETE" });
     },
     messages: async (
       channelId: string,

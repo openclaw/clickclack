@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.
 - Fixed desktop sign-in behind Cloudflare Access One-time PIN by completing authentication in an isolated window sharing the app's session; multi-domain Access apps require Eager redirect cookie disabled. Thanks @sercada.

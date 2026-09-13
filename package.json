@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm build:web && pnpm build:sdk && pnpm embed:webassets",
     "build:sdk": "pnpm --filter @clickclack/sdk-ts build",
-    "build:web": "pnpm --filter @clickclack/web build && node scripts/normalize-web-dist.mjs apps/web/dist",
+    "build:web": "pnpm --filter @clickclack/web build",
     "docs:site": "node scripts/build-docs-site.mjs",
     "build:desktop": "pnpm --filter @clickclack/desktop build",
     "check": "pnpm test && pnpm test:fakeco-aws && pnpm test:desktop && pnpm typecheck && pnpm -r typecheck && pnpm lint && pnpm fmt:check",

@@ -1,1 +1,2 @@
 apps/api/internal/webassets/dist/**/*.js -whitespace
+apps/api/internal/webassets/dist/*.html -whitespace

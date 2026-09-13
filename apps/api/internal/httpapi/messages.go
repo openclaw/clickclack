@@ -159,7 +159,7 @@ func (s *Server) getMessageByNonce(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("workspace_id is required"))
 		return
 	}
-	nonce, err := normalizeClientNonce(r.URL.Query().Get("nonce"))
+	nonce, err := store.NormalizeClientNonce(r.URL.Query().Get("nonce"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

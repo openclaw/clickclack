@@ -392,7 +392,7 @@ func TestNormalizeClientNonceRejectsDatabaseInvalidText(t *testing.T) {
 	t.Parallel()
 
 	for _, nonce := range []string{string([]byte{0xff}), "invalid\x00nonce"} {
-		if _, err := normalizeClientNonce(nonce); err == nil {
+		if _, err := store.NormalizeClientNonce(nonce); err == nil {
 			t.Fatalf("expected database-invalid nonce rejection for %q", nonce)
 		}
 	}

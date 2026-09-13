@@ -230,7 +230,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (store.User, e
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {
-	displayName, handle, avatarURL, err := normalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
+	displayName, handle, avatarURL, err := store.NormalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
 	if err != nil {
 		return store.User{}, err
 	}
@@ -273,7 +273,7 @@ func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserPro
 }
 
 func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrentUserInput) (store.CurrentUserState, error) {
-	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
+	displayName, handle, avatarURL, err := store.NormalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
 	if err != nil {
 		return store.CurrentUserState{}, err
 	}
@@ -379,56 +379,6 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 		return store.CurrentUserState{}, err
 	}
 	return store.CurrentUserState{User: user, AppearancePreferences: preferences}, nil
-}
-
-func normalizeUserProfilePatch(displayNameInput, handleInput, avatarURLInput *string) (*string, *string, *string, error) {
-	var displayName *string
-	if displayNameInput != nil {
-		normalized := strings.TrimSpace(*displayNameInput)
-		if normalized == "" {
-			return nil, nil, nil, errors.New("display_name is required")
-		}
-		if len(normalized) > 80 {
-			return nil, nil, nil, errors.New("display_name is too long")
-		}
-		displayName = &normalized
-	}
-	var handle *string
-	if handleInput != nil {
-		normalized, err := normalizeHandle(*handleInput)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		handle = &normalized
-	}
-	var avatarURL *string
-	if avatarURLInput != nil {
-		normalized, err := normalizeAvatarURL(*avatarURLInput)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		avatarURL = &normalized
-	}
-	return displayName, handle, avatarURL, nil
-}
-
-func normalizeUserProfile(displayNameInput, handleInput, avatarURLInput string) (string, string, string, error) {
-	displayName := strings.TrimSpace(displayNameInput)
-	if displayName == "" {
-		return "", "", "", errors.New("display_name is required")
-	}
-	if len(displayName) > 80 {
-		return "", "", "", errors.New("display_name is too long")
-	}
-	handle, err := normalizeHandle(handleInput)
-	if err != nil {
-		return "", "", "", err
-	}
-	avatarURL, err := normalizeAvatarURL(avatarURLInput)
-	if err != nil {
-		return "", "", "", err
-	}
-	return displayName, handle, avatarURL, nil
 }
 
 func profileUpdateError(err error) error {
@@ -663,7 +613,7 @@ func (s *Store) GetMessage(ctx context.Context, messageID, userID string) (store
 }
 
 func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (store.Message, error) {
-	normalized, err := normalizeClientNonce(nonce)
+	normalized, err := store.NormalizeClientNonce(nonce)
 	if err != nil {
 		return store.Message{}, err
 	}
@@ -724,7 +674,7 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if body == "" {
 		return store.Message{}, store.Event{}, errors.New("message body is required")
 	}
-	nonce, err := normalizeClientNonce(input.Nonce)
+	nonce, err := store.NormalizeClientNonce(input.Nonce)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -863,7 +813,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if body == "" {
 		return store.Message{}, store.ThreadState{}, nil, errors.New("reply body is required")
 	}
-	nonce, err := normalizeClientNonce(input.Nonce)
+	nonce, err := store.NormalizeClientNonce(input.Nonce)
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}

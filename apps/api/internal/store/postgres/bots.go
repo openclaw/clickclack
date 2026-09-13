@@ -133,11 +133,11 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if len(displayName) > 80 {
 		return store.User{}, store.BotToken{}, errors.New("display_name is too long")
 	}
-	handle, err := normalizeHandle(input.Handle)
+	handle, err := store.NormalizeHandle(input.Handle)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
-	avatarURL, err := normalizeAvatarURL(input.AvatarURL)
+	avatarURL, err := store.NormalizeAvatarURL(input.AvatarURL)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
@@ -1006,7 +1006,7 @@ func normalizeBotScopes(values []string) ([]string, error) {
 }
 
 func normalizeSetupNonce(value string) (string, error) {
-	nonce, err := normalizeClientNonce(value)
+	nonce, err := store.NormalizeClientNonce(value)
 	if err != nil {
 		return "", err
 	}

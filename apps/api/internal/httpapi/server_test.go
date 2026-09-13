@@ -3119,16 +3119,16 @@ func TestNormalizeClientNonceCountsCharacters(t *testing.T) {
 	t.Parallel()
 
 	valid := strings.Repeat("é", 128)
-	if normalized, err := normalizeClientNonce(valid); err != nil || normalized != valid {
+	if normalized, err := store.NormalizeClientNonce(valid); err != nil || normalized != valid {
 		t.Fatalf("expected 128-character nonce to remain valid: normalized=%q err=%v", normalized, err)
 	}
-	if _, err := normalizeClientNonce(strings.Repeat("é", 129)); err == nil {
+	if _, err := store.NormalizeClientNonce(strings.Repeat("é", 129)); err == nil {
 		t.Fatal("expected 129-character nonce rejection")
 	}
-	if _, err := normalizeClientNonce(string([]byte{0xff})); err == nil {
+	if _, err := store.NormalizeClientNonce(string([]byte{0xff})); err == nil {
 		t.Fatal("expected invalid UTF-8 nonce rejection")
 	}
-	if _, err := normalizeClientNonce("invalid\x00nonce"); err == nil {
+	if _, err := store.NormalizeClientNonce("invalid\x00nonce"); err == nil {
 		t.Fatal("expected NUL nonce rejection")
 	}
 }

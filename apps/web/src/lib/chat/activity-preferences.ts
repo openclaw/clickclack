@@ -18,6 +18,12 @@ const storageKeys = {
   otherAlign: OTHER_ALIGN_STORAGE_KEY,
 };
 
+function loadActivityVisibility(key: string, legacyHidden: boolean): boolean {
+  const stored = window.localStorage.getItem(key);
+  // An explicit current choice takes precedence over the old combined setting.
+  return stored === "0" ? false : stored === "1" || legacyHidden;
+}
+
 export function loadActivityPreferences(): ActivityPreferences {
   const preferences: ActivityPreferences = {
     hideCommentary: false,
@@ -26,12 +32,9 @@ export function loadActivityPreferences(): ActivityPreferences {
     otherAlign: "left",
   };
   try {
-    // Preserve the older single-toggle preference when loading individual flags.
     const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
-    preferences.hideCommentary =
-      window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
-    preferences.hideToolCalls =
-      window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
+    preferences.hideCommentary = loadActivityVisibility(HIDE_COMMENTARY_STORAGE_KEY, legacyHidden);
+    preferences.hideToolCalls = loadActivityVisibility(HIDE_TOOL_CALLS_STORAGE_KEY, legacyHidden);
     preferences.userAlign =
       window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     preferences.otherAlign =

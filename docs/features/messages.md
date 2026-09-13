@@ -115,6 +115,10 @@ sharing a `turn_id` render as one collapsible preamble in the web app. They do
 not increment unread counts, trigger notifications, or appear in full-text
 search.
 
+Account settings can hide agent commentary and tool calls independently. Saved
+choices remain in effect after reload, including when an older combined
+hide-activity preference was previously enabled.
+
 Publishing activity requires bot-token authentication plus the explicit
 `agent_activity:write` scope, which is intentionally excluded from every
 `bot:*` bundle. Ordinary messages default to `kind: "message"` and reject a

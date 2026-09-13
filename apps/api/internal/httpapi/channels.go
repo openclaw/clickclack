@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"database/sql"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -114,4 +117,70 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 	}
 	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: workspaceID, ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"topic": topic}, err)
+}
+
+func (s *Server) channelDeletionPreview(w http.ResponseWriter, r *http.Request) {
+	act, ok := s.channelDeletionActor(w, r)
+	if !ok {
+		return
+	}
+	preview, err := s.store.PreviewChannelDeletion(r.Context(), chi.URLParam(r, "channel_id"), act.user.ID)
+	if err != nil {
+		writeChannelDeletionError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
+}
+
+func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
+	act, ok := s.channelDeletionActor(w, r)
+	if !ok {
+		return
+	}
+	deletion, err := s.store.DeleteChannel(r.Context(), chi.URLParam(r, "channel_id"), act.user.ID)
+	if err != nil {
+		writeChannelDeletionError(w, err)
+		return
+	}
+	s.publishEvent(r.Context(), deletion.Event)
+	s.recordAudit(r.Context(), deletion.Channel.WorkspaceID, act.user.ID, "channel.deleted", "channel", deletion.Channel.ID, map[string]any{
+		"name":           deletion.Channel.Name,
+		"messages":       deletion.Counts.Messages,
+		"thread_replies": deletion.Counts.ThreadReplies,
+		"files":          deletion.Counts.Files,
+	})
+	if err := s.cleanupUploadObjects(r.Context(), deletion.Cleanups); err != nil {
+		log.Printf("channel %s deleted with pending upload cleanup retry: %v", deletion.Channel.ID, err)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// channelDeletionActor admits human sessions only; owner authorization happens
+// in the store transaction.
+func (s *Server) channelDeletionActor(w http.ResponseWriter, r *http.Request) (actor, bool) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return actor{}, false
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot delete channels"))
+		return actor{}, false
+	}
+	if err := act.requireScope("channels:write"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return actor{}, false
+	}
+	return act, true
+}
+
+func writeChannelDeletionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		writeError(w, http.StatusNotFound, errors.New("channel not found"))
+	case errors.Is(err, store.ErrLastChannel), errors.Is(err, store.ErrProvisionedChannel):
+		writeError(w, http.StatusConflict, err)
+	default:
+		writeStoreError(w, err)
+	}
 }

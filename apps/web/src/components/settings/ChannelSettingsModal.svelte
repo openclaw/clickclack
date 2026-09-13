@@ -6,16 +6,20 @@
     channel: Channel;
     saving?: boolean;
     error?: string;
+    canDelete?: boolean;
     onClose: () => void;
     onArchivedChange: (archived: boolean) => void;
+    onDelete?: () => void;
   };
 
   let {
     channel,
     saving = false,
     error = "",
+    canDelete = false,
     onClose,
     onArchivedChange,
+    onDelete,
   }: Props = $props();
 
   let confirmingArchive = $state(false);
@@ -114,6 +118,20 @@
             Archive channel
           </button>
         </div>
+      {/if}
+
+      {#if canDelete && onDelete}
+        <section class="channel-settings-danger" aria-labelledby="channel-settings-danger-title">
+          <div>
+            <strong id="channel-settings-danger-title">Delete channel</strong>
+            <p>Permanently erase this channel with its messages, threads, files, and pins.</p>
+          </div>
+          <div class="profile-actions channel-settings-danger__actions">
+            <button type="button" class="danger-action" disabled={saving} onclick={onDelete}>
+              Delete channel...
+            </button>
+          </div>
+        </section>
       {/if}
     </div>
   </div>

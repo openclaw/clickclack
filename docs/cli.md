@@ -335,6 +335,19 @@ Human output confirms the action without echoing the reaction value. `--json`
 prints the API's `{event,reactions}` response. `--plain` is unsupported and
 fails before making a request.
 
+Workspace owners can delete a channel with its full history:
+
+```sh
+clickclack channels delete --channel old-launch --yes
+```
+
+The command needs `--channel` on its command line; `CLICKCLACK_CHANNEL` and the
+saved default channel are ignored. It fetches the deletion preview first.
+Without `--yes` it prints what would be removed and exits with an error;
+a blocked deletion (the workspace's last channel or a provisioned Guests
+channel) fails before any delete request. `--plain` prints the deleted channel
+ID and `--json` prints `{deleted_channel,counts}`.
+
 ## `canary`
 
 ```sh

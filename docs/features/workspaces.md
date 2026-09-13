@@ -67,6 +67,8 @@ pickers still support manual paging.
 GET  /api/workspaces/{workspace_id}/channels  # list, ordered by name
 POST /api/workspaces/{workspace_id}/channels  # create
 PATCH /api/channels/{channel_id}              # rename, change kind, archive
+GET  /api/channels/{channel_id}/deletion-preview # owner: what deletion removes
+DELETE /api/channels/{channel_id}             # owner: permanently delete
 ```
 
 Create body: `{name, display_title?, kind?, external_managed?, external_ref?,
@@ -104,14 +106,43 @@ placement. Section and Archived disclosure state is browser-local and persisted
 per workspace. `external_managed` adds a small row marker, while a safe HTTP(S)
 `external_url` adds an external-open action to the channel header.
 
+### Deleting channels
+
+Channel deletion is owner-only, requires a human session, and is permanent.
+Archive remains the reversible way to hide a channel. `DELETE` removes the
+channel with its messages, thread replies, reactions, pins, channel-scoped
+topics, read pointers, notification settings, and the uploads attached only to
+that channel. Uploads still attached in another channel or a direct message,
+and the workspace icon, are kept. Removed upload objects use the same durable
+cleanup queue as workspace deletion. The workspace audit log records the
+channel name and the removed counts.
+
+`GET /deletion-preview` returns `{channel, counts, blocker?}`. `counts` holds
+visible `messages`, `thread_replies`, `pins`, `topics`, `files`, and
+`file_bytes`. The server refuses (`409`) to delete a workspace's last channel
+(`blocker: last_channel`) and the Guests workspace's `#guest` and `#general`,
+which guest sign-in recreates (`blocker: provisioned_channel`). Bot tokens,
+moderators, and members receive `403`; an unknown channel returns `404`.
+
+Deletion appends a workspace-scoped `channel.deleted` event whose payload holds
+`channel_id` and `deleted_by`. Earlier durable events for the channel carry
+only identifiers and stay in the log, so every client's replay cursor remains
+valid; live delivery skips them once the channel is gone. They age out through
+normal event retention.
+
+In the web app, owners find **Delete channel** in the channel settings danger
+zone. The dialog shows the preview, offers to archive instead, and enables
+deletion only after the channel name is typed. Members viewing a deleted
+channel return to their fallback conversation with a notice.
+
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
 owners can promote them to `member`, time them out, or block them. See
 [moderation.md](moderation.md).
 
-Channel write endpoints emit a durable `channel.created` or `channel.updated`
-event into the workspace event stream so connected clients see the change
-without polling. `channel.updated` includes the resulting `archived` boolean in
+Channel write endpoints emit a durable `channel.created`, `channel.updated`, or
+`channel.deleted` event into the workspace event stream so connected clients see
+the change without polling. `channel.updated` includes the resulting `archived` boolean in
 its payload so consumers can update visibility without refetching the channel.
 
 ## Web routes

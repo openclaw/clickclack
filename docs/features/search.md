@@ -58,7 +58,9 @@ limited to the guest channel.
 SQLite uses the `messages_fts` FTS5 table with the `porter unicode61` tokenizer.
 Workspace and body terms are intersected inside FTS so one workspace does not
 scan matches from another. Triggers keep ordinary message rows synchronized
-when bodies are inserted, updated, or deleted.
+when bodies are inserted, updated, or deleted. They find a message's search row
+through `message_search_rows`, which records its FTS rowid, so deleting a large
+channel or workspace does not scan the index once per message.
 
 Postgres uses `to_tsvector('simple', body)` with partial GIN indexes for channel
 messages and direct messages. A separate direct-conversation scope index keeps

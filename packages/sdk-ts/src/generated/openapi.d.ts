@@ -810,10 +810,28 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    delete?: never;
+    /** @description Permanently deletes a channel with its messages, thread replies, reactions, pins, channel topics, read state, notification settings, and the uploads attached only to it. Requires a workspace owner's human session. Emits the workspace-scoped `channel.deleted` event. */
+    delete: operations["deleteChannel"];
     options?: never;
     head?: never;
     patch: operations["updateChannel"];
+    trace?: never;
+  };
+  "/api/channels/{channel_id}/deletion-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Describes what deleting the channel removes and whether a rule blocks it. Owner-only. */
+    get: operations["getChannelDeletionPreview"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/channels/{channel_id}/messages": {
@@ -1913,6 +1931,30 @@ export interface components {
       moderation_by?: string;
       /** Format: date-time */
       moderation_at?: string;
+    };
+    ChannelDeletionPreview: {
+      channel: components["schemas"]["Channel"];
+      counts: components["schemas"]["ChannelDeletionCounts"];
+      /**
+       * @description Rule that prevents deleting this channel, when one applies.
+       * @enum {string}
+       */
+      blocker?: "last_channel" | "provisioned_channel";
+    };
+    /** @description Visible content removed with the channel. Files are uploads attached only to this channel. */
+    ChannelDeletionCounts: {
+      /** Format: int64 */
+      messages: number;
+      /** Format: int64 */
+      thread_replies: number;
+      /** Format: int64 */
+      pins: number;
+      /** Format: int64 */
+      topics: number;
+      /** Format: int64 */
+      files: number;
+      /** Format: int64 */
+      file_bytes: number;
     };
     Channel: {
       id: string;
@@ -4213,6 +4255,47 @@ export interface operations {
       };
     };
   };
+  deleteChannel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Channel deleted; queued upload-object cleanup may continue asynchronously */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Workspace owner session required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Channel not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The workspace's last channel or a provisioned Guests channel cannot be deleted */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   updateChannel: {
     parameters: {
       query?: never;
@@ -4230,6 +4313,42 @@ export interface operations {
     responses: {
       /** @description Updated channel */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getChannelDeletionPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Channel deletion preview */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChannelDeletionPreview"];
+        };
+      };
+      /** @description Workspace owner session required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Channel not found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

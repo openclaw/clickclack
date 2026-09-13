@@ -128,8 +128,11 @@ func (c apiClient) workspaces(args []string) error {
 }
 
 func (c apiClient) channels(args []string) error {
+	if len(args) > 0 && args[0] == "delete" {
+		return c.channelsDelete(args[1:])
+	}
 	if len(args) == 0 || args[0] != "list" {
-		return errors.New("usage: clickclack channels list [--workspace WORKSPACE]")
+		return errors.New("usage: clickclack channels list [--workspace WORKSPACE] | channels delete --channel CHANNEL --yes")
 	}
 	opts := c.opts
 	flags := flag.NewFlagSet("channels list", flag.ExitOnError)
@@ -153,6 +156,43 @@ func (c apiClient) channels(args []string) error {
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\n", item.ID, item.Name, item.Kind)
 	}
 	return nil
+}
+
+// channelsDelete requires --yes and a channel named on the command line because
+// the deletion cannot be undone. CLICKCLACK_CHANNEL and the saved default
+// channel never choose what gets deleted.
+func (c apiClient) channelsDelete(args []string) error {
+	opts := c.opts
+	flags := flag.NewFlagSet("channels delete", flag.ExitOnError)
+	addClientFlags(flags, &opts)
+	confirmed := flags.Bool("yes", false, "confirm permanent deletion")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	named := opts.ChannelFromFlag || flagWasSet(flags, "channel")
+	if !named || strings.TrimSpace(opts.Channel) == "" {
+		return errors.New("usage: clickclack channels delete --channel CHANNEL --yes")
+	}
+	c = c.withOptions(opts, true)
+	_, channel, err := c.resolveChannel()
+	if err != nil {
+		return err
+	}
+	var preview store.ChannelDeletionPreview
+	if err := c.get("/api/channels/"+url.PathEscape(channel.ID)+"/deletion-preview", &preview); err != nil {
+		return err
+	}
+	summary := fmt.Sprintf("#%s: %d messages, %d thread replies, %d files", channel.Name, preview.Counts.Messages, preview.Counts.ThreadReplies, preview.Counts.Files)
+	if preview.Blocker != "" {
+		return fmt.Errorf("cannot delete %s (%s)", summary, preview.Blocker)
+	}
+	if !*confirmed {
+		return fmt.Errorf("refusing to permanently delete %s without --yes", summary)
+	}
+	if err := c.doJSON(context.Background(), http.MethodDelete, "/api/channels/"+url.PathEscape(channel.ID), nil, nil); err != nil {
+		return err
+	}
+	return c.write(map[string]any{"deleted_channel": channel, "counts": preview.Counts}, channel.ID, "deleted "+summary+"\n")
 }
 
 func (c apiClient) messages(args []string) error {

@@ -232,6 +232,8 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces/{workspace_id}/connected-accounts", s.createConnectedAccount)
 		r.Post("/connected-accounts/{account_id}/revoke", s.revokeConnectedAccount)
 		r.Patch("/channels/{channel_id}", s.updateChannel)
+		r.Delete("/channels/{channel_id}", s.deleteChannel)
+		r.Get("/channels/{channel_id}/deletion-preview", s.channelDeletionPreview)
 		r.Get("/channels/{channel_id}/messages", s.listMessages)
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
 		r.Get("/channels/{channel_id}/notification-settings", s.getChannelNotificationSettings)

@@ -1156,6 +1156,41 @@ paths:
       responses:
         "200":
           description: Updated channel
+    delete:
+      operationId: deleteChannel
+      description: >
+        Permanently deletes a channel with its messages, thread replies, reactions,
+        pins, channel topics, read state, notification settings, and the uploads
+        attached only to it. Requires a workspace owner's human session. Emits the
+        workspace-scoped `channel.deleted` event.
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+      responses:
+        "204":
+          description: Channel deleted; queued upload-object cleanup may continue asynchronously
+        "403":
+          description: Workspace owner session required
+        "404":
+          description: Channel not found
+        "409":
+          description: The workspace's last channel or a provisioned Guests channel cannot be deleted
+  /api/channels/{channel_id}/deletion-preview:
+    get:
+      operationId: getChannelDeletionPreview
+      description: Describes what deleting the channel removes and whether a rule blocks it. Owner-only.
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+      responses:
+        "200":
+          description: Channel deletion preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelDeletionPreview"
+        "403":
+          description: Workspace owner session required
+        "404":
+          description: Channel not found
   /api/channels/{channel_id}/messages:
     get:
       operationId: listMessages
@@ -3082,6 +3117,41 @@ components:
         moderation_at:
           type: string
           format: date-time
+    ChannelDeletionPreview:
+      type: object
+      required: [channel, counts]
+      properties:
+        channel:
+          $ref: "#/components/schemas/Channel"
+        counts:
+          $ref: "#/components/schemas/ChannelDeletionCounts"
+        blocker:
+          type: string
+          enum: [last_channel, provisioned_channel]
+          description: Rule that prevents deleting this channel, when one applies.
+    ChannelDeletionCounts:
+      type: object
+      description: Visible content removed with the channel. Files are uploads attached only to this channel.
+      required: [messages, thread_replies, pins, topics, files, file_bytes]
+      properties:
+        messages:
+          type: integer
+          format: int64
+        thread_replies:
+          type: integer
+          format: int64
+        pins:
+          type: integer
+          format: int64
+        topics:
+          type: integer
+          format: int64
+        files:
+          type: integer
+          format: int64
+        file_bytes:
+          type: integer
+          format: int64
     Channel:
       type: object
       required: [id, route_id, workspace_id, name, kind, created_at, external_managed]

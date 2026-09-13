@@ -1281,6 +1281,8 @@ type Store interface {
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, error)
 	CreateChannel(ctx context.Context, input CreateChannelInput) (Channel, Event, error)
 	UpdateChannel(ctx context.Context, input UpdateChannelInput) (Channel, Event, error)
+	PreviewChannelDeletion(ctx context.Context, channelID, actorUserID string) (ChannelDeletionPreview, error)
+	DeleteChannel(ctx context.Context, channelID, actorUserID string) (ChannelDeletion, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)
 	CreateTopic(ctx context.Context, input CreateTopicInput) (Topic, error)
 	ListMessages(ctx context.Context, channelID, userID string, page MessagePageRequest) (MessagePage, error)

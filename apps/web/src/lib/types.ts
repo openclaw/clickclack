@@ -61,6 +61,21 @@ export type Channel = {
   unread_count?: number;
 };
 
+export type ChannelDeletionCounts = {
+  messages: number;
+  thread_replies: number;
+  pins: number;
+  topics: number;
+  files: number;
+  file_bytes: number;
+};
+
+export type ChannelDeletionPreview = {
+  channel: Channel;
+  counts: ChannelDeletionCounts;
+  blocker?: "last_channel" | "provisioned_channel";
+};
+
 export type Topic = {
   id: string;
   workspace_id: string;
@@ -318,6 +333,7 @@ export type EventPayload = {
   display_name?: string;
   former_handle?: string;
   deleted_at?: string;
+  deleted_by?: string;
 };
 
 export type RealtimeEvent = {

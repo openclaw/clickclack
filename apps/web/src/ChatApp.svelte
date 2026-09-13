@@ -61,6 +61,8 @@
   import PinnedPanel from "./components/pins/PinnedPanel.svelte";
   import SearchResults from "./components/search/SearchResults.svelte";
   import ChannelSettingsModal from "./components/settings/ChannelSettingsModal.svelte";
+  import DeleteChannelModal from "./components/settings/DeleteChannelModal.svelte";
+  import { channelDeletedNotice } from "./lib/channel-deletion";
   import SettingsModal from "./components/settings/SettingsModal.svelte";
   import ThreadEmptyState from "./components/thread/ThreadEmptyState.svelte";
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
@@ -69,7 +71,7 @@
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { respondingAgentNames } from "./lib/agent-responding";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
-  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, ChannelDeletionPreview, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -165,6 +167,14 @@
   let channelSettingsOpen = false;
   let channelSettingsSaving = false;
   let channelSettingsError = "";
+  let deleteChannelTarget: Channel | null = null;
+  let deleteChannelPreview: ChannelDeletionPreview | null = null;
+  let deleteChannelLoading = false;
+  let deleteChannelDeleting = false;
+  let deleteChannelError = "";
+  let deleteChannelSerial = 0;
+  // A notice that must survive leaving the conversation it describes.
+  let carriedComposerNotice: { fromConversation: string; text: string } | null = null;
   let showCreateChannel = false;
   let showCreateDirect = false;
   let browserNotificationsEnabled = false;
@@ -257,6 +267,7 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
+  $: canDeleteSelectedChannel = Boolean(selectedChannel) && selectedWorkspace?.role === "owner";
   $: canManageSelectedChannel =
     Boolean(selectedChannel) &&
     (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator");
@@ -513,6 +524,95 @@
     } finally {
       channelSettingsSaving = false;
     }
+  }
+
+  async function openDeleteChannel() {
+    const channel = selectedChannel;
+    if (!channel || !canDeleteSelectedChannel) return;
+    const serial = ++deleteChannelSerial;
+    channelSettingsOpen = false;
+    channelSettingsError = "";
+    deleteChannelTarget = channel;
+    deleteChannelPreview = null;
+    deleteChannelError = "";
+    deleteChannelLoading = true;
+    try {
+      const preview = await api<ChannelDeletionPreview>(`/api/channels/${channel.id}/deletion-preview`);
+      if (serial === deleteChannelSerial) deleteChannelPreview = preview;
+    } catch (error) {
+      if (serial === deleteChannelSerial) deleteChannelError = readableAPIError(error, "Could not check what this channel contains");
+    } finally {
+      if (serial === deleteChannelSerial) deleteChannelLoading = false;
+    }
+  }
+
+  function closeDeleteChannel() {
+    if (deleteChannelDeleting) return;
+    deleteChannelSerial += 1;
+    deleteChannelTarget = null;
+    deleteChannelPreview = null;
+    deleteChannelLoading = false;
+    deleteChannelError = "";
+  }
+
+  function archiveInsteadOfDeleting() {
+    const channelID = deleteChannelTarget?.id;
+    closeDeleteChannel();
+    // Archiving keeps its own confirmation in channel settings.
+    if (channelID && channelID === selectedChannelID) openChannelSettings();
+  }
+
+  async function confirmDeleteChannel() {
+    const channel = deleteChannelTarget;
+    if (!channel || deleteChannelDeleting) return;
+    deleteChannelDeleting = true;
+    deleteChannelError = "";
+    try {
+      await api(`/api/channels/${channel.id}`, { method: "DELETE" });
+    } catch (error) {
+      deleteChannelError = readableAPIError(error, "Could not delete channel");
+      deleteChannelDeleting = false;
+      return;
+    }
+    deleteChannelDeleting = false;
+    closeDeleteChannel();
+    // The realtime event can arrive before this response and remove it first.
+    if (channels.some((candidate) => candidate.id === channel.id)) {
+      await removeDeletedChannel(channel.id, channelDeletedNotice(channelDisplayTitle(channel), "", true));
+    }
+  }
+
+  async function handleChannelDeletedEvent(event: RealtimeEvent) {
+    const channel = channels.find((candidate) => candidate.id === event.payload.channel_id);
+    if (!channel) return;
+    const deletedBy = event.payload.deleted_by || "";
+    const actor = mentionPeople.find((person) => person.id === deletedBy)?.display_name || "";
+    const notice = channelDeletedNotice(channelDisplayTitle(channel), actor, deletedBy === user?.id);
+    await removeDeletedChannel(channel.id, notice);
+  }
+
+  async function removeDeletedChannel(channelID: string, notice: string) {
+    const wasSelected = selectedChannelID === channelID;
+    channels = channels.filter((candidate) => candidate.id !== channelID);
+    scrollMemory.delete(channelID);
+    messageWindows.delete(channelID);
+    if (thread.root?.channel_id === channelID) thread.close();
+    if (searchSession) {
+      searchSession = {
+        ...searchSession,
+        results: searchSession.results.filter((result) => result.channel_id !== channelID),
+      };
+    }
+    if (deleteChannelTarget?.id === channelID) {
+      deleteChannelDeleting = false;
+      closeDeleteChannel();
+    }
+    if (!wasSelected) return;
+    channelSettingsOpen = false;
+    channelSettingsError = "";
+    carriedComposerNotice = { fromConversation: channelID, text: notice };
+    clearRoutePanelState();
+    await navigateToApp(selectedWorkspaceID, defaultTargetID(), true);
   }
 
   function handleSettingsUserUpdated(updated: User) {
@@ -1132,9 +1232,13 @@
     }
   }
 
-  function clearComposerNoticeFor(_conversationKey: string) {
+  function clearComposerNoticeFor(conversationKey: string) {
     slashDispatchGeneration += 1;
     composerNotice = null;
+    if (carriedComposerNotice && conversationKey !== carriedComposerNotice.fromConversation) {
+      composerNotice = { kind: "ephemeral", text: carriedComposerNotice.text };
+      carriedComposerNotice = null;
+    }
   }
 
   async function updateMemberModeration(userID: string, body: Record<string, unknown>) {
@@ -2640,7 +2744,7 @@
   }
 
   function isModalOpen(): boolean {
-    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || showCreateDirect;
+    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || deleteChannelTarget !== null || showCreateChannel || showCreateDirect;
   }
 
   function activeComposerTarget(): HTMLTextAreaElement | null {
@@ -3220,6 +3324,10 @@
       if (event.workspace_id === selectedWorkspaceID) await handleBotMembershipRemovedEvent(event);
       return;
     }
+    if (event.type === "channel.deleted" && event.workspace_id === selectedWorkspaceID) {
+      await handleChannelDeletedEvent(event);
+      return;
+    }
     if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {
       await loadChannels(false, false, false);
       return;
@@ -3796,7 +3904,7 @@
 
   function closeModal() {
     if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
-    if (channelSettingsSaving) return;
+    if (channelSettingsSaving || deleteChannelDeleting) return;
     resetCreateActions();
     pendingDeleteMessage = null;
     deleteMessageError = "";
@@ -3804,6 +3912,7 @@
     settingsModalOpen = false;
     channelSettingsOpen = false;
     channelSettingsError = "";
+    closeDeleteChannel();
   }
 
   function closeMobileNav() {
@@ -4259,8 +4368,22 @@
     channel={selectedChannel}
     saving={channelSettingsSaving}
     error={channelSettingsError}
+    canDelete={canDeleteSelectedChannel}
     onClose={closeModal}
     onArchivedChange={(archived) => void setSelectedChannelArchived(archived)}
+    onDelete={() => void openDeleteChannel()}
+  />
+{/if}
+{#if deleteChannelTarget}
+  <DeleteChannelModal
+    channel={deleteChannelTarget}
+    preview={deleteChannelPreview}
+    loading={deleteChannelLoading}
+    deleting={deleteChannelDeleting}
+    error={deleteChannelError}
+    onClose={closeDeleteChannel}
+    onArchive={archiveInsteadOfDeleting}
+    onConfirm={() => void confirmDeleteChannel()}
   />
 {/if}
 {#if showCreateChannel}

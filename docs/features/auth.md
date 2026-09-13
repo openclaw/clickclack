@@ -268,6 +268,11 @@ Without a client ID and client secret, `GET /api/auth/openclaw/start` returns
 `501`. Both credentials must be configured together, and the flow requires
 `CLICKCLACK_PUBLIC_URL`.
 
+The server advertises `openclaw` in its runtime `authMethods` only when both
+credentials are configured. The browser hides unconfigured sign-in providers;
+with no available provider it opens the sign-in token form. Separately hosted
+frontends without runtime auth metadata retain the GitHub and OpenClaw ID links.
+
 Flow:
 
 1. `GET /api/auth/openclaw/start` reuses the GitHub OAuth transaction store: a

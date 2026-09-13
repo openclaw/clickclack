@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
+- Updated Vite, Electron 43, desktop packaging, Wrangler, pnpm and build image/tool pins while preserving Node.js 24, macOS 12 and Go 1.26.6 minimums; CI now covers web utilities on Node.js 24 and 26 and avoids duplicate Go tests and unnecessary job dependencies.
+
 ## 0.5.0 - 2026-09-11
 
 **Highlights:** Quieter server access logs with explicit operator controls.

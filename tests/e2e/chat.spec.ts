@@ -2292,16 +2292,39 @@ test("channel preferences filter browser notifications outside the active conver
   await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
   const mutedToggle = page.getByRole("button", { name: "Channel muted - click to change" });
   await expect(mutedToggle).toBeVisible();
+  let releasePreferenceSave!: () => void;
+  const preferenceSaveHeld = new Promise<void>((resolve) => {
+    releasePreferenceSave = resolve;
+  });
+  let preferenceSaveStarted!: () => void;
+  const preferenceSaveRequested = new Promise<void>((resolve) => {
+    preferenceSaveStarted = resolve;
+  });
+  await page.route(`**/api/channels/${channel.channel.id}/notification-settings`, async (route) => {
+    const request = route.request();
+    if (request.method() === "PATCH" && request.postDataJSON().preference === "mentions") {
+      preferenceSaveStarted();
+      await preferenceSaveHeld;
+    }
+    await route.continue();
+  });
   await mutedToggle.click();
   await page.getByRole("button", { name: "All notifications enabled - click to change" }).click();
-  await expect(
-    page.getByRole("button", { name: "Notifications for @mentions only - click to change" }),
-  ).toBeVisible();
-  await page.reload();
-  await waitForAppReady(page);
-  await expect(
-    page.getByRole("button", { name: "Notifications for @mentions only - click to change" }),
-  ).toBeVisible();
+  await preferenceSaveRequested;
+  const mentionsToggle = page.getByRole("button", {
+    name: "Notifications for @mentions only - click to change",
+  });
+  try {
+    await expect(mentionsToggle).toBeVisible();
+    await expect(mentionsToggle).toBeDisabled();
+    releasePreferenceSave();
+    await expect(mentionsToggle).toBeEnabled();
+    await page.reload();
+    await waitForAppReady(page);
+    await expect(mentionsToggle).toBeVisible();
+  } finally {
+    releasePreferenceSave();
+  }
   await page.goto(`/app/${workspace.route_id}/${activeChannel.channel.route_id}`);
   await waitForAppReady(page);
 

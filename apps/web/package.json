@@ -24,7 +24,7 @@
     "sax": "^1.6.1",
     "svelte": "^5.57.0",
     "virtua": "^0.51.2",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",

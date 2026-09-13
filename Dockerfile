@@ -1,8 +1,8 @@
-FROM node:26-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS web
+FROM node:26-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS web
 ARG CLICKCLACK_WEB_VERSION=dev
 ENV CLICKCLACK_WEB_VERSION=$CLICKCLACK_WEB_VERSION
 WORKDIR /src
-RUN npm install -g pnpm@11.25.0
+RUN npm install -g pnpm@12.4.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/protocol/package.json packages/protocol/package.json

@@ -8,11 +8,11 @@ if ! [[ "$min_coverage" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
 	exit 2
 fi
 
-go test ./apps/api/internal/... -coverprofile=coverage.out
+go test ./... -coverprofile=coverage.out
 # Keep the aggregate gate focused on request/business logic. Storage and upload
 # adapters are still exercised by `go test ./...`, but their generated SQL and
 # external I/O branches make the total package percentage noisy.
-grep -v -e '/store/' -e '/storedb/' -e '/uploadstore/' coverage.out > coverage.filtered.out
+awk 'NR == 1 || (/\/apps\/api\/internal\// && !/\/(store|storedb|uploadstore)\//)' coverage.out > coverage.filtered.out
 go tool cover -func=coverage.filtered.out | tee coverage.txt
 
 awk -v min="$min_coverage" '

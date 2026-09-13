@@ -50,7 +50,7 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 | Command                | What it does |
 |------------------------|--------------|
 | `pnpm build`           | Builds the Svelte app and the SDK, then embeds `apps/web/dist` into `apps/api/internal/webassets/dist`. |
-| `pnpm build:web`       | Builds and normalizes the Svelte app without touching embedded Go assets. |
+| `pnpm build:web`       | Builds the Svelte app without touching embedded Go assets. Generated output is preserved byte-for-byte; whitespace inside JavaScript literals is significant. |
 | `pnpm build:sdk`       | Builds the TypeScript SDK. |
 | `pnpm build:desktop`   | Bundles the Electron main process, preloads, and settings renderer. |
 | `pnpm check`           | Full local gate: web/Go, FakeCo AWS and desktop tests, root/workspace `tsc`, `oxlint`, and format checks. |

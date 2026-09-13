@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.
 - Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.

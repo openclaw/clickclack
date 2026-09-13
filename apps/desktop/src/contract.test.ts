@@ -4,6 +4,7 @@ import {
   appURL,
   clampUnreadCount,
   desktopBridgeAllowed,
+  desktopCloudflareAccessLoginURL,
   desktopMainWindowNavigationAllowed,
   desktopOAuthCallbackCode,
   desktopOAuthStartURL,
@@ -120,6 +121,42 @@ test("keeps integrated desktop chrome on app routes", () => {
       false,
     ),
     false,
+  );
+});
+
+test("recognizes only the configured Cloudflare Access login redirect", () => {
+  const serverUrl = "https://chat.example.com";
+  const loginURL = (host: string, query = "") =>
+    `https://${host}.cloudflareaccess.com/cdn-cgi/access/login/chat.example.com${query}`;
+
+  assert.equal(desktopCloudflareAccessLoginURL(loginURL("tenant"), serverUrl), true);
+  assert.equal(
+    desktopCloudflareAccessLoginURL(
+      loginURL("tenant", "?redirect_url=https%3A%2F%2Fchat.example.com%2Fapp%2Fteam%2Fgeneral"),
+      serverUrl,
+    ),
+    true,
+  );
+
+  for (const input of [
+    "https://chat.example.com/cdn-cgi/access/login/chat.example.com",
+    "https://tenant.example.cloudflareaccess.com/cdn-cgi/access/login/chat.example.com",
+    "https://tenant.cloudflareaccess.com:8443/cdn-cgi/access/login/chat.example.com",
+    "http://tenant.cloudflareaccess.com/cdn-cgi/access/login/chat.example.com",
+    "https://user:pass@tenant.cloudflareaccess.com/cdn-cgi/access/login/chat.example.com",
+    "https://tenant.cloudflareaccess.com/cdn-cgi/access/login/other.example.com",
+    "https://tenant.cloudflareaccess.com/cdn-cgi/access/authorize/chat.example.com",
+    "https://tenant.cloudflareaccess.com/cdn-cgi/access/login/chat.example.com?redirect_url=https%3A%2F%2Fevil.example%2Fapp%2Fteam",
+  ]) {
+    assert.equal(desktopCloudflareAccessLoginURL(input, serverUrl), false, input);
+  }
+
+  assert.equal(
+    desktopCloudflareAccessLoginURL(
+      "https://tenant.cloudflareaccess.com/cdn-cgi/access/login/127.0.0.1?redirect_url=http%3A%2F%2F127.0.0.1%3A8080%2Fapp",
+      "http://127.0.0.1:8080",
+    ),
+    true,
   );
 });
 

@@ -36,6 +36,7 @@ const result = spawnSync(
     "--test",
     outfile,
     path.join(root, "scripts", "main.test.mjs"),
+    path.join(root, "scripts", "access-auth.test.mjs"),
     releaseArtifactsTest,
     macosSigningTest,
   ],

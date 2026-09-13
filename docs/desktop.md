@@ -91,6 +91,17 @@ attempt. Errors from the current attempt still appear normally.
 Servers using namespaced cookies require desktop OAuth protocol 2. They return
 an update-required page before sending an older desktop client to GitHub.
 
+When a server redirects the app to Cloudflare Access, ClickClack opens the
+Cloudflare Access one-time-PIN page in a small, isolated sign-in window. It
+shares the selected server's Electron session so Access can set its cookies,
+but it has no preload bridge, Node access, or popup support. ClickClack accepts
+only the exact HTTPS Access login URL for the configured host and returns only
+after the sign-in window has committed a navigation back to that server's
+`/app` route. This flow does not support arbitrary external identity providers.
+If the PIN window is closed or cannot complete, the main window stays on a
+local connection page; use **View → Reload** to retry or **Settings** to check
+the server URL.
+
 ## Security model
 
 The app loads the selected ClickClack origin with Electron sandboxing,
@@ -105,6 +116,10 @@ opaque, short-lived grant: GitHub access tokens and ClickClack session tokens
 never appear in the callback URL. Redemption requires the verifier held by the
 initiating app, is single-use, survives server restart or replica handoff, and
 expires after five minutes. Permission requests from remote content are denied.
+The Cloudflare Access sign-in window denies permissions, downloads, custom
+protocols, and popups; navigation is limited to its Access origin and the configured
+ClickClack origin (including Access cookie callbacks). Only a committed `/app`
+navigation completes the sign-in.
 Server configuration is accepted only from the bundled local settings window
 and is written atomically with user-only permissions.
 

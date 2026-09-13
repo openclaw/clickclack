@@ -177,6 +177,37 @@ export function desktopMainWindowNavigationAllowed(
   }
 }
 
+/**
+ * Identifies the narrow Cloudflare Access one-time-PIN entry point that may be
+ * opened by the desktop shell. It is intentionally not a general redirect or
+ * identity-provider allowlist.
+ */
+export function desktopCloudflareAccessLoginURL(input: string, serverUrl: string): boolean {
+  try {
+    const value = new URL(input);
+    const server = new URL(normalizeServerURL(serverUrl));
+    if (
+      value.protocol !== "https:" ||
+      value.username ||
+      value.password ||
+      value.port ||
+      !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/i.test(value.hostname) ||
+      value.pathname !== `/cdn-cgi/access/login/${server.hostname}`
+    ) {
+      return false;
+    }
+    const redirect = value.searchParams.get("redirect_url");
+    if (!redirect) return true;
+    const destination = new URL(redirect, server.origin);
+    return (
+      destination.origin === server.origin &&
+      safeAppRoute(`${destination.pathname}${destination.search}${destination.hash}`) !== null
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function deepLinkToRoute(input: string): string | null {
   let value: URL;
   try {

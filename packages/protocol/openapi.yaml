@@ -854,6 +854,44 @@ paths:
           description: Invalid command menu. The previous menu remains unchanged.
         "403":
           description: Bot token with commands:write required. Human sessions are rejected.
+  /api/bots/self/questions:
+    get:
+      operationId: listBotUnresolvedQuestions
+      summary: List the authenticated bot's open and submitted questions in its token workspace
+      description: >
+        Requires messages:read. Questions in direct messages are included only
+        for tokens that also have dms:read.
+      parameters:
+        - name: after
+          in: query
+          schema:
+            type: string
+          description: next_cursor from the previous page
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: Unresolved questions ordered by message id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [questions, next_cursor]
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BotQuestion"
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "403":
+          description: Bot token required
   /api/bot-tokens/{token_id}/revoke:
     post:
       operationId: revokeBotToken
@@ -1453,6 +1491,52 @@ paths:
           description: Existing thread reply returned for an idempotent nonce replay
         "201":
           description: Created thread reply
+  /api/messages/{message_id}/question/answers:
+    post:
+      operationId: answerQuestion
+      description: >
+        Records the first valid answer, or a skip, from a person who can write
+        in the conversation. Emits message.updated and question.submitted.
+      parameters:
+        - $ref: "#/components/parameters/message_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerQuestionRequest"
+      responses:
+        "200":
+          description: Updated message with its submitted question
+        "400":
+          description: Answers do not match the question
+        "403":
+          description: Bot tokens and people outside responder_user_ids cannot answer
+        "404":
+          description: Question not found
+        "409":
+          description: The question already has an answer, was resolved, expired, or changed since expected_version
+  /api/messages/{message_id}/question/resolution:
+    post:
+      operationId: resolveQuestion
+      description: Records the outcome of a question. Only the bot that asked it can call this.
+      parameters:
+        - $ref: "#/components/parameters/message_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveQuestionRequest"
+      responses:
+        "200":
+          description: Updated message. The event is omitted when the status was already recorded.
+        "403":
+          description: Only the authoring bot can resolve the question
+        "404":
+          description: Question not found
+        "409":
+          description: Stale expected_version or a transition the current status does not allow
   /api/messages/{message_id}/reactions:
     post:
       operationId: addReaction
@@ -2925,6 +3009,8 @@ components:
           description: |
             Optional agent-turn correlation ID. Allowed only with
             agent_commentary or agent_tool; ordinary messages reject it.
+        question:
+          $ref: "#/components/schemas/QuestionSpec"
     CreateThreadReplyRequest:
       type: object
       required: [body]
@@ -2936,6 +3022,216 @@ components:
         nonce:
           type: string
           maxLength: 128
+        question:
+          $ref: "#/components/schemas/QuestionSpec"
+    QuestionOption:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 200
+    QuestionItem:
+      type: object
+      required: [id, header, prompt]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+        header:
+          type: string
+          minLength: 1
+          maxLength: 24
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Rendered as inline Markdown.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Optional http(s) link opened by an action that never answers the question.
+        options:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/QuestionOption"
+          description: Declared choices. An item without options accepts one free-text answer.
+        multi_select:
+          type: boolean
+          description: Allow several options. Requires at least two options.
+        allow_other:
+          type: boolean
+          description: Accept one free-text answer in addition to the declared options.
+        other_placeholder:
+          type: string
+          maxLength: 60
+    QuestionSpec:
+      type: object
+      description: >
+        Structured question a bot attaches to its message. Only bot tokens can
+        create questions, and only on ordinary messages (not agent activity
+        kinds). The message body remains the readable fallback for clients that
+        do not render questions.
+      required: [expires_at, items]
+      properties:
+        external_id:
+          type: string
+          maxLength: 128
+          description: Opaque identifier from the bot's runtime.
+        title:
+          type: string
+          maxLength: 300
+        expires_at:
+          type: string
+          format: date-time
+          description: Between 10 seconds and 7 days from now.
+        responder_user_ids:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+          description: People allowed to answer. Empty means anyone who can read and write in the conversation.
+        allow_skip:
+          type: boolean
+          default: true
+        items:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/QuestionItem"
+    QuestionResponse:
+      type: object
+      required: [source]
+      properties:
+        answers:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        skipped:
+          type: boolean
+        source:
+          type: string
+          enum: [clickclack, external]
+          description: external marks answers the bot recorded from outside ClickClack.
+        responder:
+          $ref: "#/components/schemas/User"
+        responded_at:
+          type: string
+          format: date-time
+    MessageQuestion:
+      type: object
+      required: [status, expires_at, allow_skip, items, version]
+      properties:
+        status:
+          type: string
+          enum: [open, submitted, answered, cancelled, expired, failed]
+          description: An open question past expires_at is reported as expired.
+        external_id:
+          type: string
+        title:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        allow_skip:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionItem"
+        responder_user_ids:
+          type: array
+          items:
+            type: string
+        response:
+          $ref: "#/components/schemas/QuestionResponse"
+        note:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    AnswerQuestionRequest:
+      type: object
+      properties:
+        answers:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Answers keyed by item id. Every item needs at least one value.
+        skip:
+          type: boolean
+          description: Decline to answer when the question allows it. Cannot be combined with answers.
+        nonce:
+          type: string
+          maxLength: 128
+          description: Replaying the same nonce as the same person returns the recorded answer.
+        expected_version:
+          type: integer
+          format: int64
+          description: >
+            Question version the person answered. A different current version,
+            such as after the bot reopened the question, returns 409 instead of
+            recording the answer.
+    ResolveQuestionRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, answered, cancelled, expired, failed]
+          description: open reopens a submitted question and requires a note.
+        note:
+          type: string
+          maxLength: 200
+        answers:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Answers recorded outside ClickClack, accepted when an open question becomes answered.
+        expected_version:
+          type: integer
+          format: int64
+    BotQuestion:
+      type: object
+      required: [message_id, workspace_id, thread_root_id, status, expires_at, version]
+      properties:
+        message_id:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        direct_conversation_id:
+          type: string
+        thread_root_id:
+          type: string
+        external_id:
+          type: string
+        status:
+          type: string
+          enum: [open, submitted, expired]
+        expires_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     UpdateMessageRequest:
       type: object
       required: [body]
@@ -3365,6 +3661,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReactionSummary"
+        question:
+          $ref: "#/components/schemas/MessageQuestion"
     MessageResponse:
       type: object
       required: [message]

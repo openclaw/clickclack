@@ -129,18 +129,20 @@ func (s *Server) listDirectMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(store.QuestionCapabilityHeader, store.QuestionCapabilityHeaderValue)
 	act, err := s.currentActor(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err)
 		return
 	}
 	var body struct {
-		Body            string `json:"body"`
-		QuotedMessageID string `json:"quoted_message_id"`
-		Nonce           string `json:"nonce"`
-		UploadID        string `json:"upload_id"`
-		Kind            string `json:"kind"`
-		TurnID          string `json:"turn_id"`
+		Body            string              `json:"body"`
+		QuotedMessageID string              `json:"quoted_message_id"`
+		Nonce           string              `json:"nonce"`
+		UploadID        string              `json:"upload_id"`
+		Kind            string              `json:"kind"`
+		TurnID          string              `json:"turn_id"`
+		Question        *store.QuestionSpec `json:"question"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -154,13 +156,16 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !requireQuestionAuthor(w, act, body.Question, kind) {
+		return
+	}
 	if !s.requireBotDirectWorkspace(w, r, act, chi.URLParam(r, "conversation_id")) {
 		return
 	}
 	if !s.requireCreateUpload(w, r, act, body.UploadID, body.Nonce, "", chi.URLParam(r, "conversation_id")) {
 		return
 	}
-	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, UploadID: body.UploadID, Kind: kind, TurnID: turnID})
+	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, UploadID: body.UploadID, Kind: kind, TurnID: turnID, Question: body.Question})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {

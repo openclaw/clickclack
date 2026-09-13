@@ -61,6 +61,44 @@ export type Channel = {
   unread_count?: number;
 };
 
+export type QuestionOption = {
+  label: string;
+  description?: string;
+};
+
+export type QuestionItem = {
+  id: string;
+  header: string;
+  prompt: string;
+  url?: string;
+  options?: QuestionOption[];
+  multi_select?: boolean;
+  allow_other?: boolean;
+  other_placeholder?: string;
+};
+
+export type QuestionStatus = "open" | "submitted" | "answered" | "cancelled" | "expired" | "failed";
+
+export type MessageQuestion = {
+  status: QuestionStatus;
+  external_id?: string;
+  title?: string;
+  expires_at: string;
+  allow_skip: boolean;
+  items: QuestionItem[];
+  responder_user_ids?: string[];
+  response?: {
+    answers?: Record<string, string[]>;
+    skipped?: boolean;
+    source: "clickclack" | "external";
+    responder?: User;
+    responded_at?: string;
+  };
+  note?: string;
+  resolved_at?: string;
+  version: number;
+};
+
 export type Topic = {
   id: string;
   workspace_id: string;
@@ -135,6 +173,7 @@ export type Message = {
   preamble_block?: PreambleBlock;
   author?: User;
   attachments?: Upload[];
+  question?: MessageQuestion;
   quoted_message_id?: string;
   quoted_body_snapshot?: string;
   quoted_author_id?: string;

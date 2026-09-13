@@ -18,6 +18,7 @@
   import MessageEditor from "./MessageEditor.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
+  import QuestionCard from "./QuestionCard.svelte";
   import TopicBadge from "./TopicBadge.svelte";
 
   type Props = {
@@ -655,11 +656,17 @@
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
-    <div
-      class="markdown"
-      use:enhanceMarkdown
-      use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
-    >{@html markdown(message.body)}</div>
+    {#if message.question}
+      {#key `${message.id}:${message.question.version}`}
+        <QuestionCard {message} question={message.question} {currentUserID} people={mentionPeople} />
+      {/key}
+    {:else}
+      <div
+        class="markdown"
+        use:enhanceMarkdown
+        use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+      >{@html markdown(message.body)}</div>
+    {/if}
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}

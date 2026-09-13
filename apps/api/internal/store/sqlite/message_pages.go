@@ -81,6 +81,10 @@ func (s *Store) listMessagePage(ctx context.Context, scope messagePageScope, req
 	if err != nil {
 		return store.MessagePage{}, err
 	}
+	messages, err = s.hydrateQuestions(ctx, messages)
+	if err != nil {
+		return store.MessagePage{}, err
+	}
 	messages, err = s.hydrateThreadStates(ctx, messages)
 	if err != nil {
 		return store.MessagePage{}, err

@@ -328,6 +328,8 @@ type Message struct {
 	// response.
 	Nonce     string            `json:"nonce,omitempty"`
 	Reactions []ReactionSummary `json:"reactions,omitempty"`
+	// Question is the structured question a bot attached to this message.
+	Question *MessageQuestion `json:"question,omitempty"`
 }
 
 type MessagePageRequest struct {
@@ -899,6 +901,8 @@ type CreateMessageInput struct {
 	// API layer by AgentActivityWriteScope.
 	Kind   string
 	TurnID string
+	// Question is only accepted from bot tokens; the API layer enforces that.
+	Question *QuestionSpec
 }
 
 type UpdateMessageInput struct {
@@ -918,6 +922,7 @@ type CreateThreadReplyInput struct {
 	Body            string
 	QuotedMessageID *string
 	Nonce           string
+	Question        *QuestionSpec
 }
 
 type CreateReactionInput struct {
@@ -1064,6 +1069,7 @@ type CreateDirectMessageInput struct {
 	UploadID        string
 	Kind            string
 	TurnID          string
+	Question        *QuestionSpec
 }
 
 type Topic struct {
@@ -1295,6 +1301,9 @@ type Store interface {
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
+	AnswerQuestion(ctx context.Context, input AnswerQuestionInput) (Message, []Event, error)
+	ResolveQuestion(ctx context.Context, input ResolveQuestionInput) (Message, Event, error)
+	ListBotUnresolvedQuestions(ctx context.Context, workspaceID, botUserID, afterMessageID string, includeDirect bool, limit int) ([]BotQuestion, error)
 	PinMessage(ctx context.Context, channelID, messageID, userID string) (PinnedMessage, Event, error)
 	UnpinMessage(ctx context.Context, channelID, messageID, userID string) (Event, error)
 	ListPinnedMessages(ctx context.Context, channelID, userID string, limit int) ([]Message, error)

@@ -1916,3 +1916,65 @@ WHERE user_id = sqlc.arg(user_id)
   AND token_hash = sqlc.arg(token_hash)
   AND revoked_at IS NULL
 FOR UPDATE;
+
+-- name: InsertMessageQuestion :exec
+INSERT INTO message_questions (
+  message_id, workspace_id, bot_user_id, external_id, spec_json, responder_user_ids,
+  allow_skip, expires_at, created_at, updated_at
+) VALUES (
+  sqlc.arg(message_id), sqlc.arg(workspace_id), sqlc.arg(bot_user_id), sqlc.arg(external_id),
+  sqlc.arg(spec_json), sqlc.arg(responder_user_ids), sqlc.arg(allow_skip), sqlc.arg(expires_at),
+  sqlc.arg(created_at), sqlc.arg(created_at)
+);
+
+-- name: GetMessageQuestion :one
+SELECT message_id, workspace_id, bot_user_id, external_id, spec_json, responder_user_ids, allow_skip,
+       expires_at, status, response_json, response_source, responded_by, responded_at, response_nonce,
+       note, resolved_at, version, created_at, updated_at
+FROM message_questions
+WHERE message_id = sqlc.arg(message_id);
+
+-- name: SubmitMessageQuestionResponse :execrows
+UPDATE message_questions
+SET status = 'submitted',
+    note = '',
+    response_json = sqlc.arg(response_json),
+    response_source = 'clickclack',
+    responded_by = sqlc.arg(responded_by),
+    responded_at = sqlc.arg(responded_at),
+    response_nonce = sqlc.arg(response_nonce),
+    version = version + 1,
+    updated_at = sqlc.arg(responded_at)
+WHERE message_id = sqlc.arg(message_id)
+  AND status = 'open'
+  AND version = sqlc.arg(version);
+
+-- name: ResolveMessageQuestion :execrows
+UPDATE message_questions
+SET status = sqlc.arg(status),
+    note = sqlc.arg(note),
+    response_json = sqlc.arg(response_json),
+    response_source = sqlc.arg(response_source),
+    responded_by = sqlc.narg(responded_by),
+    responded_at = sqlc.narg(responded_at),
+    response_nonce = sqlc.arg(response_nonce),
+    resolved_at = sqlc.narg(resolved_at),
+    version = version + 1,
+    updated_at = sqlc.arg(updated_at)
+WHERE message_id = sqlc.arg(message_id)
+  AND version = sqlc.arg(version);
+
+-- name: ListBotUnresolvedQuestions :many
+SELECT q.message_id, q.workspace_id, COALESCE(m.channel_id, '') AS channel_id,
+       COALESCE(m.direct_conversation_id, '') AS direct_conversation_id, m.thread_root_id,
+       q.external_id, q.status, q.expires_at, q.version
+FROM message_questions q
+JOIN messages m ON m.id = q.message_id
+WHERE q.workspace_id = sqlc.arg(workspace_id)
+  AND q.bot_user_id = sqlc.arg(bot_user_id)
+  AND q.status IN ('open', 'submitted')
+  AND m.deleted_at IS NULL
+  AND (sqlc.arg(include_direct)::boolean OR m.direct_conversation_id IS NULL)
+  AND q.message_id > sqlc.arg(after_message_id)
+ORDER BY q.message_id
+LIMIT sqlc.arg(row_limit);

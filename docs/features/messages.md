@@ -126,6 +126,12 @@ Publishing activity requires bot-token authentication plus the explicit
 activity-capable bot token with a scope list such as
 `bot:write,agent_activity:write`.
 
+## Questions
+
+Bots can attach a structured question to a message they create. The web app
+renders it as an answerable card, and the body remains the fallback text. See
+[questions.md](questions.md).
+
 ## Conversation organization and attention
 
 Conversation organization stays attached to the channel timeline, while

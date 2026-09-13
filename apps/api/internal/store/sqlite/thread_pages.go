@@ -78,6 +78,10 @@ func (s *Store) GetThreadPage(ctx context.Context, rootMessageID, userID string,
 	if err != nil {
 		return store.ThreadPage{}, err
 	}
+	messages, err = s.hydrateQuestions(ctx, messages)
+	if err != nil {
+		return store.ThreadPage{}, err
+	}
 	messages, err = s.hydrateReactions(ctx, userID, messages)
 	if err != nil {
 		return store.ThreadPage{}, err

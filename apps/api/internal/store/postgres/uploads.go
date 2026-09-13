@@ -311,6 +311,9 @@ func hydrateMessageCreateReplay(ctx context.Context, tx *sql.Tx, message store.M
 	if err != nil {
 		return store.Message{}, err
 	}
+	if messages, err = hydrateQuestions(ctx, tx, messages); err != nil {
+		return store.Message{}, err
+	}
 	message = messages[0]
 	uploadID = strings.TrimSpace(uploadID)
 	if uploadID == "" {

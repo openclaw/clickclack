@@ -160,6 +160,10 @@ func (s *Store) ListPinnedMessages(ctx context.Context, channelID, userID string
 	if err != nil {
 		return nil, err
 	}
+	messages, err = s.hydrateQuestions(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
 	messages, err = s.hydrateReactions(ctx, userID, messages)
 	if err != nil {
 		return nil, err

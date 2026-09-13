@@ -75,10 +75,17 @@ export type Topic = components["schemas"]["Topic"];
 
 export type MessageKind = "message" | "agent_commentary" | "agent_tool";
 
+export type QuestionSpec = components["schemas"]["QuestionSpec"];
+export type MessageQuestion = components["schemas"]["MessageQuestion"];
+export type BotQuestion = components["schemas"]["BotQuestion"];
+export type QuestionAnswers = Record<string, string[]>;
+
 type MessageInputBase = {
   body: string;
   quoted_message_id?: string;
   nonce?: string;
+  /** Structured question; bot tokens only. The body stays the readable fallback. */
+  question?: QuestionSpec;
 };
 
 export type MessageInput = MessageInputBase &
@@ -850,7 +857,7 @@ export class ClickClackClient {
     },
     reply: async (
       messageId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string },
+      input: { body: string; quoted_message_id?: string; nonce?: string; question?: QuestionSpec },
     ): Promise<Message> => {
       const data = await this.request<{ message: Message }>(
         `/api/messages/${messageId}/thread/replies`,
@@ -860,6 +867,68 @@ export class ClickClackClient {
         },
       );
       return data.message;
+    },
+  };
+
+  questions = {
+    answer: async (
+      messageId: string,
+      answers: QuestionAnswers,
+      options: { nonce?: string; expectedVersion?: number } = {},
+    ): Promise<Message> => {
+      const data = await this.request<{ message: Message }>(
+        `/api/messages/${messageId}/question/answers`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            answers,
+            nonce: options.nonce,
+            expected_version: options.expectedVersion,
+          }),
+        },
+      );
+      return data.message;
+    },
+    skip: async (
+      messageId: string,
+      options: { nonce?: string; expectedVersion?: number } = {},
+    ): Promise<Message> => {
+      const data = await this.request<{ message: Message }>(
+        `/api/messages/${messageId}/question/answers`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            skip: true,
+            nonce: options.nonce,
+            expected_version: options.expectedVersion,
+          }),
+        },
+      );
+      return data.message;
+    },
+    resolve: async (
+      messageId: string,
+      input: {
+        status: "open" | "answered" | "cancelled" | "expired" | "failed";
+        note?: string;
+        answers?: QuestionAnswers;
+        expected_version?: number;
+      },
+    ): Promise<Message> => {
+      const data = await this.request<{ message: Message }>(
+        `/api/messages/${messageId}/question/resolution`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+      return data.message;
+    },
+    listUnresolved: async (
+      options: { after?: string; limit?: number } = {},
+    ): Promise<{ questions: BotQuestion[]; next_cursor: string | null }> => {
+      const params = new URLSearchParams();
+      if (options.after) params.set("after", options.after);
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      return this.request(`/api/bots/self/questions${query}`);
     },
   };
 

@@ -1642,6 +1642,41 @@ func (q *Queries) GetMessageIDByAuthorNonce(ctx context.Context, arg GetMessageI
 	return id, err
 }
 
+const getMessageQuestion = `-- name: GetMessageQuestion :one
+SELECT message_id, workspace_id, bot_user_id, external_id, spec_json, responder_user_ids, allow_skip,
+       expires_at, status, response_json, response_source, responded_by, responded_at, response_nonce,
+       note, resolved_at, version, created_at, updated_at
+FROM message_questions
+WHERE message_id = $1
+`
+
+func (q *Queries) GetMessageQuestion(ctx context.Context, messageID string) (MessageQuestion, error) {
+	row := q.db.QueryRowContext(ctx, getMessageQuestion, messageID)
+	var i MessageQuestion
+	err := row.Scan(
+		&i.MessageID,
+		&i.WorkspaceID,
+		&i.BotUserID,
+		&i.ExternalID,
+		&i.SpecJson,
+		&i.ResponderUserIds,
+		&i.AllowSkip,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.ResponseJson,
+		&i.ResponseSource,
+		&i.RespondedBy,
+		&i.RespondedAt,
+		&i.ResponseNonce,
+		&i.Note,
+		&i.ResolvedAt,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getNotificationSettings = `-- name: GetNotificationSettings :one
 SELECT pushover_enabled, pushover_user_key
 FROM user_notification_settings
@@ -2724,6 +2759,44 @@ func (q *Queries) InsertMagicLink(ctx context.Context, arg InsertMagicLinkParams
 	return err
 }
 
+const insertMessageQuestion = `-- name: InsertMessageQuestion :exec
+INSERT INTO message_questions (
+  message_id, workspace_id, bot_user_id, external_id, spec_json, responder_user_ids,
+  allow_skip, expires_at, created_at, updated_at
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, $7, $8,
+  $9, $9
+)
+`
+
+type InsertMessageQuestionParams struct {
+	MessageID        string `json:"message_id"`
+	WorkspaceID      string `json:"workspace_id"`
+	BotUserID        string `json:"bot_user_id"`
+	ExternalID       string `json:"external_id"`
+	SpecJson         string `json:"spec_json"`
+	ResponderUserIds string `json:"responder_user_ids"`
+	AllowSkip        int64  `json:"allow_skip"`
+	ExpiresAt        string `json:"expires_at"`
+	CreatedAt        string `json:"created_at"`
+}
+
+func (q *Queries) InsertMessageQuestion(ctx context.Context, arg InsertMessageQuestionParams) error {
+	_, err := q.db.ExecContext(ctx, insertMessageQuestion,
+		arg.MessageID,
+		arg.WorkspaceID,
+		arg.BotUserID,
+		arg.ExternalID,
+		arg.SpecJson,
+		arg.ResponderUserIds,
+		arg.AllowSkip,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const insertOAuthTransaction = `-- name: InsertOAuthTransaction :exec
 INSERT INTO oauth_transactions (
   id, state_hash, browser_binding_hash, mode, pkce_verifier, desktop_challenge,
@@ -3292,6 +3365,81 @@ func (q *Queries) ListBotHistoricalWorkspaces(ctx context.Context, botUserID str
 			return nil, err
 		}
 		items = append(items, workspace_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBotUnresolvedQuestions = `-- name: ListBotUnresolvedQuestions :many
+SELECT q.message_id, q.workspace_id, COALESCE(m.channel_id, '') AS channel_id,
+       COALESCE(m.direct_conversation_id, '') AS direct_conversation_id, m.thread_root_id,
+       q.external_id, q.status, q.expires_at, q.version
+FROM message_questions q
+JOIN messages m ON m.id = q.message_id
+WHERE q.workspace_id = $1
+  AND q.bot_user_id = $2
+  AND q.status IN ('open', 'submitted')
+  AND m.deleted_at IS NULL
+  AND ($3::boolean OR m.direct_conversation_id IS NULL)
+  AND q.message_id > $4
+ORDER BY q.message_id
+LIMIT $5
+`
+
+type ListBotUnresolvedQuestionsParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	BotUserID      string `json:"bot_user_id"`
+	IncludeDirect  bool   `json:"include_direct"`
+	AfterMessageID string `json:"after_message_id"`
+	RowLimit       int32  `json:"row_limit"`
+}
+
+type ListBotUnresolvedQuestionsRow struct {
+	MessageID            string `json:"message_id"`
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	ThreadRootID         string `json:"thread_root_id"`
+	ExternalID           string `json:"external_id"`
+	Status               string `json:"status"`
+	ExpiresAt            string `json:"expires_at"`
+	Version              int64  `json:"version"`
+}
+
+func (q *Queries) ListBotUnresolvedQuestions(ctx context.Context, arg ListBotUnresolvedQuestionsParams) ([]ListBotUnresolvedQuestionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBotUnresolvedQuestions,
+		arg.WorkspaceID,
+		arg.BotUserID,
+		arg.IncludeDirect,
+		arg.AfterMessageID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBotUnresolvedQuestionsRow
+	for rows.Next() {
+		var i ListBotUnresolvedQuestionsRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.ThreadRootID,
+			&i.ExternalID,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -5661,6 +5809,56 @@ func (q *Queries) RequireWorkspaceOwner(ctx context.Context, arg RequireWorkspac
 	return role, err
 }
 
+const resolveMessageQuestion = `-- name: ResolveMessageQuestion :execrows
+UPDATE message_questions
+SET status = $1,
+    note = $2,
+    response_json = $3,
+    response_source = $4,
+    responded_by = $5,
+    responded_at = $6,
+    response_nonce = $7,
+    resolved_at = $8,
+    version = version + 1,
+    updated_at = $9
+WHERE message_id = $10
+  AND version = $11
+`
+
+type ResolveMessageQuestionParams struct {
+	Status         string         `json:"status"`
+	Note           string         `json:"note"`
+	ResponseJson   string         `json:"response_json"`
+	ResponseSource string         `json:"response_source"`
+	RespondedBy    sql.NullString `json:"responded_by"`
+	RespondedAt    sql.NullString `json:"responded_at"`
+	ResponseNonce  string         `json:"response_nonce"`
+	ResolvedAt     sql.NullString `json:"resolved_at"`
+	UpdatedAt      string         `json:"updated_at"`
+	MessageID      string         `json:"message_id"`
+	Version        int64          `json:"version"`
+}
+
+func (q *Queries) ResolveMessageQuestion(ctx context.Context, arg ResolveMessageQuestionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resolveMessageQuestion,
+		arg.Status,
+		arg.Note,
+		arg.ResponseJson,
+		arg.ResponseSource,
+		arg.RespondedBy,
+		arg.RespondedAt,
+		arg.ResponseNonce,
+		arg.ResolvedAt,
+		arg.UpdatedAt,
+		arg.MessageID,
+		arg.Version,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const retireBotUser = `-- name: RetireBotUser :execrows
 UPDATE users
 SET handle = ''
@@ -5854,6 +6052,46 @@ type SetUserAvatarIfEmptyParams struct {
 func (q *Queries) SetUserAvatarIfEmpty(ctx context.Context, arg SetUserAvatarIfEmptyParams) error {
 	_, err := q.db.ExecContext(ctx, setUserAvatarIfEmpty, arg.AvatarUrl, arg.ID)
 	return err
+}
+
+const submitMessageQuestionResponse = `-- name: SubmitMessageQuestionResponse :execrows
+UPDATE message_questions
+SET status = 'submitted',
+    note = '',
+    response_json = $1,
+    response_source = 'clickclack',
+    responded_by = $2,
+    responded_at = $3,
+    response_nonce = $4,
+    version = version + 1,
+    updated_at = $3
+WHERE message_id = $5
+  AND status = 'open'
+  AND version = $6
+`
+
+type SubmitMessageQuestionResponseParams struct {
+	ResponseJson  string         `json:"response_json"`
+	RespondedBy   sql.NullString `json:"responded_by"`
+	RespondedAt   sql.NullString `json:"responded_at"`
+	ResponseNonce string         `json:"response_nonce"`
+	MessageID     string         `json:"message_id"`
+	Version       int64          `json:"version"`
+}
+
+func (q *Queries) SubmitMessageQuestionResponse(ctx context.Context, arg SubmitMessageQuestionResponseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, submitMessageQuestionResponse,
+		arg.ResponseJson,
+		arg.RespondedBy,
+		arg.RespondedAt,
+		arg.ResponseNonce,
+		arg.MessageID,
+		arg.Version,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const threadNextSeq = `-- name: ThreadNextSeq :one

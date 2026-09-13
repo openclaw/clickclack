@@ -27,6 +27,7 @@ import {
   desktopMainWindowNavigationAllowed,
   DESKTOP_SERVER_ORIGIN_ARG,
   DESKTOP_TITLEBAR_ARG,
+  desktopCloudflareAccessLoginURL,
   desktopOAuthCallbackCode,
   desktopOAuthStartURL,
   mergeSettings,
@@ -56,6 +57,15 @@ let pendingRoute: string | null = null;
 let pendingProtocolURL: string | null = null;
 type DesktopAuthAttempt = Readonly<{ serverUrl: string; verifier: string; window: BrowserWindow }>;
 let pendingDesktopAuth: DesktopAuthAttempt | null = null;
+type CloudflareAccessAttempt = Readonly<{
+  authOrigin: string;
+  authWindow: BrowserWindow;
+  main: BrowserWindow;
+  route: string;
+  serverUrl: string;
+}>;
+let pendingCloudflareAccess: CloudflareAccessAttempt | null = null;
+let completingCloudflareAccess: CloudflareAccessAttempt | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 let integratedTitleBar = false;
@@ -108,6 +118,7 @@ async function start() {
   app.on("activate", () => showMainWindow());
   app.on("before-quit", () => {
     quitting = true;
+    clearCloudflareAccess();
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin" && (!settings.closeToTray || quitting)) app.quit();
@@ -174,6 +185,7 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     }
   });
   window.on("closed", () => {
+    if (pendingCloudflareAccess?.main === window) clearCloudflareAccess();
     if (mainWindow === window) mainWindow = null;
   });
   window.on("resize", scheduleWindowStateSave);
@@ -187,7 +199,7 @@ function createMainWindow(route = currentRoute): BrowserWindow {
   window.webContents.on("render-process-gone", (_event, details) => {
     if (details.reason !== "clean-exit") void window.webContents.reload();
   });
-  void window.loadURL(appURL(settings.serverUrl, route));
+  void window.loadURL(appURL(settings.serverUrl, route)).catch(logMainNavigationError);
   return window;
 }
 
@@ -249,7 +261,20 @@ function configureWebContents(window: BrowserWindow) {
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", guardMainFrameNavigation);
-  window.webContents.on("will-redirect", guardMainFrameNavigation);
+  window.webContents.on("will-redirect", (event, url, _isInPlace, isMainFrame) => {
+    if (
+      isMainFrame &&
+      window === mainWindow &&
+      desktopCloudflareAccessLoginURL(url, settings.serverUrl)
+    ) {
+      event.preventDefault();
+      if (!pendingCloudflareAccess || !isCurrentCloudflareAccess(pendingCloudflareAccess)) {
+        void beginCloudflareAccess(url, window);
+      }
+      return;
+    }
+    guardMainFrameNavigation(event, url, _isInPlace, isMainFrame);
+  });
   window.webContents.on("context-menu", (_event, params) => {
     const template: MenuItemConstructorOptions[] = [];
     if (params.misspelledWord) {
@@ -312,6 +337,183 @@ function guardMainFrameNavigation(
   } else if (isExternalURL(url)) {
     void shell.openExternal(url);
   }
+}
+
+async function beginCloudflareAccess(accessURL: string, window: BrowserWindow) {
+  if (window !== mainWindow || window.isDestroyed()) return;
+  const serverUrl = normalizeServerURL(settings.serverUrl);
+  if (!desktopCloudflareAccessLoginURL(accessURL, serverUrl)) return;
+  if (pendingCloudflareAccess && isCurrentCloudflareAccess(pendingCloudflareAccess)) return;
+  clearCloudflareAccess();
+
+  const route = currentRoute;
+  const authOrigin = new URL(accessURL).origin;
+  const authWindow = new BrowserWindow({
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131419" : "#f7f3ed",
+    height: 720,
+    icon: assetPath("icon.png"),
+    parent: window,
+    show: false,
+    title: "ClickClack sign-in",
+    width: 520,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      session: window.webContents.session,
+      webSecurity: true,
+    },
+  });
+  const pending: CloudflareAccessAttempt = {
+    authOrigin,
+    authWindow,
+    main: window,
+    route,
+    serverUrl,
+  };
+  pendingCloudflareAccess = pending;
+  authWindow.once("ready-to-show", () => {
+    if (isCurrentCloudflareAccess(pending)) authWindow.show();
+  });
+  authWindow.on("closed", () => {
+    const cancelled =
+      pendingCloudflareAccess === pending &&
+      completingCloudflareAccess !== pending &&
+      pending.main === mainWindow &&
+      !pending.main.isDestroyed() &&
+      pending.serverUrl === settings.serverUrl;
+    if (pendingCloudflareAccess === pending) {
+      pendingCloudflareAccess = null;
+      if (completingCloudflareAccess === pending) completingCloudflareAccess = null;
+    }
+    if (cancelled) {
+      showMainWindow();
+      void showCloudflareAccessError();
+    }
+  });
+  authWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  authWindow.webContents.on("will-frame-navigate", (event) =>
+    guardCloudflareAccessNavigation(event, event.url, event.isMainFrame, pending),
+  );
+  authWindow.webContents.on("will-redirect", (event, url, _isInPlace, isMainFrame) =>
+    guardCloudflareAccessNavigation(event, url, isMainFrame, pending),
+  );
+  authWindow.webContents.on("did-navigate", (_event, url) => {
+    if (isCloudflareAccessReturnURL(url, pending.serverUrl)) void completeCloudflareAccess(pending);
+  });
+  authWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
+      if (isMainFrame && errorCode !== -3 && isCurrentCloudflareAccess(pending)) {
+        clearCloudflareAccess(pending);
+        void showCloudflareAccessError();
+      }
+    },
+  );
+  try {
+    await window.loadFile(resourcePath("access-connecting.html"));
+    if (!isCurrentCloudflareAccess(pending)) return;
+    await authWindow.loadURL(accessURL);
+  } catch {
+    if (!isCurrentCloudflareAccess(pending)) return;
+    clearCloudflareAccess(pending);
+    await showCloudflareAccessError();
+  }
+}
+
+function isCurrentCloudflareAccess(pending: CloudflareAccessAttempt): boolean {
+  return (
+    pendingCloudflareAccess === pending &&
+    pending.serverUrl === settings.serverUrl &&
+    pending.main === mainWindow &&
+    !pending.main.isDestroyed() &&
+    !pending.authWindow.isDestroyed()
+  );
+}
+
+function clearCloudflareAccess(pending = pendingCloudflareAccess) {
+  if (!pending || pendingCloudflareAccess !== pending) return;
+  pendingCloudflareAccess = null;
+  if (completingCloudflareAccess === pending) completingCloudflareAccess = null;
+  if (!pending.authWindow.isDestroyed()) pending.authWindow.destroy();
+}
+
+function guardCloudflareAccessNavigation(
+  event: Electron.Event,
+  url: string,
+  isMainFrame: boolean,
+  pending: CloudflareAccessAttempt,
+) {
+  if (!isCurrentCloudflareAccess(pending)) return;
+  if (isCloudflareAccessNavigationAllowed(url, isMainFrame, pending)) return;
+  event.preventDefault();
+  clearCloudflareAccess(pending);
+  void showCloudflareAccessError(
+    "Access tried to leave the sign-in and ClickClack origins. For multi-domain Access applications, turn off Eager redirect cookie in the application's cookie settings.",
+  );
+}
+
+function isCloudflareAccessNavigationAllowed(
+  input: string,
+  isMainFrame: boolean,
+  pending: CloudflareAccessAttempt,
+): boolean {
+  try {
+    const value = new URL(input);
+    // Access can embed Turnstile; it never becomes a top-level sign-in origin.
+    if (!isMainFrame && value.origin === "https://challenges.cloudflare.com") return true;
+    if (value.protocol === "https:" && value.origin === pending.authOrigin) return true;
+    return value.origin === normalizeServerURL(pending.serverUrl);
+  } catch {
+    return false;
+  }
+}
+
+function isCloudflareAccessReturnURL(input: string, serverUrl: string): boolean {
+  try {
+    const value = new URL(input);
+    return (
+      value.origin === normalizeServerURL(serverUrl) &&
+      safeAppRoute(`${value.pathname}${value.search}${value.hash}`) !== null
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function completeCloudflareAccess(pending: CloudflareAccessAttempt) {
+  if (!isCurrentCloudflareAccess(pending) || completingCloudflareAccess === pending) return;
+  completingCloudflareAccess = pending;
+  pending.authWindow.hide();
+  try {
+    await pending.main.loadURL(appURL(pending.serverUrl, pending.route));
+    if (!isCurrentCloudflareAccess(pending) || completingCloudflareAccess !== pending) return;
+    pendingCloudflareAccess = null;
+    completingCloudflareAccess = null;
+    if (!pending.authWindow.isDestroyed()) pending.authWindow.destroy();
+    showMainWindow();
+  } catch {
+    if (!isCurrentCloudflareAccess(pending) || completingCloudflareAccess !== pending) return;
+    clearCloudflareAccess(pending);
+    await showCloudflareAccessError();
+  }
+}
+
+function logMainNavigationError(error: unknown) {
+  if (error instanceof Error && /ERR_ABORTED/.test(error.message)) return;
+  console.error("ClickClack main navigation failed", error);
+}
+
+async function showCloudflareAccessError(detail = "") {
+  const options: Electron.MessageBoxOptions = {
+    message:
+      "Cloudflare Access one-time PIN sign-in could not complete. This desktop flow does not support external identity providers. Reload ClickClack or choose Settings to verify the server." +
+      (detail ? ` ${detail}` : ""),
+    title: "ClickClack sign-in failed",
+    type: "error",
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) await dialog.showMessageBox(mainWindow, options);
+  else await dialog.showMessageBox(options);
 }
 
 function createSettingsWindow() {
@@ -417,6 +619,7 @@ function registerIPC() {
       settings = { ...next, window: settings.window };
       integratedTitleBar = titleBar;
       pendingDesktopAuth = null;
+      clearCloudflareAccess();
       applyLoginItemSetting();
       currentRoute = "/app";
       rememberWindowState();
@@ -462,7 +665,16 @@ function secureSession() {
 }
 
 function installDownloadHandling() {
-  session.defaultSession.on("will-download", (_event, item) => {
+  session.defaultSession.on("will-download", (event, item, webContents) => {
+    if (
+      pendingCloudflareAccess &&
+      !pendingCloudflareAccess.authWindow.isDestroyed() &&
+      webContents === pendingCloudflareAccess.authWindow.webContents
+    ) {
+      event.preventDefault();
+      item.cancel?.();
+      return;
+    }
     item.once("done", (_doneEvent, state) => {
       if (state !== "completed" || !Notification.isSupported()) return;
       const filePath = item.getSavePath();
@@ -527,7 +739,7 @@ function createApplicationMenu() {
     {
       label: "View",
       submenu: [
-        { role: "reload" },
+        { label: "Reload", accelerator: "CmdOrCtrl+R", click: reloadMainApp },
         { role: "forceReload" },
         { type: "separator" },
         { role: "resetZoom" },
@@ -540,6 +752,15 @@ function createApplicationMenu() {
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }] },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function reloadMainApp() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (isSameServerURL(mainWindow.webContents.getURL())) {
+    void mainWindow.webContents.reload();
+    return;
+  }
+  void mainWindow.loadURL(appURL(settings.serverUrl, currentRoute)).catch(logMainNavigationError);
 }
 
 function createTray() {

@@ -62,6 +62,7 @@ export async function desktop(t) {
   const browserURLs = [];
   const requests = [];
   const handlers = new Map();
+  let applicationMenu;
   const timers = new Map();
   const ready = deferred();
   const app = new EventEmitter();
@@ -85,6 +86,7 @@ export async function desktop(t) {
     openExternal: async () => {},
     writeFile: fs.writeFile,
     rename: fs.rename,
+    loadURL: async () => {},
   };
   class Window extends EventEmitter {
     constructor(options) {
@@ -98,7 +100,10 @@ export async function desktop(t) {
       this.webContents = new EventEmitter();
       Object.assign(this.webContents, {
         id: windows.length + 1,
-        setWindowOpenHandler() {},
+        setWindowOpenHandler: (handler) => {
+          this.openHandler = handler;
+        },
+        session,
         getURL: () => this.url,
         isLoading: () => false,
         send: (...args) => this.messages.push(args),
@@ -110,6 +115,7 @@ export async function desktop(t) {
       this.loads.push(url);
       this.url = url;
       this.webContents.emit("did-navigate", {}, url);
+      await controls.loadURL(this, url);
       if (this.navigation) await this.navigation.promise;
     }
     async loadFile(file) {
@@ -142,8 +148,12 @@ export async function desktop(t) {
     setOverlayIcon() {}
   }
   const session = Object.assign(new EventEmitter(), {
-    setPermissionRequestHandler() {},
-    setPermissionCheckHandler() {},
+    setPermissionRequestHandler(handler) {
+      this.permissionRequest = handler;
+    },
+    setPermissionCheckHandler(handler) {
+      this.permissionCheck = handler;
+    },
     fetch: (url, options) => {
       requests.push({ url, options });
       return controls.fetch(url, options);
@@ -167,7 +177,12 @@ export async function desktop(t) {
     Tray,
     nativeTheme: new EventEmitter(),
     nativeImage: { createFromPath: () => nativeImage },
-    Menu: { buildFromTemplate: (value) => value, setApplicationMenu() {} },
+    Menu: {
+      buildFromTemplate: (value) => value,
+      setApplicationMenu(value) {
+        applicationMenu = value;
+      },
+    },
     screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 3000, height: 2000 } }) },
     net: { fetch: (...args) => controls.probe(...args) },
     session: { defaultSession: session },
@@ -227,12 +242,16 @@ export async function desktop(t) {
   const settingsWindow = windows[1];
   return {
     app,
+    get applicationMenu() {
+      return applicationMenu;
+    },
     controls,
     windows,
     errors,
     logs,
     badges,
     requests,
+    session,
     browserURLs,
     destination,
     idle,

@@ -102,6 +102,13 @@ If the PIN window is closed or cannot complete, the main window stays on a
 local connection page; use **View → Reload** to retry or **Settings** to check
 the server URL.
 
+This flow supports the selected ClickClack hostname only. If the Access application
+covers multiple domains, turn off **Eager redirect cookie** under **Advanced settings
+→ Cookie settings** before using desktop sign-in. Cloudflare otherwise redirects
+through the other protected hostnames to set their cookies, which this isolated
+window deliberately blocks. With eager redirects off, Access issues each domain's
+cookie when that domain is visited. See [Cloudflare's cookie settings](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/#eager-redirect-cookie).
+
 ## Security model
 
 The app loads the selected ClickClack origin with Electron sandboxing,
@@ -120,6 +127,8 @@ The Cloudflare Access sign-in window denies permissions, downloads, custom
 protocols, and popups; navigation is limited to its Access origin and the configured
 ClickClack origin (including Access cookie callbacks). Only a committed `/app`
 navigation completes the sign-in.
+Subframe navigation has the same restriction, with `https://challenges.cloudflare.com`
+allowed only inside frames for Cloudflare Turnstile challenges.
 Server configuration is accepted only from the bundled local settings window
 and is written atomically with user-only permissions.
 

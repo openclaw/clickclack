@@ -10,6 +10,8 @@ function navigate(window, url, name = "will-redirect", mainFrame = true) {
   window.webContents.emit(
     name,
     {
+      url,
+      isMainFrame: mainFrame,
       preventDefault() {
         prevented = true;
       },
@@ -100,11 +102,33 @@ test("Access rejects unrelated origins and custom protocols without opening a br
     navigate(d.main, login);
     await settle();
     const auth = authWindow(d);
-    assert.equal(navigate(auth, url, "will-navigate"), true);
+    assert.equal(navigate(auth, url, "will-frame-navigate"), true);
     await settle();
     assert.deepEqual(d.browserURLs, []);
     assert.ok(d.errors.length > 0);
+    assert.match(d.errors[0], /turn off Eager redirect cookie/);
   }
+});
+
+test("Access guards subframe navigation and permits only the Turnstile frame exception", async (t) => {
+  const d = await desktop(t);
+  navigate(d.main, login);
+  await settle();
+  const auth = authWindow(d);
+  assert.equal(
+    navigate(auth, "https://challenges.cloudflare.com/turnstile", "will-frame-navigate", false),
+    false,
+  );
+  assert.equal(navigate(auth, "https://external.example/", "will-frame-navigate", false), true);
+  assert.equal(auth.destroyed, true);
+  assert.deepEqual(d.browserURLs, []);
+
+  navigate(d.main, login);
+  await settle();
+  assert.equal(
+    navigate(authWindow(d), "https://challenges.cloudflare.com/", "will-frame-navigate"),
+    true,
+  );
 });
 
 test("Access windows cannot download or send desktop bridge messages", async (t) => {

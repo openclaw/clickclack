@@ -392,8 +392,8 @@ async function beginCloudflareAccess(accessURL: string, window: BrowserWindow) {
     }
   });
   authWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  authWindow.webContents.on("will-navigate", (event, url, _isInPlace, isMainFrame) =>
-    guardCloudflareAccessNavigation(event, url, isMainFrame, pending),
+  authWindow.webContents.on("will-frame-navigate", (event) =>
+    guardCloudflareAccessNavigation(event, event.url, event.isMainFrame, pending),
   );
   authWindow.webContents.on("will-redirect", (event, url, _isInPlace, isMainFrame) =>
     guardCloudflareAccessNavigation(event, url, isMainFrame, pending),
@@ -444,19 +444,24 @@ function guardCloudflareAccessNavigation(
   isMainFrame: boolean,
   pending: CloudflareAccessAttempt,
 ) {
-  if (!isMainFrame || !isCurrentCloudflareAccess(pending)) return;
-  if (isCloudflareAccessNavigationAllowed(url, pending)) return;
+  if (!isCurrentCloudflareAccess(pending)) return;
+  if (isCloudflareAccessNavigationAllowed(url, isMainFrame, pending)) return;
   event.preventDefault();
   clearCloudflareAccess(pending);
-  void showCloudflareAccessError();
+  void showCloudflareAccessError(
+    "Access tried to leave the sign-in and ClickClack origins. For multi-domain Access applications, turn off Eager redirect cookie in the application's cookie settings.",
+  );
 }
 
 function isCloudflareAccessNavigationAllowed(
   input: string,
+  isMainFrame: boolean,
   pending: CloudflareAccessAttempt,
 ): boolean {
   try {
     const value = new URL(input);
+    // Access can embed Turnstile; it never becomes a top-level sign-in origin.
+    if (!isMainFrame && value.origin === "https://challenges.cloudflare.com") return true;
     if (value.protocol === "https:" && value.origin === pending.authOrigin) return true;
     return value.origin === normalizeServerURL(pending.serverUrl);
   } catch {
@@ -499,10 +504,11 @@ function logMainNavigationError(error: unknown) {
   console.error("ClickClack main navigation failed", error);
 }
 
-async function showCloudflareAccessError() {
+async function showCloudflareAccessError(detail = "") {
   const options: Electron.MessageBoxOptions = {
     message:
-      "Cloudflare Access one-time PIN sign-in could not complete. This desktop flow does not support external identity providers. Reload ClickClack or choose Settings to verify the server.",
+      "Cloudflare Access one-time PIN sign-in could not complete. This desktop flow does not support external identity providers. Reload ClickClack or choose Settings to verify the server." +
+      (detail ? ` ${detail}` : ""),
     title: "ClickClack sign-in failed",
     type: "error",
   };

@@ -56,8 +56,7 @@ test.describe("type-to-focus composer", () => {
 
   test("typing in an existing input does not jump focus to the composer", async ({ page }) => {
     const composer = page.getByLabel("Message body");
-    const search = page.getByPlaceholder(/search/i).first();
-    if ((await search.count()) === 0) test.skip(true, "no search input in this build");
+    const search = page.getByRole("textbox", { name: "Search messages" });
     await search.click();
     await page.keyboard.type("abc");
     await expect(composer).not.toBeFocused();

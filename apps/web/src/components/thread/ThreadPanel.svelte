@@ -548,6 +548,7 @@
     >&times;</button>
   {/if}
 </header>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions (Observes bubbled scroll intent; the region does not act as a control.) -->
 <div
   bind:this={threadScroll}
   class="thread-scroll"

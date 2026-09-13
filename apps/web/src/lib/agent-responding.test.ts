@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agentNameFor, agentProgressTurnKey, respondingAgentNames } from "./agent-responding.ts";
+import { agentProgressTurnKey } from "./chat/agent-progress.ts";
+import { agentNameFor, respondingAgentNames } from "./agent-responding.ts";
 import type { User, WorkspaceBotCommand } from "./types";
 
 const bot = (id: string, display_name: string, handle = "") =>

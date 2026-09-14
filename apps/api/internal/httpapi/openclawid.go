@@ -2,9 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -30,6 +34,7 @@ const (
 	defaultOpenClawIDIssuer      = "https://id.openclaw.ai/api/auth"
 	defaultOpenClawIDHTTPTimeout = 30 * time.Second
 	openClawIDTokenClockLeeway   = 30 * time.Second
+	openClawIDDiscoveryMaxBytes  = 64 << 10
 )
 
 const (
@@ -46,20 +51,139 @@ func (c OpenClawIDConfig) withDefaults() OpenClawIDConfig {
 	c.ClientID = strings.TrimSpace(c.ClientID)
 	c.ClientSecret = strings.TrimSpace(c.ClientSecret)
 	c.PublicURL = strings.TrimSpace(c.PublicURL)
-	c.Issuer = strings.TrimRight(strings.TrimSpace(c.Issuer), "/")
+	c.Issuer = strings.TrimSpace(c.Issuer)
 	if c.Issuer == "" {
 		c.Issuer = defaultOpenClawIDIssuer
 	}
 	if c.AuthURL == "" {
-		c.AuthURL = c.Issuer + "/oauth2/authorize"
+		c.AuthURL = strings.TrimRight(c.Issuer, "/") + "/oauth2/authorize"
 	}
 	if c.TokenURL == "" {
-		c.TokenURL = c.Issuer + "/oauth2/token"
+		c.TokenURL = strings.TrimRight(c.Issuer, "/") + "/oauth2/token"
 	}
 	if c.HTTPClient == nil {
 		c.HTTPClient = &http.Client{Timeout: defaultOpenClawIDHTTPTimeout}
 	}
 	return c
+}
+
+type oidcDiscoveryDocument struct {
+	Issuer                string `json:"issuer"`
+	AuthorizationEndpoint string `json:"authorization_endpoint"`
+	TokenEndpoint         string `json:"token_endpoint"`
+}
+
+// ApplyDiscovery fills unset endpoints from issuer metadata, preserving each
+// explicit override. Only the default OpenClaw ID issuer can fall back when
+// discovery is unavailable; malformed metadata always fails closed.
+func (c OpenClawIDConfig) ApplyDiscovery(ctx context.Context) (OpenClawIDConfig, error) {
+	explicitAuth := strings.TrimSpace(c.AuthURL) != ""
+	explicitToken := strings.TrimSpace(c.TokenURL) != ""
+	c = c.withDefaults()
+	if c.ClientID == "" || c.ClientSecret == "" {
+		return c, nil
+	}
+	issuer, err := url.Parse(c.Issuer)
+	if err != nil || !oidcHTTPURLAllowed(issuer) || issuer.RawQuery != "" || issuer.ForceQuery {
+		return OpenClawIDConfig{}, errors.New("oidc issuer url is not allowed")
+	}
+	if explicitAuth && explicitToken {
+		return c, nil
+	}
+	doc, err := c.fetchOIDCDiscovery(ctx)
+	if err != nil {
+		if c.Issuer == defaultOpenClawIDIssuer && errors.Is(err, errOIDCDiscoveryUnavailable) {
+			return c, nil
+		}
+		return OpenClawIDConfig{}, err
+	}
+	if doc.Issuer != c.Issuer {
+		return OpenClawIDConfig{}, errors.New("oidc discovery issuer does not match OPENCLAW_ID_ISSUER")
+	}
+	authURL, err := parseOIDCEndpoint(doc.AuthorizationEndpoint)
+	if err != nil {
+		return OpenClawIDConfig{}, fmt.Errorf("oidc authorization_endpoint: %w", err)
+	}
+	tokenURL, err := parseOIDCEndpoint(doc.TokenEndpoint)
+	if err != nil {
+		return OpenClawIDConfig{}, fmt.Errorf("oidc token_endpoint: %w", err)
+	}
+	if !explicitAuth {
+		c.AuthURL = authURL
+	}
+	if !explicitToken {
+		c.TokenURL = tokenURL
+	}
+	return c, nil
+}
+
+var errOIDCDiscoveryUnavailable = errors.New("oidc discovery unavailable")
+
+func (c OpenClawIDConfig) fetchOIDCDiscovery(ctx context.Context) (oidcDiscoveryDocument, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.Issuer, "/")+"/.well-known/openid-configuration", nil)
+	if err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery request failed")
+	}
+	resp, err := discoveryHTTPClient(c.HTTPClient).Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return oidcDiscoveryDocument{}, ctx.Err()
+		}
+		return oidcDiscoveryDocument{}, errOIDCDiscoveryUnavailable
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNotImplemented {
+		return oidcDiscoveryDocument{}, errOIDCDiscoveryUnavailable
+	}
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, openClawIDDiscoveryMaxBytes))
+		return oidcDiscoveryDocument{}, fmt.Errorf("oidc discovery returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, openClawIDDiscoveryMaxBytes+1))
+	if err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery body unreadable")
+	}
+	if len(body) > openClawIDDiscoveryMaxBytes {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery body too large")
+	}
+	var doc oidcDiscoveryDocument
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery document is not json")
+	}
+	return doc, nil
+}
+
+func discoveryHTTPClient(base *http.Client) *http.Client {
+	cloned := *base
+	cloned.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	if cloned.Timeout <= 0 || cloned.Timeout > defaultOpenClawIDHTTPTimeout {
+		cloned.Timeout = defaultOpenClawIDHTTPTimeout
+	}
+	return &cloned
+}
+
+func parseOIDCEndpoint(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || !oidcHTTPURLAllowed(parsed) {
+		return "", errors.New("endpoint is not an allowed http(s) url")
+	}
+	return parsed.String(), nil
+}
+
+func oidcHTTPURLAllowed(parsed *url.URL) bool {
+	if parsed == nil || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
+		return false
+	}
+	switch parsed.Scheme {
+	case "https":
+		return true
+	case "http":
+		return isLocalHostPort(parsed.Host)
+	default:
+		return false
+	}
 }
 
 func (s *Server) openclawIDStart(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +358,7 @@ func (s *Server) validateOpenClawIDToken(idToken string) (openClawIDClaims, erro
 	if _, _, err := jwt.NewParser().ParseUnverified(strings.TrimSpace(idToken), &claims); err != nil {
 		return openClawIDClaims{}, errors.New("invalid openclaw id token")
 	}
-	if strings.TrimRight(claims.Issuer, "/") != s.openclawID.Issuer {
+	if claims.Issuer != s.openclawID.Issuer {
 		return openClawIDClaims{}, errors.New("invalid openclaw id token issuer")
 	}
 	if !slices.Contains(claims.Audience, s.openclawID.ClientID) {

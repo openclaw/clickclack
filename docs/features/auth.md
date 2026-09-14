@@ -260,7 +260,7 @@ confidential OAuth 2.1 client. Configure the server through the environment:
 ```sh
 OPENCLAW_ID_CLIENT_ID=...
 OPENCLAW_ID_CLIENT_SECRET=...
-# Optional issuer override for staging or tests:
+# Optional issuer override for staging, tests, or another OIDC provider:
 # OPENCLAW_ID_ISSUER=https://id.openclaw.ai/api/auth
 ```
 
@@ -273,15 +273,28 @@ credentials are configured. The browser hides unconfigured sign-in providers;
 with no available provider it opens the sign-in token form. Separately hosted
 frontends without runtime auth metadata retain the GitHub and OpenClaw ID links.
 
+At serve startup, ClickClack GETs
+`<issuer>/.well-known/openid-configuration` (no redirects) and uses that
+document's `authorization_endpoint` and `token_endpoint`. The document `issuer`
+must match `OPENCLAW_ID_ISSUER`. The default OpenClaw ID issuer may fall back
+to `<issuer>/oauth2/authorize` and `<issuer>/oauth2/token` when discovery is
+unavailable (network failure, HTTP 404, or HTTP 501). Malformed metadata and
+redirects always fail closed. Any other issuer requires a usable discovery
+document. Explicit endpoint overrides are preserved independently. Discovery
+requests are bounded to 30 seconds and 64 KiB; endpoints require HTTPS except
+for loopback development providers.
+Kanidm's discovery document is the supported way to point this client at
+Kanidm; do not concatenate Kanidm's issuer with `/oauth2/authorize`.
+
 Flow:
 
 1. `GET /api/auth/openclaw/start` reuses the GitHub OAuth transaction store: a
    database-backed, ten-minute transaction, the same HTTP-only browser-binding
-   cookie, and a SHA-256 PKCE challenge, then redirects to
-   `<issuer>/oauth2/authorize` with `scope=openid profile email`.
+   cookie, and a SHA-256 PKCE challenge, then redirects to the discovered
+   `authorization_endpoint` with `scope=openid profile email`.
 2. OpenClaw ID redirects back to `GET /api/auth/openclaw/callback?code&state`.
 3. The handler atomically consumes the state only when the browser binding
-   matches, exchanges the code at `<issuer>/oauth2/token` using
+   matches, exchanges the code at the discovered `token_endpoint` using
    `client_secret_basic` plus the stored PKCE verifier, and reads the returned
    `id_token`. The token arrives directly from the issuer over TLS on an
    authenticated confidential-client exchange, so no local JWKS signature check

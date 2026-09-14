@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Discover OIDC authorization and token endpoints for providers such as Kanidm, validate issuer metadata, and preserve explicit endpoint overrides. Thanks @AdamClaassens.
+
 ## 0.5.2 - 2026-09-24
 
 **Highlights:** Visible macOS menu icons, reliable trackpad actions, and Markdown text that stays intact.

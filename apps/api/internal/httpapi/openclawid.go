@@ -2,9 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -30,6 +34,7 @@ const (
 	defaultOpenClawIDIssuer      = "https://id.openclaw.ai/api/auth"
 	defaultOpenClawIDHTTPTimeout = 30 * time.Second
 	openClawIDTokenClockLeeway   = 30 * time.Second
+	openClawIDDiscoveryMaxBytes  = 64 << 10
 )
 
 const (
@@ -60,6 +65,112 @@ func (c OpenClawIDConfig) withDefaults() OpenClawIDConfig {
 		c.HTTPClient = &http.Client{Timeout: defaultOpenClawIDHTTPTimeout}
 	}
 	return c
+}
+
+type oidcDiscoveryDocument struct {
+	Issuer                string `json:"issuer"`
+	AuthorizationEndpoint string `json:"authorization_endpoint"`
+	TokenEndpoint         string `json:"token_endpoint"`
+}
+
+// ApplyDiscovery fills AuthURL and TokenURL from the issuer's OpenID Connect
+// Discovery document. Concatenating {issuer}/oauth2/authorize is the OpenClaw
+// ID default; Kanidm and other IdPs publish different authorization and token
+// paths. Explicit AuthURL and TokenURL skip the fetch. A custom issuer without
+// a usable discovery document fails closed.
+func (c OpenClawIDConfig) ApplyDiscovery(ctx context.Context) (OpenClawIDConfig, error) {
+	explicitAuth := strings.TrimSpace(c.AuthURL) != ""
+	explicitToken := strings.TrimSpace(c.TokenURL) != ""
+	c = c.withDefaults()
+	if c.ClientID == "" || c.ClientSecret == "" {
+		return c, nil
+	}
+	if explicitAuth && explicitToken {
+		return c, nil
+	}
+	doc, err := c.fetchOIDCDiscovery(ctx)
+	if err != nil {
+		if c.Issuer == defaultOpenClawIDIssuer {
+			return c, nil
+		}
+		return OpenClawIDConfig{}, err
+	}
+	if strings.TrimRight(strings.TrimSpace(doc.Issuer), "/") != c.Issuer {
+		return OpenClawIDConfig{}, errors.New("oidc discovery issuer does not match OPENCLAW_ID_ISSUER")
+	}
+	authURL, err := parseOIDCEndpoint(doc.AuthorizationEndpoint)
+	if err != nil {
+		return OpenClawIDConfig{}, fmt.Errorf("oidc authorization_endpoint: %w", err)
+	}
+	tokenURL, err := parseOIDCEndpoint(doc.TokenEndpoint)
+	if err != nil {
+		return OpenClawIDConfig{}, fmt.Errorf("oidc token_endpoint: %w", err)
+	}
+	c.AuthURL = authURL
+	c.TokenURL = tokenURL
+	return c, nil
+}
+
+func (c OpenClawIDConfig) fetchOIDCDiscovery(ctx context.Context) (oidcDiscoveryDocument, error) {
+	discovery, err := url.Parse(c.Issuer + "/.well-known/openid-configuration")
+	if err != nil || !oidcHTTPURLAllowed(discovery) {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery url is not allowed")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discovery.String(), nil)
+	if err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery request failed")
+	}
+	resp, err := discoveryHTTPClient(c.HTTPClient).Do(req)
+	if err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery request failed")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, openClawIDDiscoveryMaxBytes))
+		return oidcDiscoveryDocument{}, fmt.Errorf("oidc discovery returned %s", resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, openClawIDDiscoveryMaxBytes+1))
+	if err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery body unreadable")
+	}
+	if len(body) > openClawIDDiscoveryMaxBytes {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery body too large")
+	}
+	var doc oidcDiscoveryDocument
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return oidcDiscoveryDocument{}, errors.New("oidc discovery document is not json")
+	}
+	return doc, nil
+}
+
+func discoveryHTTPClient(base *http.Client) *http.Client {
+	cloned := *base
+	cloned.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return errors.New("oidc discovery refused a redirect")
+	}
+	return &cloned
+}
+
+func parseOIDCEndpoint(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || !oidcHTTPURLAllowed(parsed) {
+		return "", errors.New("endpoint is not an allowed http(s) url")
+	}
+	return parsed.String(), nil
+}
+
+func oidcHTTPURLAllowed(parsed *url.URL) bool {
+	if parsed == nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	switch parsed.Scheme {
+	case "https":
+		return true
+	case "http":
+		return isLocalHostPort(parsed.Host)
+	default:
+		return false
+	}
 }
 
 func (s *Server) openclawIDStart(w http.ResponseWriter, r *http.Request) {

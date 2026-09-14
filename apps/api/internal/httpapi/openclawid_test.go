@@ -472,3 +472,125 @@ func TestOpenClawIDOAuthStoreFailureBranches(t *testing.T) {
 		t.Fatalf("expected missing code rejection, got %d", recorder.Code)
 	}
 }
+
+type failRoundTrip struct{}
+
+func (failRoundTrip) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("offline")
+}
+
+func TestOpenClawIDApplyDiscoveryUsesKanidmShapedEndpoints(t *testing.T) {
+	t.Parallel()
+	var issuer string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth2/openid/clickclack/.well-known/openid-configuration" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 issuer,
+			"authorization_endpoint": strings.TrimSuffix(issuer, "/oauth2/openid/clickclack") + "/ui/oauth2",
+			"token_endpoint":         strings.TrimSuffix(issuer, "/oauth2/openid/clickclack") + "/oauth2/token",
+		})
+	}))
+	t.Cleanup(provider.Close)
+	issuer = provider.URL + "/oauth2/openid/clickclack"
+	base := strings.TrimSuffix(provider.URL, "/")
+	resolved, err := OpenClawIDConfig{
+		ClientID:     "clickclack",
+		ClientSecret: "secret",
+		Issuer:       issuer,
+		HTTPClient:   provider.Client(),
+	}.ApplyDiscovery(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.AuthURL != base+"/ui/oauth2" || resolved.TokenURL != base+"/oauth2/token" {
+		t.Fatalf("unexpected discovered endpoints auth=%q token=%q", resolved.AuthURL, resolved.TokenURL)
+	}
+	st := newEmptyHTTPStore(t)
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{OpenClawID: resolved}).Handler())
+	t.Cleanup(server.Close)
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(server.URL + "/api/auth/openclaw/start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), base+"/ui/oauth2?") {
+		t.Fatalf("expected Kanidm authorize redirect, got %s %s", resp.Status, resp.Header.Get("Location"))
+	}
+}
+
+func TestOpenClawIDApplyDiscoveryCustomIssuerRequiresDocument(t *testing.T) {
+	t.Parallel()
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(provider.Close)
+	_, err := OpenClawIDConfig{
+		ClientID:     "clickclack",
+		ClientSecret: "secret",
+		Issuer:       provider.URL + "/oauth2/openid/clickclack",
+		HTTPClient:   provider.Client(),
+	}.ApplyDiscovery(context.Background())
+	if err == nil {
+		t.Fatal("expected custom issuer without discovery to fail closed")
+	}
+}
+
+func TestOpenClawIDApplyDiscoveryDefaultIssuerFallsBack(t *testing.T) {
+	t.Parallel()
+	resolved, err := OpenClawIDConfig{
+		ClientID:     "client",
+		ClientSecret: "secret",
+		HTTPClient:   &http.Client{Timeout: time.Second, Transport: failRoundTrip{}},
+	}.ApplyDiscovery(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.AuthURL != defaultOpenClawIDIssuer+"/oauth2/authorize" || resolved.TokenURL != defaultOpenClawIDIssuer+"/oauth2/token" {
+		t.Fatalf("unexpected fallback endpoints auth=%q token=%q", resolved.AuthURL, resolved.TokenURL)
+	}
+}
+
+func TestOpenClawIDApplyDiscoveryRejectsIssuerMismatch(t *testing.T) {
+	t.Parallel()
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 "https://evil.example.com/oauth2/openid/clickclack",
+			"authorization_endpoint": "https://evil.example.com/ui/oauth2",
+			"token_endpoint":         "https://evil.example.com/oauth2/token",
+		})
+	}))
+	t.Cleanup(provider.Close)
+	_, err := OpenClawIDConfig{
+		ClientID:     "clickclack",
+		ClientSecret: "secret",
+		Issuer:       provider.URL + "/oauth2/openid/clickclack",
+		HTTPClient:   provider.Client(),
+	}.ApplyDiscovery(context.Background())
+	if err == nil {
+		t.Fatal("expected discovery issuer mismatch to fail")
+	}
+}
+
+func TestOpenClawIDApplyDiscoverySkipsFetchWhenEndpointsAreExplicit(t *testing.T) {
+	t.Parallel()
+	resolved, err := OpenClawIDConfig{
+		ClientID:     "clickclack",
+		ClientSecret: "secret",
+		Issuer:       "https://idm.example.com/oauth2/openid/clickclack",
+		AuthURL:      "https://idm.example.com/ui/oauth2",
+		TokenURL:     "https://idm.example.com/oauth2/token",
+		HTTPClient:   &http.Client{Timeout: time.Second, Transport: failRoundTrip{}},
+	}.ApplyDiscovery(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.AuthURL != "https://idm.example.com/ui/oauth2" || resolved.TokenURL != "https://idm.example.com/oauth2/token" {
+		t.Fatalf("explicit endpoints were rewritten: auth=%q token=%q", resolved.AuthURL, resolved.TokenURL)
+	}
+}

@@ -143,6 +143,15 @@ func serve(args []string) error {
 	if cfg.PushoverAPIToken != "" {
 		pushNotifier = httpapi.NewPushoverNotifier(cfg.PushoverAPIToken)
 	}
+	openclawID, err := httpapi.OpenClawIDConfig{
+		ClientID:     cfg.OpenClawIDClientID,
+		ClientSecret: cfg.OpenClawIDClientSecret,
+		Issuer:       cfg.OpenClawIDIssuer,
+		PublicURL:    cfg.PublicURL,
+	}.ApplyDiscovery(ctx)
+	if err != nil {
+		return err
+	}
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadStorage:       uploads,
@@ -160,12 +169,7 @@ func serve(args []string) error {
 			AllowedOrg:   cfg.GitHubAllowedOrg,
 			ModeratorOrg: cfg.GitHubModeratorOrg,
 		},
-		OpenClawID: httpapi.OpenClawIDConfig{
-			ClientID:     cfg.OpenClawIDClientID,
-			ClientSecret: cfg.OpenClawIDClientSecret,
-			Issuer:       cfg.OpenClawIDIssuer,
-			PublicURL:    cfg.PublicURL,
-		},
+		OpenClawID: openclawID,
 		Access: httpapi.AccessConfig{
 			TeamDomain: cfg.AccessTeamDomain,
 			Audience:   cfg.AccessAUD,

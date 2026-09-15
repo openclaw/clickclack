@@ -261,6 +261,13 @@ Writes a JSON dump of users, workspaces, channels, messages, threads,
 reactions, uploads metadata, and DMs. Useful for migrations between SQLite
 files or for one-off audits.
 
+File exports replace the destination only after the complete dump is written.
+An export cannot target its source SQLite database or its `-wal`, `-shm`, or
+`-journal` files, including paths through symlinks or hard links. Choose a
+separate output file; protection follows the directory's case rules.
+Windows aliases with trailing periods or spaces are also protected.
+`--out -` still writes to stdout.
+
 ## Client auth
 
 ```sh

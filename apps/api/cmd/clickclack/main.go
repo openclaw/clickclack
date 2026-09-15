@@ -584,7 +584,8 @@ func exportData(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	st, err := openStore(resolveDB(*data, *dbURL))
+	sourceDB := resolveDB(*data, *dbURL)
+	st, err := openStore(sourceDB)
 	if err != nil {
 		return err
 	}
@@ -593,21 +594,39 @@ func exportData(args []string) error {
 	if *out == "-" {
 		writer = os.Stdout
 	} else {
-		dir := filepath.Dir(*out)
-		writer, err = os.CreateTemp(dir, "."+filepath.Base(*out)+".tmp-*")
+		destination, err := exportDestinationPath(*out)
+		if err != nil {
+			return err
+		}
+		rules := exportPathRules{}
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
+		dir := filepath.Dir(destination)
+		writer, err = os.CreateTemp(dir, exportTempPattern)
 		if err != nil {
 			return err
 		}
 		tmpName := writer.Name()
 		defer os.Remove(tmpName)
+		defer writer.Close()
+		rules, err = exportDirectoryRules(writer)
+		if err != nil {
+			return err
+		}
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
 		if err := st.ExportJSON(context.Background(), writer); err != nil {
-			writer.Close()
 			return err
 		}
 		if err := writer.Close(); err != nil {
 			return err
 		}
-		return os.Rename(tmpName, *out)
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
+		return os.Rename(tmpName, destination)
 	}
 	return st.ExportJSON(context.Background(), writer)
 }

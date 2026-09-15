@@ -30,12 +30,17 @@ type Store struct {
 	sequenceMu sync.Mutex
 }
 
-func Open(dbURL string) (*Store, error) {
+// DatabasePath resolves the filesystem path used by Open.
+func DatabasePath(dbURL string) (string, error) {
 	path := strings.TrimPrefix(dbURL, "sqlite://")
 	if path == "" || path == dbURL {
 		path = dbURL
 	}
-	absolutePath, err := filepath.Abs(path)
+	return filepath.Abs(path)
+}
+
+func Open(dbURL string) (*Store, error) {
+	absolutePath, err := DatabasePath(dbURL)
 	if err != nil {
 		return nil, err
 	}

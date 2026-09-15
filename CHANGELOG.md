@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prevent JSON exports from overwriting their source SQLite database or its journal files, including paths reached through filesystem aliases.
+- Avoid PostgreSQL test fixture collisions when parallel tests start within the same clock tick.
 - Fixed account settings opening integrations in the wrong workspace and leaving the mobile navigation drawer open beneath the dialog. Thanks @isaiahknight-va.
 - Fixed moderators being offered channel settings they cannot save, and return a clear permission error for denied channel updates in both database stores. Thanks @sercada.
 - Updated Virtua, Wrangler, transitive build dependencies, the pinned AWS CLI, and the PostgreSQL CI service while retaining the 48-hour release-age gate and supported runtime minimums.

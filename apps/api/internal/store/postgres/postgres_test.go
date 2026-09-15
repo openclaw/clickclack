@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
 	"sort"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
@@ -280,6 +280,23 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	}
 }
 
+func postgresTestSchemaName() string {
+	return newID("member_upgrade")
+}
+
+func TestPostgresSchemaNamesAreUniqueWithinClockTick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		seen := map[string]bool{}
+		for range 32 {
+			name := postgresTestSchemaName()
+			if seen[name] {
+				t.Fatalf("two fixtures chose the same schema within one clock tick: %s", name)
+			}
+			seen[name] = true
+		}
+	})
+}
+
 func newIsolatedPostgresTestStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
@@ -294,7 +311,7 @@ func newIsolatedPostgresTestStore(t *testing.T) *Store {
 		_ = adminDB.Close()
 		t.Fatal(err)
 	}
-	schema := fmt.Sprintf("member_upgrade_%d", time.Now().UnixNano())
+	schema := postgresTestSchemaName()
 	if _, err := adminDB.Exec(`CREATE SCHEMA ` + schema); err != nil {
 		_ = adminDB.Close()
 		t.Fatal(err)

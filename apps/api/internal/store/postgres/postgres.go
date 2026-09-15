@@ -1167,5 +1167,8 @@ func workspaceMutationError(err error) error {
 
 func requireChannelAdminTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) error {
 	_, err := storedb.New(tx).RequireChannelAdmin(ctx, storedb.RequireChannelAdminParams{WorkspaceID: workspaceID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrWorkspaceOwnerRequired
+	}
 	return err
 }

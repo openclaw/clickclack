@@ -92,6 +92,11 @@ the nullable display, external, or sidebar fields clears that field.
 Omitted fields retain their current values, including changes committed by
 concurrent updates.
 
+Channel updates require a workspace owner or an appropriately scoped bot.
+The web app only offers channel settings to owners; other people receive
+`403 workspace owner permission required` if they call the update API directly.
+Moderators retain their workspace and member moderation controls.
+
 Channel responses include `display_title` when set. Human-facing web labels use
 it and fall back to `name`; API selectors, links, and routing continue to use
 the slug-like `name`.

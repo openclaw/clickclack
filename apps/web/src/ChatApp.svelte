@@ -66,6 +66,7 @@
   import ThreadPanel from "./components/thread/ThreadPanel.svelte";
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
+  import { canAdministerChannels } from "./lib/permissions";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { respondingAgentNames } from "./lib/agent-responding";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
@@ -257,9 +258,7 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
-  $: canManageSelectedChannel =
-    Boolean(selectedChannel) &&
-    (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator");
+  $: canManageSelectedChannel = Boolean(selectedChannel) && canAdministerChannels(selectedWorkspace?.role);
   $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);

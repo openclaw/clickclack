@@ -539,3 +539,40 @@ func TestPostgresConcurrentChannelMessages(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresChannelAdministrationRequiresOwner(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "pg-channel-admin-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: role, Email: "pg-channel-admin-" + role + "@example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, user.ID, role); err != nil {
+			t.Fatal(err)
+		}
+		archived := true
+		if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: user.ID, Archived: &archived}); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+			t.Fatalf("%s channel archive error = %v, want %v", role, err, store.ErrWorkspaceOwnerRequired)
+		}
+	}
+	archived := true
+	if updated, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: owner.ID, Archived: &archived}); err != nil || updated.ArchivedAt == nil {
+		t.Fatalf("owner archive = %#v, %v", updated, err)
+	}
+}

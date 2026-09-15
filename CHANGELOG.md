@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed moderators being offered channel settings they cannot save, and return a clear permission error for denied channel updates in both database stores. Thanks @sercada.
 - Updated Virtua, Wrangler, transitive build dependencies, the pinned AWS CLI, and the PostgreSQL CI service while retaining the 48-hour release-age gate and supported runtime minimums.
 - Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.

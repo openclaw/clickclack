@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentRole, isWorkspaceManager } from "./permissions.ts";
+import { canAdministerChannels, currentRole, isWorkspaceManager } from "./permissions.ts";
 import type { Workspace } from "./types";
 
 const workspace = (id: string, overrides: Partial<Workspace> = {}): Workspace =>
@@ -26,6 +26,15 @@ test("isWorkspaceManager is true only for owner and moderator roles", () => {
 test("isWorkspaceManager treats missing roles as non-managers", () => {
   assert.equal(isWorkspaceManager(undefined), false);
   assert.equal(isWorkspaceManager(null), false);
+});
+
+test("canAdministerChannels matches the server's owner-only rule for people", () => {
+  assert.equal(canAdministerChannels("owner"), true);
+  assert.equal(canAdministerChannels("moderator"), false);
+  assert.equal(canAdministerChannels("member"), false);
+  assert.equal(canAdministerChannels("guest"), false);
+  assert.equal(canAdministerChannels(undefined), false);
+  assert.equal(canAdministerChannels(null), false);
 });
 
 test("currentRole matches a workspace by id or by route_id", () => {

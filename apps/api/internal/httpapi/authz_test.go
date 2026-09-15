@@ -1272,3 +1272,53 @@ func newHTTPStore(t *testing.T) *sqlitestore.Store {
 	_, _ = st.CreateUser(context.Background(), store.CreateUserInput{DisplayName: "seed", Email: "seed@example.com"})
 	return st
 }
+
+func TestChannelAdministrationIsOwnerOnlyForPeople(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "channel-admin-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "/api/channels/" + channels[0].ID
+	people := map[string]string{}
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: role, Email: "channel-admin-" + role + "@example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, user.ID, role); err != nil {
+			t.Fatal(err)
+		}
+		people[role] = user.ID
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		expectStatusAsUser(t, people[role], http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":true}`), http.StatusForbidden)
+		expectStatusAsUser(t, people[role], http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"name":"renamed-by-`+role+`"}`), http.StatusForbidden)
+		if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: people[role], Name: "store-" + role}); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+			t.Fatalf("%s channel update error = %v, want %v", role, err, store.ErrWorkspaceOwnerRequired)
+		}
+	}
+	unchanged, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged[0].Name != channels[0].Name || unchanged[0].ArchivedAt != nil {
+		t.Fatalf("rejected channel updates changed the channel: %#v", unchanged[0])
+	}
+	expectStatusAsUser(t, owner.ID, http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":true}`), http.StatusOK)
+	expectStatusAsUser(t, owner.ID, http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":false}`), http.StatusOK)
+}

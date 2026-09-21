@@ -46,7 +46,11 @@ archives:
       - README.md
       - SPEC.md
       - CHANGELOG.md
-      - docs/**/*
+      # Keep offline guides and README images without development proof captures.
+      - docs/*.md
+      - docs/**/*.md
+      - docs/assets/*
+      - docs/proof/switchboard-after-chat-light.png
 
 checksum:
   name_template: "sha256sums.txt"

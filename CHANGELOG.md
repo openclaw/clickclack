@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reduce server archive downloads by omitting development proof captures, and include all offline guides and README images on every platform.
 - Prevent JSON exports from overwriting their source SQLite database or its journal files, including paths reached through filesystem aliases.
 - Avoid PostgreSQL test fixture collisions when parallel tests start within the same clock tick.
 - Fixed account settings opening integrations in the wrong workspace and leaving the mobile navigation drawer open beneath the dialog. Thanks @isaiahknight-va.

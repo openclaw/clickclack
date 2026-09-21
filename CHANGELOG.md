@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Require Foundation signing and finished-artifact verification for official Windows desktop releases; release operators must configure the approved Azure identity first. Local and PR previews remain unsigned.
 - Reduce server archive downloads by omitting development proof captures, and include all offline guides and README images on every platform.
 - Prevent JSON exports from overwriting their source SQLite database or its journal files, including paths reached through filesystem aliases.
 - Avoid PostgreSQL test fixture collisions when parallel tests start within the same clock tick.

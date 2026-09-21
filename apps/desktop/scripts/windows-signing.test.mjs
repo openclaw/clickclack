@@ -12,10 +12,10 @@ const require = createRequire(import.meta.url);
 
 test("Windows release config signs owned files and preserves preview configuration", async () => {
   const builderRequire = createRequire(require.resolve("electron-builder"));
+  const { WinPackager } = builderRequire("app-builder-lib");
   const appBuilderRequire = createRequire(builderRequire.resolve("app-builder-lib"));
   const { getConfig, validateConfiguration } = appBuilderRequire("./util/config/config");
   const { DebugLogger } = appBuilderRequire("builder-util");
-  const { WinPackager } = appBuilderRequire("./winPackager");
   const preview = await getConfig(root, "electron-builder.yml", null);
   const release = await getConfig(root, "electron-builder.windows-release.yml", null);
   await validateConfiguration(release, new DebugLogger());
@@ -51,7 +51,10 @@ test("Windows release config signs owned files and preserves preview configurati
 });
 
 test("release workflow gates Windows checksums and upload on signing verification", async () => {
-  const workflow = await readFile(path.join(repo, ".github/workflows/release.yml"), "utf8");
+  const workflow = (await readFile(path.join(repo, ".github/workflows/release.yml"), "utf8")).replaceAll(
+    "\r\n",
+    "\n",
+  );
   const windows = workflow.split("  desktop-windows:\n")[1].split("  desktop-linux:\n")[0];
   const linux = workflow.split("  desktop-linux:\n")[1].split("  verify-macos:\n")[0];
   const order = [

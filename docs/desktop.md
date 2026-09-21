@@ -164,6 +164,12 @@ runtime, notarized, stapled, and uploaded to a private draft. The release
 workflow independently verifies their checksums, bundle seals, stable bundle
 identifier, Foundation team, Gatekeeper assessment, and notarization tickets
 before publishing them alongside the Windows and Linux installers.
+Official Windows releases require the approved Foundation Azure signing
+identity and valid, timestamped signatures on the app, installer, and embedded
+uninstaller. The release job verifies both finished archives before checksums
+and upload. See [Windows signing setup](releasing.md#configure-windows-signing)
+for the required identity approval and qualification; local and PR builds remain
+unsigned.
 
 ## Icon system
 

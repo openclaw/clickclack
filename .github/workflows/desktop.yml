@@ -81,6 +81,15 @@ jobs:
       - name: Package desktop app
         run: pnpm --filter @clickclack/desktop run ${{ matrix.command }}
 
+      - name: Verify Windows release checks reject unsigned previews
+        if: matrix.command == 'dist:win'
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $vendorElevate = node -e 'const r = require("node:module").createRequire(require.resolve("electron-builder")); r("app-builder-lib/out/toolsets/windows").getNsisElevatePath().then(p => console.log(p));'
+          if ($LASTEXITCODE -ne 0) { throw "Could not resolve the pinned NSIS vendor helper." }
+          ./scripts/windows-signing.test.ps1 -UnsignedReleaseDirectory release -Version 0.0.0 -VendorElevate $vendorElevate
+
       - name: Upload unsigned preview installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

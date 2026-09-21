@@ -1,0 +1,15 @@
+# Official Windows releases only; local and PR packages use electron-builder.yml.
+extends: ./electron-builder.yml
+forceCodeSigning: true
+win:
+  # NSIS injects this upstream helper after app signing. Preserve its vendor bytes.
+  signExts:
+    - "!elevate.exe"
+  azureSignOptions:
+    publisherName: OpenClaw Foundation
+    endpoint: https://eus.codesigning.azure.net/
+    codeSigningAccountName: openclaw
+    certificateProfileName: openclaw
+    fileDigest: SHA256
+    timestampRfc3161: http://timestamp.acs.microsoft.com
+    timestampDigest: SHA256

@@ -39,6 +39,7 @@ const result = spawnSync(
     path.join(root, "scripts", "access-auth.test.mjs"),
     releaseArtifactsTest,
     macosSigningTest,
+    path.join(root, "scripts", "windows-signing.test.mjs"),
   ],
   {
     stdio: "inherit",

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Require Foundation signing and finished-artifact verification for official Windows desktop releases; release operators must configure the approved Azure identity first. Thanks @vincentkoc.
+
 ## 0.8.0 - 2026-10-16
 
 **Highlights:** Fix ten reachable Go vulnerabilities, refresh chat dependencies, and add a read-only release dry run.

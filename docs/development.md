@@ -13,7 +13,7 @@ built SPA, so a full local build runs both toolchains.
 ## Prerequisites
 
 - Go (matching `go.mod`).
-- pnpm 12.4.1, matching `packageManager` in `package.json`.
+- pnpm 12.5.1, matching `packageManager` in `package.json`.
 - TypeScript runs via stable TypeScript 7 native `tsc` from `@typescript/native` — installed
   through pnpm.
 - The OpenAPI generator has its own TypeScript 5 compiler API dependency, matching

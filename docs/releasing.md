@@ -62,12 +62,12 @@ notary profile must already be stored in the login keychain; its credentials do
 not belong in the repository.
 
 ```sh
-git tag -s v0.3.0 -m "Release v0.3.0"
+git tag -s v0.5.1 -m "Release v0.5.1"
 git push origin main
-git push origin v0.3.0
-git checkout v0.3.0
+git push origin v0.5.1
+git checkout v0.5.1
 NOTARYTOOL_KEYCHAIN_PROFILE=<approved-profile> \
-  pnpm --filter @clickclack/desktop run dist:mac:release -- v0.3.0
+  pnpm --filter @clickclack/desktop run dist:mac:release v0.5.1
 ```
 
 The command fails closed unless `HEAD` is the clean, trusted signed tag. It
@@ -77,10 +77,10 @@ leaves the verified files and `ClickClack-<version>-mac-SHA256SUMS.txt` under
 Create a private draft containing those files:
 
 ```sh
-gh release create v0.3.0 --draft --verify-tag \
-  apps/desktop/release/ClickClack-0.3.0-mac-*.dmg \
-  apps/desktop/release/ClickClack-0.3.0-mac-*.zip \
-  apps/desktop/release/ClickClack-0.3.0-mac-SHA256SUMS.txt
+gh release create v0.5.1 --draft --verify-tag \
+  apps/desktop/release/ClickClack-0.5.1-mac-*.dmg \
+  apps/desktop/release/ClickClack-0.5.1-mac-*.zip \
+  apps/desktop/release/ClickClack-0.5.1-mac-SHA256SUMS.txt
 ```
 
 ## Publish

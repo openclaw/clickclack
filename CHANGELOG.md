@@ -2,19 +2,23 @@
 
 ## Unreleased
 
-- Updated SQLite, Markdown rendering, scrolling, Electron 43, and development tools while preserving the supported runtime minimums and dependency release-age gate.
-- Fixed the typing indicator covering and clipping the last message, and the responding indicator resizing thread replies, by reserving one steady status band above both composers. Thanks @isaiahknight-va.
-- Reduce server archive downloads by omitting development proof captures, and include all offline guides and README images on every platform.
+## 0.5.1 - 2026-09-21
+
+**Highlights:** Safer exports, reliable sign-in, and chat status indicators that stay clear of messages.
+
 - Prevent JSON exports from overwriting their source SQLite database or its journal files, including paths reached through filesystem aliases.
+- Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
+- Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
+- Fixed desktop sign-in behind Cloudflare Access One-time PIN by completing authentication in an isolated window sharing the app's session; multi-domain Access apps require Eager redirect cookie disabled. Thanks @sercada.
+- Fixed the typing indicator covering and clipping the last message, and the responding indicator resizing thread replies, by reserving one steady status band above both composers. Thanks @isaiahknight-va.
+- Updated SQLite, Markdown rendering, scrolling, Electron 43, and development tools while preserving the supported runtime minimums and dependency release-age gate.
+- Reduce server archive downloads by omitting development proof captures, and include all offline guides and README images on every platform.
 - Avoid PostgreSQL test fixture collisions when parallel tests start within the same clock tick.
 - Fixed account settings opening integrations in the wrong workspace and leaving the mobile navigation drawer open beneath the dialog. Thanks @isaiahknight-va.
 - Fixed moderators being offered channel settings they cannot save, and return a clear permission error for denied channel updates in both database stores. Thanks @sercada.
 - Updated Virtua, Wrangler, transitive build dependencies, the pinned AWS CLI, and the PostgreSQL CI service while retaining the 48-hour release-age gate and supported runtime minimums.
-- Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.
-- Fixed desktop sign-in behind Cloudflare Access One-time PIN by completing authentication in an isolated window sharing the app's session; multi-domain Access apps require Eager redirect cookie disabled. Thanks @sercada.
-- Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
 - Updated Vite, Electron 43, desktop packaging, Wrangler, pnpm and build image/tool pins while preserving Node.js 24, macOS 12 and Go 1.26.6 minimums; CI now covers web utilities on Node.js 24 and 26 and avoids duplicate Go tests and unnecessary job dependencies.
 
 ## 0.5.0 - 2026-09-11

@@ -2,10 +2,13 @@
 
 ## Unreleased
 
-- Updated Electron 43 for hidden-window startup fixes on Windows and Linux, and refreshed virtual scrolling and build tools while preserving runtime minimums and the dependency release-age gate.
+## 0.6.0 - 2026-09-24
 
-- Added Web Push notifications with a web app manifest and home-screen icons, so an installed ClickClack can alert a phone with no third-party account, opt-in per device. Thanks @isaiahknight-va.
-- Discover OIDC authorization and token endpoints for providers such as Kanidm, validate issuer metadata, and preserve explicit endpoint overrides. Thanks @AdamClaassens.
+**Highlights:** Phone alerts with per-device controls and automatic OIDC endpoint discovery.
+
+- Added opt-in phone and browser alerts over standard Web Push, with session-bound devices, key rotation, and private previews restricted to the signed-in account. Thanks @isaiahknight-va.
+- Added automatic OIDC authorization and token endpoint discovery for providers such as Kanidm, with exact issuer validation and preserved endpoint overrides. Thanks @AdamClaassens.
+- Updated Electron 43 for hidden-window startup fixes on Windows and Linux, and refreshed virtual scrolling and build tools while preserving runtime minimums and the dependency release-age gate.
 
 ## 0.5.2 - 2026-09-24
 

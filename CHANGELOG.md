@@ -4,7 +4,7 @@
 
 - Fixed the macOS menu bar icon disappearing on dark menu bars by preserving the template flag after resizing. Thanks @isaiahknight-va.
 - Restored trackpad message actions in chat and embeds, kept new reactions visible without undoing later scrolling, and prevented text selection over the iOS action sheet. Thanks @isaiahknight-va.
-- Updated Markdown parsing and virtual scrolling, SQLite runtime support, and build tooling while retaining runtime minimums and the 48-hour dependency release-age gate.
+- Fixed disappearing text after empty nested Markdown quotes and updated virtual scrolling, SQLite runtime support, and build tools while retaining runtime minimums and the dependency release-age gate.
 
 ## 0.5.1 - 2026-09-21
 

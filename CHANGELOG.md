@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.2 - 2026-09-24
+
+**Highlights:** Visible macOS menu icons, reliable trackpad actions, and Markdown text that stays intact.
+
 - Fixed the macOS menu bar icon disappearing on dark menu bars by preserving the template flag after resizing. Thanks @isaiahknight-va.
 - Restored trackpad message actions in chat and embeds, kept new reactions visible without undoing later scrolling, and prevented text selection over the iOS action sheet. Thanks @isaiahknight-va.
 - Fixed disappearing text after empty nested Markdown quotes and updated virtual scrolling, SQLite runtime support, and build tools while retaining runtime minimums and the dependency release-age gate.

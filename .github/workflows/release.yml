@@ -14,7 +14,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "12.5.1"
+  PNPM_VERSION: "12.6.0"
 
 jobs:
   release:

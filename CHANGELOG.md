@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Updated Electron 43 for hidden-window startup fixes on Windows and Linux, and refreshed virtual scrolling and build tools while preserving runtime minimums and the dependency release-age gate.
+
 - Added Web Push notifications with a web app manifest and home-screen icons, so an installed ClickClack can alert a phone with no third-party account, opt-in per device. Thanks @isaiahknight-va.
 - Discover OIDC authorization and token endpoints for providers such as Kanidm, validate issuer metadata, and preserve explicit endpoint overrides. Thanks @AdamClaassens.
 

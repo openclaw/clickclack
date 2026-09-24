@@ -49,8 +49,7 @@ type WebPushConfig struct {
 	Subject         string
 }
 
-// WebPushSubscriptionStore is the slice of the store the delivery worker
-// needs. Keeping it narrow keeps the notifier liftable.
+// WebPushSubscriptionStore is the store contract used by delivery workers.
 type WebPushSubscriptionStore interface {
 	GetPushSubscriptionDelivery(ctx context.Context, userID, endpoint, currentKeyID string) (store.PushSubscriptionTarget, error)
 	GetMessage(ctx context.Context, messageID, userID string) (store.Message, error)
@@ -66,11 +65,8 @@ type webPushSender interface {
 	Send(ctx context.Context, subscription webpush.Subscription, message webpush.Message) error
 }
 
-// webPushDelivery is one queued push. It names the device and the message
-// rather than carrying the device's keys: authority is re-read from the store
-// when a worker picks it up, because it can change while the push waits. The
-// queued payload supplies the title, tag, and route and holds no text: the
-// text is read from the message in that same re-read, as it reads at send.
+// Queue identifiers and presentation metadata; re-read device authority and
+// message text at send time.
 type webPushDelivery struct {
 	userID    string
 	endpoint  string
@@ -110,9 +106,7 @@ func NewWebPushNotifier(config WebPushConfig, subscriptions WebPushSubscriptionS
 	}, subscriptions, webPushKeyID(config.VAPIDPublicKey))
 }
 
-// webPushKeyID names the application server key a device registers under:
-// the fingerprint the server logs at startup, so a stored key id and the log
-// line agree. No key names nothing.
+// Keep stored key IDs aligned with the startup fingerprint; no key has no ID.
 func webPushKeyID(publicKey string) string {
 	if strings.TrimSpace(publicKey) == "" {
 		return ""
@@ -138,8 +132,7 @@ func newWebPushNotifier(sender webPushSender, subscriptions WebPushSubscriptionS
 	return notifier
 }
 
-// Notify queues one delivery per device. It never blocks the caller and never
-// returns a delivery result: the worker owns the outcome.
+// Notify queues deliveries without waiting for push services.
 func (n *WebPushNotifier) Notify(_ context.Context, notification PushNotification) error {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -172,9 +165,7 @@ func (n *WebPushNotifier) Notify(_ context.Context, notification PushNotificatio
 	return nil
 }
 
-// Close stops the sweep, stops accepting deliveries, and gives the queued ones
-// a bounded time to finish, so a deploy in the middle of a burst does not drop
-// the last batch.
+// Close stops new deliveries and gives the worker pool a bounded drain.
 func (n *WebPushNotifier) Close() {
 	n.mu.Lock()
 	if n.closed {
@@ -198,8 +189,7 @@ func (n *WebPushNotifier) Close() {
 	}
 }
 
-// pruneEvery sweeps once at start and then on every tick until Close. A pass
-// that runs when Close is called is canceled with it.
+// pruneEvery runs an immediate sweep, then repeats until Close.
 func (n *WebPushNotifier) pruneEvery(ctx context.Context, interval time.Duration) {
 	defer n.pruning.Done()
 	ticker := time.NewTicker(interval)
@@ -214,8 +204,6 @@ func (n *WebPushNotifier) pruneEvery(ctx context.Context, interval time.Duration
 	}
 }
 
-// prune removes the devices that can no longer receive, by the rules in
-// PrunePushSubscriptions. A failure is logged and the next tick tries again.
 func (n *WebPushNotifier) prune(parent context.Context) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -244,9 +232,7 @@ func (n *WebPushNotifier) work() {
 	}
 }
 
-// deliver sends one push and records what the push service said. It recovers
-// from a panic because the pool is detached from the request: an unrecovered
-// panic here would take the whole server down.
+// Detached workers recover panics so a notification failure cannot crash the server.
 func (n *WebPushNotifier) deliver(delivery webPushDelivery) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -293,14 +279,9 @@ func (n *WebPushNotifier) deliver(delivery webPushDelivery) {
 	}
 }
 
-// authorize re-reads everything that allowed a push when it was queued: the
-// device must still be registered to this user under a live session and the
-// key the server signs with, with its backoff elapsed; the user must still be
-// able to read the message, which must not have been deleted; and the rules
-// that chose the user when the message was posted must still choose them. It
-// answers the device's current keys and the message as it reads now, or the
-// class of reason it may not be sent. A lookup that fails for any other reason
-// also refuses: without an answer, the message text stays on the server.
+// Queued alerts can outlive permissions, sessions, or message text. Recheck
+// the device, message, and recipient policy before sending; lookup failures
+// keep private text on the server.
 func (n *WebPushNotifier) authorize(ctx context.Context, delivery webPushDelivery) (webpush.Subscription, store.Message, string) {
 	target, err := n.subscriptions.GetPushSubscriptionDelivery(ctx, delivery.userID, delivery.endpoint, n.keyID)
 	switch {
@@ -333,11 +314,8 @@ func (n *WebPushNotifier) authorize(ctx context.Context, delivery webPushDeliver
 	return webpush.Subscription{Endpoint: target.Endpoint, P256dh: target.P256dh, Auth: target.Auth}, message, ""
 }
 
-// recipientRefusal applies the recipient policy again, to the message as it
-// reads now and the preference the recipient holds now: a mention the author
-// edited out, or a channel muted while the push waited, stops it. A direct
-// message has no preference; its readers are its members, which the message
-// lookup already settled.
+// Reapply channel preferences and edited mentions. Direct-message membership
+// was already checked when the message was read.
 func (n *WebPushNotifier) recipientRefusal(ctx context.Context, userID string, message store.Message) string {
 	if message.DirectConversationID != "" {
 		return ""

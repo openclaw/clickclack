@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added roaming personal channel order, so a sidebar reordered on one device appears in the same order on every other device signed in to the same account, with localStorage still serving the pre-paint cache and the offline fallback. Clearing the order on one device clears it on the others, saves for one workspace are sent one at a time so the newest order is the one that lands, and positions past the 500-id roaming cap stay on the device that made them.
+
 ## 0.6.0 - 2026-09-24
 
 **Highlights:** Phone alerts with per-device controls and automatic OIDC endpoint discovery.

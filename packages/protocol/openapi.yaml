@@ -2065,6 +2065,8 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferencesPatch"
+        sidebar_preferences:
+          $ref: "#/components/schemas/SidebarPreferencesPatch"
     User:
       type: object
       required: [id, kind, display_name, handle, avatar_url, created_at]
@@ -2098,6 +2100,8 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferences"
+        sidebar_preferences:
+          $ref: "#/components/schemas/SidebarPreferences"
         password_enrolled:
           type: boolean
           description: Whether this account has a password on file. Reported only for the signed-in caller, on /api/me.
@@ -2935,6 +2939,33 @@ components:
         density:
           type: string
           enum: ["", comfortable, compact]
+    SidebarPreferences:
+      type: object
+      description: Current user's complete sidebar preference snapshot. Omitted properties use client defaults.
+      properties:
+        channel_order:
+          type: object
+          description: Personal channel order, keyed by workspace id. Each value lists the caller's channel ids for that workspace in sidebar order. A workspace whose order was cleared is present with an empty array, so a client can tell a clear from a workspace that never saved an order; workspaces that never saved one are absent.
+          additionalProperties:
+            type: array
+            maxItems: 500
+            items:
+              type: string
+              maxLength: 128
+    SidebarPreferencesPatch:
+      type: object
+      description: Partial sidebar update. Workspaces omitted from channel_order are unchanged, a listed workspace replaces that workspace's order, and an empty array clears it back to the server's default ordering.
+      properties:
+        channel_order:
+          type: object
+          description: Ordered channel ids keyed by workspace id. The caller must be a member of every workspace listed. Ids that are not channels of that workspace are dropped, and repeated ids keep their first position.
+          maxProperties: 100
+          additionalProperties:
+            type: array
+            maxItems: 500
+            items:
+              type: string
+              maxLength: 128
     CreateChannelRequest:
       type: object
       required: [name]

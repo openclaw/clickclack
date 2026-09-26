@@ -273,6 +273,25 @@ UPDATE user_appearance_preferences
 SET density = sqlc.arg(density)
 WHERE user_id = sqlc.arg(user_id);
 
+-- name: ListSidebarChannelOrder :many
+SELECT workspace_id, channel_ids
+FROM user_sidebar_channel_order
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY workspace_id;
+
+-- name: UpsertSidebarChannelOrder :exec
+INSERT INTO user_sidebar_channel_order (user_id, workspace_id, channel_ids, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(workspace_id), sqlc.arg(channel_ids), sqlc.arg(updated_at))
+ON CONFLICT(user_id, workspace_id) DO UPDATE SET
+  channel_ids = excluded.channel_ids,
+  updated_at = excluded.updated_at;
+
+-- name: ListWorkspaceChannelIDs :many
+SELECT id
+FROM channels
+WHERE workspace_id = sqlc.arg(workspace_id)
+ORDER BY id;
+
 -- name: UpsertChannelNotificationSettings :exec
 INSERT INTO channel_notification_settings (channel_id, user_id, preference, created_at, updated_at)
 VALUES (sqlc.arg(channel_id), sqlc.arg(user_id), sqlc.arg(preference), sqlc.arg(created_at), sqlc.arg(updated_at))

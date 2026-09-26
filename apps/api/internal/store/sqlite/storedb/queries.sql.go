@@ -4357,6 +4357,41 @@ func (q *Queries) ListReactionsForMessages(ctx context.Context, arg ListReaction
 	return items, nil
 }
 
+const listSidebarChannelOrder = `-- name: ListSidebarChannelOrder :many
+SELECT workspace_id, channel_ids
+FROM user_sidebar_channel_order
+WHERE user_id = ?1
+ORDER BY workspace_id
+`
+
+type ListSidebarChannelOrderRow struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelIds  string `json:"channel_ids"`
+}
+
+func (q *Queries) ListSidebarChannelOrder(ctx context.Context, userID string) ([]ListSidebarChannelOrderRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSidebarChannelOrder, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSidebarChannelOrderRow
+	for rows.Next() {
+		var i ListSidebarChannelOrderRow
+		if err := rows.Scan(&i.WorkspaceID, &i.ChannelIds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listThreadReplyPage = `-- name: ListThreadReplyPage :many
 WITH descending_page AS (
  SELECT candidate.id, candidate.workspace_id, candidate.channel_id, candidate.direct_conversation_id, candidate.author_id, candidate.parent_message_id, candidate.thread_root_id, candidate.topic_id, candidate.channel_seq, candidate.thread_seq, candidate.body, candidate.body_format, candidate.created_at, candidate.edited_at, candidate.deleted_at, candidate.quoted_message_id, candidate.quoted_body_snapshot, candidate.quoted_author_id, candidate.client_nonce, candidate.route_id, candidate.kind, candidate.turn_id FROM messages candidate
@@ -4883,6 +4918,36 @@ func (q *Queries) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspaceChannelIDs = `-- name: ListWorkspaceChannelIDs :many
+SELECT id
+FROM channels
+WHERE workspace_id = ?1
+ORDER BY id
+`
+
+func (q *Queries) ListWorkspaceChannelIDs(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspaceChannelIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -6699,6 +6764,31 @@ func (q *Queries) UpsertPushSubscription(ctx context.Context, arg UpsertPushSubs
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.VapidKeyID,
+	)
+	return err
+}
+
+const upsertSidebarChannelOrder = `-- name: UpsertSidebarChannelOrder :exec
+INSERT INTO user_sidebar_channel_order (user_id, workspace_id, channel_ids, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT(user_id, workspace_id) DO UPDATE SET
+  channel_ids = excluded.channel_ids,
+  updated_at = excluded.updated_at
+`
+
+type UpsertSidebarChannelOrderParams struct {
+	UserID      string `json:"user_id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelIds  string `json:"channel_ids"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+func (q *Queries) UpsertSidebarChannelOrder(ctx context.Context, arg UpsertSidebarChannelOrderParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSidebarChannelOrder,
+		arg.UserID,
+		arg.WorkspaceID,
+		arg.ChannelIds,
+		arg.UpdatedAt,
 	)
 	return err
 }

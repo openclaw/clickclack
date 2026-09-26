@@ -31,7 +31,8 @@ PATCH /api/me
 ```
 
 `PATCH /api/me` returns `{ "user": ... }`. Omitted fields are unchanged, so a
-client can update a profile field, notifications, or appearance independently.
+client can update a profile field, notifications, appearance, or sidebar
+preferences independently.
 Handles must be unique when set and must be 2-32 characters using letters,
 numbers, `_`, or `-`. Avatar URLs can be
 blank or an `http`/`https` URL. An explicit URL takes precedence over Gravatar;
@@ -69,6 +70,46 @@ Conversation display preferences can hide agent commentary or tool calls and
 independently place the current user's messages and other human or agent
 messages on the left or right. These preferences are stored on the local
 device, not in the user profile returned by `/api/me`.
+
+The personal sidebar channel order does roam with the account. `GET /api/me`
+reports it as `sidebar_preferences.channel_order`, an object keyed by workspace
+id whose values are ordered channel ids, and `PATCH /api/me` accepts the same
+shape:
+
+```http
+PATCH /api/me
+{
+  "sidebar_preferences": {
+    "channel_order": { "wsp_01hzy": ["chn_01hzz", "chn_01j00"] }
+  }
+}
+```
+
+A workspace present in the patch replaces that workspace's order, omitted
+workspaces are unchanged, and an empty array clears one workspace back to the
+server's default ordering. The caller must be a member of every workspace
+listed, or the request is rejected with `403`. Ids that are not channels of
+that workspace are dropped rather than rejected, so a channel deleted since the
+sidebar rendered cannot block a save, and a repeated id keeps its first
+position. One workspace holds at most 500 ids.
+
+A cleared workspace stays in later `GET /api/me` responses with an empty array
+rather than disappearing, so a browser holding a cached order can tell a clear
+from a workspace that never saved one and drop its copy instead of restoring
+it. The row goes away only when the membership it hangs off does.
+
+Reordering still applies on the device first and localStorage stays the
+pre-paint cache, so drag, keyboard, and touch moves take effect without waiting
+on the network and survive a server that cannot be reached. The account order
+wins on load and is written back into the cache. Because the account copy stops
+at 500 ids, it leads the cached order rather than replacing it: local positions
+past that cap stay on the device that made them. The account write is debounced
+and best effort: a failed write leaves the local order in place and the next
+reorder retries. Writes for one workspace are serialized, and an order that
+arrives while a write is in flight replaces any other waiting order, so the
+newest order is the one that lands. An account snapshot is applied once per
+loaded profile and workspace, so moving between workspaces re-reads the cache
+instead of replaying a snapshot over an order another tab has since saved.
 
 Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,

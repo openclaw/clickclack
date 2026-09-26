@@ -290,7 +290,35 @@ test("OpenClaw install snippets use supported workspace identifiers", () => {
   );
 });
 
-test("channels can be reordered accessibly and persist locally", async ({ page, browser }) => {
+async function accountChannelOrder(targetPage: Page, workspaceID: string) {
+  const response = await targetPage.request.get("/api/me");
+  if (!response.ok()) return null;
+  const { user } = (await response.json()) as {
+    user: { sidebar_preferences?: { channel_order?: Record<string, string[]> } };
+  };
+  return user.sidebar_preferences?.channel_order?.[workspaceID] ?? null;
+}
+
+async function channelIDsFor(targetPage: Page, workspaceID: string, names: string[]) {
+  const response = await targetPage.request.get(`/api/workspaces/${workspaceID}/channels`);
+  expect(response.ok()).toBe(true);
+  const { channels } = (await response.json()) as { channels: { id: string; name: string }[] };
+  const byName = new Map(channels.map((channel) => [channel.name, channel.id]));
+  return names.map((name) => byName.get(name));
+}
+
+// The order roams with the account, and the account write is debounced, so
+// anything that must observe it waits for the write before reloading or
+// opening another context.
+async function expectAccountChannelOrder(targetPage: Page, workspaceID: string, names: string[]) {
+  const expected = await channelIDsFor(targetPage, workspaceID, names);
+  await expect.poll(() => accountChannelOrder(targetPage, workspaceID)).toEqual(expected);
+}
+
+test("channels can be reordered accessibly, persist locally, and roam with the account", async ({
+  page,
+  browser,
+}) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `Channel order ${suffix}` },
@@ -329,6 +357,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await source.dragTo(target, { targetPosition: { x: 40, y: 1 } });
   await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1]]);
   await expect.poll(() => channelNames(peer)).toEqual([names[2], names[0], names[1]]);
+  await expectAccountChannelOrder(page, workspace.id, [names[2], names[0], names[1]]);
 
   await page.reload();
   await waitForAppReady(page);
@@ -357,6 +386,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1]]);
   await expect.poll(() => channelNames(peer)).toEqual([names[0], names[2], names[1]]);
   await expect(page.getByText(`Moved #${names[2]} to position 2 of 3`)).toBeAttached();
+  await expectAccountChannelOrder(page, workspace.id, [names[0], names[2], names[1]]);
 
   const addedName = `bb-order-${suffix}`;
   const addedResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
@@ -394,7 +424,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await page.evaluate((key) => localStorage.setItem(key, "not-json"), storageKey!);
   await page.reload();
   await waitForAppReady(page);
-  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
 
   await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
     key: storageKey!,
@@ -402,7 +432,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   });
   await page.reload();
   await waitForAppReady(page);
-  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[1], names[2]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
 
   await page.addInitScript(() => {
     const prefix = "clickclack:sidebar-channel-order:v1:";
@@ -419,9 +449,11 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   });
   await page.reload();
   await waitForAppReady(page);
+  await expect.poll(() => channelNames(page)).toEqual([names[0], names[2], names[1], addedName]);
   await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
   await page.keyboard.press("ArrowUp");
-  await expect.poll(() => channelNames(page)).toEqual([names[0], addedName, names[2], names[1]]);
+  await expect.poll(() => channelNames(page)).toEqual([names[2], names[0], names[1], addedName]);
+  await expectAccountChannelOrder(page, workspace.id, [names[2], names[0], names[1], addedName]);
 
   await peer.close();
 
@@ -436,7 +468,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
   await waitForAppReady(mobilePage);
   await expect
     .poll(() => channelNames(mobilePage))
-    .toEqual([names[0], addedName, names[1], names[2]]);
+    .toEqual([names[2], names[0], names[1], addedName]);
   const mobileNavigationToggle = mobilePage.getByRole("button", { name: "Toggle navigation" });
   await mobileNavigationToggle.click();
   await expect(mobileNavigationToggle).toHaveAttribute("aria-expanded", "true");
@@ -449,13 +481,19 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
     .click();
   await expect
     .poll(() => channelNames(mobilePage))
-    .toEqual([names[0], names[1], addedName, names[2]]);
+    .toEqual([names[2], names[1], names[0], addedName]);
+  await expectAccountChannelOrder(mobilePage, workspace.id, [
+    names[2],
+    names[1],
+    names[0],
+    addedName,
+  ]);
   await mobilePage.reload();
   await waitForAppReady(mobilePage);
   await mobilePage.getByRole("button", { name: "Toggle navigation" }).click();
   await expect
     .poll(() => channelNames(mobilePage))
-    .toEqual([names[0], names[1], addedName, names[2]]);
+    .toEqual([names[2], names[1], names[0], addedName]);
   await mobileContext.close();
 });
 

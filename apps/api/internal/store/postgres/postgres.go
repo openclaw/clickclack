@@ -283,6 +283,13 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 			return store.CurrentUserState{}, err
 		}
 	}
+	var sidebarPatch store.SidebarPreferencesPatch
+	if input.SidebarPreferences != nil {
+		sidebarPatch, err = store.NormalizeSidebarPreferencesPatch(*input.SidebarPreferences)
+		if err != nil {
+			return store.CurrentUserState{}, err
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.CurrentUserState{}, err
@@ -353,6 +360,11 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 			return store.CurrentUserState{}, err
 		}
 	}
+	if input.SidebarPreferences != nil && !store.SidebarPreferencesPatchEmpty(sidebarPatch) {
+		if err := updateSidebarPreferences(ctx, qtx, input.UserID, sidebarPatch, now()); err != nil {
+			return store.CurrentUserState{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return store.CurrentUserState{}, err
 	}
@@ -364,7 +376,11 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 	if err != nil {
 		return store.CurrentUserState{}, err
 	}
-	return store.CurrentUserState{User: user, AppearancePreferences: preferences}, nil
+	sidebar, err := s.GetSidebarPreferences(ctx, input.UserID)
+	if err != nil {
+		return store.CurrentUserState{}, err
+	}
+	return store.CurrentUserState{User: user, AppearancePreferences: preferences, SidebarPreferences: sidebar}, nil
 }
 
 func profileUpdateError(err error) error {

@@ -1,6 +1,14 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { apiResourceURL } from "../../lib/api";
+  import { api, apiResourceURL } from "../../lib/api";
+  import {
+    channelOrderWorkspaceFromStorageKey,
+    flushChannelOrderPatches,
+    markChannelOrderLocallyNewer,
+    parseChannelOrder,
+    resolveChannelOrder,
+    storeChannelOrder,
+  } from "../../lib/channel-order";
   import { avatarHue, directConversationForUser, handleLabel } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
@@ -101,58 +109,39 @@
     sections = loadSections(workspaceID);
   });
 
-  const CHANNEL_ORDER_STORAGE_PREFIX = "clickclack:sidebar-channel-order:v1:";
-  const MAX_CHANNEL_ORDER_STORAGE_LENGTH = 1_000_000;
-  const MAX_CHANNEL_ORDER_IDS = 10_000;
-  const MAX_CHANNEL_ID_LENGTH = 128;
   let channelOrder = $state<string[]>([]);
-
-  function channelOrderStorageKey(workspaceID: string, userID: string): string {
-    return `${CHANNEL_ORDER_STORAGE_PREFIX}${userID}:${workspaceID}`;
-  }
-
-  function parseChannelOrder(raw: string | null): string[] {
-    if (!raw || raw.length > MAX_CHANNEL_ORDER_STORAGE_LENGTH) return [];
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return Array.isArray(parsed) &&
-        parsed.length <= MAX_CHANNEL_ORDER_IDS &&
-        parsed.every((id) => typeof id === "string" && id.length <= MAX_CHANNEL_ID_LENGTH)
-        ? [...new Set(parsed)]
-        : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function loadChannelOrder(workspaceID: string, userID: string): string[] {
-    if (!workspaceID || !userID) return [];
-    try {
-      return parseChannelOrder(window.localStorage.getItem(channelOrderStorageKey(workspaceID, userID)));
-    } catch {
-      return [];
-    }
-  }
 
   function saveChannelOrder(order: string[]) {
     channelOrder = order;
     if (!workspaceID || !currentUser?.id) return;
-    try {
-      const key = channelOrderStorageKey(workspaceID, currentUser.id);
-      const serialized = JSON.stringify(order);
-      if (serialized.length > MAX_CHANNEL_ORDER_STORAGE_LENGTH) {
-        window.localStorage.removeItem(key);
-        return;
-      }
-      window.localStorage.setItem(key, serialized);
-    } catch {
-      // Storage is an enhancement; reordering still works for this session.
-    }
+    storeChannelOrder(workspaceID, currentUser.id, order, api);
   }
 
+  // A reorder made just before the page goes away would otherwise lose its
+  // debounced account write, so send it while the document is still alive.
+  $effect(() => {
+    const flush = () => flushChannelOrderPatches(api);
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  });
+
+  // Another tab of this browser wrote a channel order. That cache is newer than
+  // the account snapshot this tab booted with, so the workspace is marked
+  // before anything re-resolves it, even when the write is for a workspace this
+  // tab is not showing.
   function handleStorage(event: StorageEvent) {
     if (!workspaceID || !currentUser?.id) return;
-    if (event.key !== channelOrderStorageKey(workspaceID, currentUser.id)) return;
+    const changed = channelOrderWorkspaceFromStorageKey(event.key, currentUser.id);
+    if (!changed) return;
+    markChannelOrderLocallyNewer(changed, currentUser.id);
+    if (changed !== workspaceID) return;
     channelOrder = parseChannelOrder(event.newValue);
   }
 
@@ -168,7 +157,7 @@
   });
 
   $effect(() => {
-    channelOrder = loadChannelOrder(workspaceID, currentUser?.id || "");
+    channelOrder = resolveChannelOrder(currentUser, workspaceID);
   });
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {

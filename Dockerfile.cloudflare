@@ -4,7 +4,9 @@ ENV CLICKCLACK_WEB_VERSION=$CLICKCLACK_WEB_VERSION
 WORKDIR /src
 RUN npm install -g pnpm@12.7.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/desktop/package.json apps/desktop/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY examples/bot-ts/package.json examples/bot-ts/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/sdk-ts/package.json packages/sdk-ts/package.json
 RUN pnpm install --frozen-lockfile

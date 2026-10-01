@@ -115,3 +115,18 @@ attached and the draft is published.
 GoReleaser reuses the existing draft and replaces matching server assets, while
 the desktop uploader replaces matching Windows and Linux assets. This makes a
 failed draft release safe to retry without making published releases mutable.
+
+If local packaging produced all archives but a verifier defect stopped completion,
+preserve those candidates and fix the verifier through normal review and CI on
+protected `main`. Verify the preserved artifacts with that trusted checkout,
+then finish the desktop checksum manifest before creating the draft:
+
+```sh
+"$VERIFY_TREE/apps/desktop/scripts/verify-macos-release.sh" v0.7.0 "$RELEASE_DIR"
+node "$VERIFY_TREE/apps/desktop/scripts/release-artifacts.mjs" mac 0.7.0 "$RELEASE_DIR"
+```
+
+`VERIFY_TREE` is the clean, reviewed `main` checkout and `RELEASE_DIR` contains the
+artifacts already built from the signed tag. Every signature, notarization, version,
+and architecture check must pass. The signed tag and built code remain unchanged;
+the workflow independently repeats verification from protected `main`.

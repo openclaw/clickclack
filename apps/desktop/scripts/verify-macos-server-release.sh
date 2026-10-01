@@ -31,8 +31,10 @@ PY
   test "$(lipo -archs "$binary")" = "$expected_arch"
   codesign --verify --strict -R="$requirement" --verbose=2 "$binary"
   codesign --verify --strict --check-notarization -R=notarized --verbose=2 "$binary"
-  codesign -dvvv "$binary" 2>&1 | grep -Eq '^CodeDirectory .*flags=.*\([^)]*runtime[^)]*\)'
-  minos=$(otool -l "$binary" | awk '/LC_BUILD_VERSION/{build=1;next} build && /minos/{print $2;exit}')
+  signature=$(codesign -dvvv "$binary" 2>&1)
+  grep -Eq '^CodeDirectory .*flags=.*\([^)]*runtime[^)]*\)' <<<"$signature"
+  load_commands=$(otool -l "$binary")
+  minos=$(awk '/LC_BUILD_VERSION/{build=1;next} build && /minos/{print $2;exit}' <<<"$load_commands")
   test "$minos" = 13.0
   if [[ "$(uname -m)" = "$expected_arch" ]]; then
     "$binary" version | grep -F "$version"

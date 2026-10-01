@@ -42,10 +42,10 @@
     "@types/node": "^26.6.3",
     "@typescript/native": "npm:typescript@^7.0.2",
     "fflate": "^0.8.3",
-    "oxfmt": "^0.70.0",
-    "oxlint": "^1.85.0",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "wrangler": "4.142.0"
+    "wrangler": "4.143.0"
   },
   "engines": {
     "node": ">=24"

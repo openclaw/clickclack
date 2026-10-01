@@ -2,10 +2,14 @@
 
 ## Unreleased
 
-- Personal sidebar channel order now follows your account across browsers and devices, with the existing local cache retained for offline use. Thanks @isaiahknight-va.
+## 0.7.0 - 2026-09-30
 
-- Corrected the source-install pnpm version and quickstart caller-authentication count to match the current toolchain and authentication guide. Thanks @KrasimirKralev.
+**Highlights:** Personal channel order follows your account across browsers and devices.
+
+- Personal sidebar channel order now follows your account across browsers and devices, with the existing local cache retained for offline use. Thanks @isaiahknight-va.
+- Updated SQLite, virtual scrolling, Wrangler, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Updated DOMPurify, Vite, Electron 43, desktop packaging, Wrangler, Node.js types, and pnpm while preserving runtime minimums and the 48-hour dependency release-age gate; Docker builds now include every workspace manifest for frozen-lockfile validation.
+- Corrected the source-install pnpm version and quickstart caller-authentication count to match the current toolchain and authentication guide. Thanks @KrasimirKralev.
 
 ## 0.6.0 - 2026-09-24
 

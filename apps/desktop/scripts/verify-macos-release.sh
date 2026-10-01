@@ -63,4 +63,6 @@ for arch in arm64 x64; do
   mounted_volume=""
 done
 
+"$root/scripts/verify-macos-server-release.sh" "$tag" "$release_dir"
+
 echo "verified notarized ClickClack $version macOS ZIP and DMG artifacts"

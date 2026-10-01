@@ -198,7 +198,10 @@ jobs:
             --dir macos-release \
             --pattern "ClickClack-${version}-mac-*.dmg" \
             --pattern "ClickClack-${version}-mac-*.zip" \
-            --pattern "ClickClack-${version}-mac-SHA256SUMS.txt"
+            --pattern "ClickClack-${version}-mac-SHA256SUMS.txt" \
+            --pattern "clickclack_${version}_darwin_*.tar.gz" \
+            --pattern "ClickClack-${version}-mac-server-SHA256SUMS.txt" \
+            --pattern "ClickClack-${version}-mac-server-notarization.json"
 
       - name: Verify checksums and sealed apps
         env:

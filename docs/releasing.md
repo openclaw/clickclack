@@ -22,14 +22,18 @@ The snapshot build runs `pnpm build`, then cross-compiles `clickclack` for:
 
 - `linux/amd64`
 - `linux/arm64`
-- `darwin/amd64`
-- `darwin/arm64`
 - `windows/amd64`
 - `windows/arm64`
 - `freebsd/amd64`
 - `freebsd/arm64`
 
 It also emits Linux `.deb` and `.rpm` packages and `sha256sums.txt`.
+
+The `darwin/amd64` and `darwin/arm64` server archives are built and signed by
+the local macOS release command below. GoReleaser excludes them so it cannot
+replace signed artifacts with unsigned builds. Server binaries require macOS
+13 (the pinned Go toolchain's minimum); the Electron desktop app retains its
+macOS 12 minimum.
 
 The same workflow builds Windows and Linux desktop installers on their matching
 GitHub runner. The desktop app version comes from the release tag, and each
@@ -48,6 +52,14 @@ finished archive and requires the stable `chat.clickclack.desktop` designated
 requirement, Foundation team, sealed resources, Gatekeeper acceptance, and a
 valid notarization ticket.
 
+The same command builds both macOS server architectures with at most two Go
+compiler jobs, signs them with the Foundation identity and hardened runtime,
+and submits each archive to Apple. Bare executables cannot be stapled, so both
+the local verifier and the clean runner use `codesign --check-notarization -R=notarized` to
+require an online notarization ticket. The server checksum manifest and JSON
+submission receipts accompany the archives. All macOS signing must run inside
+the shared `mac-release codesign-run` helper's managed keychain lock.
+
 GoReleaser leaves the GitHub Release as a draft after uploading the server
 artifacts. The publish job downloads the Windows and Linux runner outputs,
 verifies every SHA-256 manifest, and attaches them to that draft. A separate
@@ -62,12 +74,13 @@ notary profile must already be stored in the login keychain; its credentials do
 not belong in the repository.
 
 ```sh
-git tag -s v0.6.0 -m "Release v0.6.0"
+git tag -s v0.7.0 -m "Release v0.7.0"
 git push origin main
-git push origin v0.6.0
-git checkout v0.6.0
+git push origin v0.7.0
+git checkout v0.7.0
 NOTARYTOOL_KEYCHAIN_PROFILE=<approved-profile> \
-  pnpm --filter @clickclack/desktop run dist:mac:release v0.6.0
+  mac-release codesign-run -- \
+  pnpm --filter @clickclack/desktop run dist:mac:release v0.7.0
 ```
 
 The command fails closed unless `HEAD` is the clean, trusted signed tag. It
@@ -77,10 +90,13 @@ leaves the verified files and `ClickClack-<version>-mac-SHA256SUMS.txt` under
 Create a private draft containing those files:
 
 ```sh
-gh release create v0.6.0 --draft --verify-tag \
-  apps/desktop/release/ClickClack-0.6.0-mac-*.dmg \
-  apps/desktop/release/ClickClack-0.6.0-mac-*.zip \
-  apps/desktop/release/ClickClack-0.6.0-mac-SHA256SUMS.txt
+gh release create v0.7.0 --draft --verify-tag \
+  apps/desktop/release/ClickClack-0.7.0-mac-*.dmg \
+  apps/desktop/release/ClickClack-0.7.0-mac-*.zip \
+  apps/desktop/release/ClickClack-0.7.0-mac-SHA256SUMS.txt \
+  apps/desktop/release/clickclack_0.7.0_darwin_*.tar.gz \
+  apps/desktop/release/ClickClack-0.7.0-mac-server-SHA256SUMS.txt \
+  apps/desktop/release/ClickClack-0.7.0-mac-server-notarization.json
 ```
 
 ## Publish

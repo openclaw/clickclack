@@ -41,6 +41,8 @@ version=${tag#v}
 cd "$root"
 pnpm build
 rm -rf release
+mkdir -p release
+node "$root/scripts/package-macos-server.mjs" "$tag" "$root/release"
 CLICKCLACK_OFFICIAL_MACOS_RELEASE=1 \
   CSC_IDENTITY_AUTO_DISCOVERY=true \
   CSC_NAME="$identity_qualifier" \

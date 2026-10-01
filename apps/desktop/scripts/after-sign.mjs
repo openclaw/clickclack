@@ -61,6 +61,29 @@ async function verifyApp(script, appPath, requireNotarized = false) {
   await run("bash", [script, ...args]);
 }
 
+export async function notarizeArchive(submission, options = {}) {
+  const profile = options.profile || process.env.NOTARYTOOL_KEYCHAIN_PROFILE;
+  if (!profile) throw new Error("official macOS packaging requires NOTARYTOOL_KEYCHAIN_PROFILE");
+  const delay =
+    options.delay ||
+    ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const result = await submitNotarizationWithRetry(async () => {
+    const { stdout } = await run("xcrun", [
+      "notarytool",
+      "submit",
+      submission,
+      "--keychain-profile",
+      profile,
+      "--no-s3-acceleration",
+      "--wait",
+      "--output-format",
+      "json",
+    ]);
+    return stdout;
+  }, delay);
+  return assertAcceptedNotarization(result);
+}
+
 export async function notarizeApp(appPath, options = {}) {
   const profile = options.profile || process.env.NOTARYTOOL_KEYCHAIN_PROFILE;
   if (!profile) {
@@ -75,30 +98,11 @@ export async function notarizeApp(appPath, options = {}) {
   const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "verify-macos-app.sh");
   const workDirectory = await mkdtemp(path.join(os.tmpdir(), "clickclack-notary."));
   const submission = path.join(workDirectory, "ClickClack.zip");
-  const delay =
-    options.delay ||
-    ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-
   try {
     await verifyApp(script, appPath);
     await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, submission]);
 
-    const submit = async () => {
-      const { stdout } = await run("xcrun", [
-        "notarytool",
-        "submit",
-        submission,
-        "--keychain-profile",
-        profile,
-        "--no-s3-acceleration",
-        "--wait",
-        "--output-format",
-        "json",
-      ]);
-      return stdout;
-    };
-    const result = await submitNotarizationWithRetry(submit, delay);
-    assertAcceptedNotarization(result);
+    await notarizeArchive(submission, { profile, delay: options.delay });
 
     await run("xcrun", ["stapler", "staple", appPath]);
     await verifyApp(script, appPath, true);

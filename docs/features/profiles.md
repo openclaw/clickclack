@@ -100,3 +100,6 @@ dropped and duplicates keep their first position. Up to 100 workspaces and 500
 channel IDs per workspace can be saved per request. Larger local orders retain
 their tail on the browser where they were arranged. Appearance and sidebar
 preferences update independently.
+
+SQLite and PostgreSQL JSON exports include the saved per-workspace channel order,
+including explicit clears, in `user_sidebar_channel_order`.

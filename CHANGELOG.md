@@ -7,6 +7,7 @@
 **Highlights:** Personal channel order follows your account across browsers and devices.
 
 - Personal sidebar channel order now follows your account across browsers and devices, with the existing local cache retained for offline use. Thanks @isaiahknight-va.
+- Preserve saved sidebar channel order, including explicit clears, in SQLite and PostgreSQL JSON exports.
 - Signed and notarized macOS server archives with the Foundation Developer ID, alongside the desktop installers, and verify their notarization tickets on a clean runner before publication.
 - Allow macOS release automation to select its credential keychain explicitly on headless hosts.
 - Updated SQLite, virtual scrolling, Wrangler, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.

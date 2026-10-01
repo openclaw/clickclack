@@ -1,9 +1,12 @@
 package storetest
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -12,7 +15,10 @@ import (
 )
 
 // SidebarPreferences exercises the same persistence contract on both databases.
-func SidebarPreferences(t *testing.T, st store.Store) {
+func SidebarPreferences(t *testing.T, st interface {
+	store.Store
+	ExportJSON(context.Context, io.Writer) error
+}) {
 	t.Helper()
 	ctx := context.Background()
 	suffix := fmt.Sprint(time.Now().UnixNano())
@@ -81,4 +87,32 @@ func SidebarPreferences(t *testing.T, st store.Store) {
 		t.Fatal("accepted oversized order")
 	}
 	check()
+	var output bytes.Buffer
+	if err := st.ExportJSON(ctx, &output); err != nil {
+		t.Fatal(err)
+	}
+	var snapshot struct {
+		Orders []struct {
+			UserID      string `json:"user_id"`
+			WorkspaceID string `json:"workspace_id"`
+			ChannelIDs  string `json:"channel_ids"`
+		} `json:"user_sidebar_channel_order"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	exported := map[string][]string{}
+	for _, row := range snapshot.Orders {
+		if row.UserID != user.ID {
+			continue
+		}
+		var order []string
+		if err := json.Unmarshal([]byte(row.ChannelIDs), &order); err != nil {
+			t.Fatal(err)
+		}
+		exported[row.WorkspaceID] = order
+	}
+	if !reflect.DeepEqual(exported, want) {
+		t.Fatalf("exported sidebar preferences: %v; want: %v", exported, want)
+	}
 }

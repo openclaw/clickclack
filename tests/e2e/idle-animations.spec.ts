@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { BotToken } from "../../apps/web/src/lib/bots";
 import type { Channel, DirectConversation, User, Workspace } from "../../apps/web/src/lib/types";
 import { waitForAppReady } from "./app-ready";
+import { settleScrollFrames } from "./message-frames";
 
 // A running animation produces a frame every display refresh, so an idle
 // conversation must have none, including on elements that are mounted but hidden.
@@ -45,8 +46,11 @@ async function fixture(page: Page): Promise<Fixture> {
   return { workspace, channel, dm, botToken: bot_token.token };
 }
 
-async function post(page: Page, path: string, body: string) {
-  const response = await page.request.post(path, { data: { body } });
+async function post(page: Page, path: string, body: string, token?: string) {
+  const response = await page.request.post(path, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    data: { body },
+  });
   expect(response.ok()).toBe(true);
 }
 
@@ -109,4 +113,43 @@ test("typing dots run only while someone is typing", async ({ page }) => {
   await publishTyping(page, s, "typing.stopped");
   await expect(indicator).not.toHaveClass(/\bvisible\b/);
   await expect.poll(() => runningAnimations(page)).toEqual([]);
+});
+
+test("the unread jump bar pulses three times, then rests", async ({ page }) => {
+  const s = await fixture(page);
+  for (let i = 0; i < 40; i++) {
+    await post(
+      page,
+      `/api/channels/${s.channel.id}/messages`,
+      `read history ${i} ${"enough text to scroll ".repeat(4)}`,
+    );
+  }
+  await page.goto(`/app/${s.workspace.route_id}/${s.channel.route_id}`);
+  await waitForAppReady(page);
+  await expect(page.locator(".markdown").filter({ hasText: "read history 39" })).toBeVisible();
+  await settleScrollFrames(page);
+  const scrollport = page.locator(".messages-scroll");
+  await scrollport.evaluate((el) => {
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await settleScrollFrames(page);
+  // Farther from the bottom than the live-edge tolerance, so a new message counts as unread.
+  expect(
+    await scrollport.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+  ).toBeGreaterThan(200);
+
+  await post(
+    page,
+    `/api/channels/${s.channel.id}/messages`,
+    "unread while scrolled up",
+    s.botToken,
+  );
+  await expect(page.locator(".unread-bar__jump")).toBeVisible();
+  const onJump = async () =>
+    (await runningAnimations(page)).filter((name) => name.includes(".unread-bar__jump"));
+  expect(await onJump()).toEqual(["unread-bar-pulse on .unread-bar__jump::before"]);
+  // Three 1.8 s pulses, then the dot stays still while the bar remains.
+  await expect.poll(onJump, { timeout: 8_000 }).toEqual([]);
+  await expect(page.locator(".unread-bar__jump")).toBeVisible();
 });

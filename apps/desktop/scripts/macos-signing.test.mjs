@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -62,6 +64,45 @@ test("notarization accepts only Apple's accepted response shape", () => {
     /invalid submission id/,
   );
 });
+
+test(
+  "notarization forwards a credential-keychain path as one argument",
+  { skip: process.platform === "win32" },
+  async () => {
+    const scratch = await mkdtemp(path.join(os.tmpdir(), "clickclack-notary-test-"));
+    try {
+      const argsFile = path.join(scratch, "args.txt");
+      await writeFile(
+        path.join(scratch, "xcrun"),
+        `#!/bin/sh\nprintf '%s\\n' "$@" > "$NOTARY_TEST_ARGS"\nprintf '%s\\n' '${accepted}'\n`,
+        { mode: 0o755 },
+      );
+      const keychainPath = path.join(scratch, "release credentials.keychain-db");
+      const moduleURL = new URL("./after-sign.mjs", import.meta.url).href;
+      execFileSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import { notarizeArchive } from ${JSON.stringify(moduleURL)}; await notarizeArchive("synthetic.zip");`,
+        ],
+        {
+          env: {
+            PATH: scratch,
+            NOTARY_TEST_ARGS: argsFile,
+            NOTARYTOOL_KEYCHAIN_PROFILE: "synthetic-profile",
+            NOTARYTOOL_KEYCHAIN_PATH: keychainPath,
+          },
+        },
+      );
+      const args = (await readFile(argsFile, "utf8")).trim().split("\n");
+      assert.equal(args[args.indexOf("--keychain") + 1], keychainPath);
+      assert.equal(args[args.indexOf("--keychain-profile") + 1], "synthetic-profile");
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  },
+);
 
 test("macOS release policy is fail-closed and Foundation-scoped", async () => {
   const [config, packageScript, verifier, workflow] = await Promise.all([

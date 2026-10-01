@@ -63,6 +63,7 @@ async function verifyApp(script, appPath, requireNotarized = false) {
 
 export async function notarizeArchive(submission, options = {}) {
   const profile = options.profile || process.env.NOTARYTOOL_KEYCHAIN_PROFILE;
+  const keychainPath = options.keychainPath || process.env.NOTARYTOOL_KEYCHAIN_PATH;
   if (!profile) throw new Error("official macOS packaging requires NOTARYTOOL_KEYCHAIN_PROFILE");
   const delay =
     options.delay ||
@@ -74,6 +75,7 @@ export async function notarizeArchive(submission, options = {}) {
       submission,
       "--keychain-profile",
       profile,
+      ...(keychainPath ? ["--keychain", keychainPath] : []),
       "--no-s3-acceleration",
       "--wait",
       "--output-format",
@@ -102,7 +104,11 @@ export async function notarizeApp(appPath, options = {}) {
     await verifyApp(script, appPath);
     await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, submission]);
 
-    await notarizeArchive(submission, { profile, delay: options.delay });
+    await notarizeArchive(submission, {
+      profile,
+      delay: options.delay,
+      keychainPath: options.keychainPath,
+    });
 
     await run("xcrun", ["stapler", "staple", appPath]);
     await verifyApp(script, appPath, true);

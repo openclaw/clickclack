@@ -8,6 +8,7 @@
 
 - Personal sidebar channel order now follows your account across browsers and devices, with the existing local cache retained for offline use. Thanks @isaiahknight-va.
 - Signed and notarized macOS server archives with the Foundation Developer ID, alongside the desktop installers, and verify their notarization tickets on a clean runner before publication.
+- Allow macOS release automation to select its credential keychain explicitly on headless hosts.
 - Updated SQLite, virtual scrolling, Wrangler, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Updated DOMPurify, Vite, Electron 43, desktop packaging, Wrangler, Node.js types, and pnpm while preserving runtime minimums and the 48-hour dependency release-age gate; Docker builds now include every workspace manifest for frozen-lockfile validation.
 - Corrected the source-install pnpm version and quickstart caller-authentication count to match the current toolchain and authentication guide. Thanks @KrasimirKralev.

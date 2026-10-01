@@ -70,8 +70,9 @@ is published only after all of those jobs pass.
 ## Build the macOS release candidates
 
 Create and verify the signed tag, then check it out in a clean repository. The
-notary profile must already be stored in the login keychain; its credentials do
-not belong in the repository.
+notary profile must already be stored in an accessible keychain; its credentials
+do not belong in the repository. Set `NOTARYTOOL_KEYCHAIN_PATH` to select a managed
+release keychain explicitly on a headless host with a locked login keychain.
 
 ```sh
 git tag -s v0.7.0 -m "Release v0.7.0"

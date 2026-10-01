@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed idle channels and DMs redrawing on every display refresh by stopping the hidden typing indicator's animation. Thanks @isaiahknight-va.
+
 ## 0.7.0 - 2026-09-30
 
 **Highlights:** Personal channel order follows your account across browsers and devices.

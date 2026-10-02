@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed long workspace and account names pushing the sidebar's content past its edge and hiding the create channel, direct message, and collapse buttons; the names now truncate with an ellipsis. Thanks @NOLXII for the report.
+
 ## 0.7.0 - 2026-09-30
 
 **Highlights:** Personal channel order follows your account across browsers and devices.

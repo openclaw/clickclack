@@ -204,6 +204,8 @@
 
 .sidebar {
   display: grid;
+  /* Without a zero minimum the column grows to fit a long workspace or account name. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--panel);
   border-right: 1px solid var(--line);

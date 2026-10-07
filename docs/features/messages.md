@@ -71,6 +71,11 @@ Loading older history preserves the visible message's position, including when
 adjacent messages are grouped by author. The full app and embedded channel view
 share this behavior.
 
+While reading older history, the unread jump bar pulses three times when it
+appears, then rests while keeping the unread count visible. Typing dots animate
+only while someone is typing or an agent is responding; idle conversations keep
+the reserved status area without an ongoing dot animation.
+
 The web message menu exposes **Copy link** for channel roots. It builds the
 absolute URL from the configured public frontend origin and the canonical
 `/app/{workspace_route_id}/{message_route_id}` path. If clipboard access is

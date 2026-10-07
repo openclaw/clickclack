@@ -211,7 +211,7 @@
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: unread-bar-pulse 1.8s ease-out infinite;
+  animation: unread-bar-pulse 1.8s ease-out 3;
 }
 
 @keyframes unread-bar-pulse {
@@ -421,6 +421,11 @@
   background: currentColor;
   opacity: 0.55;
   animation: typing-dot 1.1s ease-in-out infinite;
+}
+
+/* The indicator stays mounted while hidden; idle dots would still render every frame. */
+.typing-indicator:not(.visible) .typing-indicator__dots i {
+  animation: none;
 }
 
 .typing-indicator__dots i:nth-child(2) {

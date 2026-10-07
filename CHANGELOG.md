@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stop hidden typing indicators from animating so idle channels and DMs avoid continuous redraws. Thanks @isaiahknight-va.
+- Limit the unread bar’s dot to three pulses, keeping the unread cue visible without continuous repainting. Thanks @isaiahknight-va.
+
 - Keep sidebar creation and collapse controls reachable with long workspace or account names by constraining the grid column. Thanks @isaiahknight-va and @NOLXII for the report.
 
 - Prevent a slow browser push endpoint from occupying every delivery worker, while keeping one shared limit of 1,024 pending alerts and normal success bookkeeping. Thanks @SebTardif.

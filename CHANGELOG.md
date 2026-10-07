@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update SQLite, PDF.js, virtual scrolling, Vite, Electron 43, Wrangler, and Node.js types while preserving runtime minimums and the 48-hour dependency release-age gate.
+
 - Stop hidden typing indicators from animating so idle channels and DMs avoid continuous redraws. Thanks @isaiahknight-va.
 - Limit the unread bar’s dot to three pulses, keeping the unread cue visible without continuous repainting. Thanks @isaiahknight-va.
 

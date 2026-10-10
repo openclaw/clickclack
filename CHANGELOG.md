@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update Svelte, Markdown rendering, virtual scrolling, Vite, Electron 43, Playwright, and Go and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
+
 - Update SQLite, PDF.js, virtual scrolling, Vite, Electron 43, Wrangler, and Node.js types while preserving runtime minimums and the 48-hour dependency release-age gate.
 
 - Stop hidden typing indicators from animating so idle channels and DMs avoid continuous redraws. Thanks @isaiahknight-va.

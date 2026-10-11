@@ -2,18 +2,17 @@
 
 ## Unreleased
 
-- Update Svelte, Markdown rendering, virtual scrolling, Vite, Electron 43, Playwright, and Go and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
+## 0.7.1 - 2026-10-11
 
-- Update SQLite, PDF.js, virtual scrolling, Vite, Electron 43, Wrangler, and Node.js types while preserving runtime minimums and the 48-hour dependency release-age gate.
+**Highlights:** Quieter idle chats, reachable sidebar controls, and more reliable alerts and sign-in.
 
 - Stop hidden typing indicators from animating so idle channels and DMs avoid continuous redraws. Thanks @isaiahknight-va.
 - Limit the unread bar’s dot to three pulses, keeping the unread cue visible without continuous repainting. Thanks @isaiahknight-va.
-
 - Keep sidebar creation and collapse controls reachable with long workspace or account names by constraining the grid column. Thanks @isaiahknight-va and @NOLXII for the report.
-
 - Prevent a slow browser push endpoint from occupying every delivery worker, while keeping one shared limit of 1,024 pending alerts and normal success bookkeeping. Thanks @SebTardif.
-
 - Keep startup available during default OpenClaw ID discovery server errors while custom issuers still fail closed. Thanks @SebTardif.
+- Update Svelte, Markdown rendering, virtual scrolling, Vite, Electron 43, Playwright, and Go and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
+- Update SQLite, PDF.js, virtual scrolling, Vite, Electron 43, Wrangler, and Node.js types while preserving runtime minimums and the 48-hour dependency release-age gate.
 
 ## 0.7.0 - 2026-09-30
 

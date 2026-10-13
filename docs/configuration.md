@@ -48,6 +48,9 @@ hook in `cmd/clickclack/main.go`.
 | —                     | `CLICKCLACK_GITHUB_ALLOWED_ORG`  | unset       | Optional GitHub org login gate. Requires `read:org` scope. |
 | —                     | `CLICKCLACK_GITHUB_MODERATOR_ORG`| unset       | Optional GitHub org whose members become guest-workspace moderators. Requires `read:org` scope. |
 | —                     | `CLICKCLACK_PUSHOVER_API_TOKEN`  | unset       | Pushover application API token. Users still opt in with their own Pushover user key in account settings. |
+| — | `CLICKCLACK_WEBPUSH_VAPID_PUBLIC_KEY` | unset | Web Push P-256 public key; configure with the matching private key. Config key: `webpush_vapid_public_key`. |
+| — | `CLICKCLACK_WEBPUSH_VAPID_PRIVATE_KEY` | unset | Web Push private key. Keep it in the server's secret storage. Config key: `webpush_vapid_private_key`. |
+| — | `CLICKCLACK_WEBPUSH_SUBJECT` | public URL | Operator contact as a `mailto:` or HTTPS URI. Config key: `webpush_subject`. See [phone notifications](features/push-notifications.md) for setup and rotation. |
 | —                     | `CLICKCLACK_R2_ACCOUNT_ID`       | unset       | Cloudflare account ID for `r2://` uploads. |
 | —                     | `CLICKCLACK_R2_ACCESS_KEY_ID`    | unset       | R2 API token access key ID. |
 | —                     | `CLICKCLACK_R2_SECRET_ACCESS_KEY`| unset       | R2 API token secret access key. |

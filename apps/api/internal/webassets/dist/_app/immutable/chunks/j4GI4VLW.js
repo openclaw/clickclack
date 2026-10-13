@@ -1,0 +1,1 @@
+import{Ot as e}from"./BTIB_WQZ.js";e();

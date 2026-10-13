@@ -8,6 +8,7 @@
   import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
+  import { pointerMode } from "../../lib/pointer-mode.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import CopyLinkFallback from "./CopyLinkFallback.svelte";
@@ -221,9 +222,26 @@
     reactionsDisabled || !currentUserID || isPending || isFailed || reactionPending,
   );
 
+  // Reveal the optimistic chip before the request settles so later scrolling stays put.
+  function react(emoji: string) {
+    void reactionController.toggle(message, emoji);
+    void tick().then(revealReactionsBar);
+  }
+
+  // Attachments can extend below the bar; removing the last reaction leaves no bar.
+  function revealReactionsBar() {
+    const scroller = rowEl?.closest(".messages-scroll");
+    const bar = rowEl?.querySelector(".reactions-bar");
+    if (!bar || !scroller) return;
+    const target = bar.getBoundingClientRect();
+    const view = scroller.getBoundingClientRect();
+    if (target.bottom > view.bottom) scroller.scrollTop += Math.ceil(target.bottom - view.bottom);
+    else if (target.top < view.top) scroller.scrollTop -= Math.ceil(view.top - target.top);
+  }
+
   function quickReact(emoji: string) {
     if (cannotReact) return;
-    void reactionController.toggle(message, emoji);
+    react(emoji);
   }
 
   function toggleReactPicker() {
@@ -234,7 +252,7 @@
 
   function chooseToolbarReaction(emoji: string) {
     if (cannotReact) return;
-    void reactionController.toggle(message, emoji);
+    react(emoji);
     showReactPicker = false;
   }
 
@@ -376,7 +394,10 @@
     "a, button, input, textarea, select, .attachment-grid, .media-tile, .markdown img, .gif-player, .markdown-table-scroll, .message-actions, .message-failed";
   const coarseQuery =
     typeof window !== "undefined" ? window.matchMedia("(hover: none), (pointer: coarse)") : null;
-  let coarsePointer = $state(coarseQuery?.matches ?? false);
+  let coarseDevice = $state(coarseQuery?.matches ?? false);
+  // A mouse or trackpad in hand gets the desktop toolbar and menu even on a
+  // coarse device; a finger keeps the long-press sheet.
+  let coarsePointer = $derived(coarseDevice && !pointerMode.mouse);
   let showActionSheet = $state(false);
   let longPressTimer: number | undefined;
   let longPressCleanup: (() => void) | undefined;
@@ -388,7 +409,7 @@
   $effect(() => {
     if (!coarseQuery) return;
     const onChange = () => {
-      coarsePointer = coarseQuery.matches;
+      coarseDevice = coarseQuery.matches;
     };
     coarseQuery.addEventListener("change", onChange);
     return () => coarseQuery.removeEventListener("change", onChange);
@@ -489,7 +510,7 @@
   function sheetReact(emoji: string) {
     closeActionSheet();
     if (cannotReact) return;
-    void reactionController.toggle(message, emoji);
+    react(emoji);
   }
 
   function sheetOpenThread() {
@@ -670,7 +691,7 @@
         pending={reactionController.pending(message.id)}
         error={reactionController.error(message.id)}
         disabled={reactionsDisabled || !currentUserID}
-        onToggle={(emoji) => void reactionController.toggle(message, emoji)}
+        onToggle={(emoji) => react(emoji)}
       />
     {/if}
     {#if message.attachments?.length}

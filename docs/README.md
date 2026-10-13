@@ -63,6 +63,7 @@ it for anything that isn't a local clone.
 | Profile settings, handles, avatars | [Profiles](features/profiles.md) |
 | Reuse OpenClaw profile names and avatars | [Identity mapping](features/identity-sync.md) |
 | Magic-link auth, GitHub OAuth, dev fallback | [Auth](features/auth.md) |
+| Web push to phones with no third-party account | [Push notifications](features/push-notifications.md) |
 | Native macOS, Windows, and Linux clients | [Desktop apps](desktop.md) |
 | Guest waiting-room roles, approvals, timeouts, blocks | [Moderation](features/moderation.md) |
 | Mattermost-shaped webhooks and slash commands | [Integrations](features/integrations.md) |

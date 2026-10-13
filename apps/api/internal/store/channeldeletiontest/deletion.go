@@ -200,6 +200,54 @@ func DeleteChannelEnforcesGuardRails(t *testing.T, st store.Store) {
 	}
 }
 
+func DeleteChannelRejectsLostAuthority(t *testing.T, st store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	f := newFixture(t, st)
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "channel-delete-moderator@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, f.workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	assertDenied := func(actorUserID string) {
+		t.Helper()
+		before, err := st.LatestEventCursor(ctx, f.workspace.ID, f.member.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.DeleteChannel(ctx, f.doomed.ID, actorUserID); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+			t.Fatalf("unauthorized deletion error = %v", err)
+		}
+		if _, err := st.GetChannel(ctx, f.doomed.ID, f.member.ID); err != nil {
+			t.Fatalf("unauthorized deletion removed channel: %v", err)
+		}
+		if _, err := st.GetMessage(ctx, f.root.ID, f.member.ID); err != nil {
+			t.Fatalf("unauthorized deletion removed message: %v", err)
+		}
+		if _, err := st.GetUpload(ctx, f.exclusive.ID, f.member.ID); err != nil {
+			t.Fatalf("unauthorized deletion removed exclusive upload: %v", err)
+		}
+		if cleanups, err := st.ListPendingUploadCleanups(ctx, 100); err != nil || len(cleanups) != 0 {
+			t.Fatalf("unauthorized deletion enqueued cleanup: %#v, %v", cleanups, err)
+		}
+		if events, err := st.ListEventsAfter(ctx, f.workspace.ID, f.member.ID, before, 100); err != nil || len(events) != 0 {
+			t.Fatalf("unauthorized deletion appended events: %#v, %v", events, err)
+		}
+	}
+	assertDenied(moderator.ID)
+	if _, _, err := st.TransferWorkspaceOwnership(ctx, store.TransferWorkspaceOwnershipInput{
+		WorkspaceID: f.workspace.ID, ActorUserID: f.owner.ID, NewOwnerUserID: f.member.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertDenied(f.owner.ID)
+	if _, err := st.DeleteChannel(ctx, f.doomed.ID, f.member.ID); err != nil {
+		t.Fatalf("current owner could not delete channel: %v", err)
+	}
+}
+
 func newFixture(t *testing.T, st store.Store) fixture {
 	t.Helper()
 	ctx := context.Background()

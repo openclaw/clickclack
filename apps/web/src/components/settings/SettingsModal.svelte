@@ -13,6 +13,8 @@
     ACCOUNT_SETTINGS_SECTIONS,
     DEFAULT_ACCOUNT_SETTINGS_SECTION,
     WORKSPACE_SETTINGS_SECTIONS,
+    defaultSettingsWorkspace,
+    isSettingsWorkspaceCurrent,
     workspaceSettingsPath,
     type AccountSettingsSectionId,
   } from "../../lib/settings";
@@ -22,6 +24,7 @@
   type Props = {
     user: User;
     workspaces?: Workspace[];
+    currentWorkspaceID?: string;
     initialSection?: AccountSettingsSectionId;
     hideCommentary: boolean;
     hideToolCalls: boolean;
@@ -40,6 +43,7 @@
   let {
     user,
     workspaces = [],
+    currentWorkspaceID = "",
     initialSection = DEFAULT_ACCOUNT_SETTINGS_SECTION,
     hideCommentary,
     hideToolCalls,
@@ -54,6 +58,15 @@
     onOtherAlign,
     onBrowserNotificationsChanged,
   }: Props = $props();
+
+  // The rail shows one workspace's sections at a time. It opens on the workspace
+  // the user is standing in; a pick holds only while that workspace is still
+  // listed, so a refreshed list falls back rather than showing a stale group.
+  let pickedWorkspaceID = $state("");
+  const railWorkspace = $derived(
+    workspaces.find((workspace) => workspace.id === pickedWorkspaceID) ??
+      defaultSettingsWorkspace(workspaces, currentWorkspaceID),
+  );
 
   let signingOut = $state(false);
   let signOutError = $state("");
@@ -202,19 +215,38 @@
         </ul>
       </div>
 
-      {#each workspaces as workspace (workspace.id)}
+      {#if railWorkspace}
         <div class="settings-modal__rail-group">
-          <p class="settings-modal__rail-heading" title={workspace.name}>
-            Workspace · {workspace.name}
-          </p>
+          {#if workspaces.length > 1}
+            <p class="settings-modal__rail-heading">Workspace</p>
+            <label class="sr-only" for="settings-modal-workspace">Workspace</label>
+            <select
+              id="settings-modal-workspace"
+              class="settings-modal__rail-select"
+              value={railWorkspace.id}
+              onchange={(event) => (pickedWorkspaceID = event.currentTarget.value)}
+            >
+              {#each workspaces as workspace (workspace.id)}
+                <option value={workspace.id}>
+                  {isSettingsWorkspaceCurrent(workspace, currentWorkspaceID)
+                    ? `${workspace.name} (current)`
+                    : workspace.name}
+                </option>
+              {/each}
+            </select>
+          {:else}
+            <p class="settings-modal__rail-heading" title={railWorkspace.name}>
+              Workspace · {railWorkspace.name}
+            </p>
+          {/if}
           <ul>
             {#each WORKSPACE_SETTINGS_SECTIONS as section (section.id)}
-              {#if !section.managersOnly || isWorkspaceManager(workspace.role)}
+              {#if !section.managersOnly || isWorkspaceManager(railWorkspace.role)}
                 <li>
                   <button
                     type="button"
                     class="settings-modal__rail-item"
-                    onclick={() => openWorkspaceSection(workspace, section.slug)}
+                    onclick={() => openWorkspaceSection(railWorkspace, section.slug)}
                   >
                     <span class="settings-modal__rail-icon" aria-hidden="true">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -228,7 +260,7 @@
             {/each}
           </ul>
         </div>
-      {/each}
+      {/if}
     </aside>
 
     <main class="settings-modal__content">

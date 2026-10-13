@@ -33,6 +33,9 @@ type Server struct {
 	disableDevAuth        bool
 	passwordAuthEnabled   bool
 	pushNotifier          PushNotifier
+	webPushNotifier       PushNotifier
+	webPushPublicKey      string
+	webPushKeyID          string
 	metrics               *metricsRegistry
 	accessLog             AccessLogMode
 	build                 buildMetadata
@@ -97,6 +100,8 @@ type Options struct {
 	DisableDevAuth      bool
 	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
+	WebPushNotifier     PushNotifier
+	WebPushPublicKey    string
 	MetricsEnabled      bool
 	AccessLog           AccessLogMode
 	Environment         string
@@ -138,6 +143,9 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		disableDevAuth:        options.DisableDevAuth,
 		passwordAuthEnabled:   options.PasswordAuthEnabled,
 		pushNotifier:          options.PushNotifier,
+		webPushNotifier:       options.WebPushNotifier,
+		webPushPublicKey:      strings.TrimSpace(options.WebPushPublicKey),
+		webPushKeyID:          webPushKeyID(options.WebPushPublicKey),
 		metrics:               metrics,
 		accessLog:             options.AccessLog,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
@@ -187,6 +195,9 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
 		r.Get("/me/bots", s.listMyBots)
+		r.Get("/me/push", s.getMyPush)
+		r.Put("/me/push/subscriptions", s.putMyPushSubscription)
+		r.Delete("/me/push/subscriptions", s.deleteMyPushSubscription)
 		r.Get("/event-types", s.listEventTypes)
 		r.Get("/workspaces", s.listWorkspaces)
 		r.Post("/workspaces", s.createWorkspace)

@@ -79,3 +79,25 @@ func TestDecodeWorkspaceMemberCursor_VersionAndUserIDRequired(t *testing.T) {
 		t.Errorf("missing user id: got err %v, want ErrInvalidWorkspaceMemberPage", err)
 	}
 }
+
+func TestWorkspaceMemberRoleSort_OrdersKnownRolesAndSinksUnknown(t *testing.T) {
+	for _, tc := range []struct {
+		role string
+		want int
+	}{
+		{WorkspaceRoleOwner, 0},
+		{WorkspaceRoleModerator, 1},
+		{WorkspaceRoleMember, 2},
+		{WorkspaceRoleBot, 3},
+		{WorkspaceRoleGuest, 4},
+	} {
+		if got := WorkspaceMemberRoleSort(tc.role); got != tc.want {
+			t.Errorf("WorkspaceMemberRoleSort(%q) = %d, want %d", tc.role, got, tc.want)
+		}
+	}
+
+	unknown := WorkspaceMemberRoleSort("wizard")
+	if unknown <= WorkspaceMemberRoleSort(WorkspaceRoleGuest) {
+		t.Errorf("unknown role sort %d must be greater than every known role", unknown)
+	}
+}

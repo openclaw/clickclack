@@ -211,7 +211,7 @@
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: unread-bar-pulse 1.8s ease-out infinite;
+  animation: unread-bar-pulse 1.8s ease-out 3;
 }
 
 @keyframes unread-bar-pulse {
@@ -293,10 +293,10 @@
   transform: translateY(0);
 }
 
-/* The live "agent is responding" indicator floats over the composer inside a
-   permanently reserved band, so showing/hiding it never reflows the
-   transcript or shifts the composer. The space is always there; only opacity
-   toggles. */
+/* The live "is typing" and "agent is responding" indicators float over the
+   composer inside a permanently reserved band, so showing/hiding them never
+   reflows the transcript, clips its last line, or shifts the composer. The
+   space is always there; only opacity toggles. */
 .composer-dock {
   position: relative;
   padding-top: 20px;
@@ -365,6 +365,7 @@
   font: inherit;
 }
 
+.composer-dock .typing-indicator,
 .composer-dock .agent-responding {
   position: absolute;
   top: 0;
@@ -382,11 +383,29 @@
   pointer-events: none;
 }
 
+.composer-dock .typing-indicator.visible,
 .composer-dock .agent-responding.visible {
   height: 20px;
   margin: 0;
   opacity: 1;
   transform: none;
+}
+
+.composer-dock .typing-indicator__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A person typing while an agent responds: share the band, one on each side. */
+.composer-dock:has(> .agent-responding) > .typing-indicator:not(.agent-responding) {
+  left: 50%;
+  justify-content: flex-end;
+}
+
+.composer-dock:has(> .typing-indicator.visible:not(.agent-responding)) > .agent-responding {
+  right: 50%;
 }
 
 .typing-indicator__dots {
@@ -402,6 +421,11 @@
   background: currentColor;
   opacity: 0.55;
   animation: typing-dot 1.1s ease-in-out infinite;
+}
+
+/* The indicator stays mounted while hidden; idle dots would still render every frame. */
+.typing-indicator:not(.visible) .typing-indicator__dots i {
+  animation: none;
 }
 
 .typing-indicator__dots i:nth-child(2) {
@@ -1364,9 +1388,13 @@
   pointer-events: none;
 }
 
+/* Real mouse input restores hover controls on touch-first tablets. */
 @media (hover: none), (pointer: coarse) {
-  /* Touch devices use the long-press action sheet instead of the hover toolbar. */
-  .message-actions {
+  :root:not([data-pointer-mode="mouse"]) .message-row {
+    -webkit-touch-callout: none;
+  }
+
+  :root:not([data-pointer-mode="mouse"]) .message-actions {
     width: 1px;
     height: 1px;
     top: 1px;
@@ -1381,21 +1409,21 @@
     transform: none;
   }
 
-  .message-actions > :not(.message-more) {
+  :root:not([data-pointer-mode="mouse"]) .message-actions > :not(.message-more) {
     display: none;
   }
 
   /* The desktop flip must not move the collapsed 1px touch anchor. */
-  .message-row.actions-flip .message-actions {
+  :root:not([data-pointer-mode="mouse"]) .message-row.actions-flip .message-actions {
     top: 1px;
     bottom: auto;
   }
 
-  .message-actions .message-more {
+  :root:not([data-pointer-mode="mouse"]) .message-actions .message-more {
     position: static;
   }
 
-  .message-actions .message-actions-trigger {
+  :root:not([data-pointer-mode="mouse"]) .message-actions .message-actions-trigger {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1407,7 +1435,7 @@
     white-space: nowrap;
   }
 
-  .message-actions .message-actions-trigger:focus-visible {
+  :root:not([data-pointer-mode="mouse"]) .message-actions .message-actions-trigger:focus-visible {
     right: 0;
     top: 0;
     width: 36px;
@@ -1421,7 +1449,9 @@
     box-shadow: var(--shadow);
   }
 
-  .message-row:has(.message-actions-trigger:focus-visible) .message-content {
+  :root:not([data-pointer-mode="mouse"])
+    .message-row:has(.message-actions-trigger:focus-visible)
+    .message-content {
     padding-right: 44px;
   }
 }
@@ -1482,6 +1512,16 @@
   border: 0;
   background: transparent;
   padding: 0;
+}
+
+/* The sheet opens while the long-pressing finger is still down. Without this,
+   iOS carries the same press into a text selection on whatever is now under
+   the finger, which is the sheet's first row. */
+.message-sheet-scrim,
+.message-sheet-scrim * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .message-action-sheet {

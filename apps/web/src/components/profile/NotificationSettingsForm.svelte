@@ -1,6 +1,7 @@
 <script lang="ts">
   import AccountSettingsForm from "./AccountSettingsForm.svelte";
   import BrowserNotificationSetting from "./BrowserNotificationSetting.svelte";
+  import PushNotificationSetting from "./PushNotificationSetting.svelte";
   import type { User } from "../../lib/types";
 
   type Props = {
@@ -47,6 +48,8 @@
     />
 
     <h3 class="settings-rows__head">Mobile push</h3>
+
+    <PushNotificationSetting {user} {isDesktop} />
 
     <div class="settings-row2 settings-row2--toggle">
       <div class="settings-row2__desc">

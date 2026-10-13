@@ -425,6 +425,31 @@ type UserPassword struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+type UserPushSubscription struct {
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
+	Endpoint         string         `json:"endpoint"`
+	P256dh           string         `json:"p256dh"`
+	Auth             string         `json:"auth"`
+	UserAgent        string         `json:"user_agent"`
+	SessionTokenHash string         `json:"session_token_hash"`
+	CreatedAt        string         `json:"created_at"`
+	UpdatedAt        string         `json:"updated_at"`
+	LastSuccessAt    sql.NullString `json:"last_success_at"`
+	NextAttemptAt    sql.NullString `json:"next_attempt_at"`
+	FailureCount     int64          `json:"failure_count"`
+	VapidKeyID       string         `json:"vapid_key_id"`
+	FailingSince     sql.NullString `json:"failing_since"`
+	LastFailureAt    sql.NullString `json:"last_failure_at"`
+}
+
+type UserSidebarChannelOrder struct {
+	UserID      string `json:"user_id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelIds  string `json:"channel_ids"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`

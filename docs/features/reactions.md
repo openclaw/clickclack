@@ -8,6 +8,16 @@ read_when:
 Emoji reactions are a `(message_id, user_id, emoji)` triple. One reaction per
 user per emoji per message.
 
+## Message controls
+
+A mouse or trackpad reveals message actions on hover, including on touch-first
+tablets and embedded conversations. Touch input keeps the long-press action
+sheet. Switching between a trackpad and a finger updates those controls without
+reloading.
+
+Adding a reaction brings its chip into view immediately. Scrolling while the
+request is pending keeps the position you chose.
+
 ## Endpoints
 
 ```http

@@ -243,12 +243,14 @@ If you want first-party OpenClaw ID (OIDC) login, set:
 CLICKCLACK_PUBLIC_URL=https://chat.example.com
 OPENCLAW_ID_CLIENT_ID=...
 OPENCLAW_ID_CLIENT_SECRET=...
-# Optional issuer override (default https://id.openclaw.ai/api/auth):
-# OPENCLAW_ID_ISSUER=https://id.openclaw.ai/api/auth
+# Optional issuer override (default https://id.openclaw.ai/api/auth).
+# For Kanidm, use the per-client issuer from discovery, for example:
+# OPENCLAW_ID_ISSUER=https://idm.example.com/oauth2/openid/clickclack
 ```
 
-Register the redirect URI `<public-url>/api/auth/openclaw/callback` with the
-identity provider. On the hosted Cloudflare deployment, set the credentials as
+Serve fetches `<issuer>/.well-known/openid-configuration` and uses that
+document's authorization and token endpoints. Register the redirect URI
+`<public-url>/api/auth/openclaw/callback` with the identity provider. On the hosted Cloudflare deployment, set the credentials as
 Worker secrets (`wrangler secret put OPENCLAW_ID_CLIENT_ID` and
 `wrangler secret put OPENCLAW_ID_CLIENT_SECRET`); the Worker passes them into
 the container when present. See [features/auth.md](features/auth.md) for the

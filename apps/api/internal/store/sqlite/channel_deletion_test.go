@@ -19,6 +19,11 @@ func TestDeleteChannelEnforcesGuardRails(t *testing.T) {
 	channeldeletiontest.DeleteChannelEnforcesGuardRails(t, newTestStore(t))
 }
 
+func TestDeleteChannelRejectsLostAuthority(t *testing.T) {
+	t.Parallel()
+	channeldeletiontest.DeleteChannelRejectsLostAuthority(t, newTestStore(t))
+}
+
 func sqliteChannelDeletionHooks(st *Store) channeldeletiontest.Hooks {
 	return channeldeletiontest.Hooks{
 		OwnedRows: func(t *testing.T, channelID string, messageIDs []string) map[string]int64 {

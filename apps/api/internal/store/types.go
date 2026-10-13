@@ -65,6 +65,28 @@ const (
 )
 
 var (
+	ErrPushChannelMuted = errors.New("the recipient muted the channel")
+	ErrPushNotMentioned = errors.New("the message does not mention the recipient")
+)
+
+// ChannelPushAllowed is the push policy for a channel message: a recipient who
+// muted the channel gets nothing, one who chose mentions gets only messages
+// that mention them, and everyone else gets every message. Recipient selection
+// applies it when a message is posted, and the web push worker applies it again
+// to the message as it reads when a queued push is sent.
+func ChannelPushAllowed(preference string, mentioned bool) error {
+	switch preference {
+	case ChannelNotifyMuted:
+		return ErrPushChannelMuted
+	case ChannelNotifyMentions:
+		if !mentioned {
+			return ErrPushNotMentioned
+		}
+	}
+	return nil
+}
+
+var (
 	ErrAlreadyPinned         = errors.New("message is already pinned")
 	ErrPinnedMessageNotFound = errors.New("pinned message not found")
 	ErrPinnedMessageLimit    = errors.New("channel pin limit reached (maximum 100)")
@@ -141,6 +163,10 @@ func NormalizeMessageKind(kind string) (string, error) {
 // ErrNotWorkspaceManager is returned when a workspace operation requires an
 // owner or moderator.
 var ErrNotWorkspaceManager = errors.New("workspace manager permission required")
+
+// ErrNotWorkspaceMember is returned when a workspace operation requires any
+// membership and the caller has none.
+var ErrNotWorkspaceMember = errors.New("workspace membership required")
 
 // ErrWorkspaceOwnerRequired is returned when a workspace operation requires the
 // current owner, not just a moderator.
@@ -235,6 +261,18 @@ type AppearancePreferencesPatch struct {
 	Density       *string `json:"density,omitempty"`
 }
 
+// SidebarPreferences is the caller's complete roaming sidebar snapshot.
+// Workspaces with no saved channel order are absent from the map.
+type SidebarPreferences struct {
+	ChannelOrder map[string][]string `json:"channel_order,omitempty"`
+}
+
+// SidebarPreferencesPatch replaces the channel order of every workspace it
+// lists and leaves the rest untouched. An empty list clears that workspace.
+type SidebarPreferencesPatch struct {
+	ChannelOrder map[string][]string `json:"channel_order,omitempty"`
+}
+
 type ChannelNotificationInput struct {
 	ChannelID  string
 	UserID     string
@@ -245,6 +283,7 @@ type PushNotificationRecipient struct {
 	UserID          string
 	DisplayName     string
 	PushoverUserKey string
+	Subscriptions   []PushSubscriptionTarget
 }
 
 type Workspace struct {
@@ -836,11 +875,13 @@ type UpdateCurrentUserInput struct {
 	AvatarURL             *string
 	NotificationSettings  *NotificationSettings
 	AppearancePreferences *AppearancePreferencesPatch
+	SidebarPreferences    *SidebarPreferencesPatch
 }
 
 type CurrentUserState struct {
 	User                  User
 	AppearancePreferences *AppearancePreferences
+	SidebarPreferences    *SidebarPreferences
 }
 
 type CreateWorkspaceInput struct {
@@ -1247,7 +1288,16 @@ type Store interface {
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
+	GetSidebarPreferences(ctx context.Context, userID string) (*SidebarPreferences, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
+	ListMentionedUserIDs(ctx context.Context, workspaceID, body string) ([]string, error)
+	UpsertPushSubscription(ctx context.Context, input PushSubscriptionInput) (PushSubscription, error)
+	ListPushSubscriptions(ctx context.Context, userID string) ([]PushSubscription, error)
+	DeletePushSubscription(ctx context.Context, userID, endpoint string) error
+	GetPushSubscriptionDelivery(ctx context.Context, userID, endpoint, currentKeyID string) (PushSubscriptionTarget, error)
+	MarkPushSubscriptionSuccess(ctx context.Context, userID, endpoint string) error
+	MarkPushSubscriptionFailure(ctx context.Context, userID, endpoint string, retryAfter time.Duration) (int64, error)
+	PrunePushSubscriptions(ctx context.Context, currentKeyID string, now time.Time) (PushPruneResult, error)
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error

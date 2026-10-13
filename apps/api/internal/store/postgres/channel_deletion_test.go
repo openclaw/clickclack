@@ -23,6 +23,10 @@ func TestDeleteChannelEnforcesGuardRails(t *testing.T) {
 	channeldeletiontest.DeleteChannelEnforcesGuardRails(t, newMigratedPostgresChannelDeletionStore(t))
 }
 
+func TestDeleteChannelRejectsLostAuthority(t *testing.T) {
+	channeldeletiontest.DeleteChannelRejectsLostAuthority(t, newMigratedPostgresChannelDeletionStore(t))
+}
+
 func newMigratedPostgresChannelDeletionStore(t *testing.T) *Store {
 	t.Helper()
 	st := newIsolatedPostgresTestStore(t)

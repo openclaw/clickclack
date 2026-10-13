@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -33,7 +34,7 @@ export async function until(predicate) {
 
 // Run the real main entry point; replace only Electron and controllable I/O.
 // Programmatic loadURL does not emit will-navigate (Electron's navigation contract).
-export async function desktop(t) {
+export async function desktop(t, { platform = process.platform } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "clickclack-main-"));
   let pendingIO = 0;
   const trackIO = async (operation) => {
@@ -62,6 +63,7 @@ export async function desktop(t) {
   const browserURLs = [];
   const requests = [];
   const handlers = new Map();
+  const trays = [];
   let applicationMenu;
   const timers = new Map();
   const ready = deferred();
@@ -159,13 +161,47 @@ export async function desktop(t) {
       return controls.fetch(url, options);
     },
   });
-  const nativeImage = {
-    setTemplateImage() {},
-    resize() {
-      return this;
-    },
-  };
+  class NativeImage {
+    #template = false;
+    constructor(file, size) {
+      this.path = file;
+      this.size = size;
+    }
+    // Like Electron on macOS, a file name ending in "Template" loads as a template image.
+    static fromPath(file) {
+      let size = { width: 0, height: 0 };
+      try {
+        const png = readFileSync(file);
+        size = { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+      } catch {}
+      const image = new NativeImage(file, size);
+      image.setTemplateImage(platform === "darwin" && path.parse(file).name.endsWith("Template"));
+      return image;
+    }
+    isTemplateImage() {
+      return this.#template;
+    }
+    setTemplateImage(value) {
+      this.#template = value;
+    }
+    getSize() {
+      return { ...this.size };
+    }
+    // Like Electron, resizing returns a new image that does not carry the template flag.
+    resize({ width, height }) {
+      const scale = height ? height / this.size.height : width / this.size.width;
+      return new NativeImage(this.path, {
+        width: width ?? Math.round(this.size.width * scale),
+        height: height ?? Math.round(this.size.height * scale),
+      });
+    }
+  }
   class Tray extends EventEmitter {
+    constructor(image) {
+      super();
+      this.image = image;
+      trays.push(this);
+    }
     setToolTip() {}
     setContextMenu() {}
     setTitle() {}
@@ -176,7 +212,7 @@ export async function desktop(t) {
     ipcMain,
     Tray,
     nativeTheme: new EventEmitter(),
-    nativeImage: { createFromPath: () => nativeImage },
+    nativeImage: { createFromPath: (file) => NativeImage.fromPath(file) },
     Menu: {
       buildFromTemplate: (value) => value,
       setApplicationMenu(value) {
@@ -199,7 +235,7 @@ export async function desktop(t) {
     },
   };
   const testProcess = Object.assign(new EventEmitter(), {
-    platform: process.platform,
+    platform,
     argv: [],
     execPath: process.execPath,
   });
@@ -250,6 +286,7 @@ export async function desktop(t) {
     errors,
     logs,
     badges,
+    trays,
     requests,
     session,
     browserURLs,

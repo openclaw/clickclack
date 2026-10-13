@@ -358,6 +358,15 @@ CREATE TABLE user_appearance_preferences (
   density TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE user_sidebar_channel_order (
+  user_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  channel_ids TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, workspace_id),
+  FOREIGN KEY (workspace_id, user_id) REFERENCES workspace_members(workspace_id, user_id) ON DELETE CASCADE
+);
+
 CREATE TABLE bot_tokens (
   id TEXT PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,
@@ -595,3 +604,23 @@ CREATE TABLE user_passwords (
   password_hash TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE user_push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT '',
+  session_token_hash TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_success_at TEXT,
+  next_attempt_at TEXT,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  vapid_key_id TEXT NOT NULL DEFAULT '',
+  failing_since TEXT,
+  last_failure_at TEXT
+);
+
+CREATE INDEX idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, created_at);

@@ -84,6 +84,47 @@ func TestChannelDeletionHTTP(t *testing.T) {
 	expectStatusWithBearer(t, botToken.Token, http.MethodDelete, deleteURL, nil, http.StatusForbidden)
 	expectStatusAsUser(t, owner.ID, http.MethodDelete, server.URL+"/api/channels/chn_missing", nil, http.StatusNotFound)
 
+	moderator, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Moderator", Email: "channel-http-moderator@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, moderator.ID, store.WorkspaceRoleModerator); err != nil {
+		t.Fatal(err)
+	}
+	assertRejectedEffects := func(actorUserID string) {
+		t.Helper()
+		before, err := st.LatestEventCursor(ctx, workspace.ID, member.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectStatusAsUser(t, actorUserID, http.MethodDelete, deleteURL, nil, http.StatusForbidden)
+		if _, err := st.GetChannel(ctx, doomed.ID, member.ID); err != nil {
+			t.Fatalf("rejected deletion removed the channel: %v", err)
+		}
+		if message, err := st.GetMessage(ctx, created.Message.ID, member.ID); err != nil || message.Body != "doomed" {
+			t.Fatalf("rejected deletion changed the message: %#v, %v", message, err)
+		}
+		if _, err := st.GetUpload(ctx, upload.ID, member.ID); err != nil {
+			t.Fatalf("rejected deletion removed the upload row: %v", err)
+		}
+		if contents, err := os.ReadFile(storedUpload.StoragePath); err != nil || string(contents) != "doomed notes" {
+			t.Fatalf("rejected deletion removed the file object: %v", err)
+		}
+		if cleanups, err := st.ListPendingUploadCleanups(ctx, 100); err != nil || len(cleanups) != 0 {
+			t.Fatalf("rejected deletion enqueued cleanup: %#v, %v", cleanups, err)
+		}
+		if events, err := st.ListEventsAfter(ctx, workspace.ID, member.ID, before, 100); err != nil || len(events) != 0 {
+			t.Fatalf("rejected deletion appended events: %#v, %v", events, err)
+		}
+	}
+	assertRejectedEffects(moderator.ID)
+	if _, _, err := st.TransferWorkspaceOwnership(ctx, store.TransferWorkspaceOwnershipInput{
+		WorkspaceID: workspace.ID, ActorUserID: owner.ID, NewOwnerUserID: member.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertRejectedEffects(owner.ID)
+
 	wsURL := strings.Replace(server.URL, "http://", "ws://", 1) + "/api/realtime/ws?workspace_id=" + url.QueryEscape(workspace.ID)
 	memberConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 		HTTPHeader: http.Header{"X-ClickClack-User": []string{member.ID}},
@@ -93,10 +134,10 @@ func TestChannelDeletionHTTP(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = memberConn.Close(websocket.StatusNormalClosure, "done") })
 
-	expectStatusAsUser(t, owner.ID, http.MethodDelete, deleteURL, nil, http.StatusNoContent)
+	expectStatusAsUser(t, member.ID, http.MethodDelete, deleteURL, nil, http.StatusNoContent)
 	live := readEventType(t, memberConn, "channel.deleted")
 	payload, ok := live.Payload.(map[string]any)
-	if live.ChannelID != "" || !ok || payload["channel_id"] != doomed.ID || payload["deleted_by"] != owner.ID {
+	if live.ChannelID != "" || !ok || payload["channel_id"] != doomed.ID || payload["deleted_by"] != member.ID {
 		t.Fatalf("unexpected live deletion event: %#v", live)
 	}
 	// A client that reconnects from one of the channel's events keeps its place
@@ -118,7 +159,7 @@ func TestChannelDeletionHTTP(t *testing.T) {
 	expectStatusAsUser(t, owner.ID, http.MethodDelete, deleteURL, nil, http.StatusNotFound)
 	auditLog := getJSONAsUser[struct {
 		AuditLogEntries []store.AuditLogEntry `json:"audit_log_entries"`
-	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/audit-log")
+	}](t, member.ID, server.URL+"/api/workspaces/"+workspace.ID+"/audit-log")
 	foundAudit := false
 	for _, entry := range auditLog.AuditLogEntries {
 		if entry.Action == "channel.deleted" && entry.TargetID == doomed.ID && entry.Metadata["name"] == "doomed" {

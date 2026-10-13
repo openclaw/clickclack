@@ -102,6 +102,38 @@
   margin: 0;
 }
 
+/* Picks which workspace the rail's sections below belong to. Same palette as
+   the modal's own form controls (.settings-modal__content .settings-input),
+   narrowed to the rail's width. */
+.settings-modal__rail-select {
+  width: 100%;
+  height: 32px;
+  margin: 2px 0 6px;
+  padding: 0 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.settings-modal__rail-select:hover {
+  border-color: var(--line-strong);
+}
+
+.settings-modal__rail-select:focus {
+  outline: 0;
+  border-color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .settings-modal__rail ul {
   list-style: none;
   margin: 0;

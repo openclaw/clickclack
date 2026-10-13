@@ -267,6 +267,41 @@ export interface paths {
     patch: operations["updateMe"];
     trace?: never;
   };
+  "/api/me/push": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Web push state for the current user. Reports disabled with no keys when the server has no VAPID key pair. */
+    get: operations["getMyPush"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/me/push/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Register or replace the browser push subscription for one device. Re-registering the same endpoint replaces its keys. */
+    put: operations["putMyPushSubscription"];
+    post?: never;
+    /** @description Remove one device. An endpoint that is not registered still answers 204, so the client can call this freely. */
+    delete: operations["deleteMyPushSubscription"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/event-types": {
     parameters: {
       query?: never;
@@ -1328,6 +1363,7 @@ export interface components {
       avatar_url?: string;
       notification_settings?: components["schemas"]["NotificationSettings"];
       appearance_preferences?: components["schemas"]["AppearancePreferencesPatch"];
+      sidebar_preferences?: components["schemas"]["SidebarPreferencesPatch"];
     };
     User: {
       id: string;
@@ -1352,6 +1388,7 @@ export interface components {
       created_at: string;
       notification_settings?: components["schemas"]["NotificationSettings"];
       appearance_preferences?: components["schemas"]["AppearancePreferences"];
+      sidebar_preferences?: components["schemas"]["SidebarPreferences"];
       /** @description Whether this account has a password on file. Reported only for the signed-in caller, on /api/me. */
       password_enrolled?: boolean;
     };
@@ -1739,6 +1776,42 @@ export interface components {
       /** @description Current user's Pushover user key. Must be set when Pushover notifications are enabled. */
       pushover_user_key: string;
     };
+    PushState: {
+      /** @description Whether the server has a VAPID key pair and can deliver web push. */
+      enabled: boolean;
+      /** @description Application server key for pushManager.subscribe, base64url. Empty when web push is disabled. */
+      vapid_public_key: string;
+      subscriptions: components["schemas"]["PushSubscription"][];
+      /** @description Whether the device named by the device query parameter is registered to the current user. False when no device is named. */
+      this_device: boolean;
+      /** @description Whether that device is registered under an application server key the server no longer signs with, so its push service refuses every push and the client must replace the subscription. The server knows this even when the browser does not expose the key a subscription was made under. False when this_device is false or web push is disabled. */
+      this_device_stale: boolean;
+    };
+    /** @description One registered device. The endpoint and the client keys are delivery secrets and are never returned. */
+    PushSubscription: {
+      id: string;
+      /** @description Short device label chosen by the client. */
+      user_agent: string;
+      created_at: string;
+      updated_at: string;
+      last_success_at?: string;
+      /** Format: int64 */
+      failure_count: number;
+    };
+    PushSubscriptionRequest: {
+      /** @description The account the client is registering this device for, the one whose opt-in it checked. It must be the signed-in account, or the request is refused with 409. */
+      user_id: string;
+      /** @description The push service URL from pushManager.subscribe. Must be https and must not point inside the deployment's own network. */
+      endpoint: string;
+      keys: {
+        /** @description Uncompressed P-256 public key from the subscription, base64url. */
+        p256dh: string;
+        /** @description 16 byte subscription auth secret, base64url. */
+        auth: string;
+      };
+      /** @description Short device label, truncated to 200 characters. */
+      user_agent?: string;
+    };
     /** @description Current user's complete appearance preference snapshot. Empty properties use client defaults. */
     AppearancePreferences: {
       /** @enum {string} */
@@ -1760,6 +1833,20 @@ export interface components {
       message_layout?: "" | "standard" | "outlined";
       /** @enum {string} */
       density?: "" | "comfortable" | "compact";
+    };
+    /** @description Current user's complete sidebar preference snapshot. Omitted properties use client defaults. */
+    SidebarPreferences: {
+      /** @description Personal channel order, keyed by workspace id. Each value lists the caller's channel ids for that workspace in sidebar order. A workspace whose order was cleared is present with an empty array, so a client can tell a clear from a workspace that never saved an order; workspaces that never saved one are absent. */
+      channel_order?: {
+        [key: string]: string[];
+      };
+    };
+    /** @description Partial sidebar update. Workspaces omitted from channel_order are unchanged, a listed workspace replaces that workspace's order, and an empty array clears it back to the server's default ordering. */
+    SidebarPreferencesPatch: {
+      /** @description Ordered channel ids keyed by workspace id. The caller must be a member of every workspace listed. Ids that are not channels of that workspace are dropped, and repeated ids keep their first position. */
+      channel_order?: {
+        [key: string]: string[];
+      };
     };
     CreateChannelRequest: {
       name: string;
@@ -2961,6 +3048,138 @@ export interface operations {
             user: components["schemas"]["User"];
           };
         };
+      };
+    };
+  };
+  getMyPush: {
+    parameters: {
+      query?: {
+        /** @description The unpadded base64url SHA-256 of the push subscription endpoint the calling browser holds. When it matches one of the user's devices, this_device is true, and this_device_stale says whether that device must replace its subscription. The endpoint itself is never sent. */
+        device?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Web push state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PushState"];
+        };
+      };
+    };
+  };
+  putMyPushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PushSubscriptionRequest"];
+      };
+    };
+    responses: {
+      /** @description Stored device summary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            subscription: components["schemas"]["PushSubscription"];
+          };
+        };
+      };
+      /** @description The endpoint or the client keys are unusable, or user_id is missing */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description A bot token, or a caller with no signed-in session for the device to follow */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Web push is not configured on this server */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description user_id is not the signed-in account, as when another tab signed this browser in to a different account. Nothing is written. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  deleteMyPushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description The account the client is turning this device off for. It must be the signed-in account, or the request is refused with 409. */
+          user_id: string;
+          /** @description The push service URL returned by pushManager.subscribe. */
+          endpoint: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The device is no longer registered */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The endpoint or user_id is missing */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description A bot token, or a caller with no signed-in session for the device to follow */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Web push is not configured on this server */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description user_id is not the signed-in account, as when another tab signed this browser in to a different account. Nothing is removed. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

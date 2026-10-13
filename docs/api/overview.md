@@ -39,6 +39,7 @@ The value is not stored on message rows or exported as a metrics label.
 | Auth          | `/api/auth/magic/{request,consume}`, `/api/auth/github/{start,callback}` | [auth](../features/auth.md) |
 | Deployment navigation | `/api/home-link` (public) | [configuration](../configuration.md#workspace-home-link) |
 | Profile       | `/api/me`, `/api/me/bots` | [profiles](../features/profiles.md) |
+| Push devices  | `GET /api/me/push`, `PUT` and `DELETE /api/me/push/subscriptions` | [push notifications](../features/push-notifications.md) |
 | Workspaces    | `/api/workspaces`, `/api/workspaces/{id}`, `/api/workspaces/{id}/members` | [workspaces](../features/workspaces.md) |
 | Moderation    | `/api/workspaces/{id}/moderation/members` | [moderation](../features/moderation.md) |
 | Bots          | `/api/workspaces/{id}/{bots,bot-commands}`, `/api/workspaces/{id}/bots/{bot_id}/{tokens,membership,setup-codes}`, `/api/bots/{id}`, `/api/bots/{id}/tokens`, `/api/bots/self/commands`, `/api/bot-tokens/{id}/revoke`, `/api/bot-setup-codes/claim` | [bots](../features/bots.md) |

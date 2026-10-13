@@ -26,6 +26,7 @@ import (
 	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
+	"github.com/openclaw/clickclack/apps/api/internal/webpush"
 )
 
 var (
@@ -143,6 +144,26 @@ func serve(args []string) error {
 	if cfg.PushoverAPIToken != "" {
 		pushNotifier = httpapi.NewPushoverNotifier(cfg.PushoverAPIToken)
 	}
+	openclawID, err := httpapi.OpenClawIDConfig{
+		ClientID:     cfg.OpenClawIDClientID,
+		ClientSecret: cfg.OpenClawIDClientSecret,
+		Issuer:       cfg.OpenClawIDIssuer,
+		PublicURL:    cfg.PublicURL,
+	}.ApplyDiscovery(ctx)
+	if err != nil {
+		return err
+	}
+	var webPushNotifier httpapi.PushNotifier
+	if cfg.WebPushEnabled() {
+		notifier := httpapi.NewWebPushNotifier(httpapi.WebPushConfig{
+			VAPIDPublicKey:  cfg.WebPushVAPIDPublicKey,
+			VAPIDPrivateKey: cfg.WebPushVAPIDPrivateKey,
+			Subject:         cfg.WebPushSubject,
+		}, st)
+		defer notifier.Close()
+		webPushNotifier = notifier
+		log.Printf("web push enabled: application server key %s", webpush.KeyFingerprint(cfg.WebPushVAPIDPublicKey))
+	}
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadStorage:       uploads,
@@ -160,22 +181,19 @@ func serve(args []string) error {
 			AllowedOrg:   cfg.GitHubAllowedOrg,
 			ModeratorOrg: cfg.GitHubModeratorOrg,
 		},
-		OpenClawID: httpapi.OpenClawIDConfig{
-			ClientID:     cfg.OpenClawIDClientID,
-			ClientSecret: cfg.OpenClawIDClientSecret,
-			Issuer:       cfg.OpenClawIDIssuer,
-			PublicURL:    cfg.PublicURL,
-		},
+		OpenClawID: openclawID,
 		Access: httpapi.AccessConfig{
 			TeamDomain: cfg.AccessTeamDomain,
 			Audience:   cfg.AccessAUD,
 		},
-		PushNotifier:   pushNotifier,
-		MetricsEnabled: cfg.MetricsEnabled,
-		AccessLog:      accessLog,
-		Environment:    cfg.Environment,
-		Version:        version,
-		Commit:         commit,
+		PushNotifier:     pushNotifier,
+		WebPushNotifier:  webPushNotifier,
+		WebPushPublicKey: cfg.WebPushVAPIDPublicKey,
+		MetricsEnabled:   cfg.MetricsEnabled,
+		AccessLog:        accessLog,
+		Environment:      cfg.Environment,
+		Version:          version,
+		Commit:           commit,
 	})
 	if uploads != nil {
 		if err := server.CleanupPendingUploadObjects(ctx, 0); err != nil {
@@ -268,6 +286,11 @@ func admin(args []string) error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(manifest)
+	case "webpush":
+		if len(args) < 2 || args[1] != "keygen" {
+			return fmt.Errorf("usage: clickclack admin webpush keygen")
+		}
+		return adminWebPushKeygen(args[2:])
 	case "user":
 		if len(args) >= 2 && args[1] == "set-password" {
 			return adminUserSetPassword(args[2:])
@@ -584,7 +607,8 @@ func exportData(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	st, err := openStore(resolveDB(*data, *dbURL))
+	sourceDB := resolveDB(*data, *dbURL)
+	st, err := openStore(sourceDB)
 	if err != nil {
 		return err
 	}
@@ -593,21 +617,39 @@ func exportData(args []string) error {
 	if *out == "-" {
 		writer = os.Stdout
 	} else {
-		dir := filepath.Dir(*out)
-		writer, err = os.CreateTemp(dir, "."+filepath.Base(*out)+".tmp-*")
+		destination, err := exportDestinationPath(*out)
+		if err != nil {
+			return err
+		}
+		rules := exportPathRules{}
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
+		dir := filepath.Dir(destination)
+		writer, err = os.CreateTemp(dir, exportTempPattern)
 		if err != nil {
 			return err
 		}
 		tmpName := writer.Name()
 		defer os.Remove(tmpName)
+		defer writer.Close()
+		rules, err = exportDirectoryRules(writer)
+		if err != nil {
+			return err
+		}
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
 		if err := st.ExportJSON(context.Background(), writer); err != nil {
-			writer.Close()
 			return err
 		}
 		if err := writer.Close(); err != nil {
 			return err
 		}
-		return os.Rename(tmpName, *out)
+		if err := validateExportDestination(st, sourceDB, destination, rules); err != nil {
+			return err
+		}
+		return os.Rename(tmpName, destination)
 	}
 	return st.ExportJSON(context.Background(), writer)
 }

@@ -28,6 +28,9 @@ type clientOptions struct {
 	Plain     bool   `json:"-"`
 	NoInput   bool   `json:"-"`
 	Verbose   bool   `json:"-"`
+	// ChannelFromFlag is set when the command line named the channel rather
+	// than CLICKCLACK_CHANNEL or the saved config.
+	ChannelFromFlag bool `json:"-"`
 }
 
 type clientConfig struct {
@@ -58,6 +61,7 @@ func client(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	opts.ChannelFromFlag = flagWasSet(flags, "channel")
 	rest := flags.Args()
 	if len(rest) == 0 {
 		return errors.New("client command is required")
@@ -155,6 +159,14 @@ func addClientFlags(flags *flag.FlagSet, opts *clientOptions) {
 	flags.BoolVar(&opts.Plain, "plain", opts.Plain, "emit plain stable output")
 	flags.BoolVar(&opts.NoInput, "no-input", opts.NoInput, "disable prompts")
 	flags.BoolVar(&opts.Verbose, "verbose", opts.Verbose, "print diagnostics to stderr")
+}
+
+func flagWasSet(flags *flag.FlagSet, name string) bool {
+	set := false
+	flags.Visit(func(f *flag.Flag) {
+		set = set || f.Name == name
+	})
+	return set
 }
 
 func (c apiClient) withOptions(opts clientOptions, useStoredToken bool) apiClient {

@@ -6,6 +6,7 @@ import "slices"
 // eligible for outgoing event subscriptions.
 var DurableEventTypes = []string{
 	"channel.created",
+	"channel.deleted",
 	"channel.read",
 	"channel.updated",
 	"dm.read",

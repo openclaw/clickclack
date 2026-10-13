@@ -43,7 +43,7 @@
     quotedMessageID?: string;
   };
 
-  type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "error";
+  type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "deleted" | "error";
 
   let { workspaceRouteID, channelRouteID }: Props = $props();
 
@@ -371,6 +371,14 @@
 
   async function handleRealtimeEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     if (!channel || eventChannelID(event) !== channel.id) return;
+    if (event.type === "channel.deleted") {
+      loadSerial += 1;
+      loadPending = false;
+      clearChannel();
+      messageBody = "";
+      viewState = "deleted";
+      return;
+    }
     if (event.type === "message.created") {
       const eventSeq = event.seq || event.payload.seq || 0;
       if (eventSeq > 0 && eventSeq <= newestSeq) return;
@@ -613,6 +621,13 @@
     <section class="embed-state-card" role="alert">
       <h1>Channel unavailable</h1>
       <p>You are not a member of this workspace or do not have permission to view this channel.</p>
+    </section>
+  </main>
+{:else if viewState === "deleted"}
+  <main class="embed-state-shell">
+    <section class="embed-state-card" role="status">
+      <h1>Channel deleted</h1>
+      <p>This channel and its history have been permanently removed.</p>
     </section>
   </main>
 {:else if viewState === "not-found"}

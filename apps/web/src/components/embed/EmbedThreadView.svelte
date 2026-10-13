@@ -32,7 +32,7 @@
     messageRouteID: string;
   };
 
-  type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "error";
+  type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "deleted" | "error";
 
   let { workspaceRouteID, messageRouteID }: Props = $props();
 
@@ -236,6 +236,13 @@
   }
 
   async function handleRealtimeEvent(event: RealtimeEvent, isCurrent: () => boolean) {
+    if (event.type === "channel.deleted" && root?.channel_id && event.payload.channel_id === root.channel_id) {
+      loadSerial += 1;
+      loadPending = false;
+      clearThread();
+      viewState = "deleted";
+      return;
+    }
     if (
       eventBelongsToThread(event) &&
       (event.type === "reaction.added" || event.type === "reaction.removed")
@@ -395,6 +402,13 @@
     <section class="embed-state-card" role="alert">
       <h1>Thread unavailable</h1>
       <p>You are not a member of this workspace or do not have permission to view this thread.</p>
+    </section>
+  </main>
+{:else if viewState === "deleted"}
+  <main class="embed-state-shell">
+    <section class="embed-state-card" role="status">
+      <h1>Channel deleted</h1>
+      <p>This thread and its channel have been permanently removed.</p>
     </section>
   </main>
 {:else if viewState === "not-found"}

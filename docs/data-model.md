@@ -99,12 +99,18 @@ rows cascade when old events are pruned.
 ## Soft-deletes
 
 Messages set `deleted_at` instead of removing the row. This keeps
-`channel_seq`/`thread_seq` stable for cursors and reconnect.
+`channel_seq`/`thread_seq` stable for cursors and reconnect. Channel and workspace
+deletion are the exceptions: they remove rows through foreign-key cascades. The
+child keys those cascades look up (`messages.parent_message_id` and
+`messages.quoted_message_id`) are indexed so each deleted row does not scan the
+messages table.
 
 ## FTS
 
 SQLite `messages_fts` mirrors `messages.body` with `porter unicode61`. Three
-triggers keep it in sync on insert/delete/update-of-body. Postgres search uses
+triggers keep it in sync on insert/delete/update-of-body. `message_search_rows`
+records each message's FTS rowid, so the triggers replace or remove a row by
+rowid instead of scanning the index for its unindexed `message_id`. Postgres search uses
 `to_tsvector` / `websearch_to_tsquery` against `messages.body`. See
 [features/search.md](features/search.md).
 

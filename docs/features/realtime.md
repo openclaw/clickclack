@@ -82,7 +82,7 @@ POST /api/realtime/ephemeral
 
 Inserted in the same transaction as the underlying mutation:
 
-- `channel.created`, `channel.updated`
+- `channel.created`, `channel.updated`, `channel.deleted`
 - `message.created`, `message.updated`, `message.deleted`
 - `channel.read`, `dm.read`
 - `thread.reply_created`, `thread.state_updated`
@@ -127,6 +127,10 @@ top-level `seq` and include `user_id` plus the channel or DM conversation ID in
 `payload`; they are delivered only to that user.
 Moderation events carry the target `user_id` and current `role`; they are
 private to the target user and current owners/moderators.
+`channel.deleted` is workspace-scoped: its top-level `channel_id` is empty and
+its payload carries the deleted `channel_id` and `deleted_by`. Events recorded
+earlier for that channel keep their cursors, so replay from any of them still
+reaches the deletion; delivery skips them because the channel no longer exists.
 
 ## Ephemeral events
 

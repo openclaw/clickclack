@@ -75,7 +75,10 @@ export type Topic = components["schemas"]["Topic"];
 
 export type MessageKind = "message" | "agent_commentary" | "agent_tool";
 
-export type QuestionSpec = components["schemas"]["QuestionSpec"];
+export type QuestionSpec = Omit<components["schemas"]["QuestionSpec"], "allow_skip"> & {
+  /** Omission lets the server default to allowing skip. */
+  allow_skip?: boolean;
+};
 export type MessageQuestion = components["schemas"]["MessageQuestion"];
 export type BotQuestion = components["schemas"]["BotQuestion"];
 export type QuestionAnswers = Record<string, string[]>;

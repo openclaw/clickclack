@@ -48,21 +48,6 @@ type WorkspaceMemberRoleCounts struct {
 	Guest     int `json:"guest"`
 }
 
-func (c *WorkspaceMemberRoleCounts) Set(role string, count int) {
-	switch role {
-	case WorkspaceRoleOwner:
-		c.Owner = count
-	case WorkspaceRoleModerator:
-		c.Moderator = count
-	case WorkspaceRoleMember:
-		c.Member = count
-	case WorkspaceRoleBot:
-		c.Bot = count
-	case WorkspaceRoleGuest:
-		c.Guest = count
-	}
-}
-
 type WorkspaceMemberCursor struct {
 	Version    int    `json:"v"`
 	RoleSort   int    `json:"r"`

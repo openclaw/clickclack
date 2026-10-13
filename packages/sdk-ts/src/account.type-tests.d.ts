@@ -20,6 +20,18 @@ type _InvalidAppearanceRejected = Assert<
     : false
 >;
 
+type _SidebarOnlyAllowed = Assert<
+  IsAssignable<{ sidebar_preferences: { channel_order: { wsp_1: ["chn_a"] } } }, UpdateMeInput>
+>;
+type _InvalidSidebarRejected = Assert<
+  IsAssignable<
+    { sidebar_preferences: { channel_order: { wsp_1: 1 } } },
+    UpdateMeInput
+  > extends false
+    ? true
+    : false
+>;
+
 type LegacyUser = {
   id: string;
   kind: "human" | "bot";
@@ -36,3 +48,4 @@ type _UserStillAssignableToLegacy = Assert<IsAssignable<User, LegacyUser>>;
 type MeResult = Awaited<ReturnType<ClickClackClient["me"]>>;
 type _NotificationsReadable = MeResult["notification_settings"];
 type _AppearanceReadable = MeResult["appearance_preferences"];
+type _SidebarReadable = MeResult["sidebar_preferences"];

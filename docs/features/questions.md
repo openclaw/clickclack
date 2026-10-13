@@ -160,7 +160,10 @@ workspace with `messages:write` (and `dms:write` in a direct message).
 
 `note` is at most 200 characters and appears on the card. A stale
 `expected_version` or a transition the current status does not allow returns
-`409`. Repeating the recorded terminal status returns `200` without an event;
+`409`. The asking bot must still have message access and current write authority:
+blocked or timed-out bots receive `403`, including when reopening a submitted
+answer. No question state or durable event changes on rejection.
+Repeating the recorded terminal status returns `200` without an event;
 other changes append `message.updated`.
 
 ## Reconciling

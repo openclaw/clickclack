@@ -107,5 +107,5 @@ Deno, browsers, or Cloudflare Workers.
 
 - [Architecture](architecture/overview.md) — how the parts fit.
 - [Realtime](features/realtime.md) — cursor recovery and event types.
-- [Auth](features/auth.md) — the four ways to identify a caller.
+- [Auth](features/auth.md) — the five ways to identify a caller.
 - [Deployment](deployment.md) — running this for real, not just on a laptop.

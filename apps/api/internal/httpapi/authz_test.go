@@ -1210,14 +1210,14 @@ func TestHTTPNotFoundPreservesAPIAndAssetBoundaries(t *testing.T) {
 		{name: "missing stylesheet", method: http.MethodGet, path: "/_app/immutable/assets/missing.css", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing extensionless app asset", method: http.MethodGet, path: "/_app/immutable/missing", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing extensionless asset", method: http.MethodGet, path: "/assets/missing", wantStatus: http.StatusNotFound, wantType: "text/plain"},
-		{name: "missing javascript worker", method: http.MethodGet, path: "/service-worker.js", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing javascript worker", method: http.MethodGet, path: "/service-worker-missing.js", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing javascript module", method: http.MethodGet, path: "/workers/missing.mjs", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing source map", method: http.MethodGet, path: "/scripts/missing.js.map", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing font", method: http.MethodGet, path: "/fonts/missing.woff2", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing icon", method: http.MethodGet, path: "/icons/missing.svg", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing favicon", method: http.MethodGet, path: "/favicon.ico", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "missing image", method: http.MethodGet, path: "/images/missing.webp", wantStatus: http.StatusNotFound, wantType: "text/plain"},
-		{name: "missing web manifest", method: http.MethodGet, path: "/manifest.webmanifest", wantStatus: http.StatusNotFound, wantType: "text/plain"},
+		{name: "missing web manifest", method: http.MethodGet, path: "/missing.webmanifest", wantStatus: http.StatusNotFound, wantType: "text/plain"},
 		{name: "existing embedded favicon", method: http.MethodGet, path: "/favicon.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml"},
 		{name: "api lookalike remains spa", method: http.MethodGet, path: "/apiary/deep-link", wantStatus: http.StatusOK, wantType: "text/html"},
 		{name: "app deep link remains spa", method: http.MethodGet, path: "/app/TEXAMPLE/CEXAMPLE", wantStatus: http.StatusOK, wantType: "text/html"},
@@ -1271,4 +1271,54 @@ func newHTTPStore(t *testing.T) *sqlitestore.Store {
 	st := newEmptyHTTPStore(t)
 	_, _ = st.CreateUser(context.Background(), store.CreateUserInput{DisplayName: "seed", Email: "seed@example.com"})
 	return st
+}
+
+func TestChannelAdministrationIsOwnerOnlyForPeople(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newEmptyHTTPStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "channel-admin-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "/api/channels/" + channels[0].ID
+	people := map[string]string{}
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: role, Email: "channel-admin-" + role + "@example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, user.ID, role); err != nil {
+			t.Fatal(err)
+		}
+		people[role] = user.ID
+	}
+	server := httptest.NewServer(New(st, realtime.NewHub(), Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		expectStatusAsUser(t, people[role], http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":true}`), http.StatusForbidden)
+		expectStatusAsUser(t, people[role], http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"name":"renamed-by-`+role+`"}`), http.StatusForbidden)
+		if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: people[role], Name: "store-" + role}); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+			t.Fatalf("%s channel update error = %v, want %v", role, err, store.ErrWorkspaceOwnerRequired)
+		}
+	}
+	unchanged, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged[0].Name != channels[0].Name || unchanged[0].ArchivedAt != nil {
+		t.Fatalf("rejected channel updates changed the channel: %#v", unchanged[0])
+	}
+	expectStatusAsUser(t, owner.ID, http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":true}`), http.StatusOK)
+	expectStatusAsUser(t, owner.ID, http.MethodPatch, server.URL+endpoint, strings.NewReader(`{"archived":false}`), http.StatusOK)
 }

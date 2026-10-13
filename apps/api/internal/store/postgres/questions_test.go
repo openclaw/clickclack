@@ -21,6 +21,10 @@ func TestQuestionLifecycle(t *testing.T) {
 	questiontest.QuestionLifecycle(t, newMigratedQuestionStore(t))
 }
 
+func TestQuestionResolutionRespectsModeration(t *testing.T) {
+	questiontest.QuestionResolutionRespectsModeration(t, newMigratedQuestionStore(t))
+}
+
 func TestQuestionSkipReopenAndExternalAnswers(t *testing.T) {
 	questiontest.QuestionSkipReopenAndExternalAnswers(t, newMigratedQuestionStore(t))
 }

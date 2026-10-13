@@ -134,7 +134,7 @@ func (s *Server) accessActor(r *http.Request, assertion string) (actor, error) {
 	if ok {
 		s.setSessionCookie(w, r, session)
 	}
-	return actor{user: user}, nil
+	return actor{user: user, accessSessionToken: session.Token}, nil
 }
 
 func (v *accessVerifier) verify(ctx context.Context, assertion string) (accessClaims, error) {

@@ -2,11 +2,63 @@
 
 ## Unreleased
 
+## 0.7.1 - 2026-10-11
+
+**Highlights:** Quieter idle chats, reachable sidebar controls, and more reliable alerts and sign-in.
+
+- Stop hidden typing indicators from animating so idle channels and DMs avoid continuous redraws. Thanks @isaiahknight-va.
+- Limit the unread bar’s dot to three pulses, keeping the unread cue visible without continuous repainting. Thanks @isaiahknight-va.
+- Keep sidebar creation and collapse controls reachable with long workspace or account names by constraining the grid column. Thanks @isaiahknight-va and @NOLXII for the report.
+- Prevent a slow browser push endpoint from occupying every delivery worker, while keeping one shared limit of 1,024 pending alerts and normal success bookkeeping. Thanks @SebTardif.
+- Keep startup available during default OpenClaw ID discovery server errors while custom issuers still fail closed. Thanks @SebTardif.
+- Update Svelte, Markdown rendering, virtual scrolling, Vite, Electron 43, Playwright, and Go and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
+- Update SQLite, PDF.js, virtual scrolling, Vite, Electron 43, Wrangler, and Node.js types while preserving runtime minimums and the 48-hour dependency release-age gate.
+
+## 0.7.0 - 2026-09-30
+
+**Highlights:** Personal channel order follows your account across browsers and devices.
+
+- Personal sidebar channel order now follows your account across browsers and devices, with the existing local cache retained for offline use. Thanks @isaiahknight-va.
+- Preserve saved sidebar channel order, including explicit clears, in SQLite and PostgreSQL JSON exports.
+- Signed and notarized macOS server archives with the Foundation Developer ID, alongside the desktop installers, and verify their notarization tickets on a clean runner before publication.
+- Allow macOS release automation to select its credential keychain explicitly on headless hosts.
+- Updated SQLite, virtual scrolling, Wrangler, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.
+- Updated DOMPurify, Vite, Electron 43, desktop packaging, Wrangler, Node.js types, and pnpm while preserving runtime minimums and the 48-hour dependency release-age gate; Docker builds now include every workspace manifest for frozen-lockfile validation.
+- Corrected the source-install pnpm version and quickstart caller-authentication count to match the current toolchain and authentication guide. Thanks @KrasimirKralev.
+
+## 0.6.0 - 2026-09-24
+
+**Highlights:** Phone alerts with per-device controls and automatic OIDC endpoint discovery.
+
+- Added opt-in phone and browser alerts over standard Web Push, with session-bound devices, key rotation, and private previews restricted to the signed-in account. Thanks @isaiahknight-va.
+- Added automatic OIDC authorization and token endpoint discovery for providers such as Kanidm, with exact issuer validation and preserved endpoint overrides. Thanks @AdamClaassens.
+- Updated Electron 43 for hidden-window startup fixes on Windows and Linux, and refreshed virtual scrolling and build tools while preserving runtime minimums and the dependency release-age gate.
+
+## 0.5.2 - 2026-09-24
+
+**Highlights:** Visible macOS menu icons, reliable trackpad actions, and Markdown text that stays intact.
+
+- Fixed the macOS menu bar icon disappearing on dark menu bars by preserving the template flag after resizing. Thanks @isaiahknight-va.
+- Restored trackpad message actions in chat and embeds, kept new reactions visible without undoing later scrolling, and prevented text selection over the iOS action sheet. Thanks @isaiahknight-va.
+- Fixed disappearing text after empty nested Markdown quotes and updated virtual scrolling, SQLite runtime support, and build tools while retaining runtime minimums and the dependency release-age gate.
+
+## 0.5.1 - 2026-09-21
+
+**Highlights:** Safer exports, reliable sign-in, and chat status indicators that stay clear of messages.
+
+- Prevent JSON exports from overwriting their source SQLite database or its journal files, including paths reached through filesystem aliases.
+- Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
 - Preserve generated JavaScript literals during web builds, preventing whitespace cleanup from corrupting syntax grammars and Svelte class handling.
+- Fixed desktop sign-in behind Cloudflare Access One-time PIN by completing authentication in an isolated window sharing the app's session; multi-domain Access apps require Eager redirect cookie disabled. Thanks @sercada.
+- Fixed the typing indicator covering and clipping the last message, and the responding indicator resizing thread replies, by reserving one steady status band above both composers. Thanks @isaiahknight-va.
+- Updated SQLite, Markdown rendering, scrolling, Electron 43, and development tools while preserving the supported runtime minimums and dependency release-age gate.
+- Reduce server archive downloads by omitting development proof captures, and include all offline guides and README images on every platform.
+- Avoid PostgreSQL test fixture collisions when parallel tests start within the same clock tick.
+- Fixed account settings opening integrations in the wrong workspace and leaving the mobile navigation drawer open beneath the dialog. Thanks @isaiahknight-va.
+- Fixed moderators being offered channel settings they cannot save, and return a clear permission error for denied channel updates in both database stores. Thanks @sercada.
+- Updated Virtua, Wrangler, transitive build dependencies, the pinned AWS CLI, and the PostgreSQL CI service while retaining the 48-hour release-age gate and supported runtime minimums.
 - Hide OpenClaw ID sign-in when the server has not configured it, and show the correct sign-in guidance for OpenClaw-only servers.
 - Fixed saved choices to reveal agent commentary or tool calls being overridden by an older combined hide-activity setting after reload.
-- Fixed desktop sign-in behind Cloudflare Access One-time PIN by completing authentication in an isolated window sharing the app's session; multi-domain Access apps require Eager redirect cookie disabled. Thanks @sercada.
-- Patched `js-yaml` and `xmldom` advisories in the desktop packaging and OpenAPI tooling dependencies, and aligned the OpenAPI generator with its supported TypeScript compiler API.
 - Updated Vite, Electron 43, desktop packaging, Wrangler, pnpm and build image/tool pins while preserving Node.js 24, macOS 12 and Go 1.26.6 minimums; CI now covers web utilities on Node.js 24 and 26 and avoids duplicate Go tests and unnecessary job dependencies.
 
 ## 0.5.0 - 2026-09-11

@@ -228,18 +228,18 @@
 }
 
 @media (hover: none), (pointer: coarse) {
-  .thread .group-body > header {
+  :root:not([data-pointer-mode="mouse"]) .thread .group-body > header {
     position: relative;
     min-height: 28px;
     padding-right: 32px;
   }
 
-  .thread .reply-quote-btn,
-  .thread .thread-action-btn:not(.thread-more-actions) {
+  :root:not([data-pointer-mode="mouse"]) .thread .reply-quote-btn,
+  :root:not([data-pointer-mode="mouse"]) .thread .thread-action-btn:not(.thread-more-actions) {
     display: none;
   }
 
-  .thread .thread-more-actions {
+  :root:not([data-pointer-mode="mouse"]) .thread .thread-more-actions {
     position: absolute;
     right: 0;
     top: 0;
@@ -254,7 +254,7 @@
     white-space: nowrap;
   }
 
-  .thread .thread-more-actions:focus-visible {
+  :root:not([data-pointer-mode="mouse"]) .thread .thread-more-actions:focus-visible {
     width: 28px;
     height: 28px;
     margin: 0;

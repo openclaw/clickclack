@@ -50,6 +50,13 @@ except the author.
 The current user's profile control sits at the bottom of the channel sidebar.
 Click or right-click it to open account settings and edit display name, handle,
 avatar URL, conversation display preferences, and notification settings.
+The account settings rail shows one Workspace group. When the account belongs
+to more than one workspace, a selector under the heading chooses which one the
+group's sections apply to; it opens on the workspace the user is standing in,
+whose name carries a "(current)" marker in the list, so a workspace section
+opens that workspace rather than whichever one the API listed first. With a
+single workspace the heading names it and there is no selector. Opening account
+settings on a phone closes the navigation drawer.
 
 Profile and notification saves update only their respective sections. Saving
 one section preserves changes to another section made in another tab or device.
@@ -74,3 +81,25 @@ Message lists, search results, threads, DMs, and the profile control all hydrate
 avatars from the user attached to each message or conversation member.
 The member directory uses the same avatar fallback: an unavailable image shows
 the user's initial while retaining the member or bot styling.
+
+## Personal channel order
+
+Drag a channel, use its move handle with the arrow keys, or choose a move action
+from its menu to change your personal sidebar order. The order is saved with your
+account and appears on other browsers and devices when they next load the app.
+Other members' sidebars are unchanged. Same-browser tabs still share updates;
+the local cache keeps reordering usable offline or when an account save fails.
+A later reorder retries saving. Local edits take precedence for the current page;
+reload to fetch changes made on another device.
+
+`GET /api/me` includes `user.sidebar_preferences.channel_order`, keyed by workspace
+ID. `PATCH /api/me` accepts `sidebar_preferences: { channel_order: { "workspace-id":
+["channel-id"] } }`. Each supplied workspace replaces only its own order; an empty
+array clears it. The caller must belong to the workspace. Unknown channel IDs are
+dropped and duplicates keep their first position. Up to 100 workspaces and 500
+channel IDs per workspace can be saved per request. Larger local orders retain
+their tail on the browser where they were arranged. Appearance and sidebar
+preferences update independently.
+
+SQLite and PostgreSQL JSON exports include the saved per-workspace channel order,
+including explicit clears, in `user_sidebar_channel_order`.

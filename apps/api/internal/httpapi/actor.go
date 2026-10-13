@@ -21,9 +21,17 @@ type actor struct {
 	// assertion, and the local development fallbacks. Handlers that revoke or
 	// revalidate the caller's own session key on it.
 	sessionToken string
-	botTokenID   string
-	workspaceID  string
-	scopes       []string
+	// accessSessionToken is the session a trusted-proxy assertion minted for
+	// this request and set as the caller's cookie. It is not the credential
+	// the caller presented, so handlers that act on that credential ignore
+	// it; push registration binds to it so signing out still stops delivery.
+	accessSessionToken string
+	// developmentFallback marks the loopback development identity, the only
+	// actor that is signed in without any session at all.
+	developmentFallback bool
+	botTokenID          string
+	workspaceID         string
+	scopes              []string
 }
 
 var errSessionLookupUnavailable = errors.New("session verification unavailable; retry later")
@@ -88,10 +96,10 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 		if err == nil && user.DeletedAt != nil {
 			return actor{}, errors.New("authentication required")
 		}
-		return actor{user: user}, err
+		return actor{user: user, developmentFallback: true}, err
 	}
 	user, err := s.store.FirstUser(r.Context())
-	return actor{user: user}, err
+	return actor{user: user, developmentFallback: true}, err
 }
 
 func (a actor) requireScope(scope string) error {

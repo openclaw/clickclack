@@ -96,7 +96,7 @@ jobs:
           node deploy/fakeco/aws/owner.mjs validate-profile
 
       - name: Configure exact target-account role
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           allowed-account-ids: ${{ vars.FAKECO_AWS_ACCOUNT_ID }}
           aws-region: us-west-2

@@ -122,6 +122,88 @@ func QuestionLifecycle(t *testing.T, st store.Store) {
 	}
 }
 
+// QuestionResolutionRespectsModeration verifies current write authority, including
+// the response and durable event effects of reopening a submitted question.
+func QuestionResolutionRespectsModeration(t *testing.T, st store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	f := newFixture(t, st)
+	conversation, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+		WorkspaceID: f.workspace.ID, UserID: f.bot.ID, MemberIDs: []string{f.member.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, location := range []string{"channel", "direct"} {
+		for _, restriction := range []string{"blocked", "timeout"} {
+			for _, outcome := range []string{store.QuestionStatusAnswered, store.QuestionStatusOpen} {
+				t.Run(location+"/"+restriction+"/"+outcome, func(t *testing.T) {
+					spec := questionSpec(f.member.ID)
+					var message store.Message
+					var err error
+					if location == "direct" {
+						message, _, err = st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+							ConversationID: conversation.ID, AuthorID: f.bot.ID, Body: "Confirm shipping", Question: &spec,
+						})
+					} else {
+						message, _, err = st.CreateMessage(ctx, store.CreateMessageInput{
+							ChannelID: f.channel.ID, AuthorID: f.bot.ID, Body: "Confirm shipping", Question: &spec,
+						})
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					submitted, _, err := st.AnswerQuestion(ctx, store.AnswerQuestionInput{
+						MessageID: message.ID, UserID: f.member.ID,
+						Answers: map[string][]string{"ship_date": {"Lun 15 sep"}, "boxes": {"120"}},
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					moderation := store.UpdateMemberModerationInput{
+						WorkspaceID: f.workspace.ID, ActorUserID: f.owner.ID, TargetUserID: f.bot.ID,
+					}
+					if restriction == "blocked" {
+						blocked := true
+						moderation.Blocked = &blocked
+					} else {
+						until := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
+						moderation.TimeoutUntil = &until
+					}
+					_, boundary, err := st.UpdateMemberModeration(ctx, moderation)
+					if err != nil {
+						t.Fatal(err)
+					}
+					resolve := store.ResolveQuestionInput{
+						MessageID: message.ID, BotUserID: f.bot.ID, Status: outcome,
+						Note: "Please select a shipping day", ExpectedVersion: &submitted.Question.Version,
+					}
+					if _, event, err := st.ResolveQuestion(ctx, resolve); !errors.Is(err, store.ErrModerationRestricted) || event.ID != "" {
+						t.Fatalf("restricted resolution: event=%#v err=%v", event, err)
+					}
+					unchanged, err := st.GetMessage(ctx, message.ID, f.member.ID)
+					if err != nil || !reflect.DeepEqual(unchanged.Question, submitted.Question) {
+						t.Fatalf("restricted resolution changed stored question: %#v, %v", unchanged.Question, err)
+					}
+					if events, err := st.ListEventsAfter(ctx, f.workspace.ID, f.owner.ID, boundary.Cursor, 100); err != nil || len(events) != 0 {
+						t.Fatalf("restricted resolution appended durable events: %#v, %v", events, err)
+					}
+					clear := false
+					if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
+						WorkspaceID: f.workspace.ID, ActorUserID: f.owner.ID, TargetUserID: f.bot.ID,
+						Blocked: &clear, ClearTimeout: true,
+					}); err != nil {
+						t.Fatal(err)
+					}
+					if allowed, event, err := st.ResolveQuestion(ctx, resolve); err != nil || allowed.Question.Status != outcome || event.ID == "" {
+						t.Fatalf("resolution after restriction cleared: %#v, %#v, %v", allowed.Question, event, err)
+					}
+				})
+			}
+		}
+	}
+}
+
 func QuestionSkipReopenAndExternalAnswers(t *testing.T, st store.Store) {
 	t.Helper()
 	ctx := context.Background()

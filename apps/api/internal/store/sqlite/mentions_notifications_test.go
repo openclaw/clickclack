@@ -709,3 +709,49 @@ func TestPushNotificationRecipientsRespectChannelMute(t *testing.T) {
 		t.Fatal("expected mentions-only member to receive a matching @mention")
 	}
 }
+
+// TestListMentionedUserIDsResolvesLikePosting pins the lookup the web push
+// worker repeats at send time to the one posting a message records: the same
+// members, and nobody for a handle that is not one.
+func TestListMentionedUserIDsResolvesLikePosting(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "mention-lookup-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Member", Email: "mention-lookup-member@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateUserProfile(ctx, store.UpdateUserProfileInput{UserID: member.ID, DisplayName: member.DisplayName, Handle: "lookup"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const text = "@lookup and @nobody, see this"
+	_, event, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mentioned, err := st.ListMentionedUserIDs(ctx, workspace.ID, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(mentioned, ",") != member.ID || strings.Join(event.MentionedUserIDs, ",") != member.ID {
+		t.Fatalf("the lookup found %v and posting recorded %v, want only %s", mentioned, event.MentionedUserIDs, member.ID)
+	}
+	if none, err := st.ListMentionedUserIDs(ctx, workspace.ID, "no one in particular"); err != nil || len(none) != 0 {
+		t.Fatalf("a body with no mention resolved %v: %v", none, err)
+	}
+}

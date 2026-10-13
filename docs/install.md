@@ -11,7 +11,7 @@ are three sensible ways to install the server.
 
 ## From source
 
-You'll need a recent Go and pnpm 11 (auto-managed via `corepack`).
+You'll need a recent Go and pnpm 12 (auto-managed via `corepack`).
 
 ```sh
 git clone https://github.com/openclaw/clickclack.git

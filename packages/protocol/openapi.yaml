@@ -345,6 +345,81 @@ paths:
                 properties:
                   user:
                     $ref: "#/components/schemas/User"
+  /api/me/push:
+    get:
+      operationId: getMyPush
+      description: Web push state for the current user. Reports disabled with no keys when the server has no VAPID key pair.
+      parameters:
+        - name: device
+          in: query
+          required: false
+          description: The unpadded base64url SHA-256 of the push subscription endpoint the calling browser holds. When it matches one of the user's devices, this_device is true, and this_device_stale says whether that device must replace its subscription. The endpoint itself is never sent.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Web push state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushState"
+  /api/me/push/subscriptions:
+    put:
+      operationId: putMyPushSubscription
+      description: Register or replace the browser push subscription for one device. Re-registering the same endpoint replaces its keys.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscriptionRequest"
+      responses:
+        "200":
+          description: Stored device summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription]
+                properties:
+                  subscription:
+                    $ref: "#/components/schemas/PushSubscription"
+        "400":
+          description: The endpoint or the client keys are unusable, or user_id is missing
+        "403":
+          description: A bot token, or a caller with no signed-in session for the device to follow
+        "404":
+          description: Web push is not configured on this server
+        "409":
+          description: user_id is not the signed-in account, as when another tab signed this browser in to a different account. Nothing is written.
+    delete:
+      operationId: deleteMyPushSubscription
+      description: Remove one device. An endpoint that is not registered still answers 204, so the client can call this freely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, user_id]
+              properties:
+                user_id:
+                  type: string
+                  description: The account the client is turning this device off for. It must be the signed-in account, or the request is refused with 409.
+                endpoint:
+                  type: string
+                  description: The push service URL returned by pushManager.subscribe.
+      responses:
+        "204":
+          description: The device is no longer registered
+        "400":
+          description: The endpoint or user_id is missing
+        "403":
+          description: A bot token, or a caller with no signed-in session for the device to follow
+        "404":
+          description: Web push is not configured on this server
+        "409":
+          description: user_id is not the signed-in account, as when another tab signed this browser in to a different account. Nothing is removed.
   /api/event-types:
     get:
       operationId: listEventTypes
@@ -2074,6 +2149,8 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferencesPatch"
+        sidebar_preferences:
+          $ref: "#/components/schemas/SidebarPreferencesPatch"
     User:
       type: object
       required: [id, kind, display_name, handle, avatar_url, created_at]
@@ -2107,6 +2184,8 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferences"
+        sidebar_preferences:
+          $ref: "#/components/schemas/SidebarPreferences"
         password_enrolled:
           type: boolean
           description: Whether this account has a password on file. Reported only for the signed-in caller, on /api/me.
@@ -2850,6 +2929,68 @@ components:
           type: string
           description: Current user's Pushover user key. Must be set when Pushover notifications are enabled.
           pattern: "^$|^[A-Za-z0-9]{30}$"
+    PushState:
+      type: object
+      required: [enabled, vapid_public_key, subscriptions, this_device, this_device_stale]
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the server has a VAPID key pair and can deliver web push.
+        vapid_public_key:
+          type: string
+          description: Application server key for pushManager.subscribe, base64url. Empty when web push is disabled.
+        subscriptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PushSubscription"
+        this_device:
+          type: boolean
+          description: Whether the device named by the device query parameter is registered to the current user. False when no device is named.
+        this_device_stale:
+          type: boolean
+          description: Whether that device is registered under an application server key the server no longer signs with, so its push service refuses every push and the client must replace the subscription. The server knows this even when the browser does not expose the key a subscription was made under. False when this_device is false or web push is disabled.
+    PushSubscription:
+      type: object
+      description: One registered device. The endpoint and the client keys are delivery secrets and are never returned.
+      required: [id, user_agent, created_at, updated_at, failure_count]
+      properties:
+        id:
+          type: string
+        user_agent:
+          type: string
+          description: Short device label chosen by the client.
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        last_success_at:
+          type: string
+        failure_count:
+          type: integer
+          format: int64
+    PushSubscriptionRequest:
+      type: object
+      required: [endpoint, keys, user_id]
+      properties:
+        user_id:
+          type: string
+          description: The account the client is registering this device for, the one whose opt-in it checked. It must be the signed-in account, or the request is refused with 409.
+        endpoint:
+          type: string
+          description: The push service URL from pushManager.subscribe. Must be https and must not point inside the deployment's own network.
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh:
+              type: string
+              description: Uncompressed P-256 public key from the subscription, base64url.
+            auth:
+              type: string
+              description: 16 byte subscription auth secret, base64url.
+        user_agent:
+          type: string
+          description: Short device label, truncated to 200 characters.
     AppearancePreferences:
       type: object
       description: Current user's complete appearance preference snapshot. Empty properties use client defaults.
@@ -2882,6 +3023,33 @@ components:
         density:
           type: string
           enum: ["", comfortable, compact]
+    SidebarPreferences:
+      type: object
+      description: Current user's complete sidebar preference snapshot. Omitted properties use client defaults.
+      properties:
+        channel_order:
+          type: object
+          description: Personal channel order, keyed by workspace id. Each value lists the caller's channel ids for that workspace in sidebar order. A workspace whose order was cleared is present with an empty array, so a client can tell a clear from a workspace that never saved an order; workspaces that never saved one are absent.
+          additionalProperties:
+            type: array
+            maxItems: 500
+            items:
+              type: string
+              maxLength: 128
+    SidebarPreferencesPatch:
+      type: object
+      description: Partial sidebar update. Workspaces omitted from channel_order are unchanged, a listed workspace replaces that workspace's order, and an empty array clears it back to the server's default ordering.
+      properties:
+        channel_order:
+          type: object
+          description: Ordered channel ids keyed by workspace id. The caller must be a member of every workspace listed. Ids that are not channels of that workspace are dropped, and repeated ids keep their first position.
+          maxProperties: 100
+          additionalProperties:
+            type: array
+            maxItems: 500
+            items:
+              type: string
+              maxLength: 128
     CreateChannelRequest:
       type: object
       required: [name]

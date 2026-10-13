@@ -10,6 +10,9 @@ A workspace is the top-level container. It owns channels, direct conversations,
 events, uploads, and invites. Membership lives in `workspace_members` with a
 role of `owner`, `moderator`, `member`, `guest`, or `bot`.
 
+Long workspace and account names truncate with an ellipsis so channel and
+direct-message creation controls stay reachable in the sidebar and mobile drawer.
+
 ## Workspaces
 
 ```http
@@ -91,6 +94,11 @@ external_managed, external_ref, external_url, sidebar_section}`. Setting
 the nullable display, external, or sidebar fields clears that field.
 Omitted fields retain their current values, including changes committed by
 concurrent updates.
+
+Channel updates require a workspace owner or an appropriately scoped bot.
+The web app only offers channel settings to owners; other people receive
+`403 workspace owner permission required` if they call the update API directly.
+Moderators retain their workspace and member moderation controls.
 
 Channel responses include `display_title` when set. Human-facing web labels use
 it and fall back to `name`; API selectors, links, and routing continue to use

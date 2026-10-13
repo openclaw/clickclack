@@ -13,6 +13,11 @@ func TestQuestionLifecycle(t *testing.T) {
 	questiontest.QuestionLifecycle(t, newTestStore(t))
 }
 
+func TestQuestionResolutionRespectsModeration(t *testing.T) {
+	t.Parallel()
+	questiontest.QuestionResolutionRespectsModeration(t, newTestStore(t))
+}
+
 func TestQuestionSkipReopenAndExternalAnswers(t *testing.T) {
 	t.Parallel()
 	questiontest.QuestionSkipReopenAndExternalAnswers(t, newTestStore(t))

@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/webassets"
 )
+
+func init() {
+	// Go's built-in table has no .webmanifest, and a slim container image has
+	// no /etc/mime.types to fall back on, so the web app manifest would be
+	// served as text/plain and installability checks would fail.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}
 
 func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {

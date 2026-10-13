@@ -764,11 +764,12 @@ function reloadMainApp() {
 }
 
 function createTray() {
-  const image = nativeImage.createFromPath(
-    assetPath(process.platform === "darwin" ? "trayTemplate.png" : "icon.png"),
-  );
+  const image = nativeImage
+    .createFromPath(assetPath(process.platform === "darwin" ? "trayTemplate.png" : "icon.png"))
+    .resize({ height: process.platform === "darwin" ? 18 : 20 });
+  // Resizing creates a new image, so mark the final image as a template.
   if (process.platform === "darwin") image.setTemplateImage(true);
-  tray = new Tray(image.resize({ height: process.platform === "darwin" ? 18 : 20 }));
+  tray = new Tray(image);
   tray.setToolTip(APP_NAME);
   tray.on("click", showMainWindow);
   updateTrayMenu();

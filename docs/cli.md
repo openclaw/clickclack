@@ -17,7 +17,7 @@ clickclack <command> [flags]
 Commands:
   serve      run the HTTP/WebSocket server (default if no command given)
   migrate    apply embedded SQL migrations
-  admin      bootstrap, FakeCo seed, user create, member add, invite create, bot create, events prune, magic-link create
+  admin      bootstrap, FakeCo seed, user create, member add, invite create, bot create, events prune, magic-link create, webpush keygen
   backup     write a SQLite backup file
   export     write a JSON dump to a file or stdout
   login      consume a magic-link token and store/print a session token
@@ -146,6 +146,19 @@ Use this to hand out a temporary password. The account owner replaces it from
 the app's account settings, which never routes the new secret through an
 operator.
 
+### `admin webpush keygen`
+
+```sh
+clickclack admin webpush keygen
+```
+
+Prints one fresh VAPID key pair as the two environment variables the server
+reads, public key first. The pair is generated in memory and never stored, so
+copy it into the deployment's configuration before the output scrolls away, and
+treat the private key like any other server secret. Setting both halves turns
+[push notifications](features/push-notifications.md) on; without them every
+push endpoint reports the feature as disabled.
+
 ### `admin member add`
 
 ```sh
@@ -260,6 +273,13 @@ clickclack export --out -                # stdout
 Writes a JSON dump of users, workspaces, channels, messages, threads,
 reactions, uploads metadata, and DMs. Useful for migrations between SQLite
 files or for one-off audits.
+
+File exports replace the destination only after the complete dump is written.
+An export cannot target its source SQLite database or its `-wal`, `-shm`, or
+`-journal` files, including paths through symlinks or hard links. Choose a
+separate output file; protection follows the directory's case rules.
+Windows aliases with trailing periods or spaces are also protected.
+`--out -` still writes to stdout.
 
 ## Client auth
 

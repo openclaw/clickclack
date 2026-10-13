@@ -11,8 +11,8 @@ Each channel member can choose one notification preference:
 - `mentions` delivers alerts only when the event's `mentioned_user_ids` includes the member.
 - `muted` suppresses alerts.
 
-The preference applies to Pushover and browser or desktop realtime alerts. Direct-message
-notifications are unchanged.
+The preference applies to Pushover, [web push](push-notifications.md), and browser or
+desktop realtime alerts. Direct-message notifications are unchanged.
 
 ## Endpoints
 

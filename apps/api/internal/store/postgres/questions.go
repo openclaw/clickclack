@@ -360,6 +360,17 @@ func (s *Store) ResolveQuestion(ctx context.Context, input store.ResolveQuestion
 	if row.BotUserID != input.BotUserID {
 		return store.Message{}, store.Event{}, store.ErrQuestionAuthorRequired
 	}
+	if err := requireMessageAccessTx(ctx, tx, msg, input.BotUserID); err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	if msg.DirectConversationID != "" {
+		err = requireCanSendDirectTx(ctx, tx, msg.WorkspaceID, input.BotUserID)
+	} else {
+		err = requireNoModerationBlockTx(ctx, tx, msg.WorkspaceID, input.BotUserID)
+	}
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
 	if input.ExpectedVersion != nil && *input.ExpectedVersion != row.Version {
 		return store.Message{}, store.Event{}, store.ErrQuestionConflict
 	}

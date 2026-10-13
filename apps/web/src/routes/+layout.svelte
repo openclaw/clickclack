@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterNavigate } from "$app/navigation";
   import { onMount } from "svelte";
+  import { startPointerModeTracking } from "$lib/pointer-mode.svelte";
   import { applyColorMode, initAppearance, loadColorMode } from "$lib/appearance";
   import { clearEmbedHostTheme, installEmbedHostTheme } from "$lib/embed-theme";
   import "../styles/index.css";
@@ -10,7 +11,9 @@
 
   onMount(() => {
     initAppearance();
+    const stopPointerModeTracking = startPointerModeTracking();
     return () => {
+      stopPointerModeTracking();
       uninstallEmbedHostTheme();
       clearEmbedHostTheme();
     };

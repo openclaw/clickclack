@@ -133,7 +133,7 @@ test("invalid saved channel ordering falls back to server order", async ({ page 
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
 });
 
-test("unavailable channel order storage keeps session reordering functional", async ({ page }) => {
+test("unavailable local storage still saves channel order to the account", async ({ page }) => {
   const { workspace, names } = await createWorkspaceWithChannels(page, "Blocked channel order");
   await page.addInitScript(() => {
     const blockedKeyPrefix = "clickclack:sidebar-channel-order:v1:";
@@ -159,7 +159,53 @@ test("unavailable channel order storage keeps session reordering functional", as
     .click();
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[1], names[0], names[2]]);
 
+  await expect
+    .poll(async () => {
+      const response = await page.request.get("/api/me");
+      return (await response.json()).user.sidebar_preferences?.channel_order?.[workspace.id]
+        ?.length;
+    })
+    .toBe(3);
   await page.reload();
   await waitForAppReady(page);
-  await expect.poll(() => visibleChannelNames(page)).toEqual(names);
+  await expect.poll(() => visibleChannelNames(page)).toEqual([names[1], names[0], names[2]]);
+});
+
+test("channel order roams to an independent browser session", async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { workspace, names } = await createWorkspaceWithChannels(page, "Roaming order");
+  await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
+  await page.getByRole("button", { name: `Move #${names[2]}` }).focus();
+  await page.keyboard.press("ArrowUp");
+  const reordered = [names[0], names[2], names[1]];
+  await expect.poll(() => visibleChannelNames(page)).toEqual(reordered);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get("/api/me");
+      const { user } = await response.json();
+      return user.sidebar_preferences?.channel_order?.[workspace.id]?.length;
+    })
+    .toBe(3);
+
+  const independent = await browser.newContext();
+  try {
+    const other = await independent.newPage();
+    await other.goto(`/app/${workspace.route_id}`);
+    await waitForAppReady(other);
+    await other.screenshot({ path: testInfo.outputPath("independent-session.png") });
+    await expect.poll(() => visibleChannelNames(other)).toEqual(reordered);
+    // An explicit clear must override this browser's cached order on reload.
+    const cleared = await page.request.patch("/api/me", {
+      data: { sidebar_preferences: { channel_order: { [workspace.id]: [] } } },
+    });
+    expect(cleared.ok()).toBe(true);
+    await other.reload();
+    await waitForAppReady(other);
+    await expect.poll(() => visibleChannelNames(other)).toEqual(names);
+  } finally {
+    await independent.close();
+  }
 });

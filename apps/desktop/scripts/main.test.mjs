@@ -342,3 +342,20 @@ for (const replacementStage of ["after-save", "during-probe"]) {
     assert.equal(unexpectedCloses, 0, "An old save must not close a newly opened Settings window");
   });
 }
+
+test("the macOS menu bar receives the 18pt tray template image", async (t) => {
+  const d = await desktop(t, { platform: "darwin" });
+  const { image } = d.trays[0];
+  assert.equal(image.isTemplateImage(), true, "The menu bar image must stay a template image");
+  assert.match(image.path, /[/\\]assets[/\\]trayTemplate\.png$/);
+  assert.deepEqual(image.getSize(), { width: 18, height: 18 });
+});
+
+for (const platform of ["linux", "win32"]) {
+  test(`the ${platform} tray receives the app icon at 20px`, async (t) => {
+    const d = await desktop(t, { platform });
+    const { image } = d.trays[0];
+    assert.match(image.path, /[/\\]assets[/\\]icon\.png$/);
+    assert.equal(image.getSize().height, 20);
+  });
+}

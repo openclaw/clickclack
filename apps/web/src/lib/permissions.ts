@@ -13,6 +13,12 @@ export function isWorkspaceManager(role: WorkspaceRole | undefined | null): bool
   return MANAGER_ROLES.has(role);
 }
 
+// Channel rename, archive, and kind changes are owner-only for people. The
+// server also admits scoped bots, which never reach this UI.
+export function canAdministerChannels(role: WorkspaceRole | undefined | null): boolean {
+  return role === "owner";
+}
+
 export function currentRole(
   workspaces: readonly Workspace[],
   workspaceID: string | undefined | null,

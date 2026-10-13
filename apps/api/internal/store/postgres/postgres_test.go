@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
 	"sort"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/openclaw/clickclack/apps/api/internal/requestmeta"
@@ -280,6 +280,23 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	}
 }
 
+func postgresTestSchemaName() string {
+	return newID("member_upgrade")
+}
+
+func TestPostgresSchemaNamesAreUniqueWithinClockTick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		seen := map[string]bool{}
+		for range 32 {
+			name := postgresTestSchemaName()
+			if seen[name] {
+				t.Fatalf("two fixtures chose the same schema within one clock tick: %s", name)
+			}
+			seen[name] = true
+		}
+	})
+}
+
 func newIsolatedPostgresTestStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := os.Getenv("CLICKCLACK_POSTGRES_TEST_DSN")
@@ -294,7 +311,7 @@ func newIsolatedPostgresTestStore(t *testing.T) *Store {
 		_ = adminDB.Close()
 		t.Fatal(err)
 	}
-	schema := fmt.Sprintf("member_upgrade_%d", time.Now().UnixNano())
+	schema := postgresTestSchemaName()
 	if _, err := adminDB.Exec(`CREATE SCHEMA ` + schema); err != nil {
 		_ = adminDB.Close()
 		t.Fatal(err)
@@ -537,5 +554,42 @@ func TestPostgresConcurrentChannelMessages(t *testing.T) {
 		if seq != want {
 			t.Fatalf("seq[%d] = %d, want %d; all seqs: %v", i, seq, want, got)
 		}
+	}
+}
+
+func TestPostgresChannelAdministrationRequiresOwner(t *testing.T) {
+	ctx := context.Background()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "pg-channel-admin-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{store.WorkspaceRoleModerator, store.WorkspaceRoleMember} {
+		user, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: role, Email: "pg-channel-admin-" + role + "@example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspaces[0].ID, user.ID, role); err != nil {
+			t.Fatal(err)
+		}
+		archived := true
+		if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: user.ID, Archived: &archived}); !errors.Is(err, store.ErrWorkspaceOwnerRequired) {
+			t.Fatalf("%s channel archive error = %v, want %v", role, err, store.ErrWorkspaceOwnerRequired)
+		}
+	}
+	archived := true
+	if updated, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channels[0].ID, UserID: owner.ID, Archived: &archived}); err != nil || updated.ArchivedAt == nil {
+		t.Fatalf("owner archive = %#v, %v", updated, err)
 	}
 }

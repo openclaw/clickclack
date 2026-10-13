@@ -88,6 +88,7 @@ Inserted in the same transaction as the underlying mutation:
 - `thread.reply_created`, `thread.state_updated`
 - `reaction.added`, `reaction.removed`
 - `pin.added`, `pin.removed`
+- `question.submitted`
 - `member.moderation_updated`
 
 The common append helper is the transaction's finalization boundary: complete

@@ -277,6 +277,28 @@ type MessageAttachment struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type MessageQuestion struct {
+	MessageID        string         `json:"message_id"`
+	WorkspaceID      string         `json:"workspace_id"`
+	BotUserID        string         `json:"bot_user_id"`
+	ExternalID       string         `json:"external_id"`
+	SpecJson         string         `json:"spec_json"`
+	ResponderUserIds string         `json:"responder_user_ids"`
+	AllowSkip        int64          `json:"allow_skip"`
+	ExpiresAt        string         `json:"expires_at"`
+	Status           string         `json:"status"`
+	ResponseJson     string         `json:"response_json"`
+	ResponseSource   string         `json:"response_source"`
+	RespondedBy      sql.NullString `json:"responded_by"`
+	RespondedAt      sql.NullString `json:"responded_at"`
+	ResponseNonce    string         `json:"response_nonce"`
+	Note             string         `json:"note"`
+	ResolvedAt       sql.NullString `json:"resolved_at"`
+	Version          int64          `json:"version"`
+	CreatedAt        string         `json:"created_at"`
+	UpdatedAt        string         `json:"updated_at"`
+}
+
 type OauthTransaction struct {
 	ID                 string `json:"id"`
 	StateHash          string `json:"state_hash"`

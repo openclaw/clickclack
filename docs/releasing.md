@@ -29,6 +29,12 @@ The snapshot build runs `pnpm build`, then cross-compiles `clickclack` for:
 
 It also emits Linux `.deb` and `.rpm` packages and `sha256sums.txt`.
 
+To verify the same build on GitHub Actions, dispatch the `release` workflow on
+`main` with `dry_run: true` and the current release tag as `tag_name`. This runs
+`pnpm check` and the GoReleaser snapshot against the dispatched main commit,
+using the tag only as a version baseline. The dry run has read-only repository
+permissions and skips all signing, release upload, and publication jobs.
+
 The `darwin/amd64` and `darwin/arm64` server archives are built and signed by
 the local macOS release command below. GoReleaser excludes them so it cannot
 replace signed artifacts with unsigned builds. Server binaries require macOS

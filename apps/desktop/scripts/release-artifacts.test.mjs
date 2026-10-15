@@ -10,6 +10,30 @@ import {
   writeDesktopChecksums,
 } from "./release-artifacts.mjs";
 
+test("release dry runs build current main without publication authority", () => {
+  const workflow = readFileSync(
+    new URL("../../../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+  const jobs = new Map(
+    [
+      ...workflow
+        .split("\njobs:\n")[1]
+        .matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:\n|$(?![\s\S]))/gm),
+    ].map(([, name, body]) => [name, body]),
+  );
+  const dryRun = jobs.get("dry-run");
+  assert.ok(dryRun);
+  assert.match(dryRun, /if: >-\s+inputs\.dry_run &&/);
+  assert.match(dryRun, /permissions:\s+contents: read/);
+  assert.match(dryRun, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(dryRun, /args: release --snapshot --clean --skip=publish/);
+  assert.doesNotMatch(dryRun, /secrets\.|contents: write|gh release|upload-artifact/);
+  for (const [name, body] of jobs) {
+    if (name !== "dry-run") assert.match(body, /if: >-\s+!inputs\.dry_run &&/, name);
+  }
+});
+
 test("normalizes semantic release tags", () => {
   assert.equal(normalizeReleaseVersion("v1.2.3"), "1.2.3");
   assert.equal(normalizeReleaseVersion("1.2.3-beta.1"), "1.2.3-beta.1");

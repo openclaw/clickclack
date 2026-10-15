@@ -14,7 +14,7 @@ test("release dry runs build current main without publication authority", () => 
   const workflow = readFileSync(
     new URL("../../../.github/workflows/release.yml", import.meta.url),
     "utf8",
-  );
+  ).replaceAll("\r\n", "\n");
   const jobs = new Map(
     [
       ...workflow

@@ -83,6 +83,16 @@ is published only after all of those jobs pass.
 
 ## Configure Windows signing
 
+Before any publishing or Windows signing job starts, a read-only job loads the
+release policy from the protected workflow commit. It requires an annotated tag
+signed by the fleet release key in `.github/release-allowed-signers`, and requires
+the target commit to be in that workflow commit's main history. A branch with a
+version-like name, an unsigned or untrusted tag, or an off-main commit fails before
+any job receives signing authority. The resulting full commit SHA is the only
+source passed to the build jobs; moving the tag cannot change their checkout.
+The Windows signature verifier is also loaded from the protected workflow commit,
+separately from the release source.
+
 The Windows release job uses the protected `release-signing` GitHub environment.
 Its owner must approve ClickClack's use of the existing Azure Artifact Signing
 account and certificate profile, both named `openclaw`, at
@@ -95,7 +105,8 @@ after that approval:
 
 The approved identity needs a federated credential for this repository's actual
 GitHub OIDC subject and the Certificate Profile Signer role on that profile.
-Restrict the environment to approved release refs and reviewers. Missing inputs
+Restrict the environment to protected `main` workflow runs and approved reviewers;
+the read-only source gate separately authorizes the selected release tag. Missing inputs
 stop the job with an explicit setup error. Source configuration alone does not
 prove that the identity has access: keep this integration unqualified until an
 authorized native signing run passes the finished-artifact verifier.
@@ -123,8 +134,12 @@ do not belong in the repository. Set `NOTARYTOOL_KEYCHAIN_PATH` to select a mana
 release keychain explicitly on a headless host with a locked login keychain.
 
 ```sh
-git tag -s v0.7.0 -m "Release v0.7.0"
-git push origin main
+set -e
+# RELEASE_SIGNING_KEY is the approved fleet SSH private key, never a default key.
+git -c gpg.format=ssh -c user.signingkey="$RELEASE_SIGNING_KEY" \
+  tag -s v0.7.0 -m "Release v0.7.0"
+git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/release-allowed-signers \
+  verify-tag v0.7.0
 git push origin v0.7.0
 git checkout v0.7.0
 NOTARYTOOL_KEYCHAIN_PROFILE=<approved-profile> \

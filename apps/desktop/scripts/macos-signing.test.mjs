@@ -120,7 +120,11 @@ test("macOS release policy is fail-closed and Foundation-scoped", async () => {
   assert.match(verifier, new RegExp(RegExp.escape(EXPECTED_IDENTITY)));
   assert.match(packageScript, new RegExp(RegExp.escape(EXPECTED_IDENTITY_QUALIFIER)));
   assert.match(packageScript, /NOTARYTOOL_KEYCHAIN_PROFILE/);
-  assert.match(packageScript, /tag -v/);
+  assert.match(packageScript, /verify-tag/);
+  assert.match(
+    packageScript,
+    /gpg\.ssh\.allowedSignersFile="\$repo\/\.github\/release-allowed-signers"/,
+  );
   assert.match(verifier, /codesign --verify --strict --deep/);
   assert.match(verifier, /chat\.clickclack\.desktop/);
   assert.match(verifier, /FWJYW4S8P8/);

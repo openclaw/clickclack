@@ -51,12 +51,22 @@ test("Windows release config signs owned files and preserves preview configurati
 });
 
 test("release workflow gates Windows checksums and upload on signing verification", async () => {
-  const workflow = (await readFile(path.join(repo, ".github/workflows/release.yml"), "utf8")).replaceAll(
-    "\r\n",
-    "\n",
-  );
+  const workflow = (
+    await readFile(path.join(repo, ".github/workflows/release.yml"), "utf8")
+  ).replaceAll("\r\n", "\n");
   const windows = workflow.split("  desktop-windows:\n")[1].split("  desktop-linux:\n")[0];
   const linux = workflow.split("  desktop-linux:\n")[1].split("  verify-macos:\n")[0];
+  const authorization = workflow.split("  authorize-source:\n")[1].split("  release:\n")[0];
+  assert.match(authorization, /ref: \$\{\{ github\.workflow_sha \}\}/);
+  assert.match(authorization, /node scripts\/authorize-release-source\.mjs/);
+  assert.doesNotMatch(authorization, /id-token: write|secrets\.|environment:/);
+  assert.match(windows, /needs: authorize-source/);
+  assert.match(windows, /ref: \$\{\{ needs\.authorize-source\.outputs\.commit \}\}/);
+  assert.match(windows, /ref: \$\{\{ github\.workflow_sha \}\}/);
+  assert.doesNotMatch(windows, /ref: \$\{\{ inputs\./);
+  assert.match(windows, /\.release-policy\/apps\/desktop\/scripts\/verify-windows-release\.ps1/);
+  assert.match(windows, /!inputs\.dry_run/);
+  assert.match(linux, /!inputs\.dry_run/);
   const order = [
     "Require Windows signing identity",
     "Authenticate Windows signer with OIDC",

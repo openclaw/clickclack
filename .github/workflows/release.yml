@@ -72,12 +72,42 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ inputs.tag_name }}
           CLICKCLACK_WEB_VERSION: ${{ github.sha }}
 
+  authorize-source:
+    name: Authorize immutable release source
+    if: >-
+      !inputs.dry_run &&
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
+      tag_object: ${{ steps.source.outputs.tag_object }}
+    steps:
+      - name: Check out trusted release policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authorize fleet-signed tag in main history
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node scripts/authorize-release-source.mjs
+
   release:
     name: GoReleaser
     if: >-
       !inputs.dry_run &&
       endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: authorize-source
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -88,7 +118,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ inputs.tag_name || github.ref }}
+          ref: ${{ needs.authorize-source.outputs.commit }}
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -145,33 +175,32 @@ jobs:
       !inputs.dry_run &&
       endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: authorize-source
     runs-on: windows-latest
     timeout-minutes: 30
     environment: release-signing
     permissions:
       contents: read
       id-token: write
+    defaults:
+      run:
+        working-directory: release-source
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
-      - name: Check out
+      - name: Check out trusted Windows verification policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.tag_name || github.ref }}
+          ref: ${{ github.workflow_sha }}
+          path: .release-policy
 
-      - name: Resolve release version
-        id: release
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ inputs.tag_name || github.ref_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must be semantic version vMAJOR.MINOR.PATCH: $RELEASE_TAG" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check out authorized release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.authorize-source.outputs.commit }}
+          path: release-source
 
       - name: Require Windows signing identity
         shell: pwsh
@@ -180,7 +209,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
-          . ./apps/desktop/scripts/verify-windows-release.ps1
+          . "$env:GITHUB_WORKSPACE/.release-policy/apps/desktop/scripts/verify-windows-release.ps1"
           Assert-WindowsSigningInputs
 
       - name: Set up pnpm
@@ -193,6 +222,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: release-source/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -215,35 +245,37 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Package desktop installers
-        run: pnpm --filter @clickclack/desktop exec electron-builder --win nsis zip --x64 --config electron-builder.windows-release.yml --config.extraMetadata.version=${{ steps.release.outputs.version }} --publish never
+        run: pnpm --filter @clickclack/desktop exec electron-builder --win nsis zip --x64 --config electron-builder.windows-release.yml --config.extraMetadata.version=${{ needs.authorize-source.outputs.version }} --publish never
 
       - name: Verify signed Windows release assets
         shell: pwsh
-        working-directory: apps/desktop
+        working-directory: release-source/apps/desktop
         run: |
           $vendorElevate = node -e 'const r = require("node:module").createRequire(require.resolve("electron-builder")); r("app-builder-lib/out/toolsets/windows").getNsisElevatePath().then(p => console.log(p));'
           if ($LASTEXITCODE -ne 0) { throw "Could not resolve the pinned NSIS vendor helper." }
-          ./scripts/verify-windows-release.ps1 -Version '${{ steps.release.outputs.version }}' -ReleaseDirectory release -VendorElevate $vendorElevate
+          & "$env:GITHUB_WORKSPACE/.release-policy/apps/desktop/scripts/verify-windows-release.ps1" -Version '${{ needs.authorize-source.outputs.version }}' -ReleaseDirectory release -VendorElevate $vendorElevate
 
       - name: Write desktop checksums
-        run: node apps/desktop/scripts/release-artifacts.mjs win ${{ steps.release.outputs.version }} apps/desktop/release
+        run: node apps/desktop/scripts/release-artifacts.mjs win ${{ needs.authorize-source.outputs.version }} apps/desktop/release
 
       - name: Upload desktop release candidates
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ClickClack-desktop-win
           path: |
-            apps/desktop/release/*.exe
-            apps/desktop/release/*.zip
-            apps/desktop/release/ClickClack-*-SHA256SUMS.txt
+            release-source/apps/desktop/release/*.exe
+            release-source/apps/desktop/release/*.zip
+            release-source/apps/desktop/release/ClickClack-*-SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
 
   desktop-linux:
     name: Linux Desktop
     if: >-
+      !inputs.dry_run &&
       endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: authorize-source
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -253,7 +285,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.tag_name || github.ref }}
+          ref: ${{ needs.authorize-source.outputs.commit }}
 
       - name: Resolve release version
         id: release
@@ -314,6 +346,7 @@ jobs:
       !inputs.dry_run &&
       endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: authorize-source
     runs-on: macos-latest
     timeout-minutes: 20
     permissions:

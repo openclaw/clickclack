@@ -8,7 +8,9 @@ import { authorizeReleaseSource } from "./authorize-release-source.mjs";
 
 test("only trusted signed tags from reviewed main history authorize release code", () => {
   const repository = mkdtempSync(path.join(os.tmpdir(), "clickclack-release-policy-"));
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: os.devNull };
+  const emptyConfig = path.join(repository, "empty-gitconfig");
+  writeFileSync(emptyConfig, "");
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyConfig };
   const run = (command, args) =>
     execFileSync(command, args, {
       cwd: repository,

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { authorizeReleaseSource } from "./authorize-release-source.mjs";
+import { authorizeReleaseSource, checkoutReleaseSource } from "./authorize-release-source.mjs";
 
 test("only trusted signed tags from reviewed main history authorize release code", () => {
   const repository = mkdtempSync(path.join(os.tmpdir(), "clickclack-release-policy-"));
@@ -76,6 +76,20 @@ test("only trusted signed tags from reviewed main history authorize release code
       () => authorizeReleaseSource(repository, "v1.2.3", "main", signers),
       /full commit SHA/,
     );
+    const beforeCheckout = git("rev-parse", "HEAD");
+    for (const expected of [
+      { ...authorized, commit: beforeCheckout },
+      { ...authorized, tag_object: "0".repeat(40) },
+      {},
+    ]) {
+      assert.throws(
+        () => checkoutReleaseSource(repository, "v1.2.3", reviewed, expected, signers),
+        /changed after authorization/,
+      );
+      assert.equal(git("rev-parse", "HEAD"), beforeCheckout);
+    }
+    checkoutReleaseSource(repository, "v1.2.3", reviewed, authorized, signers);
+    assert.equal(git("rev-parse", "HEAD"), reviewed);
   } finally {
     rmSync(repository, { recursive: true, force: true });
   }

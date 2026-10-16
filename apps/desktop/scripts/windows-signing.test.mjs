@@ -61,7 +61,7 @@ test("release workflow gates Windows checksums and upload on signing verificatio
   assert.match(authorization, /node scripts\/authorize-release-source\.mjs/);
   assert.doesNotMatch(authorization, /id-token: write|secrets\.|environment:/);
   assert.match(windows, /needs: authorize-source/);
-  assert.match(windows, /ref: \$\{\{ needs\.authorize-source\.outputs\.commit \}\}/);
+  assert.match(windows, /AUTHORIZED_COMMIT: \$\{\{ needs\.authorize-source\.outputs\.commit \}\}/);
   assert.match(windows, /ref: \$\{\{ github\.workflow_sha \}\}/);
   assert.doesNotMatch(windows, /ref: \$\{\{ inputs\./);
   assert.match(windows, /\.release-policy\/apps\/desktop\/scripts\/verify-windows-release\.ps1/);

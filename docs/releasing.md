@@ -88,8 +88,9 @@ release policy from the protected workflow commit. It requires an annotated tag
 signed by the fleet release key in `.github/release-allowed-signers`, and requires
 the target commit to be in that workflow commit's main history. A branch with a
 version-like name, an unsigned or untrusted tag, or an off-main commit fails before
-any job receives signing authority. The resulting full commit SHA is the only
-source passed to the build jobs; moving the tag cannot change their checkout.
+any job receives signing authority. Each build job starts from the trusted workflow revision and revalidates the tag
+against both the authorized tag-object ID and full commit SHA before switching
+to release source. Moving the tag causes rejection and cannot change the build.
 The Windows signature verifier is also loaded from the protected workflow commit,
 separately from the release source.
 

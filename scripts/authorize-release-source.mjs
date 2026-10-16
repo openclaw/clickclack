@@ -46,13 +46,31 @@ export function authorizeReleaseSource(repository, tag, workflowCommit, signers 
   return { tag, version: tag.slice(1), commit, tag_object: tagObject };
 }
 
+export function checkoutReleaseSource(
+  repository,
+  tag,
+  workflowCommit,
+  expected,
+  signers = allowedSigners,
+) {
+  const source = authorizeReleaseSource(repository, tag, workflowCommit, signers);
+  if (source.commit !== expected.commit || source.tag_object !== expected.tag_object) {
+    throw new Error("Release source changed after authorization.");
+  }
+  execFileSync("git", ["-C", repository, "checkout", "--detach", source.commit], { stdio: "pipe" });
+  return source;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = authorizeReleaseSource(
-      process.cwd(),
-      process.env.RELEASE_TAG,
-      process.env.WORKFLOW_SHA,
-    );
+    const args = [process.cwd(), process.env.RELEASE_TAG, process.env.WORKFLOW_SHA];
+    const result =
+      process.argv[2] === "--checkout"
+        ? checkoutReleaseSource(...args, {
+            commit: process.env.AUTHORIZED_COMMIT,
+            tag_object: process.env.AUTHORIZED_TAG_OBJECT,
+          })
+        : authorizeReleaseSource(...args);
     for (const [name, value] of Object.entries(result)) {
       appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
     }

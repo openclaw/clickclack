@@ -118,7 +118,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ needs.authorize-source.outputs.commit }}
+          ref: ${{ github.workflow_sha }}
+
+      - name: Revalidate and check out authorized release commit
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          AUTHORIZED_COMMIT: ${{ needs.authorize-source.outputs.commit }}
+          AUTHORIZED_TAG_OBJECT: ${{ needs.authorize-source.outputs.tag_object }}
+        run: node scripts/authorize-release-source.mjs --checkout
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -200,8 +208,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ needs.authorize-source.outputs.commit }}
+          ref: ${{ github.workflow_sha }}
           path: release-source
+          fetch-depth: 0
+
+      - name: Revalidate and check out authorized release commit
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          AUTHORIZED_COMMIT: ${{ needs.authorize-source.outputs.commit }}
+          AUTHORIZED_TAG_OBJECT: ${{ needs.authorize-source.outputs.tag_object }}
+        run: node "$env:GITHUB_WORKSPACE/.release-policy/scripts/authorize-release-source.mjs" --checkout
 
       - name: Require Windows signing identity
         shell: pwsh
@@ -286,7 +303,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ needs.authorize-source.outputs.commit }}
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+
+      - name: Revalidate and check out authorized release commit
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          AUTHORIZED_COMMIT: ${{ needs.authorize-source.outputs.commit }}
+          AUTHORIZED_TAG_OBJECT: ${{ needs.authorize-source.outputs.tag_object }}
+        run: node scripts/authorize-release-source.mjs --checkout
 
       - name: Resolve release version
         id: release

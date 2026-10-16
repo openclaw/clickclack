@@ -32,7 +32,9 @@ if [[ -n "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]]; the
   echo "release checkout is not clean" >&2
   exit 1
 fi
-git -C "$repo" tag -v "$tag" >/dev/null 2>&1 || {
+git -C "$repo" -c gpg.format=ssh \
+  -c gpg.ssh.allowedSignersFile="$repo/.github/release-allowed-signers" \
+  verify-tag "$tag" >/dev/null 2>&1 || {
   echo "release tag is not signed by a trusted git signing key: $tag" >&2
   exit 1
 }

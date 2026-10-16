@@ -34,6 +34,7 @@ const result = spawnSync(
   process.execPath,
   [
     "--test",
+    path.join(root, "../../scripts/authorize-release-source.test.mjs"),
     outfile,
     path.join(root, "scripts", "main.test.mjs"),
     path.join(root, "scripts", "access-auth.test.mjs"),

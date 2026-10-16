@@ -48,6 +48,14 @@ runner emits a platform checksum manifest:
 - Windows: x64 NSIS `.exe` and `.zip`
 - Linux: x64 `.AppImage` and `.deb`
 
+Official Windows builds use `electron-builder.windows-release.yml` and require
+the Foundation signing identity. Before checksums or upload, the Windows runner
+opens both archives and requires valid, timestamped Foundation signatures on
+the installer, embedded uninstaller, and app. NSIS and ZIP app files must match
+byte for byte. The upstream `elevate.exe` helper stays unchanged and is checked
+against electron-builder's checksummed NSIS toolset; vendor binaries are not
+re-signed as Foundation code.
+
 Official macOS artifacts are built locally from the exact signed tag on an
 authorized maintainer Mac. The Foundation Developer ID private key never enters
 GitHub Actions. Electron Builder signs the app and all nested Electron code
@@ -73,6 +81,52 @@ clean macOS runner downloads the pre-uploaded macOS draft assets and repeats
 their checksum, signature, Gatekeeper, and notarization verification. The draft
 is published only after all of those jobs pass.
 
+## Configure Windows signing
+
+Before any publishing or Windows signing job starts, a read-only job loads the
+release policy from the protected workflow commit. It requires an annotated tag
+signed by the fleet release key in `.github/release-allowed-signers`, and requires
+the target commit to be in that workflow commit's main history. A branch with a
+version-like name, an unsigned or untrusted tag, or an off-main commit fails before
+any job receives signing authority. Each build job starts from the trusted workflow revision and revalidates the tag
+against both the authorized tag-object ID and full commit SHA before switching
+to release source. Moving the tag causes rejection and cannot change the build.
+The Windows signature verifier is also loaded from the protected workflow commit,
+separately from the release source.
+
+The Windows release job uses the protected `release-signing` GitHub environment.
+Its owner must approve ClickClack's use of the existing Azure Artifact Signing
+account and certificate profile, both named `openclaw`, at
+`https://eus.codesigning.azure.net/`. Configure these environment secrets only
+after that approval:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+The approved identity needs a federated credential for this repository's actual
+GitHub OIDC subject and the Certificate Profile Signer role on that profile.
+Restrict the environment to protected `main` workflow runs and approved reviewers;
+the read-only source gate separately authorizes the selected release tag. Missing inputs
+stop the job with an explicit setup error. Source configuration alone does not
+prove that the identity has access: keep this integration unqualified until an
+authorized native signing run passes the finished-artifact verifier.
+
+`azure/login` authenticates the runner's Azure CLI through OIDC. Electron
+Builder 26's built-in `win.azureSignOptions` calls `Invoke-TrustedSigning`, whose
+`DefaultAzureCredential` includes `AzureCliCredential`. No client secret or
+downloadable signing certificate is needed. The verifier requires this exact
+certificate subject and a timestamp:
+
+```text
+CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US
+```
+
+The ordinary `dist:win` command and PR builds remain unsigned. Windows preview CI
+checks that the production verifier rejects their installer, then exercises real
+archive extraction and byte comparisons with a test-only unsigned assertion.
+Those checks prove the packaging contract, not a valid Foundation signature.
+
 ## Build the macOS release candidates
 
 Create and verify the signed tag, then check it out in a clean repository. The
@@ -81,8 +135,12 @@ do not belong in the repository. Set `NOTARYTOOL_KEYCHAIN_PATH` to select a mana
 release keychain explicitly on a headless host with a locked login keychain.
 
 ```sh
-git tag -s v0.7.0 -m "Release v0.7.0"
-git push origin main
+set -e
+# RELEASE_SIGNING_KEY is the approved fleet SSH private key, never a default key.
+git -c gpg.format=ssh -c user.signingkey="$RELEASE_SIGNING_KEY" \
+  tag -s v0.7.0 -m "Release v0.7.0"
+git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/release-allowed-signers \
+  verify-tag v0.7.0
 git push origin v0.7.0
 git checkout v0.7.0
 NOTARYTOOL_KEYCHAIN_PROFILE=<approved-profile> \

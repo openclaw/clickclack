@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Require Foundation signing and finished-artifact verification for official Windows desktop releases; release operators must configure the approved Azure identity first. Thanks @vincentkoc.
 - Update rendering, scrolling, Electron 43, Go 1.27.2, and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Fix ten reachable Go standard-library vulnerabilities by using the patched build toolchain and checking reachable vulnerabilities in CI.
 - Add a read-only release dry run that checks the current main commit and builds snapshots without signing or publishing artifacts.

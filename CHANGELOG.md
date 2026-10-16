@@ -2,8 +2,12 @@
 
 ## Unreleased
 
-- Update rendering, scrolling, Electron 43, Go 1.27.2, and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
+## 0.8.0 - 2026-10-16
+
+**Highlights:** Fix ten reachable Go vulnerabilities, refresh chat dependencies, and add a read-only release dry run.
+
 - Fix ten reachable Go standard-library vulnerabilities by using the patched build toolchain and checking reachable vulnerabilities in CI.
+- Update rendering, scrolling, Electron 43, Go 1.27.2, and development dependencies while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Add a read-only release dry run that checks the current main commit and builds snapshots without signing or publishing artifacts.
 
 ## 0.7.1 - 2026-10-11

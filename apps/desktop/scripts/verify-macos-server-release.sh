@@ -12,6 +12,13 @@ release_dir=$(cd "$release_dir" && pwd)
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/clickclack-server-verify.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT
 requirement='identifier "chat.clickclack.server" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "FWJYW4S8P8"'
+host_arch=$(uname -m)
+if [[ "$host_arch" == arm64 ]]; then
+  if ! arch -x86_64 /usr/bin/true; then
+    sudo softwareupdate --install-rosetta --agree-to-license
+  fi
+  arch -x86_64 /usr/bin/true
+fi
 (
   cd "$release_dir"
   shasum -a 256 --check "ClickClack-$version-mac-server-SHA256SUMS.txt"
@@ -36,8 +43,8 @@ PY
   load_commands=$(otool -l "$binary")
   minos=$(awk '/LC_BUILD_VERSION/{build=1;next} build && /minos/{print $2;exit}' <<<"$load_commands")
   test "$minos" = 13.0
-  if [[ "$(uname -m)" = "$expected_arch" ]]; then
-    "$binary" version | grep -F "$version"
+  if [[ "$host_arch" = "$expected_arch" || "$host_arch" = arm64 ]]; then
+    arch "-$expected_arch" "$binary" version | grep -F "$version"
   fi
 done
 echo "verified signed and notarized ClickClack $version macOS server archives (macOS 13 minimum)"

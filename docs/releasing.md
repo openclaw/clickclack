@@ -32,7 +32,9 @@ It also emits Linux `.deb` and `.rpm` packages and `sha256sums.txt`.
 To verify the same build on GitHub Actions, dispatch the `release` workflow on
 `main` with `dry_run: true` and the current release tag as `tag_name`. This runs
 `pnpm check` and the GoReleaser snapshot against the dispatched main commit,
-using the tag only as a version baseline. The dry run has read-only repository
+using the tag as the snapshot version baseline. It also verifies the existing
+signed macOS assets for that tag on the `xcode-27` runner, executing the Intel
+server through Rosetta and the ARM server natively. The dry run has read-only repository
 permissions and skips all signing, release upload, and publication jobs.
 
 The `darwin/amd64` and `darwin/arm64` server archives are built and signed by

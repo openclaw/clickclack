@@ -132,7 +132,7 @@ test("macOS release policy is fail-closed and Foundation-scoped", async () => {
 });
 
 test(
-  "server verification accepts long tool output without SIGPIPE",
+  "server verification accepts long tool output and probes both architectures on Apple Silicon",
   { skip: process.platform === "win32" },
   async () => {
     const scratch = await mkdtemp(path.join(os.tmpdir(), "clickclack-verifier-test-"));
@@ -141,6 +141,13 @@ test(
       const payload = path.join(scratch, "payload");
       const release = path.join(scratch, "release");
       await Promise.all([bin, payload, release].map((directory) => mkdir(directory)));
+      const archLog = path.join(scratch, "arch.log");
+      await writeFile(path.join(bin, "uname"), "#!/bin/sh\necho arm64\n", { mode: 0o755 });
+      await writeFile(
+        path.join(bin, "arch"),
+        '#!/bin/sh\nprintf "%s %s\\n" "$1" "$2" >> "$VERIFY_ARCH_LOG"\nshift\nexec "$@"\n',
+        { mode: 0o755 },
+      );
       await writeFile(
         path.join(payload, "clickclack"),
         "#!/bin/sh\necho 'clickclack 9.9.9 (synthetic)'\n",
@@ -180,7 +187,11 @@ test(
         "bash",
         [path.join(root, "scripts", "verify-macos-server-release.sh"), "v9.9.9", release],
         {
-          env: { PATH: `${bin}${path.delimiter}${process.env.PATH}`, TMPDIR: scratch },
+          env: {
+            PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+            TMPDIR: scratch,
+            VERIFY_ARCH_LOG: archLog,
+          },
           encoding: "utf8",
         },
       );
@@ -188,6 +199,10 @@ test(
         output,
         /verified signed and notarized ClickClack 9\.9\.9 macOS server archives/,
       );
+      const archCalls = await readFile(archLog, "utf8");
+      assert.match(archCalls, /-x86_64 \/usr\/bin\/true/);
+      assert.match(archCalls, /-x86_64 .*\/amd64\/clickclack/);
+      assert.match(archCalls, /-arm64 .*\/aarch64\/clickclack/);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

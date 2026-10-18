@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move macOS desktop CI and release verification to macOS 27, run Intel server checks with Rosetta, and verify signed macOS assets during release dry runs while preserving deployment minimums.
+
 ## 0.9.0 - 2026-10-18
 
 **Highlights:** Windows desktop downloads now carry verified OpenClaw Foundation signatures.

@@ -1,0 +1,40 @@
+name: Verify signed macOS release assets
+description: Download and verify the signed desktop and server assets of a release.
+inputs:
+  tag:
+    description: Existing release tag
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download signed macOS assets
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+        version="${RELEASE_TAG#v}"
+        mkdir -p macos-release
+        gh release download "$RELEASE_TAG" \
+          --repo "$GITHUB_REPOSITORY" \
+          --dir macos-release \
+          --pattern "ClickClack-${version}-mac-*.dmg" \
+          --pattern "ClickClack-${version}-mac-*.zip" \
+          --pattern "ClickClack-${version}-mac-SHA256SUMS.txt" \
+          --pattern "clickclack_${version}_darwin_*.tar.gz" \
+          --pattern "ClickClack-${version}-mac-server-SHA256SUMS.txt" \
+          --pattern "ClickClack-${version}-mac-server-notarization.json"
+
+    - name: Verify checksums and sealed apps
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+        version="${RELEASE_TAG#v}"
+        (
+          cd macos-release
+          shasum -a 256 --check "ClickClack-${version}-mac-SHA256SUMS.txt"
+        )
+        apps/desktop/scripts/verify-macos-release.sh "$RELEASE_TAG" macos-release

@@ -375,7 +375,7 @@ jobs:
       endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     needs: authorize-source
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 20
     permissions:
       contents: write
@@ -386,35 +386,31 @@ jobs:
           persist-credentials: false
           ref: ${{ github.workflow_sha }}
 
-      - name: Download signed macOS draft assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag_name }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          mkdir -p macos-release
-          gh release download "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir macos-release \
-            --pattern "ClickClack-${version}-mac-*.dmg" \
-            --pattern "ClickClack-${version}-mac-*.zip" \
-            --pattern "ClickClack-${version}-mac-SHA256SUMS.txt" \
-            --pattern "clickclack_${version}_darwin_*.tar.gz" \
-            --pattern "ClickClack-${version}-mac-server-SHA256SUMS.txt" \
-            --pattern "ClickClack-${version}-mac-server-notarization.json"
+      - uses: ./.github/actions/verify-macos-release
+        with:
+          tag: ${{ inputs.tag_name }}
 
-      - name: Verify checksums and sealed apps
-        env:
-          RELEASE_TAG: ${{ inputs.tag_name }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          (
-            cd macos-release
-            shasum -a 256 --check "ClickClack-${version}-mac-SHA256SUMS.txt"
-          )
-          apps/desktop/scripts/verify-macos-release.sh "$RELEASE_TAG" macos-release
+  verify-macos-dry-run:
+    name: Verify published macOS assets (dry run)
+    if: >-
+      inputs.dry_run &&
+      endsWith(github.workflow_ref, format('@refs/heads/{0}', github.event.repository.default_branch)) &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: dry-run
+    runs-on: xcode-27
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out trusted verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+
+      - uses: ./.github/actions/verify-macos-release
+        with:
+          tag: ${{ inputs.tag_name }}
 
   publish-desktop:
     name: Publish desktop apps

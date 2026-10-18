@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- Require Foundation signing and finished-artifact verification for official Windows desktop releases; release operators must configure the approved Azure identity first. Thanks @vincentkoc.
+## 0.9.0 - 2026-10-18
+
+**Highlights:** Windows desktop downloads now carry verified OpenClaw Foundation signatures.
+
+- Require valid, timestamped OpenClaw Foundation Authenticode signatures on official Windows installers, applications, and uninstallers, and verify finished NSIS/ZIP packages before publication. Thanks @vincentkoc.
+- Build official releases only from immutable fleet-signed tags in reviewed main history, with source revalidation at every build boundary.
 
 ## 0.8.0 - 2026-10-16
 

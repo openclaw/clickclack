@@ -29,8 +29,23 @@ test("release dry runs build current main without publication authority", () => 
   assert.match(dryRun, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(dryRun, /args: release --snapshot --clean --skip=publish/);
   assert.doesNotMatch(dryRun, /secrets\.|contents: write|gh release|upload-artifact/);
+  const verifyDryRun = jobs.get("verify-macos-dry-run");
+  assert.ok(verifyDryRun);
+  assert.match(verifyDryRun, /if: >-\s+inputs\.dry_run &&/);
+  assert.match(verifyDryRun, /needs: dry-run/);
+  assert.match(verifyDryRun, /permissions:\s+contents: read/);
+  assert.match(verifyDryRun, /uses: \.\/\.github\/actions\/verify-macos-release/);
+  assert.doesNotMatch(verifyDryRun, /secrets\.|contents: write|upload-artifact/);
+  const verifier = readFileSync(
+    new URL("../../../.github/actions/verify-macos-release/action.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(verifier, /gh release download/);
+  assert.doesNotMatch(verifier, /gh release (create|upload|edit)|upload-artifact|secrets\./);
   for (const [name, body] of jobs) {
-    if (name !== "dry-run") assert.match(body, /if: >-\s+!inputs\.dry_run &&/, name);
+    if (name !== "dry-run" && name !== "verify-macos-dry-run") {
+      assert.match(body, /if: >-\s+!inputs\.dry_run &&/, name);
+    }
   }
 });
 

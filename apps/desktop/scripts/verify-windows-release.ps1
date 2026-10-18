@@ -28,6 +28,7 @@ function Assert-OwnedSignature([string]$Path) {
         $null -eq $signature.TimeStamperCertificate) {
         throw "Expected a valid, timestamped OpenClaw Foundation Authenticode signature: $Path"
     }
+    Write-Host "Verified Authenticode: $Path; subject=$($signature.SignerCertificate.Subject); thumbprint=$($signature.SignerCertificate.Thumbprint); timestamp=$($signature.TimeStamperCertificate.Subject)"
 }
 
 function Assert-VendorBinary([string]$Path, [string]$Reference) {

@@ -30,7 +30,7 @@ try {
     $valid = @{
         Status = 'Valid'
         SignatureType = 'Authenticode'
-        SignerCertificate = [pscustomobject]@{ Subject = $script:FoundationPublisher }
+        SignerCertificate = [pscustomobject]@{ Subject = $script:FoundationPublisher; Thumbprint = 'fixture' }
         TimeStamperCertificate = [pscustomobject]@{ Subject = 'Timestamp authority fixture' }
     }
     $unsigned = @{

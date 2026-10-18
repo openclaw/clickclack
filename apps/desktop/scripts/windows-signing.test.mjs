@@ -85,7 +85,19 @@ test("release workflow gates Windows checksums and upload on signing verificatio
   assert.match(windows, /id-token: write/);
   assert.doesNotMatch(linux, /azure\/login|id-token|azureSignOptions|release-signing/);
   const preview = await readFile(path.join(repo, ".github/workflows/desktop.yml"), "utf8");
-  assert.doesNotMatch(preview, /azure\/login|id-token|electron-builder\.windows-release\.yml/);
+  const previewPackage = preview.split("  signing-qualification:\n")[0];
+  assert.doesNotMatch(
+    previewPackage,
+    /azure\/login|id-token|electron-builder\.windows-release\.yml/,
+  );
+  const qualification = preview.split("  signing-qualification:\n")[1];
+  assert.match(qualification, /github.event_name == 'workflow_dispatch'/);
+  assert.match(qualification, /inputs.signing_qualification_sha == github.sha/);
+  assert.match(qualification, /environment: release-signing/);
+  assert.match(qualification, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(qualification, /--config electron-builder.windows-release.yml/);
+  assert.match(qualification, /verify-windows-release.ps1/);
+  assert.doesNotMatch(qualification, /contents: write|gh release|gh api/);
   assert.match(preview, /windows-signing\.test\.ps1 -UnsignedReleaseDirectory/);
 });
 

@@ -122,6 +122,14 @@ certificate subject and a timestamp:
 CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, S=California, C=US
 ```
 
+To qualify an approved integration before merging, manually dispatch the `desktop`
+workflow on the reviewed branch with `signing_qualification_sha` set to that exact
+full commit SHA. Only that explicit dispatch can use `release-signing`; it builds
+version `0.0.0-qualification` with the production signing configuration and verifier,
+then retains candidates for seven days without publishing a release. Require the
+installer, embedded uninstaller, and both app payloads to pass before merging.
+The verifier logs each certificate subject, thumbprint, and timestamp authority.
+
 The ordinary `dist:win` command and PR builds remain unsigned. Windows preview CI
 checks that the production verifier rejects their installer, then exercises real
 archive extraction and byte comparisons with a test-only unsigned assertion.

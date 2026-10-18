@@ -84,7 +84,9 @@ test("release workflow gates Windows checksums and upload on signing verificatio
   assert.match(windows, /environment: release-signing/);
   assert.match(windows, /id-token: write/);
   assert.doesNotMatch(linux, /azure\/login|id-token|azureSignOptions|release-signing/);
-  const preview = await readFile(path.join(repo, ".github/workflows/desktop.yml"), "utf8");
+  const preview = (
+    await readFile(path.join(repo, ".github/workflows/desktop.yml"), "utf8")
+  ).replaceAll("\r\n", "\n");
   const previewPackage = preview.split("  signing-qualification:\n")[0];
   assert.doesNotMatch(
     previewPackage,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update Playwright, Wrangler, Electron 43, Chi, and SQLite runtime support while preserving runtime minimums and the 48-hour dependency release-age gate.
+
 - Revoke the stored CLI session before removing local credentials on logout, preserving credentials for retry when the server is unavailable. Thanks @KrasimirKralev.
 
 - Move macOS desktop CI and release verification to macOS 27, run Intel server checks with Rosetta, and verify signed macOS assets during release dry runs while preserving deployment minimums.

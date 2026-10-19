@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Update Playwright, Wrangler, Electron 43, Chi, and SQLite runtime support while preserving runtime minimums and the 48-hour dependency release-age gate.
+- Align SQLite with its required libc runtime and update Playwright, Wrangler, Electron 43, and Chi while preserving runtime minimums and the 48-hour dependency release-age gate.
 
 - Revoke the stored CLI session before removing local credentials on logout, preserving credentials for retry when the server is unavailable. Thanks @KrasimirKralev.
 

@@ -13,6 +13,7 @@ built SPA, so a full local build runs both toolchains.
 ## Prerequisites
 
 - Go (matching `go.mod`).
+- Keep `modernc.org/libc` at the exact version required by `modernc.org/sqlite`'s `go.mod`; SQLite's generated code and its runtime must be upgraded together. `pnpm check:sqlite-runtime` verifies this pairing.
 - pnpm 12.7.0, matching `packageManager` in `package.json`.
 - TypeScript runs via stable TypeScript 7 native `tsc` from `@typescript/native` — installed
   through pnpm.

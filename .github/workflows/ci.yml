@@ -14,8 +14,8 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  NODE_VERSION: "26"
-  PNPM_VERSION: "12.7.0"
+  NODE_VERSION: "26.12.1"
+  PNPM_VERSION: "12.15.0"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -153,7 +153,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: "24.22.1"
           cache: pnpm
 
       - name: Install dependencies

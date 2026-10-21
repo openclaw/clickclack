@@ -2,16 +2,15 @@
 
 ## Unreleased
 
+## 0.9.1 - 2026-10-20
+
+**Highlights:** Safer certificate verification and CLI logout, with reliable thread commands and readable compact timestamps.
+
 - Build with Go 1.27.3 to reject compromised intermediate certificates and fix reachable GO-2026-6809, retaining the Go 1.26.6 module minimum.
-
-- Keep localized hover timestamps outside compact outlined message bubbles, and stabilize browser layout checks across appearance settings.
-
-- Accept client flags before the message ID in CLI `threads open`, `threads reply`, and `reply`, which previously sent the flag as the message ID and failed. Thanks @KrasimirKralev.
-
-- Align SQLite with its required libc runtime and update Playwright, Wrangler, Electron 43, and Chi while preserving runtime minimums and the 48-hour dependency release-age gate.
-
 - Revoke the stored CLI session before removing local credentials on logout, preserving credentials for retry when the server is unavailable. Thanks @KrasimirKralev.
-
+- Accept client flags before the message ID in CLI `threads open`, `threads reply`, and `reply`, which previously sent the flag as the message ID and failed. Thanks @KrasimirKralev.
+- Keep localized hover timestamps outside compact outlined message bubbles, and stabilize browser layout checks across appearance settings.
+- Align SQLite with its required libc runtime and update Playwright, Wrangler, Electron 43, and Chi while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Move macOS desktop CI and release verification to macOS 27, run Intel server checks with Rosetta, and verify signed macOS assets during release dry runs while preserving deployment minimums.
 
 ## 0.9.0 - 2026-10-18

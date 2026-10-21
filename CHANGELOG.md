@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Build with Go 1.27.3 to reject compromised intermediate certificates and fix reachable GO-2026-6809, retaining the Go 1.26.6 module minimum.
+
 - Keep localized hover timestamps outside compact outlined message bubbles, and stabilize browser layout checks across appearance settings.
 
 - Accept client flags before the message ID in CLI `threads open`, `threads reply`, and `reply`, which previously sent the flag as the message ID and failed. Thanks @KrasimirKralev.

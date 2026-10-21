@@ -1,4 +1,5 @@
 FROM node:26.12.1-alpine@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS web
+RUN apk add --no-cache --upgrade ca-certificates-bundle=20261020-r0
 ARG CLICKCLACK_WEB_VERSION=dev
 ENV CLICKCLACK_WEB_VERSION=$CLICKCLACK_WEB_VERSION
 WORKDIR /src
@@ -16,6 +17,7 @@ COPY scripts scripts
 RUN pnpm build
 
 FROM golang:1.27.3-alpine@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS api
+RUN apk add --no-cache --upgrade ca-certificates-bundle=20261020-r0
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -25,6 +27,7 @@ COPY --from=web /src/apps/api/internal/webassets/dist apps/api/internal/webasset
 RUN go build -o /out/clickclack ./apps/api/cmd/clickclack
 
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+RUN apk add --no-cache --upgrade ca-certificates-bundle=20261020-r0
 RUN adduser -D -H clickclack
 WORKDIR /app
 COPY --from=api /out/clickclack /usr/local/bin/clickclack

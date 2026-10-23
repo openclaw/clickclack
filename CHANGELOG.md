@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-- Update Electron 43, Vite, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.
+## 0.9.2 - 2026-10-23
+
+**Highlights:** Reject compromised certificate authority keys in the desktop runtime and refresh bundled runtimes.
+
 - Reject compromised certificate authority keys in the desktop runtime. Thanks @joshavant.
 - Update Node.js and pnpm runtimes and refresh Alpine certificate bundles in container images. Thanks @joshavant.
+- Update Electron 43, Vite, and Oxc tooling while preserving runtime minimums and the 48-hour dependency release-age gate.
 - Correct the install and deployment docs: signed macOS server archives are built separately from GoReleaser and use `ClickClack-<version>-mac-server-SHA256SUMS.txt`. Thanks @KrasimirKralev.
 
 ## 0.9.1 - 2026-10-20

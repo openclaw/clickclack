@@ -17,6 +17,3 @@ allowBuilds:
   sharp: true
   workerd: true
 minimumReleaseAge: 2880
-minimumReleaseAgeExclude:
-  # Consume the released eMudhra key-block fix before the normal 48-hour age gate.
-  - electron@43.8.1

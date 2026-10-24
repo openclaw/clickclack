@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Correct the agent-friendly CLI docs: the message body comes from `--body`, then `--file`, then `--stdin`, and the positional argument is used only when none of them is given. Thanks @KrasimirKralev.
+
 ## 0.9.2 - 2026-10-23
 
 **Highlights:** Reject compromised certificate authority keys in the desktop runtime and refresh bundled runtimes.

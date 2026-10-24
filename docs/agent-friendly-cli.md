@@ -161,12 +161,12 @@ server sees `X-ClickClack-User`. For hosted agents, use a real session token.
 
 ## Input
 
-Message body precedence:
+Message body precedence (the first source given wins; the others are ignored):
 
-1. Positional body argument.
-2. `--body <text>`.
-3. `--file <path>`.
-4. `--stdin`.
+1. `--body <text>` (a blank value falls through).
+2. `--file <path>`.
+3. `--stdin`.
+4. Positional body argument.
 
 Examples:
 

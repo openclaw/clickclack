@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep a thread closed when Escape cancels a search-result navigation before its URL has committed.
 - Reject compromised certificate authority keys in the local Worker runtime by pinning patched workerd. Thanks @joshavant.
 - Patch SvelteKit, URI parsing, brace expansion, HTTP cache parsing, and HTTP client vulnerabilities in web tooling and desktop packaging dependencies.
 - Update SQLite and its paired libc runtime, virtual scrolling, desktop packaging, and Wrangler while preserving runtime minimums and the 48-hour dependency release-age gate; align the development guide with the pinned pnpm version.

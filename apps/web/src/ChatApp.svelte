@@ -1,5 +1,6 @@
 <script lang="ts">
   import { afterNavigate, goto } from "$app/navigation";
+  import { createAppNavigator } from "./lib/app-navigation";
   import { onDestroy, onMount, tick } from "svelte";
   import { toStore } from "svelte/store";
   import {
@@ -80,6 +81,7 @@
   const CHANNEL_NOTIFICATION_STORAGE_PREFIX = "clickclack:channel-notification:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
   const appSessionStartedAt = Date.now();
+  const navigateAppPath = createAppNavigator(() => window.location.pathname, goto);
   const integratedTitleBar = desktop?.integratedTitleBar === true;
   let homeLink: HomeLink = DEFAULT_HOME_LINK;
 
@@ -640,9 +642,7 @@
   }
 
   async function navigateToApp(workspaceID = selectedWorkspaceID, targetID = "", replaceState = false) {
-    const path = appHref(workspaceID, targetID);
-    if (window.location.pathname === path) return;
-    await goto(path, { replaceState, noScroll: true, keepFocus: true });
+    await navigateAppPath(appHref(workspaceID, targetID), replaceState);
   }
 
   function followRoute(workspaceID: string, targetID: string) {

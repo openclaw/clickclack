@@ -43,6 +43,10 @@ responses arrive out of order. Targets inside a long same-author message group
 scroll to the selected message. Jumping to a quote, unread messages, or the latest
 messages supersedes an older pending history request in the same conversation.
 
+Selecting a reply opens its thread. Use Back to search results to return to the
+same results, or Escape to close the thread and return to its conversation.
+Escape also cancels a thread navigation that has not finished yet.
+
 ## Query behavior
 
 Whitespace-separated terms are matched together. Search operators and quoting

@@ -4,10 +4,6 @@
 // It installs no fetch handler and caches nothing, so a release behaves
 // exactly as it does without a worker. The app registers it only after
 // someone turns push on, never on load and never from an embed.
-//
-// The worker types live here rather than behind a webworker library
-// reference: the app typechecks as one program, and pulling that library in
-// beside the DOM one redeclares hundreds of shared names.
 
 import { pushLandingURL } from "./lib/push-landing";
 

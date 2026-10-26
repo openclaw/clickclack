@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { api, APIError } from "$lib/api";
-  import { requestCurrentUser } from "$lib/appearance";
+  import { api, APIError } from "#lib/api";
+  import { requestCurrentUser } from "#lib/appearance";
   import {
     activeOnly,
     attachedTo,
@@ -18,17 +18,17 @@
     type ConnectedAccount,
     type EventSubscription,
     type SlashCommand,
-  } from "$lib/integrations";
+  } from "#lib/integrations";
   import {
     isServiceBot,
     listWorkspaceBots,
     listWorkspaceBotTokens,
     type BotToken,
     type BotWithTokens,
-  } from "$lib/bots";
-  import { manifestForInstallation } from "$lib/app-catalog";
-  import { isWorkspaceManager } from "$lib/permissions";
-  import type { Channel, User } from "$lib/types";
+  } from "#lib/bots";
+  import { manifestForInstallation } from "#lib/app-catalog";
+  import { isWorkspaceManager } from "#lib/permissions";
+  import type { Channel, User } from "#lib/types";
   import InstallWizard from "../../../../../../components/settings/integrations/InstallWizard.svelte";
   import SlashCommandsPanel from "../../../../../../components/settings/integrations/SlashCommandsPanel.svelte";
   import EventSubscriptionsPanel from "../../../../../../components/settings/integrations/EventSubscriptionsPanel.svelte";

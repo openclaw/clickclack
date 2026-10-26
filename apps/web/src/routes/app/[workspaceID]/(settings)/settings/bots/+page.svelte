@@ -13,9 +13,9 @@
     type BotToken,
     type BotWithTokens,
     type CreateBotResponse,
-  } from "$lib/bots";
-  import { APIError } from "$lib/api";
-  import { isWorkspaceManager } from "$lib/permissions";
+  } from "#lib/bots";
+  import { APIError } from "#lib/api";
+  import { isWorkspaceManager } from "#lib/permissions";
   import BotCreateForm, {
     type BotCreateDetail,
   } from "../../../../../../components/settings/bots/BotCreateForm.svelte";

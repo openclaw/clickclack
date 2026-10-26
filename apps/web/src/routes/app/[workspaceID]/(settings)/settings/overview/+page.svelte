@@ -1,12 +1,12 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation";
-  import { api, apiResourceURL, APIError } from "$lib/api";
-  import { isWorkspaceManager } from "$lib/permissions";
-  import type { Upload, Workspace } from "$lib/types";
+  import { api, apiResourceURL, APIError } from "#lib/api";
+  import { isWorkspaceManager } from "#lib/permissions";
+  import type { Upload, Workspace } from "#lib/types";
   import {
     listAllWorkspaceMembers,
     type WorkspaceMember,
-  } from "$lib/workspace-members";
+  } from "#lib/workspace-members";
 
   let { data } = $props();
   const workspace = $derived(data.workspace);

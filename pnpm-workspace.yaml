@@ -3,14 +3,17 @@ packages:
   - examples/*
   - packages/*
 overrides:
-  'brace-expansion@1': 1.1.18
-  'brace-expansion@5': 5.0.9
-  cookie: 0.7.2
-  fast-uri: 3.1.7
+  workerd: 1.20261021.1
+  'brace-expansion@1': 1.1.21
+  'brace-expansion@5': 5.0.12
+  'cookie@0': 0.7.2
+  fast-uri: 3.1.9
+  http-cache-semantics: 4.3.0
   js-yaml: 4.3.2
   '@xmldom/xmldom@0.8': 0.8.15
   'tar@7': 7.5.22
-  'undici@6': 6.28.1
+  'undici@6': 6.29.1
+  'undici@7': 7.30.1
 allowBuilds:
   electron-winstaller: true
   esbuild: true

@@ -1,15 +1,15 @@
 export const prerender = false;
 export const ssr = false;
 
-import { APIError } from "$lib/api";
-import { requestCurrentUser } from "$lib/appearance";
+import { APIError } from "#lib/api";
+import { requestCurrentUser } from "#lib/appearance";
 import {
   listWorkspaceBots,
   botLoadErrorMessage,
   openClawWorkspaceIdentifier,
   type BotWithTokens,
-} from "$lib/bots";
-import type { User, Workspace } from "$lib/types";
+} from "#lib/bots";
+import type { User, Workspace } from "#lib/types";
 
 export async function load({
   params,

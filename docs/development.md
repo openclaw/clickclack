@@ -14,7 +14,7 @@ built SPA, so a full local build runs both toolchains.
 
 - Go (matching `go.mod`).
 - Keep `modernc.org/libc` at the exact version required by `modernc.org/sqlite`'s `go.mod`; SQLite's generated code and its runtime must be upgraded together. `pnpm check:sqlite-runtime` verifies this pairing.
-- pnpm 12.7.0, matching `packageManager` in `package.json`.
+- pnpm 12.15.0, matching `packageManager` in `package.json`.
 - TypeScript runs via stable TypeScript 7 native `tsc` from `@typescript/native` — installed
   through pnpm.
 - The OpenAPI generator has its own TypeScript 5 compiler API dependency, matching
@@ -72,6 +72,11 @@ The Vite dev server proxies `/api` and `/api/realtime/ws` to `localhost:8080`.
 local builds deterministic while still allowing real source changes to update
 content-hashed assets. Release and Docker builds should set
 `CLICKCLACK_WEB_VERSION` to the commit or tag being shipped.
+
+SvelteKit configuration lives in `apps/web/vite.config.ts`, including the static
+adapter, explicit service-worker registration, and embedded app version.
+The web typecheck checks the application and service worker separately so each
+uses its browser or worker environment types.
 
 ## Layout
 

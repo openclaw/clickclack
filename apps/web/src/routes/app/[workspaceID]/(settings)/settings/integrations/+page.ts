@@ -1,8 +1,8 @@
 export const prerender = false;
 export const ssr = false;
 
-import { api } from "$lib/api";
-import { requestCurrentUser } from "$lib/appearance";
+import { api } from "#lib/api";
+import { requestCurrentUser } from "#lib/appearance";
 import {
   integrationsLoadErrorMessage,
   listAppInstallations,
@@ -14,9 +14,9 @@ import {
   type ConnectedAccount,
   type EventSubscription,
   type SlashCommand,
-} from "$lib/integrations";
-import { listWorkspaceBots, openClawWorkspaceIdentifier, type BotWithTokens } from "$lib/bots";
-import type { Channel, User, Workspace } from "$lib/types";
+} from "#lib/integrations";
+import { listWorkspaceBots, openClawWorkspaceIdentifier, type BotWithTokens } from "#lib/bots";
+import type { Channel, User, Workspace } from "#lib/types";
 
 export async function load({
   params,

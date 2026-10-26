@@ -4,11 +4,14 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*.ts"
+  },
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
     "test": "node --test src/lib/*.test.ts",
-    "typecheck": "svelte-kit sync && tsc --noEmit -p tsconfig.json",
+    "typecheck": "svelte-kit sync && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -23,12 +26,12 @@
     "pdfjs-dist": "^6.4.299",
     "sax": "^1.6.1",
     "svelte": "^5.57.2",
-    "virtua": "^0.53.5",
+    "virtua": "^0.53.6",
     "vite": "^8.3.5"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.1.0",
     "@types/node": "^26.6.5",
     "@types/sax": "^1.2.7",
     "@typescript/native": "npm:typescript@^7.0.2",

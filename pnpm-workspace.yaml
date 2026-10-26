@@ -3,6 +3,7 @@ packages:
   - examples/*
   - packages/*
 overrides:
+  workerd: 1.20261021.1
   'brace-expansion@1': 1.1.18
   'brace-expansion@5': 5.0.9
   cookie: 0.7.2

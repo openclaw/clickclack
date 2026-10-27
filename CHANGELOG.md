@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.3 - 2026-10-26
+
+**Highlights:** Cancelled search navigation keeps threads closed, with security fixes for certificate validation and web and desktop dependencies.
+
 - Keep a thread closed when Escape cancels a search-result navigation before its URL has committed.
 - Reject compromised certificate authority keys in the local Worker runtime by pinning patched workerd. Thanks @joshavant.
 - Patch SvelteKit, URI parsing, brace expansion, HTTP cache parsing, and HTTP client vulnerabilities in web tooling and desktop packaging dependencies.

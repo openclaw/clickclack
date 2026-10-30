@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.
+- Correct the CLI docs: stored client config lives in the OS user config directory (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support` on macOS, `%AppData%` on Windows), not always `~/.config`. Thanks @KrasimirKralev.
 
 ## 0.9.3 - 2026-10-26
 

@@ -112,6 +112,9 @@ func defaultClientOptions() clientDefaults {
 		if os.Getenv("CLICKCLACK_SERVER") == "" && cfg.Server != "" {
 			opts.Server = cfg.Server
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Without this, a damaged file silently sends the request to localhost without a token.
+		fmt.Fprintf(os.Stderr, "clickclack: ignoring stored client config: %v (run \"clickclack login\" to replace it, or delete the file)\n", err)
 	}
 	defaults.opts = opts
 	return defaults
@@ -378,7 +381,10 @@ func loadClientConfig() (clientConfig, error) {
 		return clientConfig{}, err
 	}
 	var cfg clientConfig
-	return cfg, json.Unmarshal(data, &cfg)
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return clientConfig{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return cfg, nil
 }
 
 func saveClientConfig(cfg clientConfig) error {

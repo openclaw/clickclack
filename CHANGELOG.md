@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.
+- Warn on stderr when the stored client config cannot be read or parsed, naming the file, instead of silently falling back to `http://localhost:8080` with no token. Thanks @KrasimirKralev.
 
 ## 0.9.3 - 2026-10-26
 

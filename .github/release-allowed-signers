@@ -1,2 +1,3 @@
 # Fleet release key; policy is loaded from the protected workflow revision.
 steipete@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII9XsaCcr8TInPnHcuTVfvXXcsoUFrOE7menfbEIHFW9
+vincentkoc namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMYJHwFnesHbwtPLErQBRMffbET0Wrbzh+PjkndZRNyy

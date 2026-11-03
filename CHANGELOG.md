@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Batch main CodeQL analysis weekly while preserving PR and manual scans.
+
 - Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.
 
 ## 0.9.3 - 2026-10-26

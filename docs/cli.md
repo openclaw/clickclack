@@ -59,6 +59,11 @@ If `--server` or `CLICKCLACK_SERVER` points somewhere else and no explicit
 will not reuse the saved workspace or channel unless the selected server
 matches.
 
+If the stored file is unreadable or contains invalid JSON, the CLI warns on
+stderr and continues with environment values and built-in defaults. Run
+`clickclack login` to replace the file, or remove it before configuring the client again.
+A missing file is normal and produces no warning.
+
 If `--user` or `CLICKCLACK_USER_ID` is set and no explicit `--token` is
 supplied, the CLI also skips the stored bearer token so the server can honor
 the requested dev user. If both `--token` and `--user` are supplied, the

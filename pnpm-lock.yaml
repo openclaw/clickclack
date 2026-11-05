@@ -255,8 +255,8 @@ importers:
         specifier: ^5.57.3
         version: 5.57.3
       virtua:
-        specifier: ^0.54.1
-        version: 0.54.1(svelte@5.57.3)
+        specifier: ^0.53.6
+        version: 0.53.6(svelte@5.57.3)
       vite:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)
@@ -2646,8 +2646,8 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  virtua@0.54.1:
-    resolution: {integrity: sha512-qUl89ncxNDKLihVdIok8CnKxUPF9J+P6Uz58KDqsq8G9dIoMInif6KJ4oe9SkvtNsHkSzw0iV25Vr73L9L1BcQ==}
+  virtua@0.53.6:
+    resolution: {integrity: sha512-/vQtSFNDFcp3Yz4klbpe8Z88eQeThSw49cFlgJQdsqh3SUnRlW4jLi6ZYt4YzdwerYGlP6KCgAOXNVO+PmUg7w==}
     peerDependencies:
       '@angular/common': '>=20.0.0'
       '@angular/core': '>=20.0.0'
@@ -4928,7 +4928,7 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  virtua@0.54.1(svelte@5.57.3):
+  virtua@0.53.6(svelte@5.57.3):
     optionalDependencies:
       svelte: 5.57.3
 

@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- Refresh eligible web, desktop, and development dependencies, including Electron 43.8.6, pgx 5.12.0, and SQLite 1.61.1, while preserving the 48-hour cooldown, runtime floors, and paired SQLite libc.
+## 0.9.4 - 2026-11-05
 
-- Batch main CodeQL analysis weekly while preserving PR and manual scans.
+**Highlights:** Clearer client configuration and signed-out session errors, with refreshed desktop and database dependencies.
 
-- Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.
 - Warn on stderr when the stored client config cannot be read or parsed, naming the file, instead of silently falling back to `http://localhost:8080` with no token. Thanks @KrasimirKralev.
+- Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.
+- Refresh eligible web, desktop, and development dependencies, including Electron 43.8.6, pgx 5.12.0, and SQLite 1.61.1, while preserving the 48-hour cooldown, runtime floors, and paired SQLite libc.
 - Correct the CLI docs: stored client config lives in the OS user config directory (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support` on macOS, `%AppData%` on Windows), not always `~/.config`. Thanks @KrasimirKralev.
+- Batch main CodeQL analysis weekly while preserving PR and manual scans.
 
 ## 0.9.3 - 2026-10-26
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refresh eligible web, desktop, and development dependencies, including Electron 43.8.6, pgx 5.12.0, and SQLite 1.61.1, while preserving the 48-hour cooldown, runtime floors, and paired SQLite libc.
+
 - Batch main CodeQL analysis weekly while preserving PR and manual scans.
 
 - Answer an API call with a signed-out or unknown session token with "session not found or signed out; sign in again" instead of the database's `sql: no rows in result set`. Thanks @KrasimirKralev.

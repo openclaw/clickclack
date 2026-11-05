@@ -73,3 +73,19 @@ func TestDefaultClientOptionsIsQuietWithValidConfig(t *testing.T) {
 		t.Fatalf("defaults = %+v, want the stored server", defaults)
 	}
 }
+
+func TestHelpListsCommandsAndClientFlags(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var err error
+	output := captureStderr(t, func() {
+		err = runArgs([]string{"clickclack", "help"})
+	})
+	if err != nil {
+		t.Fatalf("help returned %v", err)
+	}
+	for _, want := range []string{"Commands:", "  serve ", "  admin ", "  login ", "  messages list", "-server", "-workspace"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("help output missing %q:\n%s", want, output)
+		}
+	}
+}

@@ -149,7 +149,9 @@ User config:
 }
 ```
 
-The implemented client stores this at `~/.config/clickclack/config.json`.
+The implemented client stores this at `clickclack/config.json` in the OS user
+config directory: `$XDG_CONFIG_HOME` (default `~/.config`) on Linux,
+`~/Library/Application Support` on macOS, and `%AppData%` on Windows.
 Stored bearer tokens, workspace defaults, and channel defaults are scoped to
 their saved server URL. If a command points at another server, the saved token
 is not sent unless `--token` or `CLICKCLACK_TOKEN` explicitly provides one;

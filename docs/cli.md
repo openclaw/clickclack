@@ -50,7 +50,9 @@ itself:
 | `--plain` | — | false | Stable single-field output, usually an ID or token. |
 | `--no-input` | — | false | Reserved for non-interactive flows. |
 
-Stored client config lives at `~/.config/clickclack/config.json`. Stored
+Stored client config lives at `clickclack/config.json` in the OS user config
+directory: `$XDG_CONFIG_HOME` (default `~/.config`) on Linux,
+`~/Library/Application Support` on macOS, and `%AppData%` on Windows. Stored
 token, workspace, and channel defaults are scoped to their saved server URL.
 If `--server` or `CLICKCLACK_SERVER` points somewhere else and no explicit
 `--token` is supplied, the CLI will not reuse the saved bearer token. It also

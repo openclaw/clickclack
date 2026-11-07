@@ -31,6 +31,9 @@
   );
   const canSaveProfile = $derived(isManager && hasProfileChanges && !saving);
   const canTransfer = $derived(isOwner && transferUserID !== "" && !transferring);
+  const noTransferMembers = $derived(
+    !!workspace && transferLoadedFor === workspace.id && transferMembers.length === 0,
+  );
   const canDelete = $derived(isOwner && workspace && deleteConfirm === workspace.name && !deleting);
 
   $effect(() => {
@@ -259,6 +262,9 @@
           <div class="ws-row__label">Transfer ownership</div>
           <div class="ws-row__hint">
             Transfer ownership of {workspace?.name ?? "this workspace"} to another member.
+            {#if noTransferMembers}
+              Add a human member who is not a guest first.
+            {/if}
           </div>
         </div>
         <div class="ws-row__control">
@@ -268,6 +274,9 @@
             bind:value={transferUserID}
             disabled={transferring || transferMembers.length === 0}
           >
+            {#if noTransferMembers}
+              <option value="">No eligible members</option>
+            {/if}
             {#each transferMembers as member (member.user.id)}
               <option value={member.user.id}>{member.user.display_name || member.user.handle || member.user.id}</option>
             {/each}
@@ -283,11 +292,12 @@
           <div class="ws-row__label">Delete workspace</div>
           <div class="ws-row__hint">
             Permanently delete {workspace?.name ?? "this workspace"}, all of its messages, channels,
-            and bot tokens. This cannot be undone.
+            and bot tokens. This cannot be undone. Type the workspace name to confirm.
           </div>
         </div>
         <div class="ws-row__control">
           <input
+            aria-label="Type the workspace name to confirm deletion"
             class="ws-input"
             type="text"
             placeholder={workspace?.name ?? "Workspace name"}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Workspace settings now say to type the workspace name before deleting it, label that field for screen readers, and show "No eligible members" instead of a blank transfer menu. Thanks @KrasimirKralev.
+
 ## 0.9.4 - 2026-11-05
 
 **Highlights:** Clearer client configuration and signed-out session errors, with refreshed desktop and database dependencies.

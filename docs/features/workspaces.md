@@ -38,6 +38,8 @@ arbitrary invites.
 Owners and moderators can update the workspace name, slug, and icon. An icon
 must reference an upload from the same workspace. Owners can transfer ownership
 to a human member or moderator; the former owner becomes a moderator.
+Settings says when no member is eligible, and asks the owner to type the
+workspace name before it enables deletion.
 
 The provisioned `clickclack` and `guests` slugs are reserved. Profile updates can
 retain the workspace's current normalized slug, but creating a workspace or

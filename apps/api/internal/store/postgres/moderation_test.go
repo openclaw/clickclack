@@ -155,3 +155,38 @@ func TestModerationHydrationFailureRollsBack(t *testing.T) {
 		t.Fatalf("failed moderation committed an event: before=%s after=%s error=%v", before, after, err)
 	}
 }
+
+func TestCreateMessageRejectsArchivedChannel(t *testing.T) {
+	ctx := t.Context()
+	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "archived-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) == 0 {
+		t.Fatal("expected a workspace")
+	}
+	workspace := workspaces[0]
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(channels) == 0 {
+		t.Fatal("expected a channel")
+	}
+	channel := channels[0]
+	archived := true
+	if _, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, Archived: &archived}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "blocked"}); !errors.Is(err, store.ErrChannelArchived) {
+		t.Fatalf("expected ErrChannelArchived, got %v", err)
+	}
+}

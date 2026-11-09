@@ -297,7 +297,7 @@
         </div>
         <div class="ws-row__control">
           <input
-            aria-label="Type the workspace name to confirm deletion"
+            aria-label="Name to confirm deletion"
             class="ws-input"
             type="text"
             placeholder={workspace?.name ?? "Workspace name"}

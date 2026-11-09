@@ -16,7 +16,7 @@ test("delete workspace names what to type before the button enables", async ({ p
   await expect(page.getByText("Type the workspace name to confirm.")).toBeVisible();
 
   const confirm = page.getByRole("textbox", {
-    name: "Type the workspace name to confirm deletion",
+    name: "Name to confirm deletion",
   });
   const remove = page.getByRole("button", { name: "Delete workspace" });
   await expect(remove).toBeDisabled();

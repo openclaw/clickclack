@@ -33,7 +33,7 @@ var ErrInvalidEventDeliveryCursor = errors.New("invalid or stale event delivery 
 var ErrModerationRestricted = errors.New("moderation restriction")
 
 // ErrChannelArchived is returned when a post targets an archived channel.
-var ErrChannelArchived = errors.New("channel is archived")
+var ErrChannelArchived = errors.New("channel is archived; choose an active channel or ask a workspace owner to restore it")
 
 // ErrMessageNotWritable is returned when a user can read a message but cannot
 // mutate it.

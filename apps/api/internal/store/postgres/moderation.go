@@ -148,6 +148,13 @@ func requireNoModerationBlockTx(ctx context.Context, tx *sql.Tx, workspaceID, us
 }
 
 func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, userID string) error {
+	channel, err := storedb.New(tx).GetChannel(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	if channel.ArchivedAt.Valid {
+		return store.ErrChannelArchived
+	}
 	role, err := memberRoleTx(ctx, tx, workspaceID, userID)
 	if err != nil {
 		return err

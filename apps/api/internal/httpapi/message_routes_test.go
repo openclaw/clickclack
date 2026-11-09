@@ -132,6 +132,7 @@ func TestEnsureMessageRouteEndpointIsLazyBoundedAndPermissionChecked(t *testing.
 	patchJSON[struct {
 		Channel store.Channel `json:"channel"`
 	}](t, server.URL+"/api/channels/"+channel.ID, map[string]bool{"archived": true})
+	expectStatusAsUser(t, member.ID, http.MethodPost, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]string{"body": "archived"}, http.StatusConflict)
 	archived := postJSONAsUser[struct {
 		Message store.Message `json:"message"`
 	}](t, member.ID, server.URL+"/api/messages/"+archivedRoot.ID+"/route", struct{}{})

@@ -4,6 +4,8 @@
 
 - Open the notified channel or thread even when an existing app window misses the notification click, while retaining in-page navigation for responsive windows. Thanks @chmac.
 - Workspace settings now say to type the workspace name before deleting it, label that field for screen readers, and show "No eligible members" instead of a blank transfer menu. Thanks @KrasimirKralev.
+- Refresh eligible web, desktop, development, and Go dependencies, retaining the 48-hour cooldown, runtime minimums, security overrides, and the matching SQLite/libc pair.
+
 - Build with Go 1.27.4 to fix the reachable HTTP/1 header race (GO-2026-6859), retaining the Go 1.26.6 module minimum.
 
 - Reject new posts and thread replies to archived channels with a clear HTTP 409 error, and document restoring a channel without changing its ID. Thanks @tre1d.

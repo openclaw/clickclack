@@ -138,16 +138,15 @@ func webPushTag(message store.Message) string {
 	return "clickclack:" + message.ID
 }
 
-// webPushURL routes a tap to the conversation or channel the message belongs
-// to. A thread reply lands in its channel: message routes are minted on
-// demand. The workspace segment is a storage id, and the route API resolves
-// only storage targets beside one, so the target is always a storage id too
-// (never a channel's route id) and the app canonicalizes the pair on arrival,
-// as it does for an in-page notification with no route id to hand.
+// webPushURL pairs storage IDs so the route API can canonicalize the target.
+// Thread routes are allocated lazily when the recipient opens the root.
 func webPushURL(message store.Message) string {
 	target := message.ChannelID
 	if message.DirectConversationID != "" {
 		target = message.DirectConversationID
+	}
+	if message.ParentMessageID != nil && message.ThreadRootID != "" {
+		target = message.ThreadRootID
 	}
 	if message.WorkspaceID == "" || target == "" {
 		return "/app"

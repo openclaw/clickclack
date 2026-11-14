@@ -26,7 +26,8 @@ interface NotificationEvent extends ExtendableEvent {
 interface WindowClient {
   readonly url: string;
   focus(): Promise<WindowClient>;
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer?: Transferable[]): void;
+  navigate(url: string): Promise<WindowClient | null>;
 }
 
 interface WorkerClients {
@@ -143,13 +144,41 @@ async function openApp(url: string): Promise<void> {
   // inside someone else's page and must never be steered.
   const appClient = clients.find((client) => new URL(client.url).pathname.startsWith("/app"));
   if (appClient) {
-    appClient.postMessage({ type: "clickclack:notification-click", url });
-    await appClient.focus();
-    return;
+    await appClient.focus().catch(() => {});
+    if (await requestAppNavigation(appClient, url)) return;
+    // A suspended/reloading window may never receive the message. Carry the
+    // destination through a real navigation so boot can consume it.
+    const navigated = await appClient.navigate(pushLandingURL(url)).catch(() => null);
+    if (navigated) {
+      await navigated.focus().catch(() => {});
+      return;
+    }
   }
   // A fresh window may not be listening yet when a message would arrive, so
   // the tap travels in the URL instead.
   await worker.clients.openWindow(pushLandingURL(url));
+}
+
+async function requestAppNavigation(client: WindowClient, url: string): Promise<boolean> {
+  const channel = new MessageChannel();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<boolean>((resolve) => {
+      channel.port1.onmessage = (event) => {
+        if (event.data === "clickclack:notification-opened") resolve(true);
+      };
+      timeout = setTimeout(() => resolve(false), 1500);
+      try {
+        client.postMessage({ type: "clickclack:notification-click", url }, [channel.port2]);
+      } catch {
+        resolve(false);
+      }
+    });
+  } finally {
+    clearTimeout(timeout);
+    channel.port1.close();
+    channel.port2.close();
+  }
 }
 
 async function askAppToRenew(): Promise<void> {

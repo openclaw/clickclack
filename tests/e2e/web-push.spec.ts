@@ -630,6 +630,61 @@ test("a notification tap lands at the conversation's newest message", async ({ p
   await expect(page.locator(`[data-message-id="${newest}"]`)).toBeInViewport();
 });
 
+for (const listenerAvailable of [true, false]) {
+  test(`a notification tap with ${listenerAvailable ? "a responsive" : "an unavailable"} app listener`, async ({
+    page,
+    context,
+  }, testInfo) => {
+    // A suspended or reloading home-screen app may have no message listener.
+    if (!listenerAvailable)
+      await page.addInitScript(() => {
+        navigator.serviceWorker.addEventListener("message", (event) => {
+          if (event.data?.type === "clickclack:notification-click")
+            event.stopImmediatePropagation();
+        });
+      });
+    const { workspace, channel, route } = await createGeneralChannel(
+      page,
+      "Push suspended tap",
+      true,
+    );
+    const elsewhere = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name: "elsewhere", kind: "public" },
+    });
+    expect(elsewhere.ok()).toBe(true);
+    const { channel: away } = (await elsewhere.json()) as { channel: { route_id: string } };
+    await page.goto(`/app/${workspace.route_id}/${away.route_id}`);
+    await waitForAppReady(page);
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+    });
+    await page.evaluate(() => Reflect.set(window, "notificationDocument", true));
+    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+    await worker.evaluate((url) => {
+      const scope = self as unknown as {
+        dispatchEvent: (event: Event) => boolean;
+        ExtendableEvent: new (type: string) => Event;
+      };
+      const click = new scope.ExtendableEvent("notificationclick");
+      Object.defineProperty(click, "notification", { value: { data: { url }, close() {} } });
+      try {
+        scope.dispatchEvent(click);
+      } catch {
+        // Synthetic events cannot extend the worker lifetime; navigation still starts.
+      }
+    }, `/app/${workspace.id}/${channel.id}`);
+    try {
+      await expect(page).toHaveURL(new RegExp(`${route}$`));
+      if (listenerAvailable) {
+        expect(await page.evaluate(() => Reflect.get(window, "notificationDocument"))).toBe(true);
+      }
+    } finally {
+      await page.screenshot({ path: testInfo.outputPath("notification-route.png") });
+    }
+  });
+}
+
 test("a notification tap with no app window open lands at the newest message", async ({
   page,
   context,

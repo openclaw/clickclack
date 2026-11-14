@@ -294,3 +294,10 @@ depending on the browser.
   the next open then registers the same subscription again, recorded under
   the current key it was not made under, so it is still refused. Turning the
   switch off and back on replaces the subscription.
+
+## Opening a notification
+
+Tapping an alert opens its channel or direct conversation; a reply opens its
+thread. An active app navigates in place. If an existing window is suspended
+or still starting, the worker falls back to opening the destination through
+its URL, so the alert does not resume an unrelated channel.

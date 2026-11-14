@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open the notified channel or thread even when an existing app window misses the notification click, while retaining in-page navigation for responsive windows. Thanks @chmac.
+
 - List the commands in `clickclack help`, `-h`, and `--help` instead of only the client flags; `clickclack help` no longer fails with `unknown command "help"`. Thanks @KrasimirKralev.
 
 ## 0.9.4 - 2026-11-05

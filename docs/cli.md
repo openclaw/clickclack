@@ -20,6 +20,8 @@ Commands:
   admin      bootstrap, FakeCo seed, user create, member add, invite create, bot create, events prune, magic-link create, webpush keygen
   backup     write a SQLite backup file
   export     write a JSON dump to a file or stdout
+  version    print the binary version
+  help       show this help
   login      consume a magic-link token and store/print a session token
   logout     revoke the stored session and remove stored client credentials
   whoami     print the current server-side user
@@ -35,6 +37,9 @@ Commands:
   reactions add
   reactions remove
 ```
+
+`clickclack help`, `clickclack -h`, and `clickclack --help` print this command
+list followed by the client flags.
 
 Client commands accept these common flags before the command or on the command
 itself:

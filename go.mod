@@ -2,7 +2,7 @@ module github.com/openclaw/clickclack
 
 go 1.26.6
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/coder/websocket v1.8.15

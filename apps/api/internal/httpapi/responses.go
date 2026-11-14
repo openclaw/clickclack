@@ -122,6 +122,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrModerationRestricted):
 		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, store.ErrChannelArchived):
+		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrNotWorkspaceManager):
 		writeError(w, http.StatusForbidden, err)
 	case errors.Is(err, store.ErrNotWorkspaceMember):

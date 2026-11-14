@@ -155,6 +155,13 @@ func requireCanPostTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, u
 	if err := requireNoModerationBlockTx(ctx, tx, workspaceID, userID); err != nil {
 		return err
 	}
+	channel, err := storedb.New(tx).GetChannel(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	if channel.ArchivedAt.Valid {
+		return store.ErrChannelArchived
+	}
 	if role != store.WorkspaceRoleGuest {
 		return nil
 	}

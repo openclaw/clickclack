@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- List the commands in `clickclack help`, `-h`, and `--help` instead of only the client flags; `clickclack help` no longer fails with `unknown command "help"`. Thanks @KrasimirKralev.
+
 ## 0.9.4 - 2026-11-05
 
 **Highlights:** Clearer client configuration and signed-out session errors, with refreshed desktop and database dependencies.

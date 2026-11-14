@@ -55,6 +55,7 @@ func client(args []string) error {
 	opts := defaults.opts
 	flags := flag.NewFlagSet("clickclack", flag.ExitOnError)
 	addClientFlags(flags, &opts)
+	flags.Usage = func() { printUsage(flags) }
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -64,6 +65,9 @@ func client(args []string) error {
 	}
 	c := apiClient{opts: opts, defaults: defaults, http: &http.Client{Timeout: 10 * time.Second}}
 	switch rest[0] {
+	case "help":
+		printUsage(flags)
+		return nil
 	case "login":
 		return c.login(rest[1:])
 	case "logout":
@@ -145,6 +149,40 @@ func sameServer(left, right string) bool {
 		return strings.EqualFold(leftURL.Scheme, rightURL.Scheme) && strings.EqualFold(leftURL.Host, rightURL.Host) && strings.TrimRight(leftURL.Path, "/") == strings.TrimRight(rightURL.Path, "/")
 	}
 	return strings.TrimRight(left, "/") == strings.TrimRight(right, "/")
+}
+
+// Keep in sync with the command block in docs/cli.md.
+const usageCommands = `Usage: clickclack <command> [flags]
+
+Commands:
+  serve      run the HTTP/WebSocket server (default if no command given)
+  migrate    apply embedded SQL migrations
+  admin      bootstrap, FakeCo seed, user create, member add, invite create, bot create, events prune, magic-link create, webpush keygen
+  backup     write a SQLite backup file
+  export     write a JSON dump to a file or stdout
+  version    print the binary version
+  help       show this help
+  login      consume a magic-link token and store/print a session token
+  logout     revoke the stored session and remove stored client credentials
+  whoami     print the current server-side user
+  status     print selected server/user/workspace/channel
+  canary     prove a human ClickClack -> OpenClaw -> quoted bot reply round trip
+  workspaces list
+  channels list
+  send
+  messages send
+  messages list
+  threads open
+  threads reply
+  reactions add
+  reactions remove
+
+Client flags (before the command or on the command itself):
+`
+
+func printUsage(flags *flag.FlagSet) {
+	fmt.Fprint(flags.Output(), usageCommands)
+	flags.PrintDefaults()
 }
 
 func addClientFlags(flags *flag.FlagSet, opts *clientOptions) {

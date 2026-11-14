@@ -26,7 +26,7 @@
     "pdfjs-dist": "^6.5.438",
     "sax": "^1.6.1",
     "svelte": "^5.57.3",
-    "virtua": "^0.54.2",
+    "virtua": "0.54.0",
     "vite": "^8.3.8"
   },
   "devDependencies": {

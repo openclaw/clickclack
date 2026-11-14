@@ -169,7 +169,8 @@ jobs:
     name: Playwright E2E
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      # Keep the browser image aligned with @playwright/test in package.json.
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
     timeout-minutes: 20
     steps:
       - name: Check out

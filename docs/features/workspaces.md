@@ -97,6 +97,13 @@ the nullable display, external, or sidebar fields clears that field.
 Omitted fields retain their current values, including changes committed by
 concurrent updates.
 
+Archived channels retain their history and identity, but reject new messages,
+thread replies, and other posting activity with HTTP `409` and a clear
+`channel is archived` error. Restore one with `PATCH /api/channels/{channel_id}`
+and `{"archived": false}`; it keeps the same ID and links. Creating another
+channel is a separate operation and allocates a new ID. There is no channel
+purge endpoint.
+
 Channel updates require a workspace owner or an appropriately scoped bot.
 The web app only offers channel settings to owners; other people receive
 `403 workspace owner permission required` if they call the update API directly.

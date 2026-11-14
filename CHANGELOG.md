@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Workspace settings now say to type the workspace name before deleting it, label that field for screen readers, and show "No eligible members" instead of a blank transfer menu. Thanks @KrasimirKralev.
+- List the commands in `clickclack help`, `-h`, and `--help` instead of only the client flags; `clickclack help` no longer fails with `unknown command "help"`. Thanks @KrasimirKralev.
 
 ## 0.9.4 - 2026-11-05
 

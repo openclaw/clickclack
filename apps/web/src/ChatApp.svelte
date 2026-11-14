@@ -404,8 +404,9 @@
         return;
       }
       if (data?.type !== "clickclack:notification-click") return;
-      if (typeof data.url !== "string" || !data.url.startsWith("/app")) return;
+      if (typeof data.url !== "string" || !data.url.startsWith("/app") || !appReady) return;
       void openNotificationTarget(data.url);
+      event.ports[0]?.postMessage("clickclack:notification-opened");
     };
     navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
     return () => {

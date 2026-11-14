@@ -1015,7 +1015,7 @@ func TestWebPushTapURLResolvesToTheChannel(t *testing.T) {
 	}).Handler())
 	t.Cleanup(server.Close)
 
-	postJSON[struct {
+	root := postJSON[struct {
 		Message store.Message `json:"message"`
 	}](t, server.URL+"/api/channels/"+channel.ID+"/messages", map[string]any{"body": "over here"})
 	if len(web.notifications) != 1 {
@@ -1035,6 +1035,23 @@ func TestWebPushTapURLResolvesToTheChannel(t *testing.T) {
 		resolved.Route.CanonicalPath != "/app/"+workspace.RouteID+"/"+channel.RouteID {
 		t.Fatalf("the tap must resolve to the channel it names: %#v", resolved.Route)
 	}
+	postJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/messages/"+root.Message.ID+"/thread/replies", map[string]any{"body": "thread reply"})
+	if len(web.notifications) != 2 {
+		t.Fatalf("expected thread reply notification, got %#v", web.notifications)
+	}
+	tap = web.notifications[1].URL
+	if tap != "/app/"+workspace.ID+"/"+root.Message.ID {
+		t.Fatalf("reply tap must name its thread root, got %q", tap)
+	}
+	resolved = getJSONAsUser[struct {
+		Route store.RouteTarget `json:"route"`
+	}](t, recipient.ID, server.URL+"/api/routes"+strings.TrimPrefix(tap, "/app"))
+	if resolved.Route.TargetType != "thread" || resolved.Route.TargetID != root.Message.ID || resolved.Route.ParentID != channel.ID {
+		t.Fatalf("reply tap must resolve its thread and channel: %#v", resolved.Route)
+	}
+
 }
 
 func TestWebPushTitleNamesThePlaceItKnows(t *testing.T) {
@@ -1082,7 +1099,7 @@ func TestWebPushBodyAndRouteDescribeTheMessage(t *testing.T) {
 		t.Fatalf("channel route is %q", got)
 	}
 	thread := store.Message{WorkspaceID: "wsp_1", ChannelID: "chn_1", ParentMessageID: &parent, ThreadRootID: parent}
-	if got := webPushURL(thread); got != "/app/wsp_1/chn_1" {
+	if got := webPushURL(thread); got != "/app/wsp_1/msg_root" {
 		t.Fatalf("thread route is %q", got)
 	}
 	dm := store.Message{WorkspaceID: "wsp_1", DirectConversationID: "dm_1"}

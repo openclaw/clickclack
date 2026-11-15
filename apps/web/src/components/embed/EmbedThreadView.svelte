@@ -7,7 +7,7 @@
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
-  import { channelDisplayTitle } from "../../lib/chat/channels";
+  import { ARCHIVED_CHANNEL_NOTICE, channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
@@ -51,6 +51,7 @@
   const threadState = $derived(thread.state);
   let directConversation = $state<DirectConversation | null>(null);
   let parentLabel = $state("Thread");
+  let parentArchived = $state(false);
   const replyBody = $derived(thread.draft?.body ?? "");
   const replyTarget = $derived(thread.draft?.quote ?? null);
   let replyInput = $state<HTMLTextAreaElement | null>(null);
@@ -67,7 +68,7 @@
   let memberLoadError = $state("");
 
   const replyDisabled = $derived(
-    replySending || Boolean(directConversation && !directConversation.can_send),
+    replySending || parentArchived || Boolean(directConversation && !directConversation.can_send),
   );
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
@@ -178,6 +179,7 @@
         conversation = hidden.conversation;
       }
       directConversation = conversation;
+      parentArchived = false;
       parentLabel = dmTitle(conversation, currentUser.id) || "Direct message";
       return;
     }
@@ -187,6 +189,7 @@
     const channel = data.channels.find((item) => item.id === target.parent_id);
     if (!channel) throw new APIError(404, "Thread channel not found");
     directConversation = null;
+    parentArchived = Boolean(channel.archived_at);
     parentLabel = `#${channelDisplayTitle(channel)}`;
   }
 
@@ -355,6 +358,7 @@
         {replyTarget}
         {mentionPeople}
         {replyDisabled}
+        replyDisabledPlaceholder={parentArchived ? ARCHIVED_CHANNEL_NOTICE : undefined}
         headerLabel={parentLabel}
         headerDetail={`Thread · ${threadState?.reply_count ?? replies.length} ${(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"}`}
         openHref={route.canonical_path}

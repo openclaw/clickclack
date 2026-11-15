@@ -1,0 +1,1 @@
+var e=`This channel is archived; choose an active channel or ask a workspace owner to restore it`;function t(e){return e.display_title?.trim()||e.name}function n(e){let t=e?.trim();if(!t)return``;try{let e=new URL(t);return e.protocol===`https:`||e.protocol===`http:`?e.href:``}catch{return``}}export{t as n,n as r,e as t};

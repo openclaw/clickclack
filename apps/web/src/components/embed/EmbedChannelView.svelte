@@ -11,7 +11,7 @@
   import { markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
-  import { channelDisplayTitle } from "../../lib/chat/channels";
+  import { ARCHIVED_CHANNEL_NOTICE, channelDisplayTitle } from "../../lib/chat/channels";
   import { newNonce } from "../../lib/chat/messages";
   import { MessageRequests } from "../../lib/chat/messageRequests";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
@@ -423,7 +423,7 @@
 
   async function sendMessage() {
     const body = messageBody.trim();
-    if (!body || !channel || sending) return;
+    if (!body || !channel || channel.archived_at || sending) return;
     const channelID = channel.id;
     const quotedMessageID = replyTarget?.id;
     const submission =
@@ -582,11 +582,11 @@
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
         value={messageBody}
-        placeholder={`Message #${channelDisplayTitle(channel)}`}
+        placeholder={channel.archived_at ? ARCHIVED_CHANNEL_NOTICE : `Message #${channelDisplayTitle(channel)}`}
         ariaLabel="Message body"
         submitLabel="Send"
         formClass="composer embed-channel-composer"
-        disabled={sending}
+        disabled={sending || Boolean(channel.archived_at)}
         replyTarget={replyTarget}
         showToolbar
         {mentionPeople}

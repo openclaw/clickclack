@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
 import { createGeneralChannel } from "./channel-fixture";
 
+const ARCHIVED_NOTICE =
+  "This channel is archived; choose an active channel or ask a workspace owner to restore it";
+
 function admin(args: string[]) {
   return execFileSync(
     "go",
@@ -44,7 +47,7 @@ test("owners archive and restore a channel from channel settings", async ({ page
   await expect(dialog).toBeHidden();
   await expect.poll(() => archivedAt(page.request, workspace.id, channel.id)).not.toBeNull();
   await expect(messageComposer).toBeDisabled();
-  await expect(messageComposer).toHaveAttribute("placeholder", "This channel is archived");
+  await expect(messageComposer).toHaveAttribute("placeholder", ARCHIVED_NOTICE);
 
   const rootRow = page.locator(`[data-message-id="${root.id}"]`);
   await rootRow.hover();
@@ -53,7 +56,7 @@ test("owners archive and restore a channel from channel settings", async ({ page
     .getByRole("complementary", { name: "Thread pane" })
     .getByRole("textbox", { name: "Reply body", exact: true });
   await expect(replyComposer).toBeDisabled();
-  await expect(replyComposer).toHaveAttribute("placeholder", "This channel is archived");
+  await expect(replyComposer).toHaveAttribute("placeholder", ARCHIVED_NOTICE);
 
   await page.getByRole("button", { name: "Channel settings", exact: true }).click();
   await dialog.getByRole("button", { name: "Restore channel" }).click();

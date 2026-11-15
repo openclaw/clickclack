@@ -80,7 +80,8 @@
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
   const CHANNEL_NOTIFICATION_STORAGE_PREFIX = "clickclack:channel-notification:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
-  const ARCHIVED_CHANNEL_NOTICE = "This channel is archived";
+  const ARCHIVED_CHANNEL_NOTICE =
+    "This channel is archived; choose an active channel or ask a workspace owner to restore it";
   const appSessionStartedAt = Date.now();
   const navigateAppPath = createAppNavigator(() => window.location.pathname, goto);
   const integratedTitleBar = desktop?.integratedTitleBar === true;

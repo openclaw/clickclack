@@ -183,14 +183,24 @@
       parentLabel = dmTitle(conversation, currentUser.id) || "Direct message";
       return;
     }
+    directConversation = null;
+    await loadParentChannel(target);
+  }
+
+  async function loadParentChannel(target: RouteTarget, isCurrent: () => boolean = () => true) {
     const data = await api<{ channels: Channel[] }>(
       `/api/workspaces/${encodeURIComponent(target.workspace_id)}/channels`,
     );
+    if (!isCurrent()) return;
     const channel = data.channels.find((item) => item.id === target.parent_id);
     if (!channel) throw new APIError(404, "Thread channel not found");
-    directConversation = null;
     parentArchived = Boolean(channel.archived_at);
     parentLabel = `#${channelDisplayTitle(channel)}`;
+  }
+
+  async function refreshParentChannel(isCurrent: () => boolean) {
+    if (route?.parent_type !== "channel") return;
+    await loadParentChannel(route, isCurrent);
   }
 
   async function loadThread() {
@@ -240,6 +250,13 @@
 
   async function handleRealtimeEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     if (
+      event.type === "channel.updated" &&
+      (event.channel_id || event.payload.channel_id) === route?.parent_id
+    ) {
+      await refreshParentChannel(isCurrent);
+      return;
+    }
+    if (
       eventBelongsToThread(event) &&
       (event.type === "reaction.added" || event.type === "reaction.removed")
     ) {
@@ -267,7 +284,7 @@
       onOpen: async (isCurrent, authoritativeResync) => {
         if (authoritativeResync) {
           reactionController.clear();
-          await thread.refresh(isCurrent);
+          await Promise.all([thread.refresh(isCurrent), refreshParentChannel(isCurrent)]);
         }
         if (!isCurrent()) return;
         realtimeError = "";

@@ -360,4 +360,11 @@ test("embedded channel and thread disable composers in an archived channel", asy
   const replyComposer = page.getByRole("textbox", { name: "Reply body", exact: true });
   await expect(replyComposer).toBeDisabled();
   await expect(replyComposer).toHaveAttribute("placeholder", notice);
+
+  const restore = await page.request.patch(`/api/channels/${channel.id}`, {
+    data: { archived: false },
+  });
+  expect(restore.ok()).toBe(true);
+  await expect(replyComposer).toBeEnabled();
+  await expect(replyComposer).toHaveAttribute("placeholder", "Reply in thread");
 });

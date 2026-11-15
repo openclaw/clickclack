@@ -13,6 +13,8 @@
 - Build with Go 1.27.4 to fix the reachable HTTP/1 header race (GO-2026-6859), retaining the Go 1.26.6 module minimum.
 - Refresh eligible web, desktop, development, and Go dependencies, retaining the 48-hour cooldown, runtime minimums, security overrides, and the matching SQLite/libc pair; pin Virtua 0.54.0 to preserve scroll restoration.
 
+- Disable the message and thread-reply composers in an archived channel and say "This channel is archived", instead of letting a message fail to send with only "The message failed to send". Thanks @KrasimirKralev.
+
 ## 0.9.4 - 2026-11-05
 
 **Highlights:** Clearer client configuration and signed-out session errors, with refreshed desktop and database dependencies.

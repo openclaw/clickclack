@@ -104,6 +104,9 @@ and `{"archived": false}`; it keeps the same ID and links. Creating another
 channel is a separate operation and allocates a new ID. There is no channel
 purge endpoint.
 
+The web app disables the message and thread-reply composers in an archived
+channel and shows "This channel is archived" in their place.
+
 Channel updates require a workspace owner or an appropriately scoped bot.
 The web app only offers channel settings to owners; other people receive
 `403 workspace owner permission required` if they call the update API directly.

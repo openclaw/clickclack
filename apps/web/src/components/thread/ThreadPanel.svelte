@@ -41,6 +41,7 @@
     agentResponding?: boolean;
     respondingAgentNames?: string[];
     replyDisabled?: boolean;
+    replyDisabledPlaceholder?: string;
     replySending?: boolean;
     replyError?: string;
     headerLabel?: string;
@@ -87,6 +88,7 @@
     agentResponding = false,
     respondingAgentNames = [],
     replyDisabled = false,
+    replyDisabledPlaceholder = "No active recipient",
     replySending = false,
     replyError = "",
     headerLabel = "Thread",
@@ -944,7 +946,7 @@
 {#if replyError}<p class="composer-notice composer-notice--error" role="alert">{replyError}</p>{/if}
 <ChatComposer
   value={replyBody}
-  placeholder={replyDisabled ? "No active recipient" : "Reply in thread"}
+  placeholder={replyDisabled ? replyDisabledPlaceholder : "Reply in thread"}
   ariaLabel="Reply body"
   submitLabel="Reply"
   formClass="composer reply-composer"

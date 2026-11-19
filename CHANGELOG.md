@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Disable the message and thread-reply composers, including the embedded channel and thread views, in an archived channel and say the channel is archived and how to continue, instead of letting a message fail to send with only "The message failed to send". Thanks @KrasimirKralev.
+
 ## 0.9.5 - 2026-11-15
 
 **Highlights:** Reliable navigation from notifications, clearer archived-channel and CLI behavior, and a security fix for the HTTP/1 header race.
@@ -12,8 +14,6 @@
 - Workspace settings now say to type the workspace name before deleting it, label that field for screen readers, and show "No eligible members" instead of a blank transfer menu. Thanks @KrasimirKralev.
 - Build with Go 1.27.4 to fix the reachable HTTP/1 header race (GO-2026-6859), retaining the Go 1.26.6 module minimum.
 - Refresh eligible web, desktop, development, and Go dependencies, retaining the 48-hour cooldown, runtime minimums, security overrides, and the matching SQLite/libc pair; pin Virtua 0.54.0 to preserve scroll restoration.
-
-- Disable the message and thread-reply composers, including the embedded channel and thread views, in an archived channel and say the channel is archived and how to continue, instead of letting a message fail to send with only "The message failed to send". Thanks @KrasimirKralev.
 
 ## 0.9.4 - 2026-11-05
 

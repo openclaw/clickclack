@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Name the one-time signing-secret field after rotating a slash command or event subscription secret, so screen readers announce "Signing secret — visible once" instead of an unlabeled text field. Thanks @KrasimirKralev.
+
 ## 0.9.5 - 2026-11-15
 
 **Highlights:** Reliable navigation from notifications, clearer archived-channel and CLI behavior, and a security fix for the HTTP/1 header race.

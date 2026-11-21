@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
 import { createGeneralChannel } from "./channel-fixture";
 
+const ARCHIVED_NOTICE =
+  "This channel is archived; choose an active channel or ask a workspace owner to restore it";
+
 function admin(args: string[]) {
   return execFileSync(
     "go",
@@ -26,9 +29,15 @@ async function archivedAt(request: APIRequestContext, workspaceID: string, chann
 
 test("owners archive and restore a channel from channel settings", async ({ page }, testInfo) => {
   const { workspace, channel, route } = await createGeneralChannel(page, "Owner archive proof");
+  const rootResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "Archive thread root" },
+  });
+  expect(rootResponse.status()).toBe(201);
+  const { message: root } = (await rootResponse.json()) as { message: { id: string } };
   await page.goto(route);
   await waitForAppReady(page);
 
+  const messageComposer = page.getByRole("textbox", { name: "Message body", exact: true });
   const dialog = page.getByRole("dialog", { name: "Channel settings", exact: true });
   await page.getByRole("button", { name: "Channel settings", exact: true }).click();
   await expect(dialog).toBeVisible();
@@ -37,11 +46,24 @@ test("owners archive and restore a channel from channel settings", async ({ page
   await dialog.getByRole("button", { name: "Archive channel" }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => archivedAt(page.request, workspace.id, channel.id)).not.toBeNull();
+  await expect(messageComposer).toBeDisabled();
+  await expect(messageComposer).toHaveAttribute("placeholder", ARCHIVED_NOTICE);
+
+  const rootRow = page.locator(`[data-message-id="${root.id}"]`);
+  await rootRow.hover();
+  await rootRow.getByRole("button", { name: "Open thread" }).click();
+  const replyComposer = page
+    .getByRole("complementary", { name: "Thread pane" })
+    .getByRole("textbox", { name: "Reply body", exact: true });
+  await expect(replyComposer).toBeDisabled();
+  await expect(replyComposer).toHaveAttribute("placeholder", ARCHIVED_NOTICE);
 
   await page.getByRole("button", { name: "Channel settings", exact: true }).click();
   await dialog.getByRole("button", { name: "Restore channel" }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => archivedAt(page.request, workspace.id, channel.id)).toBeNull();
+  await expect(messageComposer).toBeEnabled();
+  await expect(replyComposer).toBeEnabled();
 });
 
 test("moderators are not offered channel settings the server rejects", async ({

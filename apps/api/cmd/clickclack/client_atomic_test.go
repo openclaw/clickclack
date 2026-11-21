@@ -35,6 +35,10 @@ func TestWriteClientConfigFilePreservesWritableMode(t *testing.T) {
 	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)
 	}
+	// File creation respects umask; this fixture requires an exact existing mode.
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
 	if err := writeClientConfigFile(path, []byte("new")); err != nil {
 		t.Fatal(err)
 	}

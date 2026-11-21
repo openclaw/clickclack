@@ -31,7 +31,7 @@
   import { newNonce } from "./lib/chat/messages";
   import { MessageRequests, type AuthorUpdate } from "./lib/chat/messageRequests";
   import { mergeMessageUpdate, type MessageUpdate } from "./lib/chat/messageUpdates";
-  import { channelDisplayTitle } from "./lib/chat/channels";
+  import { ARCHIVED_CHANNEL_NOTICE, channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
   import {
     MessageEditController,
@@ -271,6 +271,11 @@
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
+  // The server rejects posts and thread replies in archived channels with 409.
+  $: selectedChannelArchived = !selectedDirect && Boolean(selectedChannel?.archived_at);
+  $: threadChannelArchived = Boolean(
+    channels.find((channel) => channel.id === $threadView.root?.channel_id)?.archived_at,
+  );
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
   $: resetTopicStateForConversation(activeConversationKey);
   // Slash-dispatch notices are scoped to the conversation they fired in.
@@ -2302,6 +2307,10 @@
       composerNotice = { kind: "error", text: "This conversation has no active recipient" };
       return;
     }
+    if (selectedChannelArchived) {
+      composerNotice = { kind: "error", text: ARCHIVED_CHANNEL_NOTICE };
+      return;
+    }
     if (!selectedChannelID && !selectedDirectID) {
       composerNotice = { kind: "ephemeral", text: "Pick or create a channel to send a message." };
       return;
@@ -2676,6 +2685,7 @@
 
   async function sendReply() {
     if (selectedDirect && !selectedDirectWritable) return;
+    if (threadChannelArchived) return;
     await thread.send();
   }
 
@@ -4129,10 +4139,10 @@
 
     <ChatComposer
       value={messageBody}
-      placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${channelDisplayTitle(selectedChannel)}` : "Pick a channel to start"}
+      placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedChannelArchived ? ARCHIVED_CHANNEL_NOTICE : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${channelDisplayTitle(selectedChannel)}` : "Pick a channel to start"}
       ariaLabel="Message body"
       submitLabel="Send"
-      disabled={!!selectedDirect && !selectedDirectWritable}
+      disabled={(!!selectedDirect && !selectedDirectWritable) || selectedChannelArchived}
       pendingUpload={pendingUpload}
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
@@ -4221,7 +4231,8 @@
         {mentionAttentionUserID}
         {agentResponding}
         respondingAgentNames={activeRespondingAgentNames}
-        replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
+        replyDisabled={Boolean(selectedDirect && !selectedDirectWritable) || threadChannelArchived}
+        replyDisabledPlaceholder={threadChannelArchived ? ARCHIVED_CHANNEL_NOTICE : undefined}
         onClose={closeSidePanel}
         onBack={searchThreadDetour && searchSession ? () => void returnToSearchFromThread() : undefined}
         onReplyBody={(value) => thread.updateDraft(value)}

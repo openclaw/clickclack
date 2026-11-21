@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Name one-time signing-secret fields for screen readers when rotating slash-command and event-subscription secrets. Thanks @KrasimirKralev.
+- Refresh eligible web, desktop, and development dependencies while preserving the Node/Go floors, security overrides, and the matched SQLite/libc pair.
+
+- Disable the message and thread-reply composers, including the embedded channel and thread views, in an archived channel and say the channel is archived and how to continue, instead of letting a message fail to send with only "The message failed to send". Thanks @KrasimirKralev.
+
 ## 0.9.5 - 2026-11-15
 
 **Highlights:** Reliable navigation from notifications, clearer archived-channel and CLI behavior, and a security fix for the HTTP/1 header race.

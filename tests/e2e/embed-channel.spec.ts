@@ -324,3 +324,47 @@ test("embedded channel fits narrow host panels without horizontal overflow", asy
   await expect(page.locator(".markdown").filter({ hasText: longMessage })).toBeVisible();
   await expectPanelToFit({ width: 320, height: 600 });
 });
+
+test("embedded channel and thread disable composers in an archived channel", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const { workspaces } = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces[0];
+  const stamp = Date.now();
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `embed-archived-${stamp}`, kind: "public" },
+  });
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; route_id: string };
+  };
+  const rootResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: `embedded archived root ${stamp}` },
+  });
+  const { message } = (await rootResponse.json()) as { message: { id: string } };
+  const threadResponse = await page.request.get(`/api/messages/${message.id}/thread`);
+  const { root } = (await threadResponse.json()) as { root: { route_id: string } };
+  const archive = await page.request.patch(`/api/channels/${channel.id}`, {
+    data: { archived: true },
+  });
+  expect(archive.ok()).toBe(true);
+  const notice =
+    "This channel is archived; choose an active channel or ask a workspace owner to restore it";
+
+  await page.goto(`/embed/channel/${workspace.route_id}/${channel.route_id}`);
+  const messageComposer = page.getByRole("textbox", { name: "Message body", exact: true });
+  await expect(messageComposer).toBeDisabled();
+  await expect(messageComposer).toHaveAttribute("placeholder", notice);
+
+  await page.goto(`/embed/thread/${workspace.route_id}/${root.route_id}`);
+  const replyComposer = page.getByRole("textbox", { name: "Reply body", exact: true });
+  await expect(replyComposer).toBeDisabled();
+  await expect(replyComposer).toHaveAttribute("placeholder", notice);
+
+  const restore = await page.request.patch(`/api/channels/${channel.id}`, {
+    data: { archived: false },
+  });
+  expect(restore.ok()).toBe(true);
+  await expect(replyComposer).toBeEnabled();
+  await expect(replyComposer).toHaveAttribute("placeholder", "Reply in thread");
+});

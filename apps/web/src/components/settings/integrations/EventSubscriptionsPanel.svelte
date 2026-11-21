@@ -248,9 +248,12 @@
               </div>
               {#if revealedSecrets[subscription.id]}
                 <div class="ws-intg__secret" aria-live="polite">
-                  <span class="ws-intg__secret-label">Signing secret — visible once</span>
+                  <label class="ws-intg__secret-label" for={`event-subscription-secret-${subscription.id}`}>
+                    Signing secret — visible once
+                  </label>
                   <div class="ws-intg__secret-row">
                     <input
+                      id={`event-subscription-secret-${subscription.id}`}
                       class="ws-bots__reveal-input"
                       type="text"
                       readonly

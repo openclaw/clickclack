@@ -39,14 +39,14 @@
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@typescript/native": "npm:typescript@^7.0.2",
     "fflate": "^0.8.3",
-    "oxfmt": "^0.78.0",
-    "oxlint": "^1.93.0",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "wrangler": "4.160.1"
+    "wrangler": "4.165.0"
   },
   "engines": {
     "node": ">=24"

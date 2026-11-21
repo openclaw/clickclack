@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function createWorkspace(page: Page, suffix: string, stamp: number) {
   const response = await page.request.post("/api/workspaces", {
@@ -12,6 +12,17 @@ async function createWorkspace(page: Page, suffix: string, stamp: number) {
     workspace: { id: string; route_id: string; slug: string };
   };
   return body.workspace;
+}
+
+// Each revealed secret is named by its own row's label, so ids must stay unique per row.
+async function expectLabelledSecrets(rows: Locator[]) {
+  for (const row of rows) {
+    const secret = await row.locator(".ws-bots__reveal-input").inputValue();
+    expect(secret).not.toBe("");
+    await expect(row.getByRole("textbox", { name: "Signing secret — visible once" })).toHaveValue(
+      secret,
+    );
+  }
 }
 
 test("installs an OpenClaw app through the wizard and uninstalls with cascade", async ({
@@ -600,6 +611,7 @@ test("keeps each registration busy until its own secret rotation finishes", asyn
   releaseCommand?.();
   await expect(firstCommandRow.locator(".ws-intg__secret")).toBeVisible();
   await expect(firstCommandRow.getByRole("button", { name: "Rotate secret" })).toBeEnabled();
+  await expectLabelledSecrets([firstCommandRow, secondCommandRow]);
 
   const subscriptionsPanel = page.locator(".ws-intg__panel", {
     hasText: "Event subscriptions",
@@ -637,6 +649,7 @@ test("keeps each registration busy until its own secret rotation finishes", asyn
   releaseSubscription?.();
   await expect(firstSubscriptionRow.locator(".ws-intg__secret")).toBeVisible();
   await expect(firstSubscriptionRow.getByRole("button", { name: "Rotate secret" })).toBeEnabled();
+  await expectLabelledSecrets([firstSubscriptionRow, secondSubscriptionRow]);
 });
 
 test("keeps each connected account busy until its own disconnect finishes", async ({ page }) => {

@@ -245,9 +245,12 @@
             </div>
             {#if revealedSecrets[command.id]}
               <div class="ws-intg__secret" aria-live="polite">
-                <span class="ws-intg__secret-label">Signing secret — visible once</span>
+                <label class="ws-intg__secret-label" for={`slash-command-secret-${command.id}`}>
+                  Signing secret — visible once
+                </label>
                 <div class="ws-intg__secret-row">
                   <input
+                    id={`slash-command-secret-${command.id}`}
                     class="ws-bots__reveal-input"
                     type="text"
                     readonly

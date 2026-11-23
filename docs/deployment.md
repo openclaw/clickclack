@@ -87,9 +87,9 @@ docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 
 Stages:
 
-1. `node:26-alpine` — installs pnpm dependencies and runs `pnpm build`.
+1. `node:26.13.1-alpine` — installs pnpm dependencies and runs `pnpm build`.
 2. `golang:1.27.4-alpine` — builds the Go binary, importing the SPA dist.
-3. `alpine:3.24` — runtime image, runs as the `clickclack` user, exposes
+3. `alpine:3.24.4` — runtime image, runs as the `clickclack` user, exposes
    `8080`, mounts `/app/data` as a volume.
 
 Override the entrypoint command to run admin tasks:

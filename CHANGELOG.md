@@ -6,6 +6,7 @@
 - Refresh eligible web, desktop, and development dependencies while preserving the Node/Go floors, security overrides, and the matched SQLite/libc pair.
 
 - Disable the message and thread-reply composers, including the embedded channel and thread views, in an archived channel and say the channel is archived and how to continue, instead of letting a message fail to send with only "The message failed to send". Thanks @KrasimirKralev.
+- Say "1 of 1 reply loaded" instead of "1 of 1 replies loaded" above a one-reply thread, matching the thread header's "1 reply". Thanks @KrasimirKralev.
 
 ## 0.9.5 - 2026-11-15
 

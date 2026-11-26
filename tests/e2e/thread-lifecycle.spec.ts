@@ -161,3 +161,15 @@ for (const surface of ["main", "embed"] as const) {
     }
   });
 }
+
+test("the loaded-replies divider agrees with the reply count", async ({ page }) => {
+  const { roots } = await threadFixture(page);
+  await openThread(page, roots[0].id);
+  const pane = page.getByLabel("Thread pane", { exact: true });
+  await expect(pane.locator(".reply-list")).toContainText("First existing reply");
+  await expect(pane.locator(".thread-divider")).toHaveText("1 of 1 reply loaded");
+  await page.getByLabel("Reply body").fill("Second reply");
+  await page.getByRole("button", { name: "Reply", exact: true }).last().click();
+  await expect(pane.locator(".reply-list")).toContainText("Second reply");
+  await expect(pane.locator(".thread-divider")).toHaveText("2 of 2 replies loaded");
+});

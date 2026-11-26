@@ -719,7 +719,7 @@
       {/if}
     </div>
   </article>
-  <div class="thread-divider"><span>{replies.length} of {threadState?.reply_count ?? replies.length} replies loaded</span></div>
+  <div class="thread-divider"><span>{replies.length} of {threadState?.reply_count ?? replies.length} {(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"} loaded</span></div>
   {#if history.hasOlder || history.loading.older || history.edgeError.older}
     <div class="thread-history">
       {#if history.loading.older}
